@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands)
+when: matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands) + スライド・文書に置く図の大きさと文字の pt を決めるとき・図の文字が頁で小さく見えるとき (#draw-at-placed-size)
 category: paper
 summary: matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・既存図を置換するときの情報 inventory / snapshot / actual-render layering review・機構 fact・射程の限界
 -->
@@ -191,6 +191,16 @@ parameter を走査して描いた曲線と、 2 本の曲線に挟まれた帯 
 5. **読者が最初に聞く基準点を印す** (例: 観測が参照する点・規格化の点)。 図にその点が無いと、 本文の数値と図を結べない。
 6. **色・矢印を変えたら原寸の PNG で見直す** ([#figure-replacement-information-audit](#figure-replacement-information-audit) の actual-render review)。
    文字が線に重なっていないか、 引き出し線が別の点を指して見えないかを見る。
+
+## <a id="draw-at-placed-size"></a>スライド・文書に置く図は、 置く大きさ (インチ) で figure を作る
+
+matplotlib の文字の大きさと線の太さは pt で決まる。 大きな figure で描いて小さく置くと、 置いた比の分だけ文字も線も縮む
+(実測: 幅 6 インチで描いた図を頁の上で 3 インチに置き、 12pt の指定が頁で 6pt 前後になった。 組版の log にも overfull にも出ない)。
+
+- **figure の大きさ = 頁の上で占める大きさ**: `plt.figure(figsize=(置く幅, 置く幅 × 縦横比))` で描き、 TeX 側は `\includegraphics{fig.pdf}` と大きさを付けずに置く (= 1:1)。 置く幅は、 その図を置く欄の幅 (列の幅・本文の幅) から先に決める
+- **文字は本文より 1〜2pt 小さく**: 本文が 11pt なら図の文字は 9〜10pt。 図ごとに描く大きさが違っても、 頁の上の文字の大きさが揃う
+- 実寸に直すと文字が相対的に大きくなるので、 ラベルの位置が重なる・枠からはみ出す = 直した後に [#assert-texts-inside](#assert-texts-inside) と原寸の画像で見直す
+- 文字の無い飾り (表紙の絵・模様) を縮めて置くときは、 線の太さを置いた大きさで見て決める
 
 ## <a id="mathtext-unsupported-commands"></a>mathtext に無い LaTeX の命令
 

@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 相手と口頭で決めた段取りを探すとき (#summary-mail-holds-agreements) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice) + 会議・研修に出ていたかを機械で残すとき (#presence-from-process)
+when: Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 相手と口頭で決めた段取りを探すとき (#summary-mail-holds-agreements) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice) + 「今からの会議を開いて」 と頼まれ、 自分の部屋を開くとき (#join-own-room) + 会議・研修に出ていたかを機械で残すとき (#presence-from-process)
 category: infra
-summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は用途ごとに admin 版を 1 つずつ足す = 部屋の作成・読み取り・変更・削除 / 自分と設定 / 終わった会議、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 終わった会議の要約と文字起こしは `notes` で取り出し、 「無い」 も過去の回の `has_meeting_summary` と transcript の 3322 で言い切る (#read-summary-and-transcript)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)。 通知メールの会議に本人を入れるときは passcode を chat に出さずクリップボードへ、 末尾の \r を落とす (#join-from-notice)。 出ていたかは account の参加の記録 (report API の pastJoined、 直近 6 か月の月だけ、 他人主催の会議は会議 id で同定) を毎日写し、 別 account の網として会議中だけ動く process `CptHost` を各機械で見張り、 1 台で予定と突き合わせる (自分主催の会議は開始の前後 15 分に入ったものだけ数える、 #presence-from-process)
+summary: Zoom の機械経路は Server-to-Server OAuth app 1 つで開く (#s2s-oauth-route、 scope は用途ごとに admin 版を 1 つずつ足す = 部屋の作成・読み取り・変更・削除 / 自分と設定 / 終わった会議、 token は account_id + Basic 認証で自己発行)。 常設の部屋を PMI と分ける判断 (#dedicated-room-vs-pmi)。 create の 2 つの罠 = アカウント既定「予定されたミーティングに PMI を使用」 が ON だと新しい id が発番されるのに参加 URL は PMI のものになる (#use-pmi-silently-hijacks-create)、 passcode なしで作ると waiting_room が要求を無視して true に上書きされる (#passcode-or-waiting-room)。 固定時刻なしの定期ミーティングは最終使用から 365 日で失効する (#no-fixed-time-expiry)。 録画と議事録は別機能で、 録画せずに要約だけ回せる (#recording-vs-summary)。 終わった会議の要約と文字起こしは `notes` で取り出し、 「無い」 も過去の回の `has_meeting_summary` と transcript の 3322 で言い切る (#read-summary-and-transcript)。 作った部屋は番号だけ残ると用途が失われる (#record-the-room)。 通知メールの会議に本人を入れるときは passcode を chat に出さずクリップボードへ、 末尾の \r を落とす (#join-from-notice)。 自分の部屋は `join <id>` が参加 URL を zoommtg:// に直してアプリで開く (passcode は出さない、 予定の場所の欄で Zoom かを決めない、 #join-own-room)。 出ていたかは account の参加の記録 (report API の pastJoined、 直近 6 か月の月だけ、 他人主催の会議は会議 id で同定) を毎日写し、 別 account の網として会議中だけ動く process `CptHost` を各機械で見張り、 1 台で予定と突き合わせる (自分主催の会議は開始の前後 15 分に入ったものだけ数える、 #presence-from-process)
 -->
 # Zoom のミーティングを script から扱う
 
@@ -10,7 +10,7 @@ Server-to-Server OAuth app を 1 つ作れる**。 これで token を自己発�
 機械経路に乗る (= [`machine-route-first.md`](machine-route-first.md) `#route-ladder` の段 2 に上がる)。
 画面を開いて毎回 click する必要は無くなる。
 
-実装 = [`../scripts/zoom-client.py`](../scripts/zoom-client.py) (stdlib のみ、 `whoami` / `show` / `list` /
+実装 = [`../scripts/zoom-client.py`](../scripts/zoom-client.py) (stdlib のみ、 `whoami` / `show` / `join` / `list` /
 `create` / `update` / `delete` / `notes`。 作成・削除・変更は既定 dry-run)。
 
 ## <a id="s2s-oauth-route"></a>Server-to-Server OAuth (= 唯一の常設 credential)
@@ -164,6 +164,15 @@ type 3 (No Fixed Time) の部屋は **最終使用から 365 日**で消える�
 - passcode は本文の別の行にある。 **chat に出さず、 クリップボードに入れて「聞かれたら貼る」 と伝える** (会話は他の端末からも読める)。
 - 取り出した値の末尾の `\r` を落としてから入れる = text/plain の本文は CRLF で届く ([`mcp.md#gmail-body-crlf`](mcp.md#gmail-body-crlf)。 実測: 落とさずに入れて「passcode が違う」 と言われた)。 入れた後は中身を出さずに、 字の種類と長さだけを確かめる。
 - 開くのは今の機械の画面 = 本人が別の端末にいるなら、 その端末でメールの URL から入ってもらう。
+
+## <a id="join-own-room"></a>自分の部屋を開く (「今からの会議を開いて」)
+
+自分の account の部屋 (常設の部屋・PMI) なら、 通知のメールを探さずに部屋の id から開ける = `zoom-client.py join <meeting_id>`。
+
+- **どの部屋か**: 予定 (カレンダー) の題と時刻から会議を決め、 その会議の部屋の id を記録 (部屋の用途を書いた記録 = [#record-the-room](#record-the-room)、 相手に送ったメールの記録) から引く。 予定の場所の欄は対面のままのことがある (会議の直前に Zoom に切り替えたなど) = 場所の欄で Zoom かどうかを決めない (実測)
+- **開き方**: 道具は API の `join_url` (passcode 入り) を `zoommtg://<host>/join?action=join&confno=<id>&pwd=<pwd>` に直して OS の既定で開く = browser を経由せずに Zoom アプリが会議に入る。 passcode は画面に出さない (`--dry-run` は伏せた URL だけを出す)
+- ⚠️ **`show` の出力には passcode 入りの join_url が出る** = `show` を打つなら出力を chat・記録に写さない (join_url の行を落として読む)
+- 開いた後に会議の窓が出たかを確かめる (macOS = `zoom.us` の process の窓の名前に「Zoom ミーティング」 が出る)。 相手が入ったかは道具では分からない
 
 ## <a id="presence-from-process"></a>会議に出ていたかを機械で残す — 会議中だけ動く process をその場で見る
 

@@ -125,7 +125,7 @@ claude-config/
 │   ├── manuscript-claim-ownership.md       # AI agent (Claude / Codex / 他 vendor / sub-agent / 無人 worker) が原稿 (.tex) の表題・概要・序論・結論・数式に触れる前 + 著者の依頼を「承認」 と読みそうになった瞬間 + manuscript-claim-guard に deny されたとき + agent の編集権限を定める規則 (本 doc・各層の参照・gate の設定と配線) を変える前
 │   ├── manuscript-value-triage.md          # 他人 (共同研究者・学生) の投稿前 draft や自分の原稿を「価値」 で読む時 + 投稿先の重さ (letter / 通常論文) を選ぶ時 + 進捗報告の draft に返事を書く時 + 原稿の主張が先行研究に対して新しいかを文献で確かめる依頼を受けた時 (#prior-work-check)
 │   ├── matplotlib-3d-illustrations.md      # matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
-│   ├── matplotlib-figure-qa.md             # matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands)
+│   ├── matplotlib-figure-qa.md             # matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands) + スライド・文書に置く図の大きさと文字の pt を決めるとき・図の文字が頁で小さく見えるとき (#draw-at-placed-size)
 │   ├── mcp.md                              # MCP ツールを使うとき (アカウント確認・scope 判定を含む)
 │   ├── media-transcription-ledger.md       # 定期的に届く画像 stream (板書写真・スキャン書類・写真メモ) を SoT 化する仕組みを設計するとき + 手書き画像の読取結果を記録・転記するとき
 │   ├── memory-file-slimming.md             # CLAUDE.md 等の memory file が肥大して縮退 (slimming) するとき + 完了 entry を archive へ graduate するとき + 長大 bullet / table row を pointer 化するとき
@@ -193,7 +193,7 @@ claude-config/
 │   ├── writing-discipline.md               # AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose) + 日本語の下書きから英語の文を起こすとき (#ga-is-not-but)
 │   ├── yaml-hazards.md                     # YAML を読む・書く・新規 data file の形式 (yaml/toml/json) を選ぶ・yamllint を設定するとき
 │   ├── zenn.md                             # Zenn.dev 記事を執筆・入稿するとき
-│   └── zoom-meetings.md                    # Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 相手と口頭で決めた段取りを探すとき (#summary-mail-holds-agreements) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice) + 会議・研修に出ていたかを機械で残すとき (#presence-from-process)
+│   └── zoom-meetings.md                    # Zoom のミーティングを script から作る・設定を読む経路を用意するとき + 定例用に「いつでも入れる常設の部屋」 を個人ミーティングルーム (PMI) と別に用意するとき + 作った部屋が待機室つきになった / 参加 URL が個人部屋のものになったとき + 会議の議事録は欲しいが録画は要らないとき + 終わった会議の AI 要約・文字起こしを取り出すとき・「無い」 と言う前 (#read-summary-and-transcript) + 相手と口頭で決めた段取りを探すとき (#summary-mail-holds-agreements) + 開催通知のメールから本人を会議に入れるとき (#join-from-notice) + 「今からの会議を開いて」 と頼まれ、 自分の部屋を開くとき (#join-own-room) + 会議・研修に出ていたかを機械で残すとき (#presence-from-process)
 <!-- AUTO-TREE:conventions END -->
 <!-- agent-free:end id=auto-tree-conventions -->
 <!-- agent-free:begin id=auto-tree-hooks -->
@@ -209,7 +209,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (408 file + formcase/ 26 module + lib/ 79 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (409 file + formcase/ 26 module + lib/ 79 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式

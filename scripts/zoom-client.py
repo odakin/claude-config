@@ -10,7 +10,9 @@
 
 subcommand:
   whoami                                    自分 (account / user / PMI) を表示 = 配線の死活確認
-  show <meeting_id>                         ミーティング 1 件の設定を表示 (PMI 番号も可)
+  show <meeting_id>                         ミーティング 1 件の設定を表示 (PMI 番号も可)。 ⚠️ join_url に passcode が入る = 出力を chat・記録に写さない
+  join <meeting_id> [--dry-run]             その部屋をこの機械の Zoom アプリで開く (passcode は画面に出さない、
+                                            conventions/zoom-meetings.md#join-own-room)
   list [--type scheduled|upcoming|previous_meetings]   自分のミーティング一覧
   create --topic T [--like <meeting_id>] [--apply]     部屋を作る (既定 dry-run)
   update <meeting_id> --set k=v [...] [--apply]        既存の部屋の settings を変える (既定 dry-run)
@@ -75,7 +77,9 @@ import argparse
 import base64
 import json
 import os
+import re
 import secrets
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -255,6 +259,47 @@ def _print_meeting(m: dict) -> None:
 
 def cmd_show(token: str, args) -> int:
     _print_meeting(api(token, "GET", f"/meetings/{args.meeting_id}"))
+    return 0
+
+
+def zoommtg_url(join_url: str, meeting_id) -> str:
+    """参加 URL (https://<host>/j/<id>?pwd=…) → Zoom アプリを直に開く zoommtg:// の URL。
+    https の URL を開くと browser を経由して「アプリで開くか」 を聞かれる = アプリの scheme で開く。"""
+    u = urllib.parse.urlparse(join_url)
+    host = u.netloc or "zoom.us"
+    pwd = (urllib.parse.parse_qs(u.query).get("pwd") or [""])[0]
+    url = f"zoommtg://{host}/join?action=join&confno={meeting_id}"
+    if pwd:
+        url += "&pwd=" + urllib.parse.quote(pwd, safe="")
+    return url
+
+
+def mask_pwd(url: str) -> str:
+    """表示用に passcode を伏せる (会話・記録は他の端末からも読める)。"""
+    return re.sub(r"(pwd=)[^&]+", r"\1***", url)
+
+
+def open_url(url: str) -> None:
+    if sys.platform == "darwin":
+        subprocess.run(["open", url], check=True)
+    elif sys.platform.startswith("win"):
+        os.startfile(url)  # noqa: S606 = 自分の部屋の URL を既定のアプリに渡すだけ
+    else:
+        subprocess.run(["xdg-open", url], check=True)
+
+
+def cmd_join(token: str, args) -> int:
+    m = api(token, "GET", f"/meetings/{args.meeting_id}")
+    join_url = m.get("join_url") or ""
+    if not join_url:
+        raise ZoomError(f"{args.meeting_id}: join_url が返らない")
+    url = zoommtg_url(join_url, m.get("id") or args.meeting_id)
+    print(f"topic: {m.get('topic')}  id: {m.get('id')}  passcode を URL に含む: {'yes' if 'pwd=' in url else 'no'}")
+    if args.dry_run:
+        print(f"dry-run (開かない): {mask_pwd(url)}")
+        return 0
+    open_url(url)
+    print("Zoom アプリで開いた (URL と passcode は出さない)")
     return 0
 
 
@@ -494,6 +539,12 @@ def selftest() -> int:
     check(report_time(None) is None and report_time("x") is None, "読めない時刻は None")
     check(month_chunks(dt.date(2030, 9, 29), dt.date(2030, 11, 3)) == [(dt.date(2030, 9, 29), dt.date(2030, 9, 30)),
           (dt.date(2030, 10, 1), dt.date(2030, 10, 31)), (dt.date(2030, 11, 1), dt.date(2030, 11, 3))], "問い合わせを暦の月で区切る")
+    check(zoommtg_url("https://us06web.zoom.us/j/12345678901?pwd=AbC.1", 12345678901)
+          == "zoommtg://us06web.zoom.us/join?action=join&confno=12345678901&pwd=AbC.1", "参加 URL の host と pwd を zoommtg に写す")
+    check(zoommtg_url("https://zoom.us/j/111", "111") == "zoommtg://zoom.us/join?action=join&confno=111",
+          "pwd の無い URL は pwd を付けない")
+    check(mask_pwd("zoommtg://x/join?action=join&confno=1&pwd=secret") == "zoommtg://x/join?action=join&confno=1&pwd=***",
+          "表示用に passcode を伏せる")
     print("zoom-client selftest:", "ALL PASS" if not fails else f"FAIL {fails}")
     return 1 if fails else 0
 
@@ -507,6 +558,10 @@ def main(argv: list[str]) -> int:
 
     p_show = sub.add_parser("show", help="ミーティング 1 件の設定を表示 (PMI 番号も可)")
     p_show.add_argument("meeting_id")
+
+    p_join = sub.add_parser("join", help="部屋をこの機械の Zoom アプリで開く (passcode は出さない)")
+    p_join.add_argument("meeting_id")
+    p_join.add_argument("--dry-run", action="store_true", help="開かずに、 passcode を伏せた URL だけ出す")
 
     p_list = sub.add_parser("list", help="自分のミーティング一覧")
     p_list.add_argument("--type", default="scheduled")
@@ -559,6 +614,7 @@ def main(argv: list[str]) -> int:
         return {
             "whoami": cmd_whoami,
             "show": cmd_show,
+            "join": cmd_join,
             "list": cmd_list,
             "create": cmd_create,
             "update": cmd_update,

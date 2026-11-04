@@ -119,6 +119,8 @@ for i, p in enumerate(d):
 
 ログ: `grep "^! " deck.log`(エラー)/ `grep Overfull deck.log`(はみ出し)/ `grep -i shrink deck.log`(意図しない縮小)。ただし**最終判定はレンダ画像**。
 
+全頁を 1 枚に並べて見る = [`../scripts/pdf-contact-sheet.py`](../scripts/pdf-contact-sheet.py) `deck.pdf --cols 3` (頁をまたぐ揃い = 題の行数・余白・色の配分と、 どの頁がはみ出したかが一度に見える。 図の PDF の束も `figures/*.pdf` で並べられる。 透明な図は `--bg` の色の上)。 1 枚の一覧で気になった頁だけを上の snippet で大きく出す。 図の中の文字の大きさは一覧では判断しない = 原寸の頁で見る ([`matplotlib-figure-qa.md#draw-at-placed-size`](matplotlib-figure-qa.md#draw-at-placed-size))。
+
 ## <a id="generate-figures-not-scavenge"></a>10. 図は「拾う」のでなく「生成する」
 
 - **matplotlib 図のラベルはみ出しは目視でなく機械 gate で落とす**: 正本 =
@@ -253,7 +255,7 @@ python-pptx の notes part を Keynote が拒否する上の既知事例を否�
 1. **型 = 主張と証拠** (Michael Alley の assertion–evidence): 本文の頁の題は動詞のある 1 文の主張 (2 行まで)、 本体は図か大きな数字 = 証拠。 箇条書きは最小にする ([`giving-talks.md`](giving-talks.md) の図 > 言葉 > 式と同じ向き)
 2. **認知の負荷を減らす** (Mayer のマルチメディア学習の原則): 飾り・重複を削る (coherence) / いまどのメッセージかの目印を毎頁に置く (signaling = 題の上の小さな見出し + 右上の現在地の線) / 凡例をやめて図に直接ラベル (spatial contiguity) / メッセージごとに扉 (segmenting、 扉の形 = §5)
 3. **色 = 地 + 2 色** (構造と強調): 色覚の違いに配慮した対 (Okabe–Ito の青と橙など)、 本文と地のコントラスト比を 7:1 以上 (WCAG AAA)。 図の色を deck の token と同じ値にする
-4. **主題を意匠にする**: 講演の主題から 1 つのモチーフを決め、 全頁に控えめに通す (合成例: 主題が「流れ」 なら下端に細い流線、 表紙だけ一面に)
+4. **主題を意匠にする**: 講演の主題から 1 つのモチーフを決め、 全頁に控えめに通す (合成例: 主題が「流れ」 なら下端に細い流線、 表紙だけ一面に)。 モチーフは現在地の目印 (2 の signaling) を兼ねられる (合成例: 主題が「対称と破れ」 なら下端に頁の数だけ同じ点を並べ = ずらしても同じ並び、 今の頁の点だけ色と大きさを変える = その頁が並びの対称を破る。 `\inserttotalframenumber` と `\insertframenumber` から tikz で描く)
 5. **文字の階層は太さで**: 同梱のフォントで install 不要 = 欧文と数字は Inter (TeX Live 同梱、 `Numbers=Tabular`)、 和文は原ノ味ゴシック (`deluxe` で極太まで)。 見出し Bold、 断言と大きな数字 Heavy / Black、 本文 Regular。 <a id="subtitle-smaller-than-title"></a>**表題と副題を同じ大きさで並べない** = 副題は主題の 0.5〜0.65 倍で一段細く組む (大きさと太さの差が副題を表すので、 「―」「：」「～…～」 の区切りの記号は要らない)。 同じ大きさで改行だけで続けると、 どこまでが題か読めない (実測)。 ポスター・チラシの表題も同じ
 6. **頁の種類を絞る**: 表紙・断言・討論のお題 = 全面の hero / 数字 = 大きな数字だけの頁 / 並列の 3 項目 = カード (bento) / 扉 = 大きな番号 + 全メッセージ
 7. **暗い地は明るい部屋で沈む** → 色を名前で 1 か所にまとめ、 白地の版に切り替えられるようにしておく
@@ -264,6 +266,7 @@ python-pptx の notes part を Keynote が拒否する上の既知事例を否�
 - <a id="principled-deck-pitfalls"></a>組版と言葉の罠 (実測):
   - `fontspec` の font に `Ligatures=TeX` を付ける。 無いと `--` と `---` がそのまま出る
   - 本文は左寄せにする = `\usepackage[document]{ragged2e}` と `\setlength{\RaggedRightRightskip}{0pt plus 1fil}`。 両端揃えのままだと狭い欄で字間が崩れ、 長い題が折り返さずにはみ出す
+  - 題の 1 行に入る字数を、 組む前に計算する: 和文は全角 1 字 = 字の大きさの幅なので、 本文の幅を字の大きさで割る (合成例: 16:9 の 160 mm の幅から左右の余白 12 mm ずつを引いた 136 mm に 17.5 pt の題 = 約 6.2 mm/字 → 21 字)。 題が 2 行に折れると、 その頁の本体が 1 行分 (約 8 mm) 下がり、 図の頁の下がはみ出す = 図の頁の題は 1 行に収まる字数で書く
   - 頁は上から詰める = `\documentclass[...,t]{beamer}`。 縦の中央寄せのままだと、 長い頁の下が切れる
   - 文を 1 語でも足したら頁を画像にし直す (§9): 高さを揃えたカード (`equal height group`) は 1 枚が 1 行伸びると全部伸び、 下の注記が隅のモチーフに重なる。 組版は error 無しで通る
   - 討論の頁の問いは、 物理の未解決の問いにする。 手順の選択 (どれを採るか・節を残すか) や、 対称性から自動で従うことは並べない (「自明すぎる」 と言われる)
