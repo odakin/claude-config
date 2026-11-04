@@ -166,7 +166,8 @@ def last_human(path: str) -> tuple[str, str]:
 # nor an English "don't archive". Conservative on purpose: a missed word costs one more stop, a wrong one folds a
 # child the person still works with.
 CLOSE_WORD = re.compile(r"(?:閉じ|とじ|片[づ付]け)(?:て|と|ちゃ)|(?:畳|たた)ん(?:で|ど|じゃ)|アーカイブ(?:し|で)"
-                        r"|(?<![A-Za-z])archive(?![A-Za-z])", re.I)
+                        r"|(?<![A-Za-z])archive(?:\s+(?:it|them|this|that)(?![A-Za-z])|\s*(?:して|しと|しちゃ|でいい))", re.I)
+# (the bare English word is not one: 「archive の hook が止めた」 names the guard, it does not ask for a fold)
 CLOSE_NOT_AFTER = re.compile(r"な|は|ほし|欲し|だめ|ダメ|駄目|いけ|いいの|よいの|いいか|よいか|[？?]")
 CLOSE_NOT_BEFORE = re.compile(r"(?:don'?t|do not|not|never)\s+$", re.I)
 CLAUSE_END = re.compile(r"[。．！!\n、,.]")
@@ -447,7 +448,9 @@ def selftest() -> int:
         ok("the word after the child's reason, then an unrelated prompt → passes (the word still stands)", rc == 0)
         ok("close_consent: the words that say fold",
            all(close_consent(s) for s in ("畳んでいいよ", "アーカイブして", "片づけといて", "閉じちゃって", "archive it", "閉じて大丈夫")))
-        ok("close_consent: not a fold word", not any(close_consent(s) for s in ("ありがとう", "この file を開いて", "")))
+        ok("close_consent: not a fold word", not any(close_consent(s) for s in ("ありがとう", "この file を開いて", "",
+                                                                                "archive の hook が止めた", "the archive guard")))
+        ok("close_consent: an English request to archive", close_consent("archive して") and close_consent("please archive them"))
         # The measured scene (the chore conductor, 2026-11-04): the person spoke in the child's window, the child answered and
         # stopped; 21 minutes later the person said 「閉じていいよ」 in the parent's window and the archive a minute after it
         # was stopped twice under the 30-minute grace. Timestamps are relative to now (the grace is counted from now).
