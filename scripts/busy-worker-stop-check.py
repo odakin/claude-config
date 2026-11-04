@@ -451,7 +451,7 @@ def selftest() -> int:
         ok("close_consent: not a fold word", not any(close_consent(s) for s in ("ありがとう", "この file を開いて", "",
                                                                                 "archive の hook が止めた", "the archive guard")))
         ok("close_consent: an English request to archive", close_consent("archive して") and close_consent("please archive them"))
-        # The measured scene (the chore conductor, 2026-11-04): the person spoke in the child's window, the child answered and
+        # The measured scene: the person spoke in the child's window, the child answered and
         # stopped; 21 minutes later the person said 「閉じていいよ」 in the parent's window and the archive a minute after it
         # was stopped twice under the 30-minute grace. Timestamps are relative to now (the grace is counted from now).
         def iso(m: float) -> str:
