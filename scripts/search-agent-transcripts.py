@@ -73,8 +73,10 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
 出力: 1 件ごとに `時刻  agent  session先頭8文字  役割  本文の前後`。 --tool-runs は役割の欄が `run` / `run(error)` で、
 本文の後に ` → 結果の冒頭`。 圧縮した記録を読めなかったときは、 その本数と理由を stderr に 1 行。 exit 0 (見つからなくても 0)。
 ⚠️ 時刻は記録の timestamp のまま = Claude Code も Codex も UTC (末尾の Z を落とした形)。 発言を日本時間などで引くときは
-   読み手が直す。 --since / --until も UTC の日付 (timestamp の先頭 10 文字) で比べる = 日本時間の朝 9 時より前の発言は
-   前の日付で引く (実測 = 日本時間で書かれた記録と時刻を突き合わせて、 9 時間ずれていた)。
+   読み手が直す。 --since / --until も UTC で、 日付 (YYYY-MM-DD) か日時の先頭 (YYYY-MM-DDTHH[:MM[:SS]]) を
+   timestamp の同じ長さの先頭と比べる = 日本時間の朝 9 時より前の発言は前の日付で引く (実測 = 日本時間で書かれた記録と
+   時刻を突き合わせて、 9 時間ずれていた)。 それ以外の形は error で止める (以前は日時を渡すと全件が範囲の外に落ち、
+   黙って 0 件と出た = 実測)。
 ⚠️ 射程: 手元のマシンにある記録だけ。 別のマシンで開いた session・消えた記録・claude.ai の会話は見えない
    (0 件は「このマシンの記録に無い」 であって「言っていない」 ではない)。
 """
@@ -272,6 +274,22 @@ def _report(tally) -> str | None:
     return f"⚠️ 圧縮した記録 (.jsonl.zst) を読めなかった: {tally['no-means']} 本 (lib/compressed_jsonl.py が無い)" if tally else None
 
 
+_BOUND_RE = re.compile(r"\d{4}-\d{2}-\d{2}(T\d{2}(:\d{2}(:\d{2})?)?)?")
+
+
+def _bound(value: str) -> str:
+    """--since / --until の値。 日付か日時の先頭 (UTC) だけを通す。 空白の区切りは T に直す。"""
+    v = value.strip().replace(" ", "T")
+    if not _BOUND_RE.fullmatch(v):
+        raise argparse.ArgumentTypeError(f"{value!r}: YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (UTC) で渡す")
+    return v
+
+
+def _out_of_range(ts: str, since: str | None, until: str | None) -> bool:
+    """timestamp の、 境界と同じ長さの先頭で比べる (境界の日・時・分を含む)。"""
+    return bool((since and ts[:len(since)] < since) or (until and ts[:len(until)] > until))
+
+
 def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | None,
            until: str | None, session: str | None, context: int, include_injected: bool,
            claude_dir, codex_dir, limit: int, tally=None) -> list[tuple]:
@@ -305,9 +323,7 @@ def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | Non
             except ValueError:
                 continue
             ts = rec.get("timestamp") or ""
-            if since and ts[:10] < since:
-                continue
-            if until and ts[:10] > until:
+            if _out_of_range(ts, since, until):
                 continue
             r, texts = (_texts_claude if ag == "claude" else _texts_codex)(rec)
             if (sub_agent or child) and r == "user":
@@ -405,7 +421,7 @@ def tool_runs(pattern: str, *, regex: bool, agent: str, since: str | None, until
             ts = rec.get("timestamp") or ""
             for kind, cid, text, is_err in _tool_items(ag, rec):
                 if kind == "call":
-                    if (since and ts[:10] < since) or (until and ts[:10] > until):
+                    if _out_of_range(ts, since, until):
                         continue
                     m = rx.search(text) if rx is not None else None
                     i = m.start() if m is not None else text.find(pattern)
@@ -421,6 +437,14 @@ def tool_runs(pattern: str, *, regex: bool, agent: str, since: str | None, until
             runs.append((t0, _agent_shown(ag, label), sid[:8], "run", f"{snip} → (結果なし)"))
     runs.sort()
     return runs[:limit] if limit else runs
+
+
+def _bound_rejects(value: str) -> bool:
+    try:
+        _bound(value)
+    except argparse.ArgumentTypeError:
+        return True
+    return False
 
 
 def selftest() -> int:
@@ -467,6 +491,10 @@ def selftest() -> int:
             check("--role any で assistant も出る", len(search("りんご", **{**base, "role": "any"})) == 3),
             check("--include-injected で注入文も出る", len(search("りんご", **{**base, "include_injected": True})) == 3),
             check("--since で日付を絞る", [x[1] for x in search("りんご", **{**base, "since": "2099-01-02"})] == ["codex"]),
+            check("--since・--until に日時の先頭を渡す (同じ日の中で絞る)",
+                  [x[0] for x in search("みかん", **{**base, "since": "2099-01-03T00:01"})] == ["2099-01-03T00:05:00Z"]
+                  and [x[0] for x in search("みかん", **{**base, "until": "2099-01-03T00:01"})] == ["2099-01-03T00:00:00Z"]),
+            check("--since の形の誤りは error (黙って 0 件にしない)", _bound_rejects("2099-01-03 9時")),
             check("--agent claude", [x[1] for x in search("りんご", **{**base, "agent": "claude"})] == ["claude"]),
             check("--regex", len(search("りんごは(赤|青)", **{**base, "regex": True})) == 2),
             check("--session で session を絞る", [x[2] for x in search("りんご", **{**base, "session": "aaaa"})] == ["aaaaaaaa"]),
@@ -741,8 +769,8 @@ def main(argv=None) -> int:
     ap.add_argument("--regex", action="store_true", help="pattern を正規表現として扱う")
     ap.add_argument("--role", default="user", choices=["user", "assistant", "developer", "parent", "any"])
     ap.add_argument("--agent", default="both", choices=["claude", "codex", "both"])
-    ap.add_argument("--since", help="YYYY-MM-DD (この日を含む)")
-    ap.add_argument("--until", help="YYYY-MM-DD (この日を含む)")
+    ap.add_argument("--since", type=_bound, help="UTC の YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (その時点を含む)")
+    ap.add_argument("--until", type=_bound, help="UTC の YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (その時点を含む)")
     ap.add_argument("--session", help="session id の先頭 (Claude は file 名、 Codex は末尾の uuid)")
     ap.add_argument("--context", type=int, default=120, help="一致の前後に出す文字数")
     ap.add_argument("--include-injected", action="store_true", help="harness が差し込んだ user 側の文も含める")

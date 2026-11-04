@@ -1123,8 +1123,9 @@ JHEP.bst のような `F.~Last` 形式の bst では、ブレース内が全部 
 
 ## <a id="jhep-bst-notation"></a>JHEP.bst 記法
 JHEP.bst はフィールドから自動リンクを生成するので `\href` 手書き不要（二重リンクの原因）。
-- `doi`: DOI 本体のみ（例: `10.1103/PhysRevA.61.012104`）
-- `eprint`: arXiv ID のみ（例: `quant-ph/9905023`）。`archivePrefix = "arXiv"` と併用
+- `doi`: DOI 本体のみ（例: `10.1103/PhysRevA.61.012104`）。 JHEP.bst が `https://doi.org/` を前に付けるので、 URL の形 (`https://doi.org/10.…`) は二重の URL になって開けない link になる (実測)
+- `eprint`: arXiv ID のみ（例: `quant-ph/9905023`）。`archivePrefix = "arXiv"` と併用。 出版社の頁や DOI の URL を入れると、 arXiv の link として壊れる (実測)
+- <a id="jhep-bst-identifier-check"></a>形の確かめは道具で: [`../scripts/inspire-bib-audit.py`](../scripts/inspire-bib-audit.py) が、 照会の前に `doi`・`eprint` の値の形 (URL・波括弧) を `[FORMAT]` の行で出す (network が無くても出る)
 - <a id="jhep-bst-no-braced-identifiers"></a>`doi`・`eprint` の値を波括弧で包まない (`doi = "{10.1103/…}"` の形): JHEP.bst は値をそのまま link の URL に入れるので、 波括弧が URL に残って開けない link になる (実測)。 組んだら PDF の link の URL に波括弧が残っていないかを見る (PyMuPDF なら `page.get_links()` の `uri`)
 - `url`: doi や eprint があれば不要
 - `note`: 自由テキスト。自動リンク対象外の補足情報に使う。 **全 entry で印字される**ので、 entry の内部の覚え書き (なぜ入れたか・どの note の比較対象か) は `annote` に書く (JHEP.bst は `annote` を読まない = 文献表に出ない)

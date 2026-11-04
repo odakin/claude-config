@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""inspire-bib-audit.py — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合する gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
+r"""inspire-bib-audit.py — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合し、 doi・eprint の値の形 (URL・波括弧は JHEP.bst の link を壊す) も見る gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
 
 Audit a BibTeX file against INSPIRE-HEP.
 
@@ -30,6 +30,12 @@ comparison, which then uses the first person listed, because INSPIRE lists
 persons first.  HTML markup in an INSPIRE title ("<i>Example</i> ...") is
 dropped before the titles are compared.
 
+It also checks, offline and before any lookup, that ``doi`` holds the bare DOI
+and ``eprint`` the bare arXiv identifier.  JHEP.bst puts ``https://doi.org/``
+or the arXiv prefix in front of the value, so a URL-form value (or one wrapped
+in braces) becomes a link that does not open, while the record still matches
+on every other field (observed).  These are reported as FORMAT findings.
+
 WHAT IT DOES NOT DO
 -------------------
 It checks *identity*, not *relevance* -- whether the cited work actually
@@ -45,8 +51,8 @@ Run:
     python3 inspire-bib-audit.py path/to/refs.bib --key Elitzur:1975im
     python3 inspire-bib-audit.py --selftest        # offline, no network
 
-Exit status is 1 if any MISMATCH was found, else 0 (SKIP alone is not a
-failure).  Network errors are reported and exit 2, so a silent network outage
+Exit status is 1 if any MISMATCH or FORMAT finding was found, else 0 (SKIP
+alone is not a failure).  Network errors are reported and exit 2, so a silent network outage
 cannot be mistaken for a clean audit.
 """
 import argparse
@@ -286,13 +292,35 @@ def compare(entry, meta):
         yield "eprint", f.get("eprint"), ", ".join(ins_eprints)
 
 
+DOI_BARE = re.compile(r"10\.\d{4,9}/\S+")
+ARXIV_BARE = re.compile(r"(arXiv:)?(\d{4}\.\d{4,5}|[a-z][a-z.\-]*(\.[A-Z]{2})?/\d{7})(v\d+)?")
+
+
+def format_issues(entry):
+    """doi / eprint whose value is not the bare identifier (offline)."""
+    fields = entry["fields"]
+    out = []
+    doi = fields.get("doi", "").strip()
+    if doi and not DOI_BARE.fullmatch(doi):
+        out.append(("doi", doi, "the bare DOI only (e.g. 10.1103/PhysRevA.61.012104); "
+                    "JHEP.bst adds https://doi.org/, so a URL or braces breaks the link"))
+    eprint = fields.get("eprint", "").strip()
+    if eprint and not ARXIV_BARE.fullmatch(eprint):
+        out.append(("eprint", eprint, "the bare arXiv id only (e.g. quant-ph/9905023 or 2101.00001); "
+                    "a URL or braces breaks the arXiv link"))
+    return out
+
+
 def audit(path, only=None):
     entries = parse_bib(path)
     if only:
         entries = [e for e in entries if e["key"] in only]
-    findings = skipped = 0
+    findings = skipped = formats = 0
     for entry in entries:
         key = entry["key"]
+        for field, value, want in format_issues(entry):
+            formats += 1
+            print(f"[FORMAT] {key}: {field}={value!r} -- want {want}")
         try:
             meta, matched_by = fetch(entry)
         except Exception as exc:                      # network / API failure
@@ -312,8 +340,8 @@ def audit(path, only=None):
         for field, bib_value, ins_value in diffs:
             print(f"           {field}: bib={bib_value!r}")
             print(f"           {' ' * len(field)}  inspire={ins_value!r}")
-    print(f"\n{len(entries)} entries -- {findings} mismatch, {skipped} skipped")
-    return 1 if findings else 0
+    print(f"\n{len(entries)} entries -- {findings} mismatch, {formats} format, {skipped} skipped")
+    return 1 if findings or formats else 0
 
 
 def selftest():
@@ -359,6 +387,15 @@ def selftest():
         print(f"[{'PASS' if cond else 'FAIL'}] {name}")
 
     chk("parser reads all three entries", len(entries) == 3)
+    chk("bare doi and eprint pass the format check",
+        format_issues({"fields": {"doi": "10.1103/PhysRevD.12.3978", "eprint": "quant-ph/0103144"}}) == []
+        and format_issues({"fields": {"eprint": "arXiv:2101.00001v2"}}) == [])
+    chk("URL-form doi and eprint are FORMAT findings",
+        [f for f, _, _ in format_issues({"fields": {
+            "doi": "https://doi.org/10.1000/example.001",
+            "eprint": "https://arxiv.org/abs/2101.00001"}})] == ["doi", "eprint"])
+    chk("braced doi is a FORMAT finding",
+        [f for f, _, _ in format_issues({"fields": {"doi": "{10.1103/PhysRevD.12.3978}"}})] == ["doi"])
     chk("parser keeps the entry type", entries["Swap:2018xdo"]["type"] == "inbook")
     fallback_entry = {"key": "LocalKey", "fields": {
         "eprint": "arXiv:quant-ph/0103144", "doi": "10.1000/example"
