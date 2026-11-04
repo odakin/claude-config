@@ -34,7 +34,7 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
     無い) 子は「依頼元の go 待ち」 として別の理由で残す (archive の hook が読む owner_reasons には入れない)
   - 本人と話している途中: 本人が子の窓で発言しているか (窓の最初の依頼文は数えない。 その後に親が子へ message を
     送っていても数える = 実測: 本人が子の窓で仕事をしている間に親が差し戻しを送り、 その message が本人の最後の発言を
-    隠して、 `--wait-due` が本人の発言の 4 分後に「親の番」 と出した。 その前の実測: 親が「wrap して終えて」 と送った
+    隠して、 `--wait-due` が本人の発言のすぐ後に「親の番」 と出した。 その前の実測: 親が「wrap して終えて」 と送った
     直後に本人が同じ子に「どうやって消すの？」 と打ち、 子が答えた 2 分後に親が畳んだ)。 子がその発言に答えて問いを
     残さず turn を終えていれば、 その時刻を添えて出す (子が止まってから ANSWERED_GRACE_MIN 分 〔既定 30、 env
     CHILD_WRAP_ANSWERED_GRACE_MIN、 `none` = 数え続ける〕、 本人がその窓で話さなければ、 話している途中ではない)
@@ -417,7 +417,7 @@ def owner_after_parent(ev: dict, parent: str, now: float | None = None) -> dict 
     """The person's latest prompt in the child's window (not the window's opening brief = its first entry), as long as it counts as the person working with the child: until the child has answered it and
     ANSWERED_GRACE_MIN minutes have passed. The parent's messages after the prompt do not end it (measured: the person
     was still working in the child's window, the parent's later messages to the child hid the person's last word there,
-    and --wait-due called the child the parent's to fold 4 minutes after it).
+    and --wait-due called the child the parent's to fold right after it).
     `answered_at` = the child's first turn end after that prompt (after its later questions, when the parent answered
     them) with no question left open (None otherwise). `parent_at` = the parent's latest message to the child ('')."""
     said = [p for p in ev["said"] if p[0] != ev["first"]]
@@ -488,7 +488,7 @@ def _ask_text(ask: dict) -> str:
 def _called_off(ev: dict, parent: str, sent: list[str] | None = None) -> str:
     """When the parent last called a wrap off (its retraction as it landed in the child's window, or as sent = `sent`):
     its earlier requests and the child's wrap runs before it do not count ('' when never). Measured: the parent asked a
-    child to wrap, called it off a minute later (the person was still working there), and the stop of the cancelled run
+    child to wrap, called it off soon after (the person was still working there), and the stop of the cancelled run
     read as 'wrap は終わっている'."""
     return max([ts for ts, frm in ev["peer_unwraps"] if frm == parent] + list(sent or []), default="")
 
@@ -1703,7 +1703,7 @@ def selftest() -> int:
            w_at["state"] == "answered" and not _settled(w_at))
         ok("grace 30: an hour after the child answered → due",
            {r["local"]: r for r in finished(bp_l, [board], as_of="2026-01-02T02:00:00")}[wl]["state"] == "due")
-        # the parent asked the child to wrap and called it off a minute later; the child stopped the run
+        # the parent asked the child to wrap and called it off soon after; the child stopped the run
         Rc = "20260102T000000Z-claude-0000a2"
         cl, cc = kid("c100000c", base + [peer("2026-01-02T01:20:05Z", "wrap skill を起動してください", bp_l),
                                          skill_wrap("2026-01-02T01:20:30Z"),
