@@ -75,7 +75,7 @@ daemon が読み込んでいる thread = `codex-app-launch.py rpc thread/loaded/
 承認を出さない thread (approval `never`) は、 走っている途中で書き込み可の dir を足せない (足してほしいと申し出る経路が無い)。 仕事が作業 dir の外 (盲検の sandbox・別の作業場所) に書く段に来ると、 そこで止まる (実測: 掲示板の worker が blocker を出して止まった)。
 - **直し方 = 新しい thread で起こし直す**。 起動の道具の `start` に `--writable-root <dir>` を足す。 `continue` は sandbox の設定を変えられない (`--writable-root` を持たない) ので、 同じ thread では直らない。 起こし直しは依頼元か本人が決める (動いている worker を起こし直す前に本人に聞く運用なら、 それに従う)。
 - **掲示板の worker なら、 新しい thread が前の担当を手放してから取り直す**: 役割 id は同じなので、 新しい thread の `release --reply-to <前の claim の id>` は通る。 その後に `claim` する (前の claim が生きている間は claim が断られる)。 起動文には、 前の thread の claim の id・前の thread は再開しないこと・前の thread が残した再開の地点を書く。 前の thread には `codex queue` で知らせない (起こすと 2 本目の書き手になる)。 起動の記録 (掲示板の `起動した: Codex thread …` の note) は依頼元が新しい thread の id で出す。
-- **予防 = 最初の起動で、 作業 dir の外に書く dir を全部名指す**。 依頼の spec が sandbox などに書く段を持つなら、 起こす前にその dir を `--writable-root` に入れる (`.git` の dir も同じ = 上の節)。
+- **予防 = 最初の起動で、 作業 dir の外に書く dir を全部名指す**。 依頼の spec が sandbox などに書く段を持つなら、 掲示板の request に `--launch-writable-root <dir>` (繰り返し可) を付ける = request の details に 1 dir 1 行で載り、 別の機械の `launch --request` も同じ dir で起こす (ai-collaboration `board/CONTRACT.md#codex-worker-launch`)。 起こす機械に dir が無ければ request か launch が起こす前に止まるので、 先に作っておく。 掲示板を通さずに起動の道具を直に使うなら `start --writable-root <dir>`。 そこで commit もさせるなら、 その repo の git の dir も名指す (上の節。 掲示板は自分の checkout の git の dir だけを足す)。
 
 ## <a id="launch-from-inside-sandbox"></a>worker の sandbox の中から別の Codex の thread を起こせない
 
