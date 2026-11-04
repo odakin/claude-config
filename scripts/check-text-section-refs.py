@@ -442,7 +442,7 @@ def match_name(ix: SectionIndex, name: str, bare: bool) -> str:
         toks = name.split()
         variants = []
         for i in range(len(toks), 0, -1):
-            variants.append(norm(" ".join(toks[:i])))
+            variants.append(norm(" ".join(toks[:i]).rstrip(":：,，、")))  # `§投稿履歴: 補足` = 見出しは `投稿履歴`
         first = variants[-1] if variants else ""
         for v in variants:
             if len(v) >= 2 and any(v in h for h in ix.struct):
@@ -1386,6 +1386,7 @@ def selftest() -> int:
             write(b2 / "claude-config/conventions/shell-env.md", "# shell\n\n## 外の節\n")
             write(b2 / "alpha/guide.md", "# guide\n\n本文に archive: §旧い節 とだけ残る。 O6 は本文の語\n")
             write(b2 / "alpha/guide-archive.md", "# archive\n\n## 旧い節\n")
+            write(b2 / "alpha/log.md", "# log\n\n## 投稿履歴\n\n- log.md §投稿履歴: 結果が出たら行を足す\n")
             write(b2 / "alpha/plans/p.md", "# p\n\n## O6 の話\n")
             write(b2 / "alpha/self.md", "# self\n\n`self.md` §「自分の節」 を見よ\n")
             write(b2 / "alpha/src.md", "\n".join([
@@ -1424,22 +1425,24 @@ def selftest() -> int:
             expect("省略の `...` `…` を含む path = 見本の path / `…` の直後から path を始めない",
                    all(by[("src.md", 3, k)].why == "見本の path" for k in ("z 節", "w 節"))
                    and not any(f.line == 3 and "ownership" in f.path_tok for f in f2))
-            expect("強調の `**` を path に入れない (通る)", not any(f.line == 4 for f in f2))
-            expect("和文に直に続く path を引き直す (通る)", not any(f.line == 5 for f in f2))
+            expect("強調の `**` を path に入れない (通る)", not any(f.line == 4 and f.src.endswith('/src.md') for f in f2))
+            expect("和文に直に続く path を引き直す (通る)", not any(f.line == 5 and f.src.endswith('/src.md') for f in f2))
             expect("直前に書いた repo の file で引く (`beta `CLAUDE.md`` / `beta の CLAUDE.md`、 通る)",
-                   not any(f.line == 6 for f in f2))
+                   not any(f.line == 6 and f.src.endswith('/src.md') for f in f2))
             expect("名指した repo に無い節 = 🔴 (同じ名前の別 file に和らげない)", st("src.md", 7, "名指した repo に無い節") == "MISSING")
             expect("名指しの無い裸の CLAUDE.md = 🟠 のまま (陰性対照)", st("src.md", 8, "共有の節") == "SAME_NAME")
-            expect("名指した repo の中で後方一致 / 層1 = claude-config・ai-collaboration (通る)", not any(f.line == 9 for f in f2))
-            expect("cross_ref の `repo/file:path#anchor` (通る)", not any(f.line == 10 for f in f2))
+            expect("名指した repo の中で後方一致 / 層1 = claude-config・ai-collaboration (通る)", not any(f.line == 9 and f.src.endswith('/src.md') for f in f2))
+            expect("cross_ref の `repo/file:path#anchor` (通る)", not any(f.line == 10 and f.src.endswith('/src.md') for f in f2))
             moved = by.get(("src.md", 11, "旧い節"))
             expect("本文に名前だけ残り同じ repo の別 file の見出しにある = 🔴 + 移った先の候補",
                    moved is not None and moved.status == "MISSING" and any("guide-archive.md" in h for h in moved.homes))
             expect("plans/ の見出しは移った先の候補にしない (`O6` = 🟡 のまま)", st("src.md", 11, "O6") == "BODY")
             expect("自分の file を指す参照の行は本文の証拠にしない (🔴)", st("self.md", 3, "自分の節") == "MISSING")
             expect("「repo `X`」 = 行の頭の項目名の repo で引く (通る) / その repo に無ければ 🔴",
-                   not any(f.line == 12 and f.src.endswith("src.md") for f in f2) and st("src.md", 13, "共有の節") == "MISSING")
+                   not any(f.line == 12 and f.src.endswith('/src.md') for f in f2) and st("src.md", 13, "共有の節") == "MISSING")
             expect("「当 repo `X`」 = 参照元の repo (行の前に出た別の repo で引かない)", st("src.md", 14, "共有の節") == "SAME_NAME")
+            expect("地の文の節名の語の末尾の `:` を外して見出しで引く (`§投稿履歴: 補足`、 通る)",
+                   not any(f.src.endswith("log.md") for f in f2))
             expect("plans/ の *-results.md = 記録 (🔴 も 🟠 も 📜)",
                    st("x-results.md", 1, "どこにも無い節") == "RECORD" and st("x-results.md", 1, "共有の節") == "RECORD")
             expect("plans/ の結果でない file = 🔴 のまま (陰性対照)", st("live.md", 1, "どこにも無い節") == "MISSING")
