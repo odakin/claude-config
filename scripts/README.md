@@ -32,7 +32,7 @@
 - **[bootstrap-windows.ps1](bootstrap-windows.ps1)** — Claude Code を Windows で始めるための前提ツール一括導入
 - **[browser-post-receiver.py](browser-post-receiver.py)** — browser の page が POST した本文を 1 回だけ受けて file に書く (127.0.0.1)
 - **[build-sensitive-terms.py](build-sensitive-terms.py)** — 実名などの literal gate (Tier B) の term 一覧を SoT から生成する。
-- **[busy-worker-stop-check.mutants.json](busy-worker-stop-check.mutants.json)** — busy-worker-stop-check.py の「文脈圧縮の要約の続きを本人の発言に数えない」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。
+- **[busy-worker-stop-check.mutants.json](busy-worker-stop-check.mutants.json)** — busy-worker-stop-check.py の「文脈圧縮の要約の続きを本人の発言に数えない」 と「本人が親の窓で子を畳んでよいと言った後は、 子の待ちの中でも archive を 1 回目から通す」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。
 - **[busy-worker-stop-check.py](busy-worker-stop-check.py)** — 動いている (busy) worker session を止める操作 (`claude stop|kill|rm <id>`、 desktop の stop_session / archive_session) を、 本人に聞く前の 1 回目は止める (hook の engine。 正本 = conventions/multi-session-coordination.md#ask-before-stopping-a-busy-worker)。
 - **[calendar-app-occurrence.py](calendar-app-occurrence.py)** — Mac の Calendar.app にある繰り返し予定の「この回だけ」 をずらす / 飛ばす、 写しの系列を丸ごと消す (EventKit、 既定 dry-run)。
 - **[calendar-events.py](calendar-events.py)** — Google Calendar の event を機械で読む / 足す / 直す / 消す。
