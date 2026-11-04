@@ -55,6 +55,20 @@ FIX = (
     "subagent (Agent tool の子) では単独の cd が次の呼び出しに残らない = scripts/commit-from-origin-worktree.py で commit・push する (claude-code-permissions.md#subagent-commit-route)。\n"
     "正本 = claude-config/conventions/claude-code-permissions.md#cd-with-git-goes-to-classifier"
 )
+# 行き先が session の folder の外 (home の外 = scratchpad・/tmp) のときの直し方。 desktop の Code タブは folder の外への
+# 単独の cd を戻す (「Shell cwd was reset」) = 上の FIX の 1. が使えない。 戻されたまま次の git を打つと作業ルートで走る
+# (実測 = 作業ルートに空の repo ができ、 fleet の検査が子の repo を数えなくなった)
+OUTSIDE_MARK = "行き先が session の folder の外"
+FIX_OUTSIDE = (
+    "直し方 (行き先が session の folder の外 = scratchpad・/tmp など):\n"
+    "  単独の `cd` に分けない — desktop の Code タブは folder の外への cd を作業ルートへ戻す (「Shell cwd was reset」)。\n"
+    "  戻されたまま次の git を打つと作業ルートで走る (実測 = 作業ルートに repo ができた)。\n"
+    "  cd も -C も付けず、 行き先を env で書く: `GIT_DIR=<dir>/.git GIT_WORK_TREE=<dir> git commit -q -m \"…\"` (push も同じ形)。\n"
+    "  commit と push 以外 (add・init・log) は `git -C <dir> add …` / `git init <dir>` の形で書ける (この guard は止めない)。\n"
+    "  env の形も allow rule には当たらず classifier の判定に回ることはある。 判定を避けるなら一時の repo を作業ルートの下に作る\n"
+    "  (repo を巡回する処理に拾われうるので、 使い終えたら消す)。\n"
+    "正本 = claude-config/conventions/claude-code-permissions.md#cd-with-git-goes-to-classifier"
+)
 
 
 def _blank(m: re.Match) -> str:
@@ -110,6 +124,22 @@ def _resolve(target: str | None, here: str | None, home: str) -> str | None:
     return os.path.realpath(t)
 
 
+def _outside(dest: str | None, home: str) -> bool:
+    """行き先が home の外か (= session の folder の外。 読めない行き先は外とみなさない)。"""
+    if not dest:
+        return False
+    h = os.path.realpath(home).rstrip("/")
+    return not (dest == h or dest.startswith(h + "/"))
+
+
+def _git_c_dir(words: list[str]) -> str | None:
+    """`git -C <dir> …` の <dir> (無ければ None)。"""
+    for i, w in enumerate(words[1:-1], 1):
+        if w == "-C":
+            return words[i + 1]
+    return None
+
+
 def _git_sub(words: list[str]) -> tuple[str | None, bool]:
     """(subcommand, -C が在ったか)。 git でなければ (None, False)。"""
     if not words or os.path.basename(words[0]) != "git":
@@ -133,6 +163,7 @@ def find_issue(cmd: str, cwd: str | None, home: str) -> str | None:
     start = os.path.realpath(cwd) if cwd else None
     here = start
     moved = None  # 別の dir に移った cd の表記
+    moved_dest = None  # その cd の行き先 (絶対 path、 読めなければ None)
     for seg in _segments(cmd):
         words = _words(seg)
         if not words:
@@ -144,15 +175,20 @@ def find_issue(cmd: str, cwd: str | None, home: str) -> str | None:
             here = dest
             if dest is None or start is None or dest != start:
                 moved = " ".join(words[:2])
+                moved_dest = dest
             else:
                 moved = None
+                moved_dest = None
             continue
         sub, has_c = _git_sub(words)
         if sub in GIT_WRITE:
             if moved:
-                return f"`{moved}` の後に `git {sub}` (= 別の dir への cd と git を 1 つの command に入れた形)"
+                out = f"`{moved}` の後に `git {sub}` (= 別の dir への cd と git を 1 つの command に入れた形)"
+                return out + (f" ({OUTSIDE_MARK} = `{moved_dest}`)" if _outside(moved_dest, home) else "")
             if has_c:
-                return f"`git -C … {sub}` (= 先頭が `git {sub}` でないので allow rule に当たらない形)"
+                out = f"`git -C … {sub}` (= 先頭が `git {sub}` でないので allow rule に当たらない形)"
+                c_dest = _resolve(_git_c_dir(words), here, home)
+                return out + (f" ({OUTSIDE_MARK} = `{c_dest}`)" if _outside(c_dest, home) else "")
     return None
 
 
@@ -161,7 +197,8 @@ def reason_text(issue: str) -> str:
         "[cd-git-write-guard] " + issue + "。\n"
         "この形は `Bash(git commit:*)` / `Bash(git push *)` を allow に入れていても rule に当たらず、 "
         "auto mode では classifier の判定に回って止められることがある "
-        "(cd で移った先の git hook が動きうるため = 公式 docs permissions の Read-only commands の節)。\n" + FIX
+        "(cd で移った先の git hook が動きうるため = 公式 docs permissions の Read-only commands の節)。\n"
+        + (FIX_OUTSIDE if OUTSIDE_MARK in issue else FIX)
     )
 
 
@@ -228,6 +265,22 @@ def selftest() -> int:
     check("grep -n 'cd .* && git commit' hooks/x.py", False, "quote の中の pattern")
     check("echo cd; echo git push", False, "echo の引数")
     check("cd ~/Claude/r && python3 x.py push", False, "git 以外の push")
+    # 行き先が session の folder の外 (home の外) = 単独の cd を案内せず env の形を案内する
+    def outside(cmd: str) -> bool:
+        got = find_issue(cmd, cwd, home)
+        return bool(got) and OUTSIDE_MARK in got and "GIT_DIR=" in reason_text(got) and "`cd <repo>` だけ" not in reason_text(got)
+    for cmd, label in (("cd /tmp/x && git commit -m y", "外の dir への cd + commit"),
+                       ("git -C /tmp/x commit -m y", "外の dir の git -C … commit"),
+                       ("cd /home/u/Claude/r && cd /tmp/x && git push", "最後の cd が外")):
+        ok = outside(cmd)
+        print(("  ok   " if ok else "  FAIL ") + "外の案内: " + label)
+        fails += 0 if ok else 1
+    for cmd, label in (("cd ~/Claude/repo && git commit -m x", "home の中の repo"),
+                       ("git -C /home/u/Claude/repo push", "home の中の git -C")):
+        got = find_issue(cmd, cwd, home)
+        ok = bool(got) and OUTSIDE_MARK not in got and "`cd <repo>` だけ" in reason_text(got)
+        print(("  ok   " if ok else "  FAIL ") + "従来の案内のまま (陰性対照): " + label)
+        fails += 0 if ok else 1
     print("selftest:", "PASS" if not fails else f"{fails} FAIL")
     return 1 if fails else 0
 

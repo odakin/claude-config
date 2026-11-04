@@ -25,7 +25,7 @@ json() { # <cwd> <command>
 }
 
 echo "=== hook 入出力 ==="
-out="$(json "$TMP/here" "cd $TMP/repo && git add a && git commit -q -m m -- a && git push -q" | env -u CLAUDE_CD_GIT_GUARD python3 "$HOOK")"
+out="$(json "$TMP/here" "cd $TMP/repo && git add a && git commit -q -m m -- a && git push -q" | env -u CLAUDE_CD_GIT_GUARD HOME="$TMP" python3 "$HOOK")"
 case "$out" in
   *'"permissionDecision": "deny"'*'cd <repo>'*) ok "別 dir への cd + commit/push → deny + 直し方" ;;
   *) ng "deny されない: $out" ;;
@@ -36,12 +36,21 @@ case "$out" in
 esac
 printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin)["hookSpecificOutput"]; assert d["hookEventName"]=="PreToolUse"' \
   && ok "出力は PreToolUse の JSON" || ng "JSON 形が違う"
-out="$(json "$TMP/repo" "cd $TMP/repo && git commit -q -m m -- a && git push -q" | env -u CLAUDE_CD_GIT_GUARD python3 "$HOOK")"
+out="$(json "$TMP/repo" "cd $TMP/repo && git commit -q -m m -- a && git push -q" | env -u CLAUDE_CD_GIT_GUARD HOME="$TMP" python3 "$HOOK")"
 [ -z "$out" ] && ok "行き先が今の作業ディレクトリと同じ cd は通す" || ng "同じ dir の cd で出力: $out"
-out="$(json "$TMP/repo" "git add a && git commit -q -m m -- a && git push -q" | env -u CLAUDE_CD_GIT_GUARD python3 "$HOOK")"
+out="$(json "$TMP/repo" "git add a && git commit -q -m m -- a && git push -q" | env -u CLAUDE_CD_GIT_GUARD HOME="$TMP" python3 "$HOOK")"
 [ -z "$out" ] && ok "cd なしの git 連結は通す" || ng "cd なしで出力: $out"
-out="$(json "$TMP/here" "git -C $TMP/repo push" | env -u CLAUDE_CD_GIT_GUARD python3 "$HOOK")"
+out="$(json "$TMP/here" "git -C $TMP/repo push" | env -u CLAUDE_CD_GIT_GUARD HOME="$TMP" python3 "$HOOK")"
 [ -n "$out" ] && ok "git -C … push → deny" || ng "git -C … push で無音"
+OUTSIDE="$(mktemp -d)"
+out="$(json "$TMP/here" "cd $OUTSIDE && git commit -q -m m" | env -u CLAUDE_CD_GIT_GUARD HOME="$TMP/here" python3 "$HOOK")"
+case "$out" in
+  *'"permissionDecision": "deny"'*'GIT_DIR='*) case "$out" in *'`cd <repo>` だけ'*) ng "外の dir に単独の cd を案内した: $out" ;; *) ok "行き先が home の外 → 単独の cd を案内せず GIT_DIR の形" ;; esac ;;
+  *) ng "外の dir で GIT_DIR の案内が無い: $out" ;;
+esac
+out="$(json "$TMP/here" "git -C $OUTSIDE push" | env -u CLAUDE_CD_GIT_GUARD HOME="$TMP/here" python3 "$HOOK")"
+case "$out" in *'GIT_DIR='*) ok "外の dir の git -C … push → GIT_DIR の形" ;; *) ng "外の dir の -C で GIT_DIR の案内が無い: $out" ;; esac
+rm -rf "$OUTSIDE"
 out="$(json "$TMP/here" "cd $TMP/repo && git push" | CLAUDE_CD_GIT_GUARD=0 python3 "$HOOK")"
 [ -z "$out" ] && ok "opt-out (CLAUDE_CD_GIT_GUARD=0)" || ng "opt-out が効かない"
 out="$(printf '{"tool_name":"Read","tool_input":{"file_path":"x"}}' | python3 "$HOOK")"
