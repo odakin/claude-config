@@ -27,6 +27,10 @@ machine-local)。 該当する行が --max を超えたら、 出さなかった
 一緒に出る組。 同じ道具の別の面なら正しい、 説明の語なら := で絞る)。
 出力は PreToolUse の additionalContext (止めない。 deny は別の guard の仕事)。 全 error path で fail-open (無言 exit 0)。
 自分 (engine 名) を含む command には出さない (表の file 名は除外しない = 表を開く瞬間に行の足し方の行が出るのは望む挙動)。
+Bash の command のうち、 道具を使っていない文字列は照合から外す: 掲示板 (board.py) の自由文の値 (--summary・
+--acceptance・--session-name・--title・--reason ほか) と、 grep 系 (grep / rg / ugrep / ag / ack / git grep) の
+検索語。 検索先の path と、 叩いている道具の名は外さない (= その file を読む瞬間には出る)。 実測: 発火の約 1/3 が
+「文字列に含むだけ」 で、 その主な形がこの 2 つだった。 quote が閉じない行 (heredoc の本文など) は外さずに当てる。
 
 usage:
   constraint-at-use.py --table T.md [--table U.md]... [--state-dir DIR] [--max N]      # hook (stdin = PreToolUse JSON)
@@ -42,6 +46,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -49,6 +54,14 @@ FILE_TOOLS = ("Edit", "Write", "MultiEdit", "Read", "NotebookEdit")
 TOK_RE = re.compile(r"`([^`]+)`|([A-Za-z][A-Za-z0-9_.\-/<>{},]*[A-Za-z0-9>}])")
 KEY_BLOCK_RE = re.compile(r"<!--\s*constraint-keys\s*\n(.*?)-->", re.S)
 DEFAULT_STATE_DIR = os.path.join(os.path.expanduser("~"), ".claude", "state", "constraint-at-use")
+# 道具を使っていない文字列 (Bash の command の中)
+FREE_TEXT_FLAGS = {"--summary", "--acceptance", "--session-name", "--title", "--reason", "--headless-reason",
+                   "--effort-quote", "--model-quote"}
+SEARCH_TOOLS = {"grep", "egrep", "fgrep", "rg", "ugrep", "ag", "ack"}
+SEARCH_ARG_OPTS = {"-A", "-B", "-C", "-m", "-d", "-D", "-g", "-t", "-T", "-M", "-j", "--include", "--exclude",
+                   "--exclude-dir", "--glob", "--type", "--max-count", "--context", "--after-context",
+                   "--before-context"}
+SEPARATORS = {";", "|", "||", "&", "&&", "(", ")"}
 HEADER = "⚠️ 触る前に効く制約 (この session で初めて触る道具の行。 正本 = {table})"
 
 
@@ -136,9 +149,86 @@ def load_table(path: Path) -> list[dict]:
     return rows
 
 
+def _command_word(tokens: list[str]) -> tuple[str, int]:
+    """segment の command の語と、 その位置 (env の代入・sudo・command・git の前置きを飛ばす)。"""
+    i = 0
+    while i < len(tokens) and (re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tokens[i]) or tokens[i] in ("sudo", "command", "env")):
+        i += 1
+    if i < len(tokens) - 1 and tokens[i] == "git" and tokens[i + 1] == "grep":
+        i += 1
+    return (tokens[i].rsplit("/", 1)[-1] if i < len(tokens) else ""), i
+
+
+def _drop_search_terms(tokens: list[str], start: int) -> list[str]:
+    out, pattern_seen, skip_next, i = tokens[:start + 1], False, False, start + 1
+    while i < len(tokens):
+        t = tokens[i]
+        if t in ("-e", "--regexp"):
+            pattern_seen, i = True, i + 2
+            continue
+        if t.startswith("--regexp=") or (t.startswith("-e") and not t.startswith("--") and len(t) > 2):
+            pattern_seen, i = True, i + 1
+            continue
+        if t in SEARCH_ARG_OPTS or t == "-f":
+            out.extend(tokens[i:i + 2])
+            i += 2
+            continue
+        if t.startswith("-"):
+            out.append(t)
+        elif not pattern_seen:
+            pattern_seen = True  # 最初の位置引数 = 検索語
+        else:
+            out.append(t)
+        i += 1
+    return out
+
+
+def _drop_free_text(tokens: list[str]) -> list[str]:
+    out, i = [], 0
+    while i < len(tokens):
+        t = tokens[i]
+        if t in FREE_TEXT_FLAGS:
+            i += 2
+            continue
+        if t.split("=", 1)[0] in FREE_TEXT_FLAGS and "=" in t:
+            i += 1
+            continue
+        out.append(t)
+        i += 1
+    return out
+
+
+def strip_unused_text(command: str) -> str:
+    """道具を使っていない文字列 (掲示板の自由文の値・grep 系の検索語) を除いた command。 行ごとに shlex で
+    分け、 分けられない行 (quote が閉じない = heredoc の本文など) は元のまま残す (= 今までどおり当てる)。"""
+    kept = []
+    for line in command.splitlines():
+        try:
+            lex = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lex.whitespace_split = True
+            tokens = list(lex)
+        except ValueError:
+            kept.append(line)
+            continue
+        seg: list[str] = []
+        for t in tokens + [";"]:
+            if t in SEPARATORS:
+                if seg:
+                    word, pos = _command_word(seg)
+                    if word in SEARCH_TOOLS or (word == "grep" and pos > 0 and seg[pos - 1] == "git"):
+                        seg = _drop_search_terms(seg, pos)
+                    if any(x.endswith("board.py") for x in seg):
+                        seg = _drop_free_text(seg)
+                    kept.append(" ".join(seg))
+                seg = []
+            else:
+                seg.append(t)
+    return "\n".join(kept)
+
+
 def haystack(tool_name: str, tool_input: dict) -> str | None:
     if tool_name == "Bash":
-        return str(tool_input.get("command", ""))
+        return strip_unused_text(str(tool_input.get("command", "")))
     if tool_name in FILE_TOOLS:
         return str(tool_input.get("file_path") or tool_input.get("notebook_path") or tool_input.get("path") or "")
     return None
@@ -289,6 +379,23 @@ def selftest() -> int:
         hits = match_rows(rows, "repo/todo/2026-10-01-foo.yaml")
         check(len(hits) == 1 and hits[0]["head"].startswith("todo_ledger"), "match: Edit の path に todo/<id>.yaml")
         check(match_rows(rows, "claude auth status") and not match_rows(rows, "git status"), "match: overlay の regex、 無関係な command は 0")
+        hs = lambda c: haystack("Bash", {"command": c})  # noqa: E731
+        check(not match_rows(rows, hs("python3 board/board.py claim --summary 'drive-xlsx-set-cells の件を引き受けた' --session x")),
+              "strip: 掲示板の --summary の自由文に道具の名があっても出ない")
+        check(not match_rows(rows, hs("python3 board.py note --acceptance='calendar.sh を直す'")),
+              "strip: --flag=値 の形の自由文も外す")
+        check(match_rows(rows, hs("python3 board.py submit --deliverable scripts/drive-xlsx-set-cells.py")),
+              "strip: 掲示板の path の引数 (--deliverable) は外さない")
+        check(not match_rows(rows, hs("grep -rn drive-xlsx-set-cells notes/ | head")),
+              "strip: grep の検索語に道具の名があっても出ない")
+        check(not match_rows(rows, hs("cd x && command grep -n -A 3 -e calendar.sh docs")),
+              "strip: -e の検索語と、 引数を取る option (-A 3) の後の検索先を見分ける")
+        check(match_rows(rows, hs("grep -n foo scripts/drive-xlsx-set-cells.py")),
+              "strip: grep の検索先の file は外さない (= その file を読む瞬間には出る)")
+        check(not match_rows(rows, hs("git grep -n calendar.sh")) and match_rows(rows, hs("python3 x/calendar.sh add")),
+              "strip: git grep の検索語も外す / 道具を叩く command には今までどおり出る")
+        check(match_rows(rows, hs("cat <<EOF\nrun drive-xlsx-set-cells 'now\nEOF")),
+              "strip: quote が閉じない行は外さずに当てる (fail-safe = 今までの挙動)")
         # hook: 新しい process で stdin JSON → additionalContext JSON、 2 回目は無言 (state)
         st = tmp / "state"
         ev = {"hook_event_name": "PreToolUse", "session_id": "s1", "tool_name": "Bash",
@@ -381,7 +488,8 @@ def main() -> int:
         for t in tables:
             if t.is_file():
                 rows.extend(load_table(t))
-        hits = match_rows(rows, probe)
+        text = haystack(tool, {"command": probe, "file_path": probe}) or probe  # hook と同じ除き方で当てる
+        hits = match_rows(rows, text)
         print(f"{len(hits)} 行が出る (tool = {tool}):")
         for r in hits:
             print("  " + r["head"][:70])
