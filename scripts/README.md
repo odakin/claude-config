@@ -314,6 +314,7 @@
 - **[probe-codex-wrap.py](probe-codex-wrap.py)** — 新規native sessionでwrap入口・収集・commit・掲示板を合成検証する。--run。
 - **[probe-headless-record-clause.py](probe-headless-record-clause.py)** — 実 CLI の送信内容と hook 発火を loopback の模擬応答で検証する手動 probe。
 - **[probe-python-nonascii-line.py](probe-python-nonascii-line.py)** — python が非 ASCII を含む長い 1 行を coding cookie 無しで読めなくなる境界 (file 実行と stdin = heredoc 実行の両方) を二分探索で測り、 cookie を置けば通るかも確かめる。 python を更新したら再測定する道具。--selftest 内蔵。
+- **[prose-pass-compare.py](prose-pass-compare.py)** — 共通の土台から独立に直した 2 本の写しを、 変わった所ごとに並べる (語の差 + 選択の注記つきの HTML)。--selftest 内蔵。
 - **[pty-leak-watch.sh](pty-leak-watch.sh)** — macOS Claude.app pty leak watchdog（LaunchAgent、枯渇前に macOS 通知、conventions/macos-claude-app-pty-leak.md）
 - **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A 構造 / B literal / C private repo 名 / D 未公開文書の逐語 + local-only 機密 / E 活動の事実）
 - **[public-precommit-runner.test.sh](public-precommit-runner.test.sh)** — self-tests for the file-body pre-commit gate
