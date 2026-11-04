@@ -91,6 +91,10 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
   (stat は軽く、 読むのは変化の時だけ)。 束ねる・commit するのは 1 分ごとの側だけにする (commit の途中に束が増えない)。
   spool に足す側と束ねる側は同じ lock の下に置く (束ねている最中に足した行は、 索引にだけ載って二度と写されない)。
   見張りは heartbeat を書き、 1 分ごとの係が heartbeat の古さを見て起こし直す (2 本目は lock ですぐ抜ける)。
+  ⚠️ **見張りでも拾えない窓がある**: 通知が DB に書かれるのは表示から数秒後 (実測 = 最短 4 秒台・中央 5 秒・長いと 10 秒超)。
+  それより早く取り下げられた通知は DB に一度も現れないので、 何秒おきに見ても拾えない (見張りが救うのは、 書き込みの後で
+  1 分ごとの写しの前に取り下げられた分だけ)。 表示された通知がクリックされた直後の取り下げも同じ形で落ちる
+  (log の `usernoted` の `LAUNCH`)。
   applet を作り直すと付与が外れる (下の TCC) ので、 見張りは applet が毎回呼ぶ script が背景に起こす = 子は applet の
   フルディスクアクセスのまま読めた (実測)。 取りこぼしは人が突き合わせるのでなく、 下の監査が機械で見る ([#archive-audit](#archive-audit))。
 - <a id="archive-audit"></a>**取りこぼしは定期の監査で機械が見る**: 写す係の失敗 (付与が無い・OS の通知の許可が無い・取り下げに
@@ -100,7 +104,7 @@ engine = [`scripts/macos-notification-db.py`](../scripts/macos-notification-db.p
   `log show` は通知 DB と違い、 フルディスクアクセスの無い process からも読めた。 写す係の applet から起こした子でも読めた (どちらも実測)。
   要求の id は短縮された別の識別子で DB の uuid とは一致しない = 時刻で合わせる (DB の delivered の時刻との差は数十 ms 以内、 実測)。
   余った要求 (= アプリは通知を出したのに記録に無い) を手元の台帳に積み、 session の開始時の警告に出す。 同じ id の
-  `Removing … delivered notifications with identifiers (` が続けば、 取り下げまでの秒も添える (見張りの間隔より短いかが分かる)。
+  `Removing … delivered notifications with identifiers (` が続けば、 取り下げまでの秒も添える (DB への書き込みの遅れより短いか = 見張りでも拾えなかった分かが分かる)。
   - unified log はこの subsystem だと数日で消える (実測) = 見つけた分は台帳に残し、 原因を確かめた印が付くまで警告を出し続ける。
   - `log show` は数秒〜数十秒かかる = session の開始時には回さず、 結果の file を読むだけにする。 1 時間ごとの起動は
     「起こした時刻」 で数える (監査が落ちても毎分は起こさない)。 監査そのものが止まった・失敗したときも警告に出す。
