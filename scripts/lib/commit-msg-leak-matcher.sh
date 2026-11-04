@@ -36,7 +36,8 @@
 #
 # 出力: グローバル変数 `LEAK_MATCHER_HITS` に hit summary を set (= 文字列、
 # 空なら hit なし)。 hit detail format は人間可読 (= "[repo-name] X Y" 等)。
-# `LEAK_MATCHER_LITERAL_COUNT` = (a) sensitive-terms.txt に当たった行の数 (0 = なし)。
+# `LEAK_MATCHER_LITERAL_COUNT` = (a) sensitive-terms.txt と commit-msg-terms.txt (commit message だけの一覧) に
+# 当たった行の数 (0 = なし)。
 # 公開の印の無い repo では (a) だけを止める caller (runner の Stage 0b・Claude 側の hook) が読む。
 #
 # 依存: bash 3.2 (= macOS stock)、 grep、 sed、 wc。 find-personal-layer.sh
@@ -64,7 +65,7 @@ LEAK_MATCHER_ALLOWLIST="gmail-mcp-config research-collab email-office odakin-pre
 # ====================================================================
 run_leak_matcher() {
   local message="$1"
-  local personal_layer sensitive_terms repos_md
+  local personal_layer sensitive_terms cm_terms repos_md
   local literal_hits hit_count
   local private_repos filtered_repos repo skip allow
   local repo_hits path_hits
@@ -96,17 +97,27 @@ run_leak_matcher() {
   #     word 境界 ill-defined ゆえ -w 一律適用は破壊的
   # ----------------------------------------------------------------
   sensitive_terms="$personal_layer/sensitive-terms.txt"
-  if [ -s "$sensitive_terms" ]; then
-    local ascii_terms na_terms allow_terms ascii_hits na_hits st_lib literal_message="$message"
+  # commit message だけに効く一覧 (build-sensitive-terms.py の commit_msg_sources が作る)。 本 matcher は commit message に
+  # だけ使う = 公開 repo の本文の検査 (Tier B、 public-precommit-runner.sh) はこの一覧を読まない
+  cm_terms="$personal_layer/commit-msg-terms.txt"
+  if [ -s "$sensitive_terms" ] || [ -s "$cm_terms" ]; then
+    local ascii_terms na_terms allow_terms ascii_hits na_hits st_lib literal_message="$message" all_terms f
     ascii_terms="$(mktemp)"
     na_terms="$(mktemp)"
     allow_terms="$(mktemp)"
+    all_terms="$(mktemp)"
+    for f in "$sensitive_terms" "$cm_terms"; do
+      if [ -s "$f" ]; then
+        cat "$f" >> "$all_terms"
+        printf '\n' >> "$all_terms"
+      fi
+    done
     # 行の種類 (`!複合語` = 照合前に消す許可語 / ASCII / 他) の正本 = lib/sensitive-terms.sh。
     # lib が読めないときは従来の分割 (= 許可語なし、 鳴る側に倒れる)
     st_lib="$(dirname "${BASH_SOURCE[0]}")/sensitive-terms.sh"
     if [ -f "$st_lib" ]; then
       . "$st_lib"
-      st_split "$sensitive_terms" "$ascii_terms" "$na_terms" "$allow_terms"
+      st_split "$all_terms" "$ascii_terms" "$na_terms" "$allow_terms"
       literal_message="$(printf '%s' "$message" | st_strip_allowed "$allow_terms")"
     else
       awk -v a="$ascii_terms" -v n="$na_terms" '
@@ -114,7 +125,7 @@ run_leak_matcher() {
         /^[[:space:]]*#/ { next }
         /^[ -~]+$/      { print > a; next }
                         { print > n }
-      ' "$sensitive_terms"
+      ' "$all_terms"
     fi
 
     ascii_hits=""
@@ -133,7 +144,7 @@ run_leak_matcher() {
           || true
       )"
     fi
-    rm -f "$ascii_terms" "$na_terms" "$allow_terms"
+    rm -f "$ascii_terms" "$na_terms" "$allow_terms" "$all_terms"
 
     literal_hits="$(
       {

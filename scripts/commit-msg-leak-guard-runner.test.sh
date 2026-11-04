@@ -418,7 +418,13 @@ s0b "pass-0b-merge-source" 0 "Merge branch 'モック秘語'" "merge"
 s0b "pass-0b-comment-lines-only" 0 "記録: 共著者へ返信した
 # モック秘語 (git が消す comment 行)"
 s0b "pass-0b-bypass-once" 0 "記録: モック秘語さんへ返信した" "message" "CLAUDE_COMMIT_NAME_GUARD=0"
+# commit message だけに効く一覧 (commit-msg-terms.txt) の語も止まる。 一覧が無ければ同じ語は通る
+s0b "pass-0b-commit-msg-only-term-without-list" 0 "記録: モック講師さんの返事"
+printf '%s\n' '# commit message だけの一覧 (架空)' 'モック講師' > "$MOCK_LAYER/commit-msg-terms.txt"
+s0b "block-0b-commit-msg-only-term" 1 "記録: モック講師さんの返事"
 rm -f "$SCOPE"
+expect_block "block-commit-msg-only-term-in-public-repo" "記録: モック講師さんの返事"
+rm -f "$MOCK_LAYER/commit-msg-terms.txt"
 
 # ====================================================================
 echo ""

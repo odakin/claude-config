@@ -20,10 +20,15 @@ config (個人層 `sensitive-terms-sources.yaml`):
         #    その doc は箇条書きにするか、 項目名をここに足す
     prefix_stoplist: [東京]      # 2 字 prefix が普通名詞になる語
     compound_allow: [東京駅前]   # term を含むが人名でない複合語 (地名等)。 照合の前に本文から消す (`!` 行で出力)
+    commit_msg_sources: [../seminar/speakers.yaml]   # commit message だけに効く一覧 (個人層の commit-msg-terms.txt) の元
+        # commit message の検査 (lib/commit-msg-leak-matcher.sh の (a)) は sensitive-terms.txt とこの一覧の両方を読み、
+        # 公開 repo の本文の検査 (Tier B) はこの一覧を読まない = 公開の本文に普通に出る地名・公開データの名前で鳴らさずに、
+        # commit message には人名を書かない運用を機械で守る。 読み方は sources より広い: yaml の `name_ja:` と list の
+        # `- name:` も読み、 片仮名だけの名前は頭の字を語にしない (実測: 片仮名の名前の頭の 2 字が「ログイン」「ジョブ」 に当たった)
 
 使い方:
-  build-sensitive-terms.py --check    # SoT の名前が一覧に全部あるか
-  build-sensitive-terms.py --write    # 生成 block を作り直す
+  build-sensitive-terms.py --check    # SoT の名前が一覧に全部あるか (commit message だけの一覧も)
+  build-sensitive-terms.py --write    # 生成 block を作り直す (commit message だけの一覧も)
   build-sensitive-terms.py --canary   # 実 hook で止まるかを temp の公開 repo で実測
   build-sensitive-terms.py --selftest
 """
@@ -59,6 +64,7 @@ def _personal_layer() -> Path | None:
 PREFS = _personal_layer()
 TERMS = (PREFS / "sensitive-terms.txt") if PREFS else None
 CONFIG = (PREFS / "sensitive-terms-sources.yaml") if PREFS else None
+CM_TERMS = (PREFS / "commit-msg-terms.txt") if PREFS else None   # commit message だけに効く一覧 (全体が生成物)
 
 BEGIN = "# --- generated: SoT 由来の term (build-sensitive-terms.py --write。 手編集しない) ---"
 END = "# --- end generated ---"
@@ -71,6 +77,12 @@ PLAIN_RE = re.compile(r"^\|\s*([\u3040-\u30ff\u4e00-\u9fff]{2,8})\s*\|")
 REV_RE = re.compile(r"^\|\s*([A-Za-z][A-Za-z .'-]{3,40}?)\s*[\uff08(]\s*([\u3040-\u30ff\u4e00-\u9fff]{2,8})")
 # yaml の `name: 漢字氏名`
 YAML_RE = re.compile(r"^\s*(?:name|\u6c0f\u540d)\s*:\s*[\"']?([\u3040-\u30ff\u4e00-\u9fff]{2,8})")
+# commit message だけの一覧の元に使う広い形: `name_ja:` と list の `- name:` も読む。 Tier B の元 (sources) には使わない
+# = 公開 repo の本文の検査の語を変えない (広げると公開の本文の地名・公開データの名前に当たる = 実測)
+YAML_WIDE_RE = re.compile(r"^\s*(?:-\s+)?(?:name|name_ja|\u6c0f\u540d)\s*:\s*[\"']?([\u3040-\u30ff\u4e00-\u9fff]{2,8})")
+KATAKANA_RE = re.compile(r"^[\u30a0-\u30ff]+$")
+CM_HEADER = ("# commit-msg-terms.txt — commit message だけに効く人名の一覧 (build-sensitive-terms.py --write が全体を作る。 手編集しない)\n"
+             "# 読み手 = lib/commit-msg-leak-matcher.sh の (a) (sensitive-terms.txt と合わせて読む)。 公開 repo の本文の検査は読まない")
 
 MIN_CJK_TERM = 2       # 1 字の姓は substring 照合で誤爆が多すぎる
 MIN_ASCII_TERM = 4     # -w 照合。 短い romaji 姓は普通名詞と衝突する
@@ -99,12 +111,15 @@ def load_config() -> dict | None:
         "cell_stoplist": set(c.get("cell_stoplist", [])) | DEFAULT_CELL_STOP,
         "prefix_stoplist": set(c.get("prefix_stoplist", [])),
         "compound_allow": [str(x).strip() for x in (c.get("compound_allow") or []) if str(x).strip()],
+        "commit_msg_sources": [(PREFS / s).resolve() for s in c.get("commit_msg_sources", []) or []],
     }
     return _CFG
 
 
-def extract_names(text: str, cell_stop: set[str] | None = None) -> tuple[set[str], set[str]]:
-    """(CJK 名, ASCII 名) を返す。 file の形式は表 or yaml を想定。"""
+def extract_names(text: str, cell_stop: set[str] | None = None, wide: bool = False) -> tuple[set[str], set[str]]:
+    """(CJK 名, ASCII 名) を返す。 file の形式は表 or yaml を想定。 wide = yaml の `name_ja:` と `- name:` も読む
+    (commit message だけの一覧の元に使う)。"""
+    yaml_re = YAML_WIDE_RE if wide else YAML_RE
     cjk, ascii_ = set(), set()
     # cell_stop は **全部の枝**に当てる。 PLAIN_RE の枝だけに当てていたので、
     # `| 見出し (english) | ... |` の形の表の見出し行が人名として拾われ、 その prefix
@@ -128,13 +143,13 @@ def extract_names(text: str, cell_stop: set[str] | None = None) -> tuple[set[str
             if m.group(1) not in stop:
                 cjk.add(m.group(1))
             continue
-        m = YAML_RE.match(line)
+        m = yaml_re.match(line)
         if m and m.group(1) not in stop:
             cjk.add(m.group(1))
     return cjk, ascii_
 
 
-def expand_cjk(name: str, prefix_stop: set[str] | None = None) -> set[str]:
+def expand_cjk(name: str, prefix_stop: set[str] | None = None, katakana_whole: bool = False) -> set[str]:
     """氏名から term を作る。 **姓だけの表記も実際に書かれる**ので prefix も出す。
 
     姓と名の境界は CJK 連結名から確定できないため、 長さ 2..len-1 の prefix を全部出す。
@@ -146,6 +161,8 @@ def expand_cjk(name: str, prefix_stop: set[str] | None = None) -> set[str]:
     規律 = docs/convention-design-principles.md#display-cap-is-not-the-count
     """
     out = {name}
+    if katakana_whole and KATAKANA_RE.match(name):
+        return out   # 片仮名だけの名前 (多くは名が先の外国の名前) は頭の字を語にしない = 普通の語の頭と重なる
     for k in range(MIN_CJK_TERM, len(name)):
         p = name[:k]
         if p not in (prefix_stop or set()):
@@ -153,7 +170,7 @@ def expand_cjk(name: str, prefix_stop: set[str] | None = None) -> set[str]:
     return out
 
 
-def collect(sources=None) -> tuple[set[str], set[str], list[str]]:
+def collect(sources=None, wide: bool = False) -> tuple[set[str], set[str], list[str]]:
     cfg = load_config()
     if cfg is None and sources is None:
         return set(), set(), []
@@ -165,9 +182,9 @@ def collect(sources=None) -> tuple[set[str], set[str], list[str]]:
         if not p.exists():
             continue
         seen.append(p.name)
-        c, a = extract_names(p.read_text(errors="replace"), cell_stop)
+        c, a = extract_names(p.read_text(errors="replace"), cell_stop, wide=wide)
         for n in c:
-            cjk |= expand_cjk(n, prefix_stop)
+            cjk |= expand_cjk(n, prefix_stop, katakana_whole=wide)
         for n in a:
             if len(n) >= MIN_ASCII_TERM:
                 ascii_.add(n)
@@ -202,6 +219,35 @@ def mask(t: str) -> str:
     return t[0] + "…" if len(t) > 1 else "…"
 
 
+def collect_commit_msg(main_terms: set[str]) -> tuple[list[str], list[str]]:
+    """commit message だけの一覧の (語, 読んだ source)。 sensitive-terms.txt に既に在る語は入れない (二重にしない)。"""
+    cfg = load_config()
+    if not cfg or not cfg["commit_msg_sources"]:
+        return [], []
+    cjk, ascii_, seen = collect(cfg["commit_msg_sources"], wide=True)
+    return sorted(cjk - main_terms) + sorted(ascii_ - main_terms), seen
+
+
+def read_cm_terms() -> list[str]:
+    if not CM_TERMS or not CM_TERMS.exists():
+        return []
+    return [l.strip() for l in CM_TERMS.read_text().splitlines() if l.strip() and not l.strip().startswith("#")]
+
+
+def _zero_name_sources() -> list[str]:
+    """宣言した Tier B の source のうち、 在るのに名前を 1 件も拾えないもの (= 形式が読めていない。 実測: yaml の
+    `name_ja:` の台帳が宣言されたまま 0 件だった)。 Tier B の読み方は変えずに知らせる (広げると公開の本文で鳴る)。"""
+    cfg = load_config()
+    out = []
+    for p in (cfg["sources"] if cfg else []):
+        p = Path(p)
+        if p.exists() and p.read_bytes()[:10] != b"\x00GITCRYPT\x00"[:10]:
+            c, a = extract_names(p.read_text(errors="replace"), cfg["cell_stoplist"])
+            if not c and not a:
+                out.append(p.name)
+    return out
+
+
 def read_terms() -> tuple[list[str], list[str]]:
     """(手書き行, 生成 block の行) に割る。 file 不在なら空。"""
     if not TERMS or not TERMS.exists():
@@ -231,6 +277,16 @@ def cmd_write() -> int:
     print(f"wrote {TERMS.name}: 手書き {len([l for l in manual if l.strip()])} 行 + 生成 {len(block)} 件 "
           f"(CJK {len(cjk)} / ASCII {len(ascii_)}) from {', '.join(seen)}")
     print("  sample:", " ".join(mask(t) for t in block[:6]))
+    main_terms = set(l.strip() for l in manual + block if l.strip() and not l.strip().startswith(("#", "!")))
+    cm, cm_seen = collect_commit_msg(main_terms)
+    if load_config()["commit_msg_sources"]:
+        if CM_TERMS.is_symlink() and not CM_TERMS.resolve().parent.is_dir():
+            print(f"skip [commit-msg-terms]: {CM_TERMS.name} の行き先の dir が無い (= その repo を clone していない)")
+            return 0
+        CM_TERMS.write_text(CM_HEADER + "\n" + "\n".join(cm) + "\n")
+        print(f"wrote {CM_TERMS.name}: 生成 {len(cm)} 件 (commit message だけ) from {', '.join(cm_seen)}")
+    for name in _zero_name_sources():
+        print(f"⚠️  [sensitive-terms] 宣言した source {name} から名前を 1 件も拾えない (= 形式が読めていない。 Tier B の語は変えていない)")
     return 0
 
 
@@ -267,6 +323,24 @@ def cmd_check() -> int:
         print(f"  → python3 scripts/build-sensitive-terms.py --write")
         return 1
     print(f"ARMED [sensitive-terms]: {len(have)} term ({', '.join(seen)} 由来 {len(cjk | ascii_)} 件を含む)")
+    for name in _zero_name_sources():
+        print(f"⚠️  [sensitive-terms] 宣言した source {name} から名前を 1 件も拾えない (= 形式が読めていない。 Tier B の語は変えていない)")
+    if load_config()["commit_msg_sources"]:
+        cm, cm_seen = collect_commit_msg(have)
+        if not cm_seen:
+            print("skip [commit-msg-terms]: commit message だけの一覧の元がこのマシンに無い")
+            return 0
+        have_cm = set(read_cm_terms())
+        if not have_cm and cm:
+            print(f"NOT ARMED [commit-msg-terms]: {CM_TERMS.name} が空か不在 — 一覧に無い人名は commit message に書いても止まらない。"
+                  " --write で生成する")
+            return 1
+        miss = sorted(set(cm) - have_cm)
+        if miss:
+            print(f"STALE [commit-msg-terms]: 元の人名 {len(miss)} 件が一覧に無い → python3 scripts/build-sensitive-terms.py --write")
+            print("  " + " ".join(mask(t) for t in miss[:12]))
+            return 1
+        print(f"ARMED [commit-msg-terms]: {len(have_cm)} term ({', '.join(cm_seen)} 由来)")
     return 0
 
 
@@ -372,6 +446,15 @@ def selftest() -> int:
     check(len(pr_c) == 3, "T12: 3 字以上の term / ASCII term を含む・term を含まない複合語は拒否")
     check(mask("甲野太郎") == "甲…", "T9: mask は先頭 1 字だけ残す")
     check(len(mask("甲野")) == 2, "T10: mask 後の長さ")
+
+    # commit message だけの一覧の広い読み方 (Tier B の読み方は変えない)
+    check(extract_names("  name_ja: 丙野次郎\n")[0] == set(), "T13: 狭い読み方は name_ja: を読まない (Tier B の語を変えない)")
+    check(extract_names("  name_ja: 丙野次郎\n", wide=True)[0] == {"丙野次郎"}, "T14: 広い読み方は name_ja: を読む")
+    check(extract_names("  - name: 戊野四郎\n", wide=True)[0] == {"戊野四郎"}, "T15: 広い読み方は list の - name: を読む")
+    check(extract_names("  name_ja: 丙野 次郎\n", wide=True)[0] == {"丙野"}, "T16: 姓と名の間に空白があれば姓だけ")
+    check(expand_cjk("ホゲフガ", set(), katakana_whole=True) == {"ホゲフガ"}, "T17: 片仮名だけの名前は頭の字を語にしない")
+    check("ホゲ" in expand_cjk("ホゲフガ", set()), "T18: Tier B の展開は変えない (片仮名の頭も従来どおり)")
+    check("甲野" in expand_cjk("甲野太郎", set(), katakana_whole=True), "T19: 漢字の名前は広い読み方でも頭の字を語にする")
 
     print(f"\n==== RESULT: PASS={ok} FAIL={fail} ====")
     return 1 if fail else 0

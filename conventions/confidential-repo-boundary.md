@@ -73,7 +73,9 @@ dir ごと 1 個の `tar` にして、 その tar を暗号化対象に載せる
    識別子の形か、 machine-local の名簿から作った氏名があれば止める。 名簿の値は repo に入れない。
    持ち主が同僚・共著者の名前も commit message に書かない運用にするなら、 個人層の
    `commit-msg-literal-scope.txt` に `all` と書く。 commit-msg の runner (`scripts/commit-msg-leak-guard-runner.sh`
-   の Stage 0b) が、 個人層の検出語 (`sensitive-terms.txt`) を公開の印の無い repo の commit message でも止める
+   の Stage 0b) が、 個人層の検出語 (`sensitive-terms.txt` と、 commit message にだけ効く `commit-msg-terms.txt`。
+   後者は `scripts/build-sensitive-terms.py` の `commit_msg_sources` から作り、 公開 repo の本文の検査は読まない =
+   公開の本文に普通に出る地名や公開データの名前で鳴らさない) を公開の印の無い repo の commit message でも止める
    (commit message は暗号化されない平文)。 警告にしないのは、 commit と push を 1 回の command で打つと、
    commit の前に出す警告は push の後に届くため (実測)
 
