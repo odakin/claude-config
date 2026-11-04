@@ -21,6 +21,9 @@ cross-machine state の不可視問題 (multi-account-machine-surface.md #honest
   local commit に積み上がるだけで push されない = fleet からこのマシンが silent 死に
   見え、 このマシン自身の fleet view も stale 化する (= 双方向の盲目)。 failure mode の
   正本 = conventions/multi-machine-state.md#fleet-heartbeat 設計原則 5。
+  autostash でも越えられない時 (upstream が足した file と同じ名前の untracked の file が
+  作業木に居る等) は、 その回の beat の commit を外し (file は未 commit で残す)、 git の
+  理由の行を返り値に載せる = 手元に commit を積んで分岐させない。
 - server の実況は **launchd loaded/pid + server ログ末尾の marker parse** で判定
   (= "Connected" / "Not logged in" / "too old" / "Enable Remote Control?" を新しい順に
   評価)。 process が生きていても auth 失効で cycling している状態を検出できるのが肝。
@@ -876,10 +879,37 @@ def repos_rollcall(root: Path, follow=False, skip=()):
         return {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
 
 
-def sync_after_commit(repo: Path, pre: dict):
+def rebase_failure_reason(err: str) -> str:
+    """rebase の stderr から理由の行 (error: / fatal: と、 その下に字下げで並ぶ path) を 1 行にまとめる。"""
+    keep, take = [], False
+    for ln in err.splitlines():
+        if ln.startswith(("error:", "fatal:")):
+            keep.append(ln.strip())
+            take = True
+        elif take and ln.startswith(("\t", " ")) and ln.strip():
+            keep.append(ln.strip())
+        else:
+            take = False
+    return (" ".join(keep) or "no message")[:300]
+
+
+def undo_own_commit(repo: Path, own: str, rel: str) -> str:
+    """rebase できなかった beat の commit を外す (file は未 commit の変更として残す)。 外すのは HEAD がその commit の時だけ、
+    index は自分の file の entry だけを戻す (他の session が stage した entry には触らない)。"""
+    if not own or _rf.rev(repo, "HEAD") != own:
+        return "beat commit left in place (HEAD moved)"
+    rc1, _ = git(repo, "reset", "-q", "--soft", own + "^")
+    rc2, _ = git(repo, "reset", "-q", "--", rel) if rc1 == 0 else (1, "")
+    return "beat commit undone, file left modified" if rc1 == 0 and rc2 == 0 else "undo of the beat commit failed"
+
+
+def sync_after_commit(repo: Path, pre: dict, own: str = "", rel: str = ""):
     """commit の後・push の前。 upstream が普通に進んでいれば自分の commit を載せ直す (旧 pull --rebase と同じ)。 preflight から
     ここまでの間に forced update が来ていれば載せ直さない (次の beat が中身で揃える)。 push 範囲に旧世代の commit / blob が在れば
-    push しない。 止めた時だけ理由の文字列を返す。"""
+    push しない。 止めた時だけ理由の文字列を返す。
+    載せ直しに失敗した回は、 その回の beat の commit (own) を外して理由を返す: 残すと毎回 1 本ずつ手元に積もり、 clone が
+    upstream と分岐する (実測 = 作業木に upstream が足した file と同じ名前の untracked の写しが居て、 checkout が毎回止まった。
+    conventions/multi-session-coordination.md#unattended-writer-stale-base)。"""
     up = pre["upstream"]
     remote = up.split("/", 1)[0]
     git(repo, "fetch", "-q", remote, timeout=_rf.FETCH_TIMEOUT)
@@ -887,10 +917,16 @@ def sync_after_commit(repo: Path, pre: dict):
     if after and before and after != before and not _rf.is_ancestor(repo, before, after):
         return "committed locally; deferred (forced update arrived during the beat: no rebase, the next beat follows it)"
     if after and not _rf.is_ancestor(repo, after, "HEAD"):
-        rc, _ = git(repo, "rebase", "--autostash", "-q", after)
+        try:
+            r = subprocess.run(["git", "-C", str(repo), "rebase", "--autostash", "-q", after],
+                               capture_output=True, text=True, errors="replace", timeout=60)
+            rc, err = r.returncode, r.stderr + r.stdout
+        except Exception as exc:
+            rc, err = 1, f"error: {type(exc).__name__}"
         if rc != 0:
             git(repo, "rebase", "--abort")
-            return "committed locally; deferred (rebase onto upstream failed, retry next beat)"
+            return (f"deferred (rebase onto upstream failed: {rebase_failure_reason(err)}; "
+                    f"{undo_own_commit(repo, own, rel)}; retry next beat)")
     head = _rf.rev(repo, "HEAD")
     _rc, br = git(repo, "symbolic-ref", "--short", "-q", "HEAD")
     branch = br.strip() or "HEAD"
@@ -959,7 +995,7 @@ def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_pr
     # divergence 76/12 まで雪だるま化)。 autostash なら dirty をまたいで流れる。
     # 2026-09-29: 載せ直すのは upstream が普通に進んだ時だけ (forced update = 書き換えなら載せ直さない、 sync_after_commit)。
     if pre is not None and pre.get("upstream"):
-        note = sync_after_commit(repo, pre)
+        note = sync_after_commit(repo, pre, own=_rf.rev(repo, "HEAD"), rel=rel)
         if note:
             return note
     else:
@@ -1060,6 +1096,27 @@ def _selftest_rewrite(td: Path):
         r = beat(mac_merge, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
         assert "push refused by the rewrite guard" in r, r
         assert not ({o1, o2, o3} & set(g1(rem, "rev-list", "main").split())), "merge した Mac の push で旧 sha が戻った"
+        n += 1
+        # (D) upstream が足した file と同じ名前の untracked の写しが居る Mac (origin から切った worktree で commit した後の残り) =
+        # rebase の checkout が止まる。 beat の commit を手元に積まず、 理由を返し、 写しが消えた次の beat で push する
+        mac_ut, other = td / "mac-ut", td / "other"
+        for m in (mac_ut, other):
+            subprocess.run(["git", "clone", "-q", str(rem), str(m)], check=True)
+        added = wc(other, {"added.md": "same\n"}, "add a file")
+        g1(other, "push", "-q", "origin", "main")
+        (mac_ut / "added.md").write_text("same\n")
+        head_before = g1(mac_ut, "rev-parse", "HEAD")
+        r = beat(mac_ut, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        assert r.startswith("deferred (rebase onto upstream failed") and "untracked" in r and "added.md" in r \
+            and "beat commit undone" in r, r
+        assert g1(mac_ut, "rev-parse", "HEAD") == head_before, "rebase できなかった beat の commit が手元に残った"
+        st = g1(mac_ut, "status", "--porcelain", "--untracked-files=all").splitlines()
+        assert f"M fleet/{hostname_short()}.json" in [s.strip() for s in st] and "?? added.md" in st, st
+        assert not g1(mac_ut, "diff", "--cached", "--name-only"), "外した beat の file が stage に残った"
+        (mac_ut / "added.md").unlink()
+        r = beat(mac_ut, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        assert r == "committed+pushed", r
+        assert g1(mac_ut, "rev-parse", "HEAD~1") == added and g1(rem, "rev-parse", "main") == g1(mac_ut, "rev-parse", "HEAD")
         n += 1
     finally:
         for k, v in saved.items():
