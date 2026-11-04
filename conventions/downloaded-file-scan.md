@@ -56,7 +56,7 @@ browser・メール・curl で手元に来た file を repo や作業 dir に入
 
 [`hooks/downloaded-file-import-guard.py`](../hooks/downloaded-file-import-guard.py) (PreToolUse Bash) が、 Bash の command のうち `cp` / `mv` / `ditto` / `rsync` / `install` / `ln` / `unzip` / `tar` の展開で、 ネット由来の file を git の作業 tree に入れるものを見る。
 
-- **ネット由来とみなす file** = `~/Downloads` の下 (env `DOWNLOADED_FILE_SCAN_SOURCES` に `:` 区切りで足せる) か、 ダウンロードの印の付いた file。
+- **ネット由来とみなす file** = `~/Downloads` の下 (env `DOWNLOADED_FILE_SCAN_SOURCES` に `:` 区切りで足せる) か、 ダウンロードの印の付いた file。 印が付いていても、 手元の TeX の組版の出力 = 隣の `<名前>.log` の最後の「Output written on <同じ名前> (… bytes)」 がその file の大きさと合い、 log と file の時刻が 2 分以内のものは数えない (道具の `local_tex_build`)。 実測: 手元で組んだ PDF が、 GUI の app で表示された後に印を持ち (取得した app の名前も時刻も空 = browser で落とした file の形と違う)、 TeX は組み直すたびに同じ file に上書きするので印が残り続け、 組んだ PDF の `cp` が止められた。 手元の Downloads の file の印には、 この形は無かった。 別の dir で組んで写した PDF (latexdiff の出力など) は隣に log が無いので、 印があれば従来どおり検査を求める。
 - **取り込み先** = git の作業 tree の中 (HOME そのものが git の作業 tree でも HOME は数えない。 Downloads の中への移動は数えない)。
 - **止める条件** = その file の検査の記録が無い、 要確認が出ている、 未検査の部分がある。 止める文に検査の command が出る。 検査を回せば、 同じ command が次は通る。
 - **検査の記録** = 道具が `~/.claude/state/downloaded-file-scan/` に、 path・大きさ・更新時刻の key と中身の sha256 の key で残す (同じ中身なら、 一度 scratch に写した file からでも通る)。 記録は machine-local = 別の Mac で取り込むときは、 その Mac で検査し直す。

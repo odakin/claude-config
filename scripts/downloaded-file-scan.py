@@ -31,7 +31,8 @@
 
 hook の述語 (hooks/downloaded-file-import-guard.py が読む): find_issues(command, cwd, home) -> list。
   Bash の command のうち cp / mv / ditto / rsync / install / ln / unzip / tar の展開が、 ネット由来の file
-  (Downloads の下か、 ダウンロードの印つき) を git の作業 tree (HOME 自身を除く) に入れ、 その file の検査の
+  (Downloads の下か、 ダウンロードの印つき。 印つきでも、 隣の TeX の log がその名前・その大きさで書いたと言う PDF
+  = 手元の組版の出力は除く = local_tex_build) を git の作業 tree (HOME 自身を除く) に入れ、 その file の検査の
   記録が無い・要確認・未検査の部分ありなら、 その file を返す。 command に `downloaded-file-scan: accepted <理由>`
   があれば返さない。 heredoc の本文と引用符の中は command と読まない (hook-authoring.md#command-reads-file-tokenize)。
   校正用 = shape_issues(command) (state と属性を見ず、 Downloads を指す取り込みの形だけを当てる。
@@ -1142,18 +1143,48 @@ def repo_root(dest: str, home: str) -> str | None:
         p = parent
 
 
+TEX_OUTPUT_LINE = re.compile(r"^Output written on (.+?) \(\d+ pages?, (\d+) bytes\)\.", re.M)
+LOCAL_BUILD_SKEW_S = 120  # the PDF and its log are written by the same TeX run
+
+
+def local_tex_build(path: str) -> bool:
+    """The file is the PDF a TeX run wrote where it lies: `<stem>.log` beside it ends with "Output written on <the same
+    name> (N pages, B bytes)." where B = the file's size, and the log was written within LOCAL_BUILD_SKEW_S of the PDF.
+    Measured: a PDF built locally carried the quarantine attribute with the download mark (no app, time 0) after a GUI
+    app had shown it, and every later build kept it (TeX rewrites the same inode, xattrs and all), so copying the built
+    PDF into a repo was stopped as a download. A downloaded file does not get a matching log of its own size beside it;
+    a log written by a failed or older run does not match, and the file falls back to the download rule."""
+    if not path.lower().endswith(".pdf"):
+        return False
+    log = path[:-4] + ".log"
+    try:
+        st, lst = os.stat(path), os.stat(log)
+        with open(log, "rb") as fh:
+            fh.seek(max(0, lst.st_size - 65536))
+            tail = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return False
+    hits = TEX_OUTPUT_LINE.findall(tail)
+    if not hits:
+        return False
+    name, size = hits[-1]
+    return (os.path.basename(name.strip().strip('"')) == os.path.basename(path) and int(size) == st.st_size
+            and abs(lst.st_mtime - st.st_mtime) <= LOCAL_BUILD_SKEW_S)
+
+
 def net_origin_files(src: str, home: str) -> list[str]:
-    """src (file か dir) のうち、 ネット由来とみなす file。"""
+    """src (file か dir) のうち、 ネット由来とみなす file。 Downloads の外でダウンロードの印を持つ file のうち、
+    手元の TeX の組版の出力 (local_tex_build) は除く。"""
     roots = download_dirs(home)
     in_dl = _under(src, roots)
     if os.path.isdir(src):
         files, _ = iter_files(src)
         if in_dl:
             return files
-        return [f for f in files[:500] if origin_of(f).get("download")]
+        return [f for f in files[:500] if origin_of(f).get("download") and not local_tex_build(f)]
     if not os.path.exists(src):
         return []
-    if in_dl or origin_of(src).get("download"):
+    if in_dl or (origin_of(src).get("download") and not local_tex_build(src)):
         return [src]
     return []
 
@@ -1483,6 +1514,43 @@ def selftest() -> int:
               "accepted の印 = 通す")
         check(find_issues(f"cp ~/Downloads/paper.txt {tmp}/", repo, home) == [], "取り込み先が repo の外 = 見ない")
         check(find_issues(f"cp ~/Downloads/paper.txt {home}/x.pdf", repo, home) == [], "HOME 直下 = 見ない")
+        if sys.platform == "darwin" and shutil.which("xattr"):
+            # a PDF built in a repo that got the download mark (no app, time 0) after a GUI app showed it (measured shape)
+            build = os.path.join(repo, "paper")
+            os.makedirs(build, exist_ok=True)
+            built = os.path.join(build, "draft.pdf")
+
+            def tex_build(log_size: int | None = None, log_name: str = "draft.pdf", skew: float = 0) -> None:
+                with open(built, "wb") as f:
+                    f.write(b"%PDF-1.5\n" + b"0" * 300 + b"\n%%EOF\n")
+                subprocess.run(["xattr", "-w", "com.apple.quarantine", "0083;00000000;;", built], check=True)
+                n = os.path.getsize(built) if log_size is None else log_size
+                with open(built[:-4] + ".log", "w", encoding="utf-8") as f:
+                    f.write(f"This is LuaHBTeX\n...\nOutput written on {log_name} (3 pages, {n} bytes).\nTranscript written on draft.log.\n")
+                if skew:
+                    t = os.path.getmtime(built) - skew
+                    os.utime(built[:-4] + ".log", (t, t))
+            cpb = f"cp {built} {repo}/docs/draft3.pdf"
+            tex_build()
+            check(origin_of(built).get("download") and find_issues(cpb, repo, home) == [],
+                  "手元の TeX の組版の出力 (隣の log がこの名前・この大きさで書いた) = ダウンロードの印があっても通す")
+            os.remove(built[:-4] + ".log")
+            check(len(find_issues(cpb, repo, home)) == 1, "同じ PDF でも log が無い = 止める (直す前の判定と同じ)")
+            tex_build(log_size=12345)
+            check(len(find_issues(cpb, repo, home)) == 1, "log の大きさが違う (古い run・失敗した run) = 止める")
+            tex_build(log_name="other.pdf")
+            check(len(find_issues(cpb, repo, home)) == 1, "log が別の PDF を書いたと言う = 止める")
+            tex_build(skew=86400)
+            check(len(find_issues(cpb, repo, home)) == 1, "log と PDF の時刻が離れている = 止める")
+            tex_build()
+            check(len(find_issues(f"cp -r {build} {repo}/docs/", repo, home)) == 0, "dir ごとの cp でも組版の出力は通す")
+            dl_built = os.path.join(dl, "draft.pdf")
+            shutil.copy2(built, dl_built)
+            shutil.copy2(built[:-4] + ".log", dl_built[:-4] + ".log")
+            check(len(find_issues(f"cp ~/Downloads/draft.pdf {repo}/docs/", repo, home)) == 1,
+                  "Downloads の下は log が合っても止める (Downloads の file はネット由来)")
+            for p_ in (dl_built, dl_built[:-4] + ".log"):
+                os.remove(p_)
         check(len(find_issues(f"cd ~/Downloads && mv paper.txt {repo}/docs/", tmp, home)) == 1, "cd の後の mv")
         check(len(find_issues(f"cp ~/Downloads/*.txt {repo}/docs/", repo, home)) >= 1, "glob の cp")
         check(len(find_issues("D=docs/in; cp ~/Downloads/paper.txt $D/", repo, home)) == 1,
