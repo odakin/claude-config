@@ -142,7 +142,7 @@ collaborator-check の conf に `python tools/py -- <用途>` の 1 行を置く
 - その対策に `python3 -I` (隔離 mode) を付けると、 `-I` は `-s` と `-E` を含むので **user site (`pip install --user` の入り先) も切れる** = user site にしか入っていない module (PyMuPDF の `fitz` など) が `ModuleNotFoundError` になる (実測)。 依存が入っていないのではない
 - user site の module を使うなら、 **自分で作った空の dir に cd して、 `-I` を付けずに** `python3 -c '…' <落とした file の path>` (またはその空の dir に置いた script) を走らせる。 sys.path の先頭は空の dir になり、 落とした file は引数で渡すだけで sys.path に入らない。 Python 3.11 以降は `-P` (sys.path の先頭に cwd・script の dir を入れない、 user site は残す) でも同じ
 - venv の python に `-I` を付けても venv の site-packages は残る (切れるのは user site と環境変数)
-- <a id="module-presence-by-import"></a>**module が機械に在るかは、 file を探さず python ごとに import して決める**: macOS の user site は `~/Library/Python/<版>/lib/python/site-packages/<名>` で home から深さ 7 にあり、 `find ~ -maxdepth 6` では届かない。 候補の python ごとに `<python> -c 'import X; print(X.__file__)'` を打つ。 1 回の `ModuleNotFoundError` も、 同じ command で再現するまで不在の根拠にしない (実測: 深さの足りない find と 1 回の `ModuleNotFoundError` で「この機械に無い」 と書き、 誤りだった。 その 1 回は同じ user site の別の module は読めた command の中で出て、 後で同じ command を打つと通った。 原因は分かっていない)
+- <a id="module-presence-by-import"></a>**module が機械に在るかは、 file を探さず python ごとに import して決める**: macOS の user site は `~/Library/Python/<版>/lib/python/site-packages/<名>` で home から深さ 7 にあり、 `find ~ -maxdepth 6` では届かない。 候補の python ごとに `<python> -c 'import X; print(X.__file__)'` を打つ。 **前に失敗した import が後で通ったら、 前の失敗を誤りと書き直す前に package の dir の時刻を見る** (`ls -ld -T <site>/<名> <site>/<名>-*.dist-info`) = 同じ機械の並列の session が間に入れたことがある (実測: 1 回目の `ModuleNotFoundError` はその時点で正しく、 その後に別の session が `pip install --user` で入れていた。 時刻を見ずに 1 回目を誤りと書き直し、 その書き直しが誤りだった)
 
 ## <a id="new-syntax-on-old-python"></a>3.10 からの構文の script を古い Python で回したとき
 
