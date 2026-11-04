@@ -1,6 +1,6 @@
 # SESSION — claude-config
 
-最終更新: 2026-11-02
+最終更新: 2026-11-04
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
@@ -76,6 +76,10 @@
 - [ ] **逆向きの穴 = 本人の発言の頭の system-reminder を外さず本人の問いを落とす** (2 本で実測、 どちらも直した = `session-open-questions-report.py`・`session-reply-knowledge-report.py`)。 2 回目なので、 本人の言葉を返す述語を lib に 1 つ置き、 `"<system-reminder>"` を自前で扱う 6 本 (未点検) を移す ([`#transcript-human-vs-peer-message`](conventions/hook-authoring.md#transcript-human-vs-peer-message))。 並列の締めが無い時間に。 同じ述語で `session-reply-knowledge-report.py` に turn の途中に打った本人の発言 (queued_command) も入口として数えさせる (今は数えず、 turn の途中の本人の問いと依頼が候補から抜けた = 実測。 直すと既定の候補の番号が振り直され、 検収済みの処分の file が照合を通らなくなる = 直す時は番号を時刻で引き継ぐ形も一緒に)
 - [ ] **会話記録を読む締めの道具が、 API 送信の写しの行 (`api-request-blob`) の tool call も数える** ([`hook-authoring.md#transcript-request-copy-lines`](conventions/hook-authoring.md#transcript-request-copy-lines)) — `headless-worker-reports.py` は飛ばすよう直した。 二重を実測 = `search-agent-transcripts.py --tool-runs` (同じ tool call を時刻なし・`cd … &&` つきでもう 1 回出す)。 未確認 = `session-scripts-report.py` / `session-claims-report.py` / `subagent-reports.py` / `replay-session-scripts.py` / `permission-dialog-audit.py` / `calibrate-bash-command-pattern.py` / `hook-matcher-liveness.py` / `transcript-tool-result.py`。 直す形 = 写しかを決める述語を lib に 1 つ置き、 各道具がそれを使う (型名を道具ごとに書き写さない)。 締めの道具なので、 並列の締めが走っていない時間に 1 本の変更で。
 - [ ] **TeX の読み直しの道具の 2 案 (作らずに queue、 どちらも 1 回目の実測)** — (1) 別文書 (共著者へのノート) が論文を素の番号 (「Eq. (103)」「Sec. 5」) で引くとき、 論文の版の `.aux` と照合し、 版に無い書き方 (article の版を Roman の節番号で引くなど) と番号ごとの label を出す (`scripts/tex-label-shift.py` の aux の読み方を使い回す。 規則 = [physics-notes.md#no-internal-shorthand-in-deliverables](conventions/physics-notes.md#no-internal-shorthand-in-deliverables) の版依存の段)。 (2) `scripts/tex-prose-pass-invariants.py` の numbers は節番号や数式の中の数字と混ざり、 結果の値 (小数・10 の冪・単位つき・百分率) の増減が見えにくい = 値だけの class を足す。 作るなら selftest と foil つきで。
+- [ ] **`--since` の形の点検で残した 3 件** (形と比べ方の正本 = [`scripts/lib/time_bound.py`](scripts/lib/time_bound.py)) — どれも形の違う値・失敗で黙る
+  - [`scripts/session-launch-check.py`](scripts/session-launch-check.py) `--since`: 読めない値を既定の時刻に戻す (見張りなので、 error にするなら呼び元の渡す形を先に確かめる)
+  - [`scripts/actions-usage-estimate.py`](scripts/actions-usage-estimate.py) `_gh`: API の失敗 (network・認証) を空として扱い 0 回になる
+  - [`scripts/replay-public-gate.sh`](scripts/replay-public-gate.sh) `--since`: git の自由形のまま渡す = 読めない値は別の時刻、 日付だけはその日の今の時刻
 - [ ] **`--liveness` の実 session での観察**: 健全なら沈黙 / run-all-checks からの報告が 14 日途絶えると 🟡 (2026-09-22 配線、 この machine のみ確認)。
 
 - [ ] **job health の他マシンでの初回観測** ([`shell-env.md#job-python-by-capability`](conventions/shell-env.md#job-python-by-capability)) — 各マシンで claude-config を pull した後の heartbeat から reader に出る。 常駐機で session を開くまで旧形の beat
