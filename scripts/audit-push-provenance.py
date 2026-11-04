@@ -53,8 +53,9 @@ def push_ranges(repo: Path, since: str):
 
 
 def audit(base: Path, session: str, since: str) -> tuple[int, list[str]]:
+    from repo_roots import root_is_repo  # 空の repo の base なら子を数える (lib/ は冒頭で sys.path に入れてある)
     carrying, report = 0, []
-    repos = [base] if (base / ".git").exists() else sorted(p for p in base.iterdir() if (p / ".git").exists())
+    repos = [base] if root_is_repo(base) else sorted(p for p in base.iterdir() if (p / ".git").exists())
     for repo in repos:
         for when, prev, new in push_ranges(repo, since):
             rows = [r.split("\t", 2) for r in git(

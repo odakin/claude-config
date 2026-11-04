@@ -978,8 +978,11 @@ def find_inbound(fleet: Fleet, target: Path, repo: Path, lost_heads: List[str], 
 
 
 # ---------------------------------------------------------------- fleet
+from repo_roots import root_is_repo  # noqa: E402 — root を 1 つの repo として見るか (空の repo なら子を数える)。 正本 = lib/repo_roots.py
+
+
 def repos_under(root: Path) -> List[Path]:
-    if (root / ".git").exists():
+    if root_is_repo(root):
         return [root]
     out = []
     try:
@@ -1029,10 +1032,11 @@ def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface:
         if not rp.is_dir():
             print(f"{HEADING} 検査が走っていない (root {rp} が無い)")
             return 3
-        base = Path(base_arg) if base_arg else (rp.parent if (rp / ".git").exists() else rp)
+        repos = repos_under(rp)
+        base = Path(base_arg) if base_arg else (rp.parent if repos == [rp] else rp)
         fleet = Fleet(base)
         ack = ack | load_ack(None, base=base)
-        for repo in repos_under(rp):
+        for repo in repos:
             ack = ack | load_ack(None, [repo])
             fs, st = scan_repo(fleet, repo)
             stats["repos"] += 1
@@ -1273,6 +1277,25 @@ def selftest() -> int:
         with contextlib.redirect_stdout(buf):
             rc = run_fleet([str(Path(td) / "nope")], None, set(), True, True, False, False)
         expect("root が無い = exit 3 (故障を違反と同じ値にしない)", rc == 3)
+        # root に commit も tracked file も無い空の repo (作業ルートで誤って git init した形) = 子の repo を数える
+        def fleet_stats() -> dict:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                run_fleet([str(base)], None, set(), False, False, False, True)
+            return json.loads(out.getvalue())["stats"]
+        st_plain = fleet_stats()
+        sh(["git", "init", "-q"], base)
+        try:
+            expect("空の root repo は repo とみなさない = 子の repo を返す",
+                   a in repos_under(base) and base not in repos_under(base))
+            expect("空の root repo があっても参照・repo の件数が変わらない (陽性対照 = 隠れると 0 件 / 1 repo)",
+                   st_plain["refs"] > 0 and fleet_stats() == st_plain)
+            write(base / "root.md", "# root\n")
+            sh(["git", "add", "root.md"], base)
+            expect("tracked file のある root repo は 1 つの repo として走査する", repos_under(base) == [base])
+        finally:
+            shutil.rmtree(base / ".git", ignore_errors=True)
+            (base / "root.md").unlink(missing_ok=True)
 
         # --- staged: 追加行だけ / 消えた見出しの inbound / pre-commit-bib e2e
         s = base / "gamma"

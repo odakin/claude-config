@@ -507,6 +507,7 @@
 - **[lib/rc_server_state.py](lib/rc_server_state.py)** — Remote Control サーバーの中身を log と process から読み、 古い server を無人で起こし直す部品 (fleet-heartbeat が使う)
 - **[lib/recorded_ids.py](lib/recorded_ids.py)** — mail ledger の「記録済み message / thread id」 の書式の契約と harvest (単一 home)。
 - **[lib/relay_check.py](lib/relay_check.py)** — surface した item を「この session で人に伝えたか」 と「同じ案件かもしれない別の item」 を判定する共通部品
+- **[lib/repo_roots.py](lib/repo_roots.py)** — 走査の root を 1 つの repo として見るか、 直下の子の repo を数えるかの共通の判定 (repo を並べた作業ルートを fleet scan する道具が使う)。
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
 - **[lib/seal_artifact.py](lib/seal_artifact.py)** — 画像の押印 (ハンコ画像) が入った成果物に、作る時に印を付け、出口で見つける。
 - **[lib/sensitive-terms.sh](lib/sensitive-terms.sh)** — 実名 gate (Tier B) の検出語 file を読む共通部品 (source して使う、 bash 3.2 可)
