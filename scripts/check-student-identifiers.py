@@ -557,7 +557,8 @@ def run_commit_msg(msg_file: str) -> int:
 # ---------------------------------------------------------------- --tree
 
 def repos_under(root: Path) -> List[Path]:
-    if (root / ".git").exists():
+    from repo_roots import root_is_repo  # 空の repo の root なら子を数える (lib/ は冒頭で sys.path に入れてある)
+    if root_is_repo(root):
         return [root]
     return sorted(p for p in root.iterdir() if p.is_dir() and (p / ".git").exists())
 

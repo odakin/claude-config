@@ -49,6 +49,7 @@
     "scripts/lib/prune-retired-hooks.sh",
     "scripts/lib/seal_artifact.py",
     "scripts/lib/staged_diff.py",
+    "scripts/lib/repo_roots.py",
     ".claude/pre-commit-extra.sh",
     "scripts/*hook*",
     "scripts/install-*commit*",

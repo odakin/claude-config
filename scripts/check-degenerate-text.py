@@ -212,7 +212,8 @@ def run_staged(repo_arg: Optional[str]) -> int:
 
 # ---------------------------------------------------------------- fleet scan
 def iter_repos(root: Path) -> List[Path]:
-    if (root / ".git").exists():
+    from repo_roots import root_is_repo  # 空の repo の root なら子を数える (lib/ は冒頭で sys.path に入れてある)
+    if root_is_repo(root):
         return [root]
     out: List[Path] = []
     for d in sorted(root.iterdir()) if root.is_dir() else []:
