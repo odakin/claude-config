@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: scheduled task / launchd routine を作成・管理するとき + 定期 job が毎回読む script を直すとき (#live-script-replace) + 定期 job の間隔では間に合わない仕事を常駐の worker に任せるとき (#resident-worker-from-periodic-job) + 無人 run の log に本報告が残っていないとき・hook が無人の run かを知りたいとき (#headless-log-full-report / #routine-id-marker)
+when: scheduled task / launchd routine を作成・管理するとき + 定期 job が毎回読む script を直すとき (#live-script-replace) + 定期 job の間隔では間に合わない仕事を常駐の worker に任せるとき (#resident-worker-from-periodic-job) + 無人 run の log に本報告が残っていないとき・hook が無人の run かを知りたいとき (#headless-log-full-report / #routine-id-marker) + 定期 job の wrapper の終了値を決めるとき・手で確かめる入口を作るとき・手で回した結果が本番と食い違ったとき (#wrapper-exit-and-manual-check)
 category: harness-core
 summary: Scheduled Tasks 規約（SKILL.md 二重構造・同期ルール・headless context budget = cwd の CLAUDE.md 肥大で "Prompt is too long" 全滅する罠と診断 ladder）
 -->
@@ -272,11 +272,31 @@ heartbeat とは別 layer: job は「生きて」 いて毎日失敗していた
 
 ⚠️ **終了コードだけでは足りない**: plist を読み込み直すと 0 に戻り ([`#reload-resets-exit-status`](#reload-resets-exit-status))、
 しかも原因を言わない ([`#headless-auth-expiry`](#headless-auth-expiry))。 直近の run の log 末尾も読む。
+⚠️ **wrapper が中の失敗を 0 に潰すと、 終了値を見る検出器に届かない** = [`#wrapper-exit-and-manual-check`](#wrapper-exit-and-manual-check)。
 ⚠️ **前回の run のことしか言わない**: 起動しなかった run と終わらない run は、 終了コードにも log 末尾にも出ない =
 予定の時刻と log の更新時刻を比べる ([`#missed-run-detection`](#missed-run-detection))。
 実装 = [`scripts/check-cron-health.py`](../scripts/check-cron-health.py) (そのマシン) と fleet heartbeat の job health
 (他のマシン、 [`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat))、 判定は両方とも
 [`scripts/lib/launchd_job_log.py`](../scripts/lib/launchd_job_log.py) の 1 か所。
+
+## <a id="wrapper-exit-and-manual-check"></a>wrapper は中の失敗を終了値で返す — 手で確かめる入口は定期実行と同じ設定で
+
+定期 job の wrapper (中の道具に設定を渡して呼ぶ shell) で、 失敗が黙る形は 2 つある。
+
+- **wrapper が中の失敗を 0 に潰す** (`道具; exit 0` / `道具 || echo …` / 例外を握って `sys.exit(0)`)。 上の監視の検出器 (終了値を見る) から消え、 surface にも出さなければ誰も気づかない。
+  - 「launchd を失敗の繰り返し (error loop) にしないため 0 で終える」 は、 時刻起動 (`StartCalendarInterval` / `StartInterval`) で `KeepAlive` の無い job には当てはまらない = 0 でない終了値は `launchctl list` に記録されるだけで、 launchd は起動し直さない。 起動し直すのは `KeepAlive` を持つ job。 0 で終える理由を書く前に plist を見る。
+  - 一部の処理が失敗しても残りを続ける作りでは、 失敗を覚えておいて最後に 0 でない値で終える (続けることと黙ることは別)。
+  - 同じ壊れ方を毎回人に知らせ直さないのは、 知らせの側で「壊れた部分の組」 を覚え、 組が変わったときだけ鳴らす形で行う。 終了値は毎回そのまま返す (検出器は直近の run を見るので、 直れば次の run で消える)。
+- **手で確かめる入口が定期実行と違う設定を読む**: 認証の置き場などを wrapper が環境変数で渡す作りでは、 中の道具を引数だけで手で回すと既定の置き場を読み、 そこが無い機械では「認証が無い」 と出る。 定期実行は読めているのに、 手で確かめた人は「壊れている」 と報告する (実測: 確かめた結果が本番と食い違い、 誤った報告が人に届いた)。
+  - wrapper に `--check` を持たせる = 定期実行と同じ環境変数で、 書かない・知らせない・同期しない形で中の道具を回し、 中の道具の終了値を返す。 本番ホストかを問わず回る形にしておくと、 機械ごとの配線の確かめにも使える。
+  - 中の道具の失敗の文に、 設定を環境変数から決めたか既定から決めたかを書く (「環境変数 X が無いので既定の置き場を見た」)。 読んだ人が設定違いだと気づける。
+  - 知らせの文が勧める直し方 (入れ直しの command) が、 定期実行の読む置き場に入る経路かを確かめる。 既定の置き場に入る command を勧めると、 直したつもりで定期実行は直らない (実測)。
+
+確かめ方:
+
+- **wrapper の試験** = 中の道具を偽の script に差し替える環境変数を 1 つ持たせ、 結果と終了値を台本どおりに返させる (全部成功 / 1 つ失敗 / 同じ壊れ方の繰り返し / 組が変わる / 直った / 中の道具が落ちた / `--check`)。 差し替えのときは関門・同期・常駐の登録を飛ばすので、 知らせの送り先と状態・surface の置き場が試験用に向いていなければ、 中の道具を呼ばずに止まる作りにする (本物の通知先に書かない)。
+- **検出器が拾うところまで** = 別の label の一時の launchd job (時刻起動なし) に同じ wrapper を載せて 1 回 `kickstart` し、 `launchctl list` の終了値と検出器の出力を見て、 `trap` で `bootout` と plist の削除をする。 本物の job を壊さずに、 launchd を通した終了値を確かめられる (実測)。 検出器に label の全体を prefix として渡すと、 名前の欄は空になる (表示は prefix を外した残り)。 一時の job も常駐の登録に見えて止められることがある = [#agent-direct-launchd-install](#agent-direct-launchd-install)。
+- **過去の本番の run** = job の終了値を残している heartbeat の履歴 ([`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat)) を、 知らせを出した時刻の直後で引く。
 
 ## <a id="reload-resets-exit-status"></a>plist を読み込み直すと、 失敗は終了コード 0 の顔になる
 
