@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき + ChatGPT desktop の不具合を公式フィードバックへ送るとき + script や別の session から起こした Codex の仕事がアプリの一覧に出ないとき (#thread-not-in-app) + sandbox の中の git が `.git` に書けないとき (#sandbox-git-dir-readonly) + 端末で `codex` が command not found のとき (#cli-on-path)
+when: ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき + ChatGPT desktop の不具合を公式フィードバックへ送るとき + script や別の session から起こした Codex の仕事がアプリの一覧に出ないとき (#thread-not-in-app) + sandbox の中の git が `.git` に書けないとき (#sandbox-git-dir-readonly) + 承認を出さない Codex の worker が作業場所の外の dir に書けずに止まったとき (#writable-root-relaunch) + Codex の worker の sandbox の中から別の Codex の thread (封じた判定役など) を起こせないとき (#launch-from-inside-sandbox) + 端末で `codex` が command not found のとき (#cli-on-path)
 category: harness-core
 summary: Codex desktop の auth error は client の鍵でなく backend 側のことが多い (= 手元に sk-svcacct は無い、 status page を見る、 再ログインしない) / 切り分けの読み方 (auth.json の auth_mode、 logs_2.sqlite の feedback_tags、 rollout の task_complete) / hook の信頼は hooks.json の定義 hash に束縛され TUI の /hooks で付け直す (agent は書かない) / app 同梱 binary の path は更新で動く = process から探す / 承認の引用元は生成文を除く / 結果が見当たらないときは rollout で gate の差し戻しの直前を読む / 公式フィードバックは操作ツールの制約とアプリの機能を分け、本人への貼付本文・添付範囲・送信識別子を引き継ぐ
 -->
@@ -69,6 +69,20 @@ daemon が読み込んでいる thread = `codex-app-launch.py rpc thread/loaded/
 `workspace-write` の sandbox で、 書き込み可の dir (作業 dir・`writable_roots`) の中の repo なのに `git fetch` が `.git/FETCH_HEAD` で拒まれる。
 原因 (実測): Codex の sandbox は書き込み可の dir の中の `.git` を読み取り専用にする。 git の dir そのもの (`git rev-parse --path-format=absolute --git-common-dir`) を書き込み可の dir に名指すと書けた
 (`config.sandbox_workspace_write.writable_roots`、 起動の道具なら `--writable-root`)。 承認を出さない無人の thread (approval `never`) では、 起動の時点で名指す。
+
+## <a id="writable-root-relaunch"></a>承認を出さない worker が作業場所の外に書けずに止まった
+
+承認を出さない thread (approval `never`) は、 走っている途中で書き込み可の dir を足せない (足してほしいと申し出る経路が無い)。 仕事が作業 dir の外 (盲検の sandbox・別の作業場所) に書く段に来ると、 そこで止まる (実測: 掲示板の worker が blocker を出して止まった)。
+- **直し方 = 新しい thread で起こし直す**。 起動の道具の `start` に `--writable-root <dir>` を足す。 `continue` は sandbox の設定を変えられない (`--writable-root` を持たない) ので、 同じ thread では直らない。 起こし直しは依頼元か本人が決める (動いている worker を起こし直す前に本人に聞く運用なら、 それに従う)。
+- **掲示板の worker なら、 新しい thread が前の担当を手放してから取り直す**: 役割 id は同じなので、 新しい thread の `release --reply-to <前の claim の id>` は通る。 その後に `claim` する (前の claim が生きている間は claim が断られる)。 起動文には、 前の thread の claim の id・前の thread は再開しないこと・前の thread が残した再開の地点を書く。 前の thread には `codex queue` で知らせない (起こすと 2 本目の書き手になる)。 起動の記録 (掲示板の `起動した: Codex thread …` の note) は依頼元が新しい thread の id で出す。
+- **予防 = 最初の起動で、 作業 dir の外に書く dir を全部名指す**。 依頼の spec が sandbox などに書く段を持つなら、 起こす前にその dir を `--writable-root` に入れる (`.git` の dir も同じ = 上の節)。
+
+## <a id="launch-from-inside-sandbox"></a>worker の sandbox の中から別の Codex の thread を起こせない
+
+Codex の worker の turn から起動の道具 (`codex-app-launch.py start`、 `--sealed` を含む) を呼ぶと、 道具が使い捨てに起こす `codex app-server` が `app-server ended during initialize` で終わり、 thread はできない (実測)。 app-server が `CODEX_HOME` に状態を書けないため = 締めの inventory が sandbox の中で動かないのと同じ原因 ([`closing-sweep.md#codex`](closing-sweep.md#codex))。
+- **起動は sandbox の外の依頼元に回す**: 判定役などを起こす段を持つ spec は、 worker に「起動文の file を sandbox の中に書き、 起こす前に記録するもの (盲検の対応表の hash など) を記録してから、 起動文の path を blocker で依頼元に渡す」 と書く。 worker に迂回 (別の起こし方・再試行) をさせない。
+- **依頼元は起こす前に起動文と入力を読む** (盲検なら model 名・実験の目的の語が無いかを grep する)。 起こした thread の id を blocker への答えに書く。
+- **終わったら worker に知らせる**: 起こした thread の turn の終わりは rollout (`~/.codex/sessions/<日付>/rollout-*-<thread id>.jsonl`) の `"type":"task_complete"` で分かる。 その印が出たら worker の thread に `codex queue` で続きを頼む (worker は判定役を見張れない)。
 
 ## <a id="official-feedback-handoff"></a>アプリ内の公式フィードバックと本人操作への引き継ぎ
 
