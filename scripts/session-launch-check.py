@@ -984,7 +984,7 @@ def pre_send(inp: dict) -> tuple[int, str]:
         return 0, after
     return 2, (f"🛑 session-launch-check: 宛先 {local_id} ({hit.get('title', '')[:40]}) は app の記録で " + " / ".join(diffs)
                + "。 まだ頼んだ model・effort になっていない。\n"
-               f"  set_session_model / set_session_effort を出し (worker の turn が終わってから)、 python3 ~/Claude/claude-config/"
+               f"  set_session_model / set_session_effort を出し (model は worker の turn が終わってから。 effort はいつでも = 次の turn から効く)、 python3 ~/Claude/claude-config/"
                f"scripts/session-model.py {local_id} で記録が合ったのを読んでから送る。 本人がこの model でよいと言った"
                f"なら message に {OK_TOKEN} を入れて送る。 規約 = {RULE}")
 
