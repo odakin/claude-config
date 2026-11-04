@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -310,6 +310,14 @@ LuaTeX-ja は英数字と和文の間に空き (xkanjiskip) を入れる。 半�
 
 - **直し方**: 数式は変えない。 数式の前の語順を入れ替えて (条件の句を文頭に出す: `… tends to $X$ for $y\gg1$` → `For $y\gg1$ … tends to $X$`)、 塊が行の途中に来るようにする。 式の数と番号を変えない pass では、 別行立てにする直しは使えない
 - **確かめ方**: 段落の構造を変えた pass の後は組み直し、 編集前の build と log の Overfull を比べる (比較の道具 = [`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py))。 直した後も組み直して、 はみ出しが別の行に移っていないかを見る
+
+## <a id="rendered-line-count"></a>組んだ PDF で「何行に収まったか」 を数える — 文字の行を縦の位置でまとめる
+
+**何が起きるか**: 列挙を 1 項目 1 行に収める、 段落を N 行以内に収める、 といった指定は source では確かめられない (折れ目は組んで初めて決まる)。 PyMuPDF の行 (`get_text()` の改行、 `get_text("dict")` の line) で数えると、 添字・肩字が別の行として出る (`E^2_{\nu_I}` の添字が次の行に見える) ので、 1 行の項目が 2 行と数えられる (実測)。
+
+- **数え方**: `get_text("dict")` の line ごとに縦の中心を取り、 本文の行送りの半分 (12 pt の組みで 8 pt) より離れたところで区切った塊を 1 行と数える。 項目の範囲は、 その項目の頭の記号 (`•` の span) から次の項目の頭まで (最後の項目は、 列挙の後の文の行まで)
+- **はみ出しも一緒に見る**: log の Overfull \hbox のうち、 入れた文の source の行に掛かるものだけを数える (`in paragraph at lines a--b` を入れた文の行の範囲と照らす。 雛形の既存の文のはみ出しと分けるため)。 1 行に収めようと詰めた項目や前置きの文は、 折れない長い塊 (arXiv の番号・URL) の所で右へはみ出しやすい (実測)
+- どちらも判定にして検算の script に入れる (目で見て「1 行に見えた」 で済ませない)。 直すたびに組み直すので、 返答書だけを組む短い入口を script に持たせると速い
 
 ## <a id="tcolorbox-footnotes-to-page"></a>tcolorbox の枠の中の脚注を、 本文と同じ番号で頁の下に出す
 
