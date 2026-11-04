@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: config file に ID/PII (Discord ID 等) を置く設計をするとき + 人の業績一覧 (INSPIRE の著者ページ・検索) へリンクするとき・著者 ID で論文を機械で拾うとき (#split-and-polluted-author-records)
+when: config file に ID/PII (Discord ID 等) を置く設計をするとき + 人の業績一覧 (INSPIRE の著者ページ・検索) へリンクするとき・著者 ID で論文を機械で拾うとき (#split-and-polluted-author-records) + 人の業績一覧を ORCID の出力で受け取って書類に添えるとき (#orcid-export-polluted)
 category: infra
 summary: Identity-in-Config 規約（Discord 等 PII-in-disguise、layer 2 + env var bridge）
 -->
@@ -131,6 +131,10 @@ INSPIRE BAI (`T.Kono.1`, `H.Otsu.4` のような形式の author ID。 例は架
 
 **根本の直し方は INSPIRE 側** — 本人が ORCID で INSPIRE にログインして自分の論文を claim し、 別人の論文を外す。 record の統合は INSPIRE の窓口に頼む。
 本人でない者が勝手に頼まない (本人に知らせるかは持ち主が決める)。 直るまでは上の絞った式で持ちこたえる。
+
+<a id="orcid-export-polluted"></a>**ORCID の record も混じる** — ORCID の論文の欄を外部の DB から自動で登録する設定にしていると、 同姓同名の別人の論文が付くことがある (実測)。
+人の業績一覧を ORCID の出力で受け取って書類に添えると、 その別人の論文が本人の業績として出る。 書類に添える業績一覧は、 本人が全件を確かめたものを頼む
+(ORCID の出力で受けるなら、 添える前に本人に全件の確かめを頼む)。 根本の直し方は本人が ORCID の自動の登録を見直して別人の論文を外すこと = 上の INSPIRE と同じく、 本人でない者が勝手に頼まない。
 
 ## 変更履歴
 
