@@ -170,6 +170,7 @@
       "match": "a worktree-isolated session's git operations must target its own worktree",
       "doc": "conventions/claude-code-permissions.md#worktree-session-refuses-complex-command",
       "hint": "worktree に入った session では本体が行き先を読めない command を拒否する。 path を書き下し、 処理は file に書いて回し、 git は 1 回に 1 つずつ打つ"
-    }
+    },
+    {"match": "MBLOCKRIGHTBRACE", "doc": "conventions/latex.md#latexdiff-eqtree", "hint": "latexdiff の fine が波括弧の途中まで一致させた跡。 1 式なら #latexdiff-fine-markup の表で直し、 繰り返すなら式を latexdiff に渡さない"}
   ]
 }
