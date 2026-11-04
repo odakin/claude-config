@@ -9,7 +9,8 @@ and the record shows what the session really got (conventions/multi-session-coor
 
 Where (measured on a desktop install): ~/Library/Application Support/Claude/claude-code-sessions/<account uuid>/
 <environment uuid>/local_<uuid>.json — fields sessionId (`local_…`), cliSessionId (the transcript id), model, effort,
-title, spawnedFrom.sessionId (the parent's `local_…`), isArchived, createdAt / lastActivityAt (epoch ms).
+title, spawnedFrom.sessionId (the parent's `local_…`), lineageDetached (detached from that parent = no longer its child),
+isArchived, createdAt / lastActivityAt (epoch ms).
 Read-only, never raises. Env override (tests): CLAUDE_DESKTOP_SESSIONS_DIR (the claude-code-sessions dir).
 """
 from __future__ import annotations
@@ -34,7 +35,8 @@ def _norm(d: dict, path: str) -> dict:
     return {"local_id": str(d.get("sessionId") or ""), "cli_id": str(d.get("cliSessionId") or ""),
             "model": str(d.get("model") or ""), "effort": str(d.get("effort") or ""),
             "title": str(d.get("title") or ""), "parent": str(sf.get("sessionId") or ""),
-            "archived": bool(d.get("isArchived")), "created_ms": d.get("createdAt") or 0,
+            "archived": bool(d.get("isArchived")), "detached": bool(d.get("lineageDetached")),
+            "created_ms": d.get("createdAt") or 0,
             "last_activity_ms": d.get("lastActivityAt") or 0, "path": path}
 
 
@@ -108,7 +110,13 @@ def selftest() -> int:
                        "spawnedFrom": {"sessionId": "local_parent"}, "isArchived": False}, fh)
         r = find(lid)
         check("local id → model / effort / parent", bool(r) and r["model"] == "claude-opus-5-5"
-              and r["effort"] == "xhigh" and r["parent"] == "local_parent")
+              and r["effort"] == "xhigh" and r["parent"] == "local_parent" and r["detached"] is False)
+        did = "local_0123abcd-0000-4000-8000-000000000002"
+        with open(os.path.join(d, did + ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": did, "cliSessionId": "cafef00d-2222-4222-8333-444455556666",
+                       "spawnedFrom": {"sessionId": "local_parent"}, "lineageDetached": True}, fh)
+        check("a record detached from its parent → detached (still names the parent)",
+              find(did)["detached"] is True and find(did)["parent"] == "local_parent")
         r = find("deadbeef")
         check("transcript id prefix → same record", bool(r) and r["local_id"] == lid)
         check("unknown id → None", find("local_ffffffff-0000-4000-8000-000000000009") is None and find("abc") is None)

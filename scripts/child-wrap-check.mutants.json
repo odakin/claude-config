@@ -40,6 +40,22 @@
     {"name": "問いより前の依頼元の message も答えと数える",
      "pairs": [["    if parent and not owner_only and any(ts > at for ts, frm in ev[\"peers\"] if frm == parent):\n        return None\n", "    if parent and not owner_only and any(True for ts, frm in ev[\"peers\"] if frm == parent):\n        return None\n"]],
      "expect_fail": ["the parent's message before the ask does not answer it"],
-     "expect_pass": ["the parent answered a question of judgment in the child's window"]}
+     "expect_pass": ["the parent answered a question of judgment in the child's window"]},
+    {"name": "親の後の message で本人の話を終える (直す前の判定)",
+     "pairs": [["    sent = [ts for ts, frm in ev[\"peers\"] if frm == parent]\n", "    sent = [ts for ts, frm in ev[\"peers\"] if frm == parent]\n    if sent and at <= max(sent):\n        return None\n"]],
+     "expect_fail": ["the parent's later messages do not end it → answered, not due", "the person spoke 5 minutes before the parent's wrap request"],
+     "expect_pass": ["the person spoke in the child's window after the parent's wrap request → kept"]},
+    {"name": "wrap の語があれば依頼と読む (直す前の判定)",
+     "pairs": [["    kind = \"\"\n    for m in WRAP_WORD.finditer(t):\n", "    kind = \"request\" if WRAP_WORD.search(text or \"\") else \"\"\n    for m in []:\n"]],
+     "expect_fail": ["hook: a mention, not a request (0)", "hook: a mention, not a request (3)"],
+     "expect_pass": ["hook: a wrap request (1)", "hook: wrap request to own child"]},
+    {"name": "切り離した session も子と読む",
+     "pairs": [[" or child.get(\"detached\"):\n        return \"\"  # a detached", ":\n        return \"\"  # a detached"]],
+     "expect_fail": ["hook: a real wrap request to a session detached from this parent"],
+     "expect_pass": ["hook: someone else's child → silent"]},
+    {"name": "親の取り消しを数えない",
+     "pairs": [["    return max([ts for ts, frm in ev[\"peer_unwraps\"] if frm == parent] + list(sent or []), default=\"\")", "    return \"\""]],
+     "expect_fail": ["a wrap the parent called off: its run and its stop do not count", "a wrap the parent called off: check_child does not count the run"],
+     "expect_pass": ["finished: wrap ran after the accept and the child stopped → wrapped"]}
   ]
 }
