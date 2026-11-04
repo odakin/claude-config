@@ -202,6 +202,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 
 - 新の側は一致が合格 (数字・括弧・ハイフンを除く)。 合わなければ exit 1。
 - 旧の側は読むだけ。 新にしかない display は番号の空行として残り、 新にしかない節と図は label と図そのものが残り、 latexdiff が語の間の空白を追加の側に入れた所は語がつながる (実測)。 出た語がこの 3 つで説明できることを見る。
+- <a id="latexdiff-flatten-bbl"></a>BibTeX の原稿を `latexdiff --flatten` で比べたなら、 2 版も `.bbl` を埋め込んでから渡す — `--flatten` は両版の隣の `.bbl` を差分の本文に埋め込む。 2 版を `\bibliography{…}` のまま渡すと、 道具が 2 版に写すのは差分の側の `.bbl` (埋め込んだ差分に BibTeX を回すと `\bibdata` が無いので空) なので、 2 版に文献表が出ず、 文献表の語の分だけ差が出て落ちる (実測)。 2 版の `\bibliography{…}` をそれぞれの版の `.bbl` の中身で置き換えて渡し、 差分そのものには BibTeX を回さない。
 
 ## <a id="latexdiff-deleted-blank-lines"></a>latexdiff は削除された空行を comment out できない — diff PDF と live で段落の切れ方が違ったら削除空行の残留を疑う (2026-09-08)
 
