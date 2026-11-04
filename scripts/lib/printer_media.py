@@ -194,6 +194,11 @@ def check(queue, pdf_sizes, lp_opts=(), names=None, run=_run, attrs=None):
     reasons = attrs.get("printer-state-reasons", "")
     if (state and state != "idle") or reasons not in ("", "none"):
         infos.append(f"本体の状態: {state or '?'} / {reasons or '?'}")
+    if re.search(r"media-(empty|needed)", reasons or ""):
+        # 実測: media-empty-report が出ていた本体に送った job は、 本体で processing-stopped (media-needed) になった。
+        # media-ready は用紙の設定を返すので、 紙が無くても A4 ✓ と出る
+        infos.append("⚠️ 本体が紙切れを報告 (media-empty / media-needed) — 送ると本体で止まり、 紙を入れた時に出る = 刷る前に紙を入れてもらう "
+                     "(lpstat は本体で止まった job も「プリント中」 と出す。 出たかは IPP の Get-Jobs の job-state で見る)")
     opts = {o.split("=", 1)[0].lower() for o in lp_opts if "=" in o}
     for key, val in duplex_defaults(queue, run):
         if key.lower() in opts or "sides" in opts:
@@ -227,6 +232,10 @@ def _selftest():
     assert f and "B5 JIS" in f[0] and "A4" in f[0], f
     f, i = check("Q", {(210, 297)}, attrs={"printer-state": "idle"}, run=nodup)
     assert not f and any(x.startswith("⚪") for x in i), i
+    assert not any("紙切れ" in x for x in check("Q", {(210, 297)}, attrs=a, run=nodup)[1])
+    empty = dict(a, **{"printer-state-reasons": "toner-low-warning,media-empty-report"})
+    f, i = check("Q", {(210, 297)}, attrs=empty, run=nodup)
+    assert not f and any("紙切れ" in x for x in i) and any("A4" in x and "✓" in x for x in i), (f, i)
     dup = lambda argv, t: ("VendorDuplex/Print Style: None *DuplexFront\nPageSize/Page Size: *A4 B5\n", "")  # noqa: E731
     _, i = check("Q", {(210, 297)}, attrs=a, run=dup)
     assert any("両面" in x and "VendorDuplex=DuplexFront" in x for x in i), i
