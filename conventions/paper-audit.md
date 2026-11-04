@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics) + 積分路や規約で分けた項に物理の名前を付けたとき・分解の恒等式から測定の予言を立てるとき (#decomposition-label-check) + 平面波で書いた関係 (ユニタリ性・光学定理) を外線が波束の振幅に使う式を確かめるとき (#plane-wave-relation-between-packets)
+when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics) + 積分路や規約で分けた項に物理の名前を付けたとき・分解の恒等式から測定の予言を立てるとき・近似と全体を比 (割合) で比べるとき (#decomposition-label-check) + 平面波で書いた関係 (ユニタリ性・光学定理) を外線が波束の振幅に使う式を確かめるとき (#plane-wave-relation-between-packets)
 category: paper
 summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 -->
@@ -463,6 +463,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 - (d) 依存性がどの因子から来るかを恒等式で分ける。 新しい効果と書いた依存が、 既知の因子の言い換えのことがある (実測)。 その場合、 既知の物理との違いの根拠は依存性に置けない。
 - (e) 式は観測量 (積分した率) まで持っていき、 既知の 2 つの極限と、 極限の順序で全体が変わらないことを確かめる。 分け方が順序に依るなら、 それも書く。
 - (f) 分解の恒等式から測定の予言を立てる前に、 各項の期待値を取る状態が、 動かすパラメータに依らないかを確かめる。 条件づけ・規格化・選択の後の状態は装置のパラメータに依る。 恒等式が正しくても 2 つのパラメータ値の差で状態の項は消えず、 片方の項に見える振る舞いが和では打ち消し合って消えることがある (実測)。 入力の状態を固定して、 和そのものをパラメータの関数として計算してから書く。 入力の状態の種類で答えが変わるなら、 予言の文に種類を書く。 差で消す形を残すなら、 規格化の後の状態がそろう入力の条件と、 それに要る入力の精度を書く。
+- (g) 近似と全体を比 (割合・条件つきの確率・2 つの率の比) で比べるとき、 共通の因子が比で消えると言う前に、 その因子が比の各項で同じ引数かを確かめる。 引数が項ごとに少しずれる (質量・幅・速度の違い) なら、 消えるのは因子そのものだけで、 対数微分 × ずれが残る。 比の量が差の 2 乗で小さい (遷移の割合など) と、 残った項で近似との相対の差が O(1) になりうる。 引数のずれを独立変数のずらしに書き直す恒等式があれば、 それで示す (パラメータの効果がずらしだけになる)。 確かめ方 = ずれを 0 にした foil (因子をそろえた式) が近似と厳密に一致し、 本当のずれでは外れることを数値で見る (実測)。
 
 ## <a id="abstract-geroch-compression"></a>Abstract = 文脈降下 + 3 message + 持ち帰る 1 文 (Geroch の introduction と conclusion の圧縮) (2026-09)
 
