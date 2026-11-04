@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""本文の図・表が付録の頁に流れていないかを、 組版後の .aux で確かめる (float ごとの頁と、 付録の始まりの頁を比べる)。
+"""本文の図・表が付録の頁に流れていないかと、 頁より高い図・表が無いかを、 組版後の .aux と .log で確かめる。
 
 なぜ (実測): `[t]` の図が本文の終わりで溜まり、 付録と文献表の後ろの最後の頁にまとめて出た。 PDF の本文から
 「Fig. N」 の行を探す確かめ方は、 雑誌の class ごとに caption の書式が違い (「Fig. 1:」 / 「Fig. 1 」 / 「FIG. 1.」)、
 本文の行頭の「Fig. 3 shows」 も拾う。 .aux の `\\newlabel` は float の中の `\\label` が置かれた頁を持つので、 書式に依らない。
 直し方と文献表の位置 = conventions/latex.md#figures-in-body-references-last。
+頁より高い float (実測): 図を差し替えた原稿で未定義参照 0・`Overfull \\hbox` 0 を確かめて通したが、 図の caption が
+頁の下端を越えていた。 TeX は `LaTeX Warning: Float too large for page by <長さ> on input line <行>.` を出して頁に置くだけで、
+overfull とも未定義とも別の警告なので、 その 2 つを数える確認から漏れる。 .log のこの警告も数える。
 
 使い方:
     python3 latex-float-placement.py paper.tex            # 同じ dir の paper.aux を読む (latexmk の後)
-    python3 latex-float-placement.py paper.tex --aux build/paper.aux [--strict]
+    python3 latex-float-placement.py paper.tex --aux build/paper.aux [--log build/paper.log] [--strict]
     python3 latex-float-placement.py --selftest
 
 判定:
@@ -19,7 +22,9 @@
     分からない。 `--strict` で exit 1)。 `\\label` の無い float は NOLABEL (頁が分からない = 確かめていない、 と出す)。
   - 文献表 (`\\bibliography{` / `thebibliography` / `\\printbibliography`) が source で `\\appendix` の前か後ろかも出す
     (判定はしない = どちらに置くかは分野の慣例と投稿先の雛形で決まる)。
-exit: 0 = DRIFT なし / 1 = DRIFT あり (--strict なら SAME-PAGE も) / 2 = 入力が無い・付録が無いのに --strict 以外の問題。
+  - .log (既定 = tex と同じ名前の .log) の `Float too large for page` を全部 TOO-LARGE として出す (どれだけ高いかと
+    input line)。 log の 79 字の折り返しをつないでから探す。 log が無ければ「確かめていない」 と出す (exit は変えない)。
+exit: 0 = DRIFT も TOO-LARGE もなし / 1 = DRIFT か TOO-LARGE あり (--strict なら SAME-PAGE も) / 2 = 入力が無い・付録が無いのに --strict 以外の問題。
 """
 from __future__ import annotations
 
@@ -34,6 +39,7 @@ LABEL_RE = re.compile(r"\\label(?:\[[^\]]*\])?\{([^}]*)\}")
 NEWLABEL_RE = re.compile(r"\\newlabel\{([^}]*)\}\{\{([^}]*)\}\{([^}]*)\}")
 APPTOC_RE = re.compile(r"\\contentsline \{section\}\{\\numberline \{([A-Z])\}.*?\}\{(\d+)\}\{", re.S)
 BIB_RE = re.compile(r"\\bibliography\{|\\begin\{thebibliography\}|\\printbibliography")
+TOO_LARGE_RE = re.compile(r"Float too large for page by ([\d.]+pt) on input line (\d+)")
 
 
 def strip_comments(t: str) -> str:
@@ -96,6 +102,12 @@ def analyze(tex: Path, aux: Path) -> dict:
     return {"rows": rows, "appendix_page": app_page, "has_appendix": app >= 0, "bibliography": bib_where}
 
 
+def too_large(log_text: str) -> list[tuple[str, str]]:
+    """(どれだけ高いか, input line) の list。 TeX は log を 79 字で折り返すので、 ちょうど 79 字の行は次の行とつなぐ。"""
+    joined = re.sub(r"(?m)^(.{79})\n", r"\1", log_text)
+    return TOO_LARGE_RE.findall(joined)
+
+
 def selftest() -> int:
     tex = ("\\documentclass{article}\n\\begin{document}\n\\section{Intro}\n"
            "\\begin{figure}[t]\\caption{a}\\label{fig:a}\\end{figure}\n"
@@ -121,6 +133,15 @@ def selftest() -> int:
     ok = st == want and r["appendix_page"] == 7 and r["bibliography"] == "付録の後ろ" and len(r["rows"]) == 5
     if not ok:
         print("FAIL", st, r["appendix_page"], r["bibliography"])
+    # 頁より高い float: 1 行の警告と、 79 字で折り返された警告の 2 つ。 未定義参照の警告は数えない
+    wrapped = "x" * 37 + "LaTeX Warning: Float too large for page by 12.5pt on input line 9."
+    log = ("LaTeX Warning: Float too large for page by 57.25pt on input line 120.\n"
+           "LaTeX Warning: Reference `fig:x' on page 3 undefined on input line 12.\n"
+           + wrapped[:79] + "\n" + wrapped[79:] + "\n")
+    tl = too_large(log)
+    if tl != [("57.25pt", "120"), ("12.5pt", "9")]:
+        print("FAIL too_large", tl)
+        ok = False
     print("selftest:", "OK" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -129,6 +150,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("tex", nargs="?")
     ap.add_argument("--aux")
+    ap.add_argument("--log", help="組版の log (既定 = tex と同じ名前の .log)")
     ap.add_argument("--strict", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -150,10 +172,17 @@ def main() -> int:
     unk = [x for x in r["rows"] if x["status"] in ("NOLABEL", "NOPAGE")]
     if unk:
         print(f"   ⚠️ 頁が分からない float {len(unk)} 件 = 確かめていない (\\label を float の中に置く)")
+    log = Path(a.log) if a.log else tex.with_suffix(".log")
+    tl = too_large(log.read_text(encoding="utf-8", errors="replace")) if log.is_file() else None
+    if tl is None:
+        print(f"   ⚠️ {log} が無い = 頁より高い float は確かめていない")
+    for by, line in tl or []:
+        print(f"   TOO-LARGE 頁より {by} 高い float (input line {line})")
     if bad:
         print(f"   🔴 本文の float が付録の頁に流れた: {len(bad)} 件 → conventions/latex.md#figures-in-body-references-last")
-        return 1
-    return 0
+    if tl:
+        print(f"   🔴 頁より高い float: {len(tl)} 件 (overfull・未定義の数には出ない) → 図の幅・段の配置・caption を詰める")
+    return 1 if (bad or tl) else 0
 
 
 if __name__ == "__main__":

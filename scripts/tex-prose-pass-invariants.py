@@ -19,7 +19,7 @@
   - 比べるもの (`%` のコメント行と行末コメントを除いた全文):
       inline math (`$...$` と `\\(...\\)`) / display (math 環境・`\\[...\\]`・`$$...$$`・`--display-macro` の `\\NAME{...}`) /
       `\\cite` 類のキー / `\\ref` 類 (ref・eqref・cref・Cref・autoref・labelcref・pageref・nameref・vref) のキー / `\\label` のキー /
-      散文の数値 (上のどれにも入らない所の数字)。 数式は空白を詰めて比べる (改行の位置だけの違いは差にしない)。
+      散文の数値 (上のどれにも入らない所の数字。 英字・数字・`_` に続く数字 = file 名や識別子の中の数字は数えない)。 数式は空白を詰めて比べる (改行の位置だけの違いは差にしない)。
       引用文 = `\\begin{document}` 以降の ``…'' と、 `--quote-macro NAME` の `\\NAME{…}` の中身 (空白を詰めた字句)。
       引用を ``…'' から `\\enquote{…}` や斜体の macro に包み直しただけなら同じ引用として数える (前置きの macro 定義の
       ``…'' は数えない)。 原文から引いた引用の字句が変わっていないかを、 1 字単位で確かめる (実測: 読みやすさの書き直しで
@@ -49,7 +49,9 @@ MATH_ENVS = r"equation|align|alignat|gather|multline|eqnarray|flalign|displaymat
 CITE = re.compile(r"\\[cC]ite[a-zA-Z]*\*?\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}")
 REF = re.compile(r"\\(?:ref|eqref|cref|Cref|crefrange|Crefrange|autoref|labelcref|pageref|nameref|vref)\*?\s*\{([^}]*)\}")
 LABEL = re.compile(r"\\label\s*(?:\[[^\]]*\])?\{([^}]*)\}")
-NUMBER = re.compile(r"(?<![A-Za-z\\])\d+(?:\.\d+)?")
+# 英字・数字・`_` の直後の数字は数えない = file 名や識別子の中の数字 (`plot_A12_b34.png` の 2 と 4、 `x86_64` の 64)。
+# 数字の直後を外さないと、 英字が止めた数字の次の桁から数え始める (実測: file 名の中の数字が散文の数値の増減に出た)
+NUMBER = re.compile(r"(?<![A-Za-z\\\d_])\d+(?:\.\d+)?")
 QUOTE = re.compile(r"``(.*?)''", re.S)
 CATEGORIES = ("inline math", "display", "cite keys", "ref keys", "labels", "numbers", "quotes")
 
@@ -230,6 +232,10 @@ def selftest() -> int:
         print(f"FAIL counts {got} (want {want})"); ok = False
     if sorted(e["numbers"]) != ["0.5", "12", "3"]:
         print(f"FAIL prose numbers {sorted(e['numbers'])}"); ok = False
+    fn = extract("\\begin{document}\n\\includegraphics[width=0.55\\textwidth]{plot_A12_b34.png} on x86_64, 2 of them.\n"
+                 "\\end{document}\n", [])
+    if fn["numbers"] != {"0.55": 1, "2": 1}:  # file 名・識別子の中の数字は数えない (幅と散文の数は数える)
+        print(f"FAIL digits inside names {dict(fn['numbers'])}"); ok = False
     esc = extract("\\begin{document}\nBefore it.\n"
                   "\\al{ f &= \\exp\\Big\\{ a\\nn &\\phantom{= \\exp\\Big\\{} + c \\Big\\}, }\n"
                   "After it $x$ and 7 items.\n\\end{document}\n", ["al"])

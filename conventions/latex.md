@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -241,6 +241,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - `\usepackage[section]{placeins}` を読む。 各 `\section` の手前で溜まった float を出し切るので、 図はその節の中か直後に出て、 付録と文献表へ越えない。 `\FloatBarrier` を手で置く形は、 節を足したときに置き忘れる。
 - 図の位置の指定を `[t]` から `[tbp]` に広げる (`[!t]` は `[!tbp]`)。 出し切るときの置き場 (頁の下端・float だけの頁) が増え、 半端な余白の頁が減る。
 - 確かめ = 組んだ後に [`scripts/latex-float-placement.py`](../scripts/latex-float-placement.py) `paper.tex` (`.aux` の float ごとの頁と付録の始まりの頁を比べ、 本文の float が付録の頁にあれば exit 1)。 PDF の本文から「Fig. N」 を探す形は、 class ごとに caption の書式が違い、 本文の行頭の参照も拾う。
+- <a id="float-too-large"></a>図を足す・大きくする・caption を伸ばした turn は、 頁より高い float も確かめる: TeX は `LaTeX Warning: Float too large for page by <長さ>` を出して頁に置くだけで、 caption が頁の下端を越えても未定義参照の数にも `Overfull \hbox` の数にも出ない (実測: その 2 つが 0 の確認で通した図の caption が、 頁番号に重なっていた)。 同じ道具が `.log` のこの警告も数え、 あれば exit 1。 直し方 = 図の幅を縮める・panel の並べ方を変える (列を増やして段を減らす)・caption を詰める。
 
 **文献表の位置**: 物理 (特に素粒子) の原稿では 本文 → 謝辞 → 付録 → 文献表 の順が多く、 雛形によっては文献表が付録の前にある。 どちらに置くかは著者の家風と投稿先の指定で決める。 付録の後ろへ移すときは `\bibliographystyle{…}` と `\bibliography{…}` の 2 行を `\end{document}` の直前へ動かす (付録の中の `\cite` も同じ文献表に入る)。 上の道具は source の位置 (付録の前 / 後ろ) も出す。
 
