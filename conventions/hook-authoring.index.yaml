@@ -368,6 +368,9 @@ sections:
   - id: ps-process-anchor
     level: 2
     title: "§24. hook が「動いている process」 を `ps` で数えるときは、 interpreter・script・subcommand の位置に anchor する"
+  - id: consent-before-first-stop
+    level: 2
+    title: "§25. 「止めた後に本人が話せば通す」 関門は、 止めより前に出た本人の言葉も読む"
   - id: related-docs
     level: 2
     title: "関連"
