@@ -109,7 +109,11 @@ PLACEHOLDER_NAME_RE = re.compile(r"<[^>]*>|…|\.\.\.|^(?:節名|名前|name|tit
 POSITION_WORDS = {"冒頭", "末尾", "先頭", "最後", "全体", "本文", "上記", "下記", "前述", "後述", "同", "該当", "各", "表",
                   "全文", "目次", "本節", "同節", "当該", "上", "下", "前半", "後半", "頭", "尾", "top", "end"}
 # 履歴の記録 (書いた時点の事実。 節が後で移っても参照は書き換えない) = 🔴 にせず 📜 で数える (--list)
-RECORD_RE = re.compile(r"(^|/)(?:SESSION-archive|archive|inbox|threads)/|-archive(?:[./-]|$)|(^|/)(?:[\w-]+-)?incidents\.md$")
+# plans/ の `*-results.md` `*-handoff.md` `*-spec.md` と `*-candidates/` `*-evidence/` `candidates/` `data/` = 書いた時点の記録・
+# 別の場所の文の写し (実測 = 層1 へ上げる候補の文が上げ先からの相対 link を持ち、 置き場では解決しない)
+RECORD_RE = re.compile(r"(^|/)(?:SESSION-archive|archive|inbox|threads)/|-archive(?:[./-]|$)|(^|/)(?:[\w-]+-)?incidents\.md$"
+                       r"|(^|/)plans/(?:[^/]+/)*[^/]*-(?:results|handoff|spec)\.md$"
+                       r"|(^|/)plans/(?:[^/]+/)*(?:[^/]*-(?:candidates|evidence)|candidates|data)/")
 # file の冒頭 20 行にこの宣言があれば、 その file の 🔴 は 📜 (壊れた参照を報告・引用する RCA / 結果の doc 用)
 RECORD_MARKER = "<!-- text-section-refs: record -->"
 
@@ -123,10 +127,13 @@ PLACEHOLDER_ANCHORS = re.compile(r"^(?:foo|bar|baz|x+|y|whatever|anchor|slug|som
 LINE_ANCHOR_RE = re.compile(r"^(?:L?\d+(?:-L?\d+)?|L\d+C\d+)$")
 
 # ---------------------------------------------------------------- 抽出
-_PATH_BODY = (r"(?:~/|/)?(?:[\w.\-]+/)*[A-Za-z0-9_][A-Za-z0-9_.\-]*"
+# dir の名前は `+` (例 `2+1/`) と見本・型の部分 (`<repo>/` `{a,b}/`、 丸ごとの `*/` `…/`) も含める = 切り損ねて `1/CLAUDE.md` や
+# `/status.md` を path にしない (実測)。 見本・型を含む path は resolve で「見本の path」 にする。 file 名の途中の `§` も含める
+_PATH_BODY = (r"(?:~/|/)?(?:(?:(?:[\w.+\-]|<[^<>\s/]{1,30}>|\{[^{}\s/]{1,40}\})+|\*|…)/)*"
+              r"[A-Za-z0-9_](?:[A-Za-z0-9_.\-]|§(?=[\w.]))*"
               r"\.(?:md|markdown|txt|ya?ml|py|sh|tex|toml|json|js|ts|html|css)")
 PATH_TOK = r"(?P<path>" + _PATH_BODY + r"|README|CLAUDE|DESIGN|SESSION|AGENTS)"
-LB = r"(?<![A-Za-z0-9_./\-~])"  # token の途中・URL の途中から始めない (日本語の直後からは始めてよい)
+LB = r"(?<![A-Za-z0-9_./\-~+§…])"  # token の途中・URL の途中・省略の `…` の直後から始めない (日本語の直後からは始めてよい)
 ANCHOR_TOK = r"(?:#(?P<anchor>[A-Za-z0-9_\-%.]*[A-Za-z0-9_]))?"  # 文中の anchor は ASCII (後ろの日本語を食わない)
 SECT_OPEN = r"`?\)?[ \t\u3000]?§[ \t\u3000]?"
 QUOTE_OPEN = "「『"
@@ -154,6 +161,7 @@ class Ref:
     key: str           # 節名 (F1/F2) or anchor (F3/F4)
     raw: str
     anchor: str = ""   # F1/F2 に付いた #anchor
+    pre: str = ""      # 参照の直前の文 (repo の名前・「層1」 を読む = Fleet.ctx_repos)
 
 
 def _strip_md(s: str) -> str:
@@ -249,15 +257,16 @@ def extract_refs(text: str, code: object = "") -> Tuple[List[Ref], int]:
                 if skip(m.start()):
                     continue
                 spans.append((m.start(), m.end()))
+                pre = line[:m.start()]
                 refs.append(Ref(ln, "F1", m.group("path"), _strip_md(m.group("name")), m.group(0),
-                                m.group("anchor") or ""))
+                                m.group("anchor") or "", pre))
                 rest, off = line[m.end():], m.end()
                 while True:  # 続きの `/ §「名2」` は同じ path
                     c = RE_CONT.match(rest)
                     if not c:
                         break
                     refs.append(Ref(ln, "F1", m.group("path"), _strip_md(c.group("name")),
-                                    c.group(0).strip(), m.group("anchor") or ""))
+                                    c.group(0).strip(), m.group("anchor") or "", pre))
                     spans.append((off, off + c.end()))
                     off += c.end()
                     rest = rest[c.end():]
@@ -272,13 +281,15 @@ def extract_refs(text: str, code: object = "") -> Tuple[List[Ref], int]:
                         or m.group("path") in BARE_SCAFFOLD):
                     continue  # 記号・助詞で始まる = 節名でない / 拡張子なしの README 等は鉤括弧つき (F1) だけ見る
                 spans.append((m.start(), m.end()))
-                refs.append(Ref(ln, "F2", m.group("path"), name, (m.group(0) + name)[:120], m.group("anchor") or ""))
+                refs.append(Ref(ln, "F2", m.group("path"), name, (m.group(0) + name)[:120], m.group("anchor") or "",
+                                line[:m.start()]))
         if "#" in line:
             refs.extend(r for r in f4 if not lang)
             for m in RE_A.finditer(line):
                 if any(a <= m.start() < b for a, b in link_href_spans + lit):
                     continue
-                refs.append(Ref(ln, "F3", m.group("path"), m.group("anchor"), m.group(0)))
+                refs.append(Ref(ln, "F3", m.group("path"), m.group("anchor"), m.group(0), "",
+                                line[:m.start()]))
     # F1/F2 に付いた #anchor も F3 として見る (重複は除く)
     seen = {(r.line, r.path_tok, r.key) for r in refs if r.form == "F3"}
     for r in list(refs):
@@ -286,7 +297,7 @@ def extract_refs(text: str, code: object = "") -> Tuple[List[Ref], int]:
             k = (r.line, r.path_tok, r.anchor)
             if k not in seen:
                 seen.add(k)
-                refs.append(Ref(r.line, "F3", r.path_tok, r.anchor, f"{r.path_tok}#{r.anchor}"))
+                refs.append(Ref(r.line, "F3", r.path_tok, r.anchor, f"{r.path_tok}#{r.anchor}", "", r.pre))
     return refs, numbered
 
 
@@ -518,6 +529,18 @@ def read_text_file(p: Path) -> Optional[str]:
     return b.decode("utf-8", "replace")
 
 
+# 参照の直前に書かれた repo の名前 (「claude-config `CLAUDE.md#x`」「proj の CLAUDE.md §「x」」) と「層1」、
+# cross_ref の `<repo>/file:<path>` = その repo の file として引く (実測 = repo を書かずに名前だけ前に置く参照が多く、
+# 自分の repo の同名の file で引いて「同じ名前の別 file」 に落ちていた)
+LAYER1_REPOS = ("claude-config", "ai-collaboration")
+# 「repo `X`」「repo の X」 = その行の repo (行の頭の項目名 `- **<repo>**`、 無ければその行に出る repo の名前が 1 つだけのとき
+# それ)。 「当 repo」「本 repo」「この repo」「同 repo」 = 参照元の repo (実測 = 行の前に出た別の repo で引いた)
+CTX_REPO_WORD = re.compile(r"(?P<self>当|本|この|同|自)?[ \t\u3000]*(?:repo|リポ)[ \t\u3000]*(?:の)?[ \t\u3000]*[`\[(（*]*$")
+CTX_ITEM_HEAD = re.compile(r"^\s*[-*]\s+\*\*(?P<repo>[A-Za-z0-9][A-Za-z0-9_.+\-]*)\*\*")
+CTX_TAIL = re.compile(r"(?:(?P<l1>層\s*[1１]|layer[ -]?1)|(?P<repo>[A-Za-z0-9][A-Za-z0-9_.+\-]*))"
+                      r"(?:/file:|[ \t\u3000]*(?:側)?[ \t\u3000]*(?:の|=|:|：)?[ \t\u3000]*[`\[(（*]*)$")
+
+
 class Fleet:
     """base 直下の repo 群の file 一覧 (後方一致の解決用) と、 target の節の索引の cache。"""
 
@@ -566,13 +589,48 @@ class Fleet:
             self._ix[key] = None if text is None else build_index(text, p.suffix.lower())
         return self._ix[key]
 
-    def resolve(self, tok: str, src: Path, repo: Optional[Path]) -> Tuple[str, List[Path]]:
-        """('ok', [p]) / ('ambiguous', [p...]) / ('notfound', []) / ('placeholder', [])。"""
+    def ctx_repos(self, pre: str) -> List[Path]:
+        """参照の直前に書かれた repo (無ければ [])。"""
+        known = {r.name: r for r in self.repos()}
+        pre = pre or ""
+        rw = CTX_REPO_WORD.search(pre)
+        if rw:
+            if rw.group("self"):
+                return []  # 参照元の repo = いつもの解決
+            head = CTX_ITEM_HEAD.match(pre)
+            if head and head.group("repo") in known:
+                return [known[head.group("repo")]]
+            seen = {w for w in re.findall(r"(?<![\w./-])[A-Za-z0-9][A-Za-z0-9_.+\-]*(?![\w/-])", pre) if w in known}
+            return [known[seen.pop()]] if len(seen) == 1 else []
+        m = CTX_TAIL.search(pre)
+        if not m:
+            return []
+        names = LAYER1_REPOS if m.group("l1") else (m.group("repo"),)
+        return [known[n] for n in names if n in known]
+
+    def resolve(self, tok: str, src: Path, repo: Optional[Path], pre: str = "") -> Tuple[str, List[Path]]:
+        """('ok', [p]) / ('ctx', [p]) = 直前に書かれた repo の file / ('ambiguous', [p...]) / ('notfound', []) /
+        ('placeholder', [])。"""
         tok = tok.strip("`")
         tok = BARE_SCAFFOLD.get(tok, tok)
+        if tok.startswith("<base>/"):  # `<base>` = repo を並べた作業ルート (setup の語)
+            p = self.base / tok[len("<base>/"):]
+            return ("ok", [p]) if p.is_file() else ("notfound", [])
         bn = os.path.basename(tok).lower()
-        if bn in PLACEHOLDER_BASENAMES or "<" in tok:
-            return "placeholder", []
+        if (bn in PLACEHOLDER_BASENAMES or "<" in tok or any(c in tok for c in "{}*…")
+                or "/.../" in "/" + tok):
+            return "placeholder", []  # 見本・型・省略を含む path
+        if not tok.startswith(("~/", "/", "../", "./")) and not (self.base / tok.split("/", 1)[0] / ".git").exists():
+            hits: List[Path] = []
+            for r in self.ctx_repos(pre):
+                if (r / tok).is_file():
+                    hits.append(r / tok)
+                else:  # その repo の root に無ければ repo の中で後方一致
+                    hits += [r / f for f in self.files(r) if ("/" + f).endswith("/" + tok)]
+            if len(hits) == 1:
+                return "ctx", hits
+            if len(hits) > 1:
+                return "ambiguous", hits
         if tok.startswith("~/") or tok.startswith("/"):
             p = Path(os.path.expanduser(tok))
             return ("ok", [p]) if p.is_file() else ("notfound", [])
@@ -608,6 +666,9 @@ class Fleet:
             return "ok", hits
         if len(hits) > 1:
             return "ambiguous", hits
+        lead = re.match(r"[^\x00-\x7f]+(?=[A-Za-z0-9_~./])", tok)  # 和文に直に続く path (`一般則はclaude-config/…`)
+        if lead:
+            return self.resolve(tok[lead.end():], src, repo, pre)
         return "notfound", []
 
     def _heads(self, repo: Path) -> List[Tuple[Path, List[str]]]:
@@ -723,7 +784,9 @@ def judge(fleet: Fleet, ref: Ref, src: Path, repo: Optional[Path], hints: bool =
             return unres("節名が見本")
         if norm(ref.key) in POSITION_WORDS or (ref.form == "F2" and norm(ref.key.split()[0]) in POSITION_WORDS):
             return unres("位置の語 (節の名前でない)")
-    st, paths = fleet.resolve(ref.path_tok, src, repo)
+    st, paths = fleet.resolve(ref.path_tok, src, repo, ref.pre if ref.form != "F4" else "")
+    named = st == "ctx"  # 書いた人が repo を名指している = 「同じ名前の別 file」 に和らげない
+    st = "ok" if named else st
     if st in ("placeholder", "notfound"):
         return unres("見本の path" if st == "placeholder" else "file が見つからない")
     results = [(p, _check(fleet, p, ref)) for p in paths]
@@ -740,9 +803,21 @@ def judge(fleet: Fleet, ref: Ref, src: Path, repo: Optional[Path], hints: bool =
         return unres("読めない (git-crypt lock / binary / 節を持たない種類)", rel(p, base))
     if k == "struct":
         return None
+    if k == "body" and p.resolve() == src.resolve():  # 自分の file を指す参照 = 参照の行そのものは本文の証拠にしない
+        text = read_text_file(p) or ""
+        rest = "\n".join(x for i, x in enumerate(text.splitlines(), 1) if i != ref.line)
+        k = match_name(build_index(rest, p.suffix.lower()), ref.key, bare=(ref.form == "F2"))
     if k == "body":
         if ref.form == "F2":
             return None
+        # 同じ repo の別 file の見出しにある = 節が移り、 本文に目印だけ残った形 (archive への MOVE の後。 実測)。
+        # 参照元の file と plans/ (節を提案する側・偶然の短い名前) は移った先の候補にしない
+        moved = [h for h in fleet.heading_homes(ref.key, repo_of(fleet, p), all_repos=False)
+                 if h.resolve() not in (p.resolve(), src.resolve()) and "/plans/" not in "/" + rel(h, base)] if hints else []
+        if moved:
+            return Finding("MISSING", srel, ref.line, ref.form, ref.path_tok, ref.key, target=rel(p, base),
+                           why="節名は本文にだけある。 同じ repo の別 file の見出しにある (移った先の候補)",
+                           homes=[rel(h, base) for h in moved])
         return Finding("BODY", srel, ref.line, ref.form, ref.path_tok, ref.key, target=rel(p, base),
                        why="本文にはあるが見出し等の節の形でない")
     # 移設済みの stub なら移設先で引く (旧 anchor だけを残した stub に、 移設後に増えた節を指す参照)
@@ -751,7 +826,7 @@ def judge(fleet: Fleet, ref: Ref, src: Path, repo: Optional[Path], hints: bool =
             return None
     # 同じ名前の別 file (各 repo の CLAUDE.md、 層ごとの同名 doc) にあるなら、 文脈で別 file を指している可能性 = 🟠
     bn = os.path.basename(BARE_SCAFFOLD.get(ref.path_tok, ref.path_tok))
-    if "/" not in ref.path_tok.strip("`").lstrip("~/").rstrip("/") or bn.lower() in SCAFFOLD_NAMES:
+    if not named and ("/" not in ref.path_tok.strip("`").lstrip("~/").rstrip("/") or bn.lower() in SCAFFOLD_NAMES):
         others = [q for q in fleet.by_basename().get(bn.lower(), []) if q.name == bn and q.resolve() != p.resolve()]
         hit = [q for q in others if _check(fleet, q, ref) in ("struct", "body")]
         if hit:
@@ -783,7 +858,7 @@ def scan_repo(fleet: Fleet, repo: Path, hints: bool = True) -> Tuple[List[Findin
             stats["refs"] += 1
             fd = judge(fleet, r, p, repo, hints=hints and not record)
             if fd:
-                if fd.status == "MISSING" and record:
+                if record and fd.status in ("MISSING", "SAME_NAME", "BODY", "AMBIG_MISSING"):
                     fd.status = "RECORD"
                 out.append(fd)
     return out, stats
@@ -1296,6 +1371,78 @@ def selftest() -> int:
         finally:
             shutil.rmtree(base / ".git", ignore_errors=True)
             (base / "root.md").unlink(missing_ok=True)
+
+        # --- 読み違いの形 (実測の fleet で見つかった形) と、 直前に書かれた repo の名前・記録・移った節。 別の一時 fleet で
+        with tempfile.TemporaryDirectory() as td2:
+            b2 = Path(td2) / "Claude"
+            names = ("alpha", "beta", "claude-config", "Proj")
+            for nm in names:
+                (b2 / nm).mkdir(parents=True)
+                sh(["git", "init", "-q"], b2 / nm)
+            write(b2 / "Proj/2+1/DESIGN.md", "# d\n\n## 在る節\n")
+            write(b2 / "alpha/CLAUDE.md", "# alpha\n")
+            write(b2 / "beta/CLAUDE.md", "# beta\n\n## 共有の節\n")
+            write(b2 / "beta/conventions/mcp.md", "# mcp\n\n<a id=\"mech\"></a>\n## 機械 enforcement\n")
+            write(b2 / "claude-config/conventions/shell-env.md", "# shell\n\n## 外の節\n")
+            write(b2 / "alpha/guide.md", "# guide\n\n本文に archive: §旧い節 とだけ残る。 O6 は本文の語\n")
+            write(b2 / "alpha/guide-archive.md", "# archive\n\n## 旧い節\n")
+            write(b2 / "alpha/plans/p.md", "# p\n\n## O6 の話\n")
+            write(b2 / "alpha/self.md", "# self\n\n`self.md` §「自分の節」 を見よ\n")
+            write(b2 / "alpha/src.md", "\n".join([
+                "M1 `Proj/2+1/DESIGN.md` §「在る節」 と `Proj/2+1/DESIGN.md` §「無い節」",         # `+` を path に含める
+                "M2 `<repo>/SESSION.md` §「x 節」 と `x-{a,b}/status.md` §「提出記録」 と `applications/*/status.md` §「y 節」",
+                "M3 `docs/.../notes.md` §「z 節」 と `grant/…/execution.md` §「w 節」 と `…ownership.md#rule`",
+                "M4 **beta/conventions/mcp.md §「機械 enforcement」**",                           # 強調の `**` を path に入れない
+                "M5 一般則はbeta/conventions/mcp.md#mech",                                       # 和文に直に続く path
+                "M6 beta `CLAUDE.md` §「共有の節」 と beta の CLAUDE.md §「共有の節」",             # 直前の repo の名前
+                "M7 beta `CLAUDE.md` §「名指した repo に無い節」",                                # 名指した repo に無い = 🔴
+                "M8 `CLAUDE.md` §「共有の節」",                                                  # 名指し無し = 🟠 のまま
+                "M9 beta `mcp.md` §「機械 enforcement」 と 層1 `shell-env.md` §「外の節」",       # repo の中で後方一致 / 層1
+                "M10 beta/file:conventions/mcp.md#mech",                                          # cross_ref の形
+                "M11 `guide.md` §「旧い節」 と `guide.md` §「O6」",                                # 移った節 / plans の偶然は候補にしない
+                "- **beta** — 説明。 手順 = repo `CLAUDE.md` §「共有の節」",                        # 「repo」 = 行の頭の項目名
+                "- **alpha** — 説明。 手順 = repo `CLAUDE.md` §「共有の節」",                       # 項目名の repo に無い = 🔴
+                "M14 beta の話のあとで 当 repo `CLAUDE.md` §「共有の節」",                          # 当 repo = 参照元 (alpha) = 🟠
+            ]) + "\n")
+            write(b2 / "alpha/plans/x-results.md", "`guide.md` §「どこにも無い節」 と `CLAUDE.md` §「共有の節」\n")
+            write(b2 / "alpha/plans/live.md", "`guide.md` §「どこにも無い節」\n")
+            for nm in names:
+                sh(["git", "add", "-A"], b2 / nm)
+            fl2 = Fleet(b2)
+            f2, _ = scan_repo(fl2, b2 / "alpha")
+            by = {}
+            for f in f2:
+                by.setdefault((f.src.split("/")[-1], f.line, f.key), f)
+
+            def st(src, ln, key):
+                f = by.get((src, ln, key))
+                return f.status if f else None
+            expect("`2+1/` を切らない: 在る節は通る / 無い節は 🔴 (旧 = `1/DESIGN.md` で未判定)",
+                   st("src.md", 1, "在る節") is None and st("src.md", 1, "無い節") == "MISSING")
+            expect("見本・型を含む path (`<repo>/` `{a,b}/` `*/`) = 見本の path (file が見つからない、 にしない)",
+                   all(by[("src.md", 2, k)].why == "見本の path" for k in ("x 節", "提出記録", "y 節")))
+            expect("省略の `...` `…` を含む path = 見本の path / `…` の直後から path を始めない",
+                   all(by[("src.md", 3, k)].why == "見本の path" for k in ("z 節", "w 節"))
+                   and not any(f.line == 3 and "ownership" in f.path_tok for f in f2))
+            expect("強調の `**` を path に入れない (通る)", not any(f.line == 4 for f in f2))
+            expect("和文に直に続く path を引き直す (通る)", not any(f.line == 5 for f in f2))
+            expect("直前に書いた repo の file で引く (`beta `CLAUDE.md`` / `beta の CLAUDE.md`、 通る)",
+                   not any(f.line == 6 for f in f2))
+            expect("名指した repo に無い節 = 🔴 (同じ名前の別 file に和らげない)", st("src.md", 7, "名指した repo に無い節") == "MISSING")
+            expect("名指しの無い裸の CLAUDE.md = 🟠 のまま (陰性対照)", st("src.md", 8, "共有の節") == "SAME_NAME")
+            expect("名指した repo の中で後方一致 / 層1 = claude-config・ai-collaboration (通る)", not any(f.line == 9 for f in f2))
+            expect("cross_ref の `repo/file:path#anchor` (通る)", not any(f.line == 10 for f in f2))
+            moved = by.get(("src.md", 11, "旧い節"))
+            expect("本文に名前だけ残り同じ repo の別 file の見出しにある = 🔴 + 移った先の候補",
+                   moved is not None and moved.status == "MISSING" and any("guide-archive.md" in h for h in moved.homes))
+            expect("plans/ の見出しは移った先の候補にしない (`O6` = 🟡 のまま)", st("src.md", 11, "O6") == "BODY")
+            expect("自分の file を指す参照の行は本文の証拠にしない (🔴)", st("self.md", 3, "自分の節") == "MISSING")
+            expect("「repo `X`」 = 行の頭の項目名の repo で引く (通る) / その repo に無ければ 🔴",
+                   not any(f.line == 12 and f.src.endswith("src.md") for f in f2) and st("src.md", 13, "共有の節") == "MISSING")
+            expect("「当 repo `X`」 = 参照元の repo (行の前に出た別の repo で引かない)", st("src.md", 14, "共有の節") == "SAME_NAME")
+            expect("plans/ の *-results.md = 記録 (🔴 も 🟠 も 📜)",
+                   st("x-results.md", 1, "どこにも無い節") == "RECORD" and st("x-results.md", 1, "共有の節") == "RECORD")
+            expect("plans/ の結果でない file = 🔴 のまま (陰性対照)", st("live.md", 1, "どこにも無い節") == "MISSING")
 
         # --- staged: 追加行だけ / 消えた見出しの inbound / pre-commit-bib e2e
         s = base / "gamma"
