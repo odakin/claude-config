@@ -1102,12 +1102,15 @@ def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface:
               list_all: bool, as_json: bool, compare: Optional[str] = None) -> int:
     all_f: List[Finding] = []
     stats = {"refs": 0, "numbered": 0, "repos": 0}
+    empty_roots: List[str] = []  # 作業ルートの空の repo (commit も tracked file も無い `.git`) = 消してよいかを人が確かめる
     for root in roots:
         rp = Path(os.path.expanduser(root))
         if not rp.is_dir():
             print(f"{HEADING} 検査が走っていない (root {rp} が無い)")
             return 3
         repos = repos_under(rp)
+        if (rp / ".git").exists() and repos != [rp]:
+            empty_roots.append(str(rp / ".git"))
         base = Path(base_arg) if base_arg else (rp.parent if repos == [rp] else rp)
         fleet = Fleet(base)
         ack = ack | load_ack(None, base=base)
@@ -1123,6 +1126,7 @@ def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface:
     stale_ack = sorted(ack - {f.ack_key() for f in acked})  # 直った / 行が動いた = 一覧から消す行
     by = {k: [f for f in all_f if f.status == k] for k in ("AMBIG_MISSING", "SAME_NAME", "RECORD", "BODY", "UNRESOLVED")}
     payload = {"stats": stats, "missing": [f.__dict__ for f in missing], "acked": len(acked), "stale_ack": stale_ack,
+               "empty_root_repos": empty_roots,
                **{k.lower(): [f.__dict__ for f in v] for k, v in by.items()}}
     if compare:
         try:
@@ -1136,6 +1140,9 @@ def run_fleet(roots: List[str], base_arg: Optional[str], ack: Set[str], surface:
     if as_json:
         print(json.dumps(payload, ensure_ascii=False, indent=1))
         return 1 if (strict and missing) else 0
+    for e in empty_roots:  # 走査は子の repo を数え続けるので違反ではない (--strict の値は変えない)。 dashboard (--surface) にも出す
+        print(f"⚠️ {HEADING} 作業ルートに空の repo がある: {e} (commit も tracked file も無い) = 中身を確かめて消す。 "
+              f"できる経路 = claude-config/conventions/claude-code-permissions.md#cd-with-git-goes-to-classifier")
     if missing or list_all:
         if not surface:
             print(f"{HEADING} 文中の節参照 {stats['refs']} 件 ({stats['repos']} repo) — 実在する file の実在しない節を指すもの "
@@ -1365,6 +1372,11 @@ def selftest() -> int:
                    a in repos_under(base) and base not in repos_under(base))
             expect("空の root repo があっても参照・repo の件数が変わらない (陽性対照 = 隠れると 0 件 / 1 repo)",
                    st_plain["refs"] > 0 and fleet_stats() == st_plain)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc_e = run_fleet([str(base)], None, set(), True, False, False, False)
+            expect("空の root repo を dashboard (--surface) に 1 行出す (違反ではない = exit 0)",
+                   rc_e == 0 and out.getvalue().count("作業ルートに空の repo がある") == 1)
             write(base / "root.md", "# root\n")
             sh(["git", "add", "root.md"], base)
             expect("tracked file のある root repo は 1 つの repo として走査する", repos_under(base) == [base])
