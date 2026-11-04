@@ -40,9 +40,13 @@ latexdiff takes out in one place and puts in at another has moved: struck there,
 Arguments of macros defined in the preamble are read from \\newcommand; macros that only wrap a
 bracket are listed in DELIM_MACRO.
 """
+import contextlib
+import io
 import json
+import os
 import re
 import sys
+import tempfile
 
 # --- what a control word means to the comparison -------------------------------------------------
 NEUTRAL = {",", ";", ":", "!", " ", "quad", "qquad", "enspace", "thinspace", "autospace",
@@ -1230,6 +1234,7 @@ def old_refs(s, aux):
 def restore(dp, tp, aux=None):
     data = json.load(open(tp, encoding="utf-8"))
     s = open(dp, encoding="utf-8").read()
+    load_macros(s)      # a process of its own: the in-line formulas parse as protect() parsed the displays
     moved = []
     s = fill(s, data["table"], moved)
     log = {"fine": 0, "whole": 0, "left": []}
@@ -1295,6 +1300,26 @@ def selftest():
         if "DIF" in same:   # delimiter size and row layout are not changes
             ok = False
             print("marked:", same)
+    # restore runs in a process of its own: an accent that the preamble of diff.tex defines as an alias,
+    # added in an in-line formula, stays with its argument (unknown, \hh is cut off from x and TeX stops)
+    for t in (ALIAS, USER_ARGS, USER_NOARG):
+        t.clear()
+    with tempfile.TemporaryDirectory() as tmp:
+        dp, tp = os.path.join(tmp, "diff.tex"), os.path.join(tmp, "table.json")
+        open(dp, "w", encoding="utf-8").write(
+            "\\documentclass{article}\n\\newcommand{\\hh}{\\widehat}\n\\begin{document}\nTake \\DIFdelbegin "
+            "\\DIFdel{$x^{2}y$}\\DIFdelend \\DIFaddbegin \\DIFadd{$\\hh x^{2}y$}\\DIFaddend .\n\\end{document}\n")
+        json.dump({"table": {}, "report": []}, open(tp, "w", encoding="utf-8"))
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                restore(dp, tp)
+        except SystemExit as ex:
+            ok = False
+            print(ex)
+        got = open(dp, encoding="utf-8").read().split("\n")[3]
+    if "\\DIFadd{\\hh{x}}" not in got or re.search(r"\\DIF(?:add|del)\{\\hh\s*\}", got):
+        ok = False
+        print("accent alias in an in-line formula:", got)
     print("selftest:", "ok" if ok else "FAILED")
     return 0 if ok else 1
 
