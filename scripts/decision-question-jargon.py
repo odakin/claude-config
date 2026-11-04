@@ -20,7 +20,7 @@
 本文の行番号の検査 (2026-11-04、 conventions/concise-output.md#locate-by-quote-not-line-number): Stop で最終の返事の本文 (問いの行に
   限らない) に原稿の行番号の形 (L540・L1071 = L のあとに数字 2〜5 桁 / l.119 / `.tex:540`) があれば、 節の名・式の番号・文の
   書き出しに言い直す追記を 1 回求める。 code block の中と「」『』 の中は見ない。 code の場所 (`file.py:42`) は押せる link なので
-  当てない (`.tex` だけ当てる)。 差し戻しの続き (stop_hook_active) では見ない。 実測の校正 = 本人の発言の直前の返事の 3% ほど。
+  当てない (`.tex` だけ当てる)。 差し戻しの続き (stop_hook_active) では見ない。
 
 箱の承認の検査 (2026-11-04、 conventions/mid-turn-text-visibility.md#turn-closing-question-box): turn 終わりの箱 (wrap_up) の ask の
   欄が、 文面の送信・投稿の承認 (「送ってよいか」「この文面で」) か、 本文にある下書き・案・条件 (「下の案」「推す条件で」) を指す
