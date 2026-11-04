@@ -9,7 +9,8 @@
   3. 色          : 画像 (認印等) が載っている PDF を raster 化するなら RGB で、 の注意 (情報)
   4. 用紙        : 頁の寸法と名前 (A4 等) を表示 (情報)。 ⚠️ lp の media 指定は本体の用紙設定を上書きしない
                    (実測) ので、 刷る前に本体の用紙サイズとトレイの紙を確認する。 --printer を付けると本体に IPP で聞き、
-                   本体が報告するトレイの用紙が PDF の寸法と合わなければ 🔴 (lib/printer_media.py、 答えが無ければ ⚪ で通す)
+                   本体が報告するトレイの用紙が PDF の寸法と合わなければ 🔴 (lib/printer_media.py、 答えが無ければ ⚪ で通す。
+                   問い合わせが失敗し port にも届かなければ 🔴 本体に届いていない = lp を止める)
   5. 頁の役割    : 全頁が「窓口に出す頁」 か (office-automation.md#print-submission-pages-only、 lib/print_pages.py)。
                    file に宣言 (作った道具が書く) があればそれを読み、 提出でない頁 (説明書き・記載例・控え・マスタ・白紙)
                    が入っていれば 🔴。 宣言が無ければ見出しから推定し、 記載例・控え・注意事項・白紙に見える頁と、
@@ -543,6 +544,13 @@ def selftest():
     assert rc == 2 and "本体の用紙" in msg and seen == [("Q", {(210, 297)}, ["sides=one-sided"])], (rc, msg, seen)
     assert hook(ev(f"PRINT_PREFLIGHT_PRINTER=0 lp -d Q {two}"), env={}, printer_check=fake)[0] == 0
     assert hook(ev(f"lp -d Q {two}"), env={}, printer_check=lambda *x, **k: ([], ["⚪ 未確認"]))[0] == 0
+    # M2: 本体に届いていない (2026-11-04) = 止めて網につなぐよう言う / 理由つきの PRINT_PREFLIGHT_QUEUE_REASON だけ通す
+    unreach = lambda *x, **k: ([printer_media.UNREACHABLE + " (queue Q: ipp://10.0.0.9/ipp/print …)"], [])  # noqa: E731
+    rc, msg = hook(ev(f"lp -d Q {two}"), env={}, printer_check=unreach)
+    assert rc == 2 and "本体に届いていない" in msg and "printer-unreachable" in msg and "本体の用紙" not in msg, (rc, msg)
+    assert hook(ev(f"PRINT_PREFLIGHT_QUEUE_REASON='網が戻ったら刷ってよい控え' lp -d Q {two}"), env={},
+                printer_check=unreach)[0] == 0
+    assert hook(ev(f"PRINT_PREFLIGHT_QUEUE_REASON= lp -d Q {two}"), env={}, printer_check=unreach)[0] == 2
     # N: 雛形との照合 (K3): 宣言に fidelity を持つ PDF は、 雛形の図形の字が無ければ止め、 在れば通す。 雛形が無ければ ⚪ で通す
     import importlib.util
     import openpyxl
@@ -836,6 +844,17 @@ def hook(payload: dict, env=None, printer_check=None) -> tuple:
         pf, _ = (printer_check or printer_media.check)(queue, sizes, opts, names=PAPER_NAMES)
         if not pf:
             return 0, ""
+        if any(f.startswith(printer_media.UNREACHABLE) for f in pf):
+            why = (vars_.get("PRINT_PREFLIGHT_QUEUE_REASON") or env.get("PRINT_PREFLIGHT_QUEUE_REASON") or "").strip()
+            if len(why) >= 2:
+                return 0, ""   # 網が戻ってから刷られるのを承知で queue に積む (理由つき)
+            return 2, "\n".join([
+                "[print-preflight] 本体に届いていない — このまま lp に渡すと、 網が戻ったときに無人で遅れて刷られる:",
+                *["  " + f for f in pf], "",
+                "対処: この機械をプリンタの網につないでから lp を打ち直す (本人に頼む)。 送ってしまった job は lpstat -o で見て cancel する。",
+                "      遅れて刷られるのを承知で queue に積むときだけ、 command の頭に PRINT_PREFLIGHT_QUEUE_REASON='<理由>' を付ける。",
+                "正本: conventions/office-automation.md#printer-unreachable",
+            ])
         return 2, "\n".join([
             "[print-preflight] 本体の用紙が PDF と合わない — このまま刷ると本体の設定どおりの紙に出る:",
             *["  " + f for f in pf], "",

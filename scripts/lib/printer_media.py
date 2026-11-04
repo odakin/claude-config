@@ -12,13 +12,19 @@
 - queue の device-uri が機種の独自 backend (scheme が ipp / ipps でない) のときは、 URI から host と `/ipp/` の path を拾って
   ipp:// に組み直す (実測 = 独自 backend の queue でも本体は素の ipp:// に答えた)。 組めない (dnssd 等) ・答えが無い・ipptool が
   無いときは「未確認」 を返し、 止めない (fail-open)。
+- **ただし本体に届いていないと分かるときは止める** (2026-11-04、 conventions/office-automation.md#printer-unreachable): IPP の
+  問い合わせが失敗し、 かつ同じ host の port (既定 631) にも TCP で届かないとき = この機械はプリンタの網にいない。 ipp:// の
+  queue は job を持ったまま再試行し、 網が戻ったときに遅れて刷る (実測 = 別の網から送った 3 件が「プリンタが応答しません」 で
+  残った)。 port に届くなら今までどおり「未確認」 で通す (= 遅いだけの本体を止めない)。
 - 両面の既定は、 本体の sides-default と CUPS の queue の既定 (driver 独自の option) が食い違うことがある (実測 = 本体は片面、
   queue は両面)。 紙に効くのは queue の側 = lpoptions -l の既定を併せて出す。
 """
 import os
 import re
+import socket
 import subprocess
 import tempfile
+from urllib.parse import urlsplit
 
 TOLERANCE_MM = 2
 
@@ -80,6 +86,25 @@ def parse_attrs(text):
         if m and m.group(1) != "requested-attributes":
             attrs[m.group(1)] = m.group(2).strip()
     return attrs
+
+
+UNREACHABLE = "🔴 本体に届いていない"
+
+
+def port_open(uri, timeout=2.0):
+    """ipp:// の URI の host:port (既定 631) に TCP で届くか。 host を読めなければ True (= 判定しない側)。"""
+    try:
+        u = urlsplit(uri)
+        host, port = u.hostname, u.port or 631
+    except ValueError:
+        return True
+    if not host:
+        return True
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 def query(uri, timeout=4, run=_run):
@@ -161,8 +186,9 @@ def duplex_defaults(queue=None, run=_run):
     return found
 
 
-def check(queue, pdf_sizes, lp_opts=(), names=None, run=_run, attrs=None):
+def check(queue, pdf_sizes, lp_opts=(), names=None, run=_run, attrs=None, probe=None):
     """→ (findings, infos)。 pdf_sizes = {(短辺 mm, 長辺 mm)}。 本体の報告が PDF のどの寸法とも合わなければ 🔴。
+    問い合わせが失敗し port にも届かなければ 🔴 本体に届いていない (probe = port の検査、 selftest 用に差し替える)。
     attrs を渡すと本体に聞かない (selftest 用)。"""
     names = names or DEFAULT_NAMES
     findings, infos = [], []
@@ -173,6 +199,10 @@ def check(queue, pdf_sizes, lp_opts=(), names=None, run=_run, attrs=None):
         uri = ipp_uri(dev)
         if uri:
             attrs, why = query(uri, run=run)
+            if not attrs and why.startswith("ipptool が失敗") and not (probe or port_open)(uri):
+                findings.append(f"{UNREACHABLE} ({who}: {uri} への問い合わせが失敗し、 port にも届かない = この機械はプリンタの網にいない)"
+                                " — lp に渡すと queue が job を持ったまま再試行し、 網が戻ったときに遅れて刷られる。 網につないでから打ち直す")
+                return findings, infos
         else:
             attrs, why = {}, why or f"device-uri から ipp:// を組めない = {dev}"
     sizes = ready_sizes(attrs)
@@ -241,7 +271,15 @@ def _selftest():
     assert any("両面" in x and "VendorDuplex=DuplexFront" in x for x in i), i
     _, i = check("Q", {(210, 297)}, lp_opts=["VendorDuplex=None"], attrs=a, run=dup)
     assert not any("両面" in x for x in i), i
-    down = lambda argv, t: (None, "TimeoutExpired")  # noqa: E731 - 本体に届かない = 未確認で通す
+    down = lambda argv, t: (None, "TimeoutExpired")  # noqa: E731 - queue を読めない = 未確認で通す
     f, i = check("Q", {(210, 297)}, run=down)
     assert not f and i[0].startswith("⚪"), (f, i)
+    # 本体に届いていない (2026-11-04): 問い合わせが時間切れ ∧ port にも届かない = 止める / port に届くなら未確認で通す
+    lpo = lambda argv, t: (("device-uri=ipp://10.0.0.9/ipp/print\n", "") if argv[0] == "lpoptions"  # noqa: E731
+                           else (None, "TimeoutExpired"))
+    f, i = check("Q", {(210, 297)}, run=lpo, probe=lambda u: False)
+    assert len(f) == 1 and f[0].startswith(UNREACHABLE) and "遅れて" in f[0] and "10.0.0.9" in f[0], (f, i)
+    f, i = check("Q", {(210, 297)}, run=lpo, probe=lambda u: True)
+    assert not f and i[0].startswith("⚪"), (f, i)
+    assert port_open("ipp://") is True and port_open("ipp://127.0.0.1:9/ipp/print", timeout=0.5) is False
     return "printer_media selftest: PASS"
