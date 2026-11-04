@@ -75,8 +75,8 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
 ⚠️ 時刻は記録の timestamp のまま = Claude Code も Codex も UTC (末尾の Z を落とした形)。 発言を日本時間などで引くときは
    読み手が直す。 --since / --until も UTC で、 日付 (YYYY-MM-DD) か日時の先頭 (YYYY-MM-DDTHH[:MM[:SS]]) を
    timestamp の同じ長さの先頭と比べる = 日本時間の朝 9 時より前の発言は前の日付で引く (実測 = 日本時間で書かれた記録と
-   時刻を突き合わせて、 9 時間ずれていた)。 それ以外の形は error で止める (以前は日時を渡すと全件が範囲の外に落ち、
-   黙って 0 件と出た = 実測)。
+   時刻を突き合わせて、 9 時間ずれていた)。 末尾の Z は付けてもよい。 それ以外の形は error で止める (以前は日時を渡すと
+   全件が範囲の外に落ち、 黙って 0 件と出た = 実測。 形と比べ方の正本 = lib/time_bound.py)。
 ⚠️ 射程: 手元のマシンにある記録だけ。 別のマシンで開いた session・消えた記録・claude.ai の会話は見えない
    (0 件は「このマシンの記録に無い」 であって「言っていない」 ではない)。
 """
@@ -102,6 +102,8 @@ try:
     import compressed_jsonl as _cj
 except Exception:  # pragma: no cover - 古い配置 (圧縮した記録は読めなかった本数として数える)
     _cj = None
+# --since / --until の形と比べ方 (境界と同じ長さの先頭で比べ、 形の違う値は error) = lib/time_bound.py
+from time_bound import bound_utc as _bound, out_of_range as _out_of_range  # noqa: E402
 
 
 # harness が user 役で差し込む文の書き出し (system-reminder・command 表示・AGENTS.md 指示・文脈圧縮の要約)
@@ -272,22 +274,6 @@ def _report(tally) -> str | None:
     if _cj is not None:
         return _cj.report(tally)
     return f"⚠️ 圧縮した記録 (.jsonl.zst) を読めなかった: {tally['no-means']} 本 (lib/compressed_jsonl.py が無い)" if tally else None
-
-
-_BOUND_RE = re.compile(r"\d{4}-\d{2}-\d{2}(T\d{2}(:\d{2}(:\d{2})?)?)?")
-
-
-def _bound(value: str) -> str:
-    """--since / --until の値。 日付か日時の先頭 (UTC) だけを通す。 空白の区切りは T に直す。"""
-    v = value.strip().replace(" ", "T")
-    if not _BOUND_RE.fullmatch(v):
-        raise argparse.ArgumentTypeError(f"{value!r}: YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (UTC) で渡す")
-    return v
-
-
-def _out_of_range(ts: str, since: str | None, until: str | None) -> bool:
-    """timestamp の、 境界と同じ長さの先頭で比べる (境界の日・時・分を含む)。"""
-    return bool((since and ts[:len(since)] < since) or (until and ts[:len(until)] > until))
 
 
 def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | None,

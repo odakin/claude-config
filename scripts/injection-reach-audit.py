@@ -10,7 +10,7 @@
 
 使い方:
     python3 injection-reach-audit.py --pattern '<注入の行に出る語>' [--mention '<返答で探す語>']
-        [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--events SessionStart,UserPromptSubmit]
+        [--since YYYY-MM-DD[THH[:MM]]] [--until YYYY-MM-DD[THH[:MM]]] [--events SessionStart,UserPromptSubmit]
         [--projects-dir <dir>] [--json]
     (transcript の既定 = この機械の全部の設定フォルダの projects/ = ~/.claude と、 アカウント固定の ~/.claude-<名>
      〔スマホから始めた session・無人 routine〕 と $CLAUDE_CONFIG_DIR。 列挙と重複の扱い = lib/claude_config_dirs.py。
@@ -21,7 +21,8 @@
 - 数えるのは transcript に残った注入で、 model が読んだことの証明ではない。 transcript はこのマシンの分だけ
   (設定フォルダは全部。 別のマシンの session は見えない)
 - `--mention` の既定は `--pattern` と同じ。 識別子 (id) で注入を探し、 返答は人が読む語 (件名の一部) で探す、 のように分けると伝達を数え落とさない
-- 時刻の範囲は transcript file の更新時刻で粗く絞ったあと、 各行の timestamp で判定する
+- 時刻の範囲は transcript file の更新時刻で粗く絞ったあと、 session の最初の timestamp (UTC) で判定する。 --since / --until は
+  日付か日時の先頭で、 timestamp の同じ長さの先頭と比べる。 それ以外の形は error (形と比べ方 = lib/time_bound.py)
 """
 from __future__ import annotations
 
@@ -37,6 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 from transcript_turns import load_entries  # noqa: E402
+import time_bound as _tb  # noqa: E402
 
 try:
     import claude_config_dirs as _ccd  # noqa: E402
@@ -109,17 +111,15 @@ def audit_session(entries: list[dict], pattern: re.Pattern, mention: re.Pattern,
 
 
 def _in_range(ts: str | None, since: str | None, until: str | None) -> bool:
-    if not ts:
-        return False
-    day = ts[:10]
-    return (since is None or day >= since) and (until is None or day <= until)
+    """境界と同じ長さの先頭で比べる (両端を含む)。 日付の 10 文字と比べると日時の境界でその日が落ちる (実測)。"""
+    return bool(ts) and not _tb.out_of_range(ts, since, until)
 
 
 def run(projects_dir, pattern: str, mention: str | None, since: str | None, until: str | None,
         events: set[str]) -> list[dict]:
     pat = re.compile(pattern)
     men = re.compile(mention) if mention else pat
-    floor = datetime.fromisoformat(since).replace(tzinfo=timezone.utc).timestamp() if since else 0
+    floor = datetime.fromisoformat(since[:10]).replace(tzinfo=timezone.utc).timestamp() if since else 0
     rows = []
     for label, f in transcripts(projects_dir):
         try:
@@ -207,6 +207,16 @@ def _selftest() -> int:
         check(by["aaaaaaaa"]["user_first_mention"] == "2030-01-02T01:06:00Z", "user が触れた時刻")
         rows2 = run(Path(td), r"todo-x", None, None, None, {"SessionStart", "UserPromptSubmit"})
         check(len(rows2) == 4, "--events で UserPromptSubmit の注入も数え、 --since 無しは全期間")
+        rows5 = run(Path(td), r"todo-x", None, "2030-01-02T00:30", "2030-01-02T01:00", {"SessionStart"})
+        check([r["session"] for r in rows5] == ["aaaaaaaa"]
+              and run(Path(td), r"todo-x", None, "2030-01-02T01:01", "2030-01-02T23", {"SessionStart"}) == [],
+              "--since / --until に日時の先頭を渡すと、 その日の中で絞る (日付の 10 文字との比較で 0 件になった形)")
+        try:
+            _tb.bound_utc("1月2日")
+            rejected = False
+        except argparse.ArgumentTypeError:
+            rejected = True
+        check(rejected, "--until の形の誤りは error (黙って 0 件にしない)")
         rows3 = run(Path(td), r"todo-x", r"どうなって", "2030-01-01", None, {"SessionStart"})
         check({r["session"]: r["assistant_first_mention"] for r in rows3} == {"aaaaaaaa": None, "bbbbbbbb": None},
               "--mention を分けると返答はその語で探す")
@@ -242,8 +252,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--pattern")
     ap.add_argument("--mention")
-    ap.add_argument("--since")
-    ap.add_argument("--until")
+    ap.add_argument("--since", type=_tb.bound_utc, help="UTC の YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (その時点を含む)")
+    ap.add_argument("--until", type=_tb.bound_utc, help="UTC の YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (その時点を含む)")
     ap.add_argument("--events", default="SessionStart")
     ap.add_argument("--projects-dir", default=None, help="transcript の親 dir (既定 = この機械の全部の設定フォルダ)")
     ap.add_argument("--json", action="store_true")

@@ -28,6 +28,10 @@ import subprocess
 import sys
 from collections import defaultdict
 from datetime import date, datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import time_bound as _tb  # noqa: E402
 
 
 def _gh(args: list[str]):
@@ -90,13 +94,21 @@ def selftest() -> None:
     assert got[0][:4] == ("r2", "fetch", 5, 1), got
     assert got[1][:4] == ("r1", "scan", 3, 3) and got[1][4] == {"push": 2, "schedule": 1}, got
     assert got[2][:4] == ("r2", "broken", 0, 1), got
-    print("selftest: 3/3 PASS")
+    assert _tb.bound_utc("2030-01-02 10:00") == "2030-01-02T10:00", "--since の空白の区切りは T に直す"
+    for bad in ("2030/01/02", "1月2日"):
+        try:
+            _tb.bound_utc(bad)
+            raise AssertionError(f"--since {bad} が通った (GitHub が拒み、 黙って 0 回になる形)")
+        except argparse.ArgumentTypeError:
+            pass
+    print("selftest: 4/4 PASS")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--owner", help="既定 = gh の認証 user")
-    ap.add_argument("--since", help="YYYY-MM-DD (既定 = 今月 1 日)")
+    # GitHub は created の形が違うと error を返し、 _gh はそれを空として扱う = 黙って 0 回になる (実測) ので、 形を先に止める
+    ap.add_argument("--since", type=_tb.bound_utc, help="UTC の YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (既定 = 今月 1 日)")
     ap.add_argument("--visibility", default="private", choices=["private", "public", "all"])
     ap.add_argument("--top", type=int, default=30)
     ap.add_argument("--selftest", action="store_true")

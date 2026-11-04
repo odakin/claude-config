@@ -18,7 +18,7 @@ Codex Desktop の形 = event_msg の item_completed (item.type = UserMessage) �
 設計と実測 = conventions/multi-account-machine-surface.md#first-reply-stamp-mechanism。
 
 usage:
-  check-first-reply-stamp.py [--days 14] [--since YYYY-MM-DD] [--threshold 0.10] [--min-sessions 5] [--no-codex]
+  check-first-reply-stamp.py [--days 14] [--since YYYY-MM-DD[THH[:MM]]] [--threshold 0.10] [--min-sessions 5] [--no-codex]
   check-first-reply-stamp.py --findings-only     # dashboard 用 (所見が無ければ無出力)
   check-first-reply-stamp.py --breakdown       # 要因別の表 (2026-09-11 の測定と同じ切り口)
   check-first-reply-stamp.py --json
@@ -46,6 +46,7 @@ try:
     import claude_config_dirs as _ccd  # noqa: E402
 except Exception:  # pragma: no cover - 古い配置
     _ccd = None
+import time_bound as _tb  # noqa: E402
 
 # whoami --wait を hook に入れた日。 これ以降の注入で「未同定」 が出たら race 対策が効いていない
 WAIT_FIX_DATE = "2026-09-12"
@@ -113,14 +114,14 @@ def claude_session(path: Path) -> dict | None:
             injected = next((ln for ln in str(attachment.get("content") or "").splitlines()
                              if ln.startswith(frs.STAMP_MARK)), injected)
         if started is None and frs._claude_user_text(entry) is not None:
-            started = str(entry.get("timestamp") or "")[:10]
+            started = str(entry.get("timestamp") or "")
     if started is None or not cwd or (entry_point or "").startswith("sdk-") or not frs.in_scope(cwd):
         return None
     prompts, texts = frs.claude_first_turn(path)
     if prompts < 1 or not texts:
         return None
     ctx = first_text_context(path)
-    return {"flavor": "claude", "session": path.stem[:8], "date": started, "cwd": cwd,
+    return {"flavor": "claude", "session": path.stem[:8], "date": started[:10], "start": started, "cwd": cwd,
             "s1": frs.has_top_stamp(texts[0]), "s2": any(frs.has_top_stamp(t) for t in texts),
             "injected": bool(injected), "unresolved": "未同定" in injected,
             "injection": ("未同定" if "未同定" in injected else "完全") if injected else "なし",
@@ -137,19 +138,19 @@ def codex_session(path: Path) -> dict | None:
         cwd = cwd or payload.get("cwd")
         if started is None and entry.get("type") == "event_msg" and (
                 payload.get("type") == "user_message" or frs._is_user_item(entry.get("type"), payload)):
-            started = str(entry.get("timestamp") or "")[:10]
+            started = str(entry.get("timestamp") or "")
     if started is None or not cwd or not frs.in_scope(cwd):
         return None
     prompts, texts = frs.codex_first_turn(path, item_prompts=True)
     if prompts < 1 or not texts:
         return None
     stem = path.name[: -len(".jsonl.zst")] if path.name.endswith(".jsonl.zst") else path.stem
-    return {"flavor": "codex", "session": stem[-36:][:8], "date": started, "cwd": cwd,
+    return {"flavor": "codex", "session": stem[-36:][:8], "date": started[:10], "start": started, "cwd": cwd,
             "s1": frs.has_top_stamp(texts[0]), "s2": any(frs.has_top_stamp(t) for t in texts),
             "injected": False, "unresolved": False, "head": frs.top_line(texts[0])[:50]}
 
 
-def collect(days: int, with_codex: bool, since_date: str = "") -> list[dict]:
+def collect(days: int, with_codex: bool, since_date: str | None = None) -> list[dict]:
     cutoff = time.time() - days * 86400
     rows = []
     for name in claude_files():
@@ -175,8 +176,11 @@ def collect(days: int, with_codex: bool, since_date: str = "") -> list[dict]:
                 continue
             if row:
                 rows.append(row)
-    since = max((datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d"), since_date or "")
-    return sorted((r for r in rows if r["date"] >= since), key=lambda r: r["date"])
+    floor = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    # --since は日付か日時の先頭 (UTC)。 記録の開始時刻の同じ長さの先頭で比べる (日付の 10 文字と比べると日時の境界で
+    # その日が落ちる = 実測、 形と比べ方 = lib/time_bound.py)
+    return sorted((r for r in rows if r["date"] >= floor and not _tb.out_of_range(r["start"], since_date or None, None)),
+                  key=lambda r: r["date"])
 
 
 def stop_log(days: int) -> list[dict]:
@@ -343,6 +347,16 @@ def selftest() -> int:
         check("breakdown: 促しが最初の返信より先に来たことを拾う", g.get("reminder_first") is True and g.get("tool_first") is False)
         table = breakdown(collect(14, with_codex=False))
         check("breakdown: 表に 3 軸が出る", all(t in table for t in ("注入 stamp:", "状況報告促し:", "tool call:")))
+        n_all = len(collect(14, with_codex=True))
+        check("--since に日時の先頭を渡すと、 その時点からの session を数える (境界の日を落とさない)",
+              len(collect(14, with_codex=True, since_date=_tb.bound_utc(today[:16]))) == n_all
+              and collect(14, with_codex=True, since_date=_tb.bound_utc(today[:11] + "09:01")) == [])
+        try:
+            _tb.bound_utc("2030/01/02")
+            rejected = False
+        except argparse.ArgumentTypeError:
+            rejected = True
+        check("--since の形の誤りは error (黙って 0 件・全件にしない)", rejected)
         # Codex は古くなった rollout を zstd で圧縮する (.jsonl.zst)。 数え落とさず、 読めなければ所見にする
         try:
             import compressed_jsonl as cj
@@ -416,7 +430,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--threshold", type=float, default=0.10)
     ap.add_argument("--min-sessions", type=int, default=5)
     ap.add_argument("--no-codex", action="store_true")
-    ap.add_argument("--since", default="", help="この日 (YYYY-MM-DD) 以降に始まった session だけ数える (= 機構の導入日で切る)")
+    ap.add_argument("--since", type=_tb.bound_utc, default=None,
+                    help="この時点 (UTC の YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]]) 以降に始まった session だけ数える (= 機構の導入日で切る)")
     ap.add_argument("--findings-only", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--breakdown", action="store_true", help="要因別 (注入 stamp / 状況報告促し / tool 先行) の S1・S2")

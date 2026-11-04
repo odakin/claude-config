@@ -7,7 +7,8 @@ engine。 どの channel・どの dir かは呼び出し側 (個人層の shim) 
 
 判定:
   - source = `--source-json` の message 配列。 各 message の `timestamp` (ISO 8601、 先頭 10 字を日付とみなす = 時差の換算はしない)
-    と `attachments[].filename` (画像の拡張子だけ数える) を読む。 `--since` より前の日付は見ない
+    と `attachments[].filename` (画像の拡張子だけ数える) を読む。 `--since` より前は見ない (日付か日時の先頭を timestamp の
+    同じ長さの先頭と比べる。 それ以外の形は error = 黙って「未読なし」 にしない、 実測。 形と比べ方 = lib/time_bound.py)
   - ledger = `--ledger-dir` の *.md。 `## YYYY-MM-DD` の見出しが「その日を読んだ」 印
   - 画像のある日 ∧ 節なし → 未読。 猶予 (`--grace`、 既定 7 日) を過ぎたら 🔴、 以内は 🟡
   - **同じ日に画像が 2 枚以上ある日は、 1 枚ずつ file 名が ledger のどこかに出ていること** (拡張子を省いた記録も一致とみなす)。
@@ -28,6 +29,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import time_bound as _tb  # noqa: E402
+
 IMAGE_RE = re.compile(r"\.(jpe?g|png|heic|webp)$", re.I)
 SECTION_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2})", re.M)
 
@@ -45,7 +49,7 @@ def find_findings(source_json: Path, ledger_dir: Path, today: date, since: str =
         msgs = msgs.get("messages", [])
     photos: dict[str, set[str]] = {}
     for m in msgs:
-        if not (isinstance(m, dict) and m.get("attachments") and str(m.get("timestamp", "")) >= since):
+        if not (isinstance(m, dict) and m.get("attachments") and not _tb.out_of_range(str(m.get("timestamp", "")), since, None)):
             continue
         d = str(m["timestamp"])[:10]
         names = photos.setdefault(d, set())
@@ -93,7 +97,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--source-json")
     ap.add_argument("--ledger-dir")
-    ap.add_argument("--since", default="0000-00-00")
+    ap.add_argument("--since", type=_tb.bound, default="0000-00-00",
+                    help="記録の timestamp と同じ時刻帯の YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (その時点を含む)")
     ap.add_argument("--grace", type=int, default=7)
     ap.add_argument("--title", default="画像の読取記録に未読がある")
     ap.add_argument("--today")
@@ -133,6 +138,16 @@ def selftest() -> int:
         assert [(s, d) for s, d, _, _ in f] == [("🔴", "2026-07-13"), ("🟡", "2026-07-19")], f
         (led / "2026.md").write_text("# t\n\n## 2026-07-09\n\n## 2026-07-13\n\n## 2026-07-19\n")
         assert find_findings(src, led, today, since="2026-04-01") == []
+        # --since の日時の先頭: 境界の分を含み、 境界より前は見ない / 形の誤りは error (`/` の区切りで黙って「未読なし」 になった形)
+        (led / "2026.md").write_text("# t\n")
+        assert [d for _, d, _, _ in find_findings(src, led, today, since=_tb.bound("2026-07-13 04:00"))] == ["2026-07-13", "2026-07-19"]
+        assert [d for _, d, _, _ in find_findings(src, led, today, since="2026-07-13T04:01")] == ["2026-07-19"]
+        try:
+            _tb.bound("2026/07/01")
+            raise AssertionError("--since 2026/07/01 が通った")
+        except argparse.ArgumentTypeError:
+            pass
+        (led / "2026.md").write_text("# t\n\n## 2026-07-09\n\n## 2026-07-13\n\n## 2026-07-19\n")
         # 同じ日に 2 枚: 名前が出ていなければ出す / 拡張子なしの記録でも消える
         src.write_text(json.dumps(msgs + [{"timestamp": "2026-07-09T04:20:00+00:00", "attachments": [{"filename": "b2.jpg"}]}]))
         f2 = find_findings(src, led, today, since="2026-04-01")
@@ -147,7 +162,7 @@ def selftest() -> int:
         assert find_findings(src, led, today) is None
         src.unlink()
         assert find_findings(src, led, today) is None
-    print("check-media-ledger selftest: ALL PASS (5 blocks)")
+    print("check-media-ledger selftest: ALL PASS (6 blocks)")
     return 0
 
 

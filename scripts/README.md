@@ -520,6 +520,7 @@
 - **[lib/tcc_disclaim.py](lib/tcc_disclaim.py)** — macOS で、 子 process を「自分がプライバシー許可 (TCC) の責任者」 として起動する。
 - **[lib/test-err-trap.sh](lib/test-err-trap.sh)** — set -e の bash test で落ちた assertion の行とコマンドを stderr に出す ERR trap (sourceable lib)
 - **[lib/test-err-trap.test.sh](lib/test-err-trap.test.sh)** — test-err-trap.sh の self-test (hermetic、 走らせた bash で fixture を実行)
+- **[lib/time_bound.py](lib/time_bound.py)** — 道具の --since / --until の値を日付か日時の先頭だけに絞り、 記録の時刻とは境界と同じ長さの先頭で比べる共通規則 (形の違う値で黙って 0 件・全件にしない)。--selftest。
 - **[lib/todo_ledger.py](lib/todo_ledger.py)** — 1 entry 1 file の TODO 台帳 (`<repo>/todo/<id>.yaml`) の読み書き (単一 home)。
 - **[lib/todo_thread_links.py](lib/todo_thread_links.py)** — 台帳の項目 (TODO) と mail thread を結ぶ link の読み方 (単一 home)。
 - **[lib/transcript_turns.py](lib/transcript_turns.py)** — Claude Code の transcript (jsonl) を turn に分けて最終 assistant 発話を取り出す共通部品（Stop hook の「今の turn の最終発話」 と、 過去 transcript で句を校正する calibrate-final-message-pattern.py が同じ境界で読む。 引用の中かの判定 inside_quote と、 match を含む 1 文を返す sentence_around も持つ）

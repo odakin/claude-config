@@ -37,6 +37,9 @@ import re
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import time_bound as _tb  # noqa: E402
+
 WEIGHTS = (1.0, 1.25, 0.1, 5.0)   # input, cache write, cache read, output
 
 
@@ -100,7 +103,7 @@ def window_report(dirs, since, until, model_sub, weights=WEIGHTS):
                 if key not in rows or r[1] < rows[key][0][1]:
                     rows[key] = (r, rel, sub)
         for (model, ts, sid, v), rel, sub in rows.values():
-            if ts < since or (until and ts >= until):
+            if _tb.head(ts, since) < since or (until and _tb.head(ts, until) >= until):
                 continue
             _add(by_model[(os.path.basename(root), model)], v)
             if model_sub and model_sub not in model:
@@ -155,8 +158,10 @@ def session_report(d: str, weights=WEIGHTS):
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--since", help="ISO 時刻 (UTC、 記録の timestamp と文字列で比べる。 例 2026-01-02T09:00:00Z)")
-    ap.add_argument("--until", default="", help="ISO 時刻 (含まない)。 既定 = 終わりなし")
+    ap.add_argument("--since", type=_tb.bound_utc,
+                    help="UTC の YYYY-MM-DD か YYYY-MM-DDTHH[:MM[:SS]] (末尾の Z は可。 記録の timestamp の同じ長さの先頭と比べる、"
+                         " 他の形は error = 黙って 0 になった形を止める。 例 2026-01-02T09:00:00Z)")
+    ap.add_argument("--until", type=_tb.bound_utc, help="--since と同じ形 (その時点を含まない)。 既定 = 終わりなし")
     ap.add_argument("--model", default="", help="session ごと・時間ごとに数える model の部分一致 (例 fable)。 既定 = 全部")
     ap.add_argument("--session", help="session id の先頭 = その session の内訳")
     ap.add_argument("--config-dir", action="append", help="読む設定フォルダ (繰り返し可)")
@@ -237,7 +242,7 @@ def selftest() -> int:
         with open(os.path.join(proj, "s1", "workflows", "wf_a.json"), "w") as fh:
             json.dump({"script": "export const meta = { name: 'demo-run' }", "agentCount": 3, "status": "done",
                        "durationMs": 120000}, fh)
-        bm, bs, bh = window_report([root], "2026-01-01T09:00:00Z", "", "fable")
+        bm, bs, bh = window_report([root], _tb.bound_utc("2026-01-01T09:00:00Z"), "", "fable")
         check("dedupe by message id + window + synthetic dropped",
               bm[(os.path.basename(root), "claude-fable-5")][4] == 2 and (os.path.basename(root), "claude-opus-5") in bm
               and bm[(os.path.basename(root), "claude-opus-5")][4] == 1)
@@ -246,8 +251,16 @@ def selftest() -> int:
         s = bs[(os.path.basename(root), "s1")]
         check("session row: fable only, main and sub marked", s[4] == 2 and s[8] == {"main", "sub"})
         check("by hour (UTC)", sorted(bh) == ["2026-01-01T10", "2026-01-01T11"])
-        bm2, _, _ = window_report([root], "2026-01-01T00:00:00Z", "2026-01-01T09:00:00Z", "")
+        bm2, _, _ = window_report([root], _tb.bound_utc("2026-01-01T00:00:00Z"), _tb.bound_utc("2026-01-01T09:00:00Z"), "")
         check("until is exclusive and earlier rows are in", sum(v[4] for v in bm2.values()) == 1)
+        bm3, _, _ = window_report([root], _tb.bound_utc("2026-01-01 10:00"), _tb.bound_utc("2026-01-01T11"), "")
+        try:
+            _tb.bound_utc("1月1日")
+            rejected = False
+        except argparse.ArgumentTypeError:
+            rejected = True
+        check("a space-separated or hour-only bound compares by its own length; other forms are an error",
+              sum(v[4] for v in bm3.values()) == 1 and rejected)
         check("find the session by prefix", find_session_dir([root], "s1") == [os.path.join(proj, "s1")])
         main_, groups, meta = session_report(os.path.join(proj, "s1"))
         check("session report: main by model", main_["claude-fable-5"][4] == 1 and main_["claude-opus-5"][4] == 1)

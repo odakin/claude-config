@@ -27,6 +27,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import time_bound as _tb  # noqa: E402
+
 
 def git(repo: Path, *a: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True).stdout
@@ -43,7 +46,9 @@ def push_ranges(repo: Path, since: str):
             if "update by push" not in subj:
                 continue
             when = gd.split("{", 1)[1].rstrip("}") if "{" in gd else ""
-            if when >= since:                  # the push that created the ref has no predecessor: root range
+            # compare by the bound's own length (the reflog writes "YYYY-MM-DD HH:MM:SS +zone"; measured: a "T" bound
+            # sorted after every push of that day and the audit found 0 pushes)
+            if not _tb.out_of_range(when, since, None):  # the push that created the ref has no predecessor: root range
                 yield when, (entries[i + 1][0] if i + 1 < len(entries) else None), new
 
 
@@ -110,6 +115,14 @@ def selftest() -> int:
         check("another session's own push is not attributed to this session", "theirs-alone" not in text)
         c2, r2 = audit(base, "aaaa1111", "2999-01-01")
         check("--since excludes older pushes", c2 == 0 and r2 == [])
+        recent = _tb.bound((dt.datetime.now() - dt.timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M"))
+        try:
+            _tb.bound("1月2日")
+            rejected = False
+        except Exception:
+            rejected = True
+        check("a T-form --since keeps that day's pushes; another form is an error",
+              audit(base, "aaaa1111", recent)[0] == 4 and rejected)
         c3, r3 = audit(live, "aaaa1111", "2000-01-01")
         check("--base may be a single repo", c3 == 4 and len([l for l in r3 if l.startswith("MIXED")]) == 2)
     print("\nALL PASS" if ok else "\nFAILED")
@@ -119,7 +132,8 @@ def selftest() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--session", help="a session id or a unique prefix of one")
-    ap.add_argument("--since", default=(dt.datetime.now() - dt.timedelta(days=7)).strftime("%Y-%m-%d %H:%M"))
+    ap.add_argument("--since", type=_tb.bound, default=(dt.datetime.now() - dt.timedelta(days=7)).strftime("%Y-%m-%d %H:%M"),
+                    help="local YYYY-MM-DD or YYYY-MM-DD[T| ]HH[:MM[:SS]] (default = 7 days ago; other forms are an error)")
     ap.add_argument("--base", type=Path, default=Path.home() / "Claude")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
