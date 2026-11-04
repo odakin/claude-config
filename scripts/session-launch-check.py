@@ -3,9 +3,13 @@
 
 Why (実測): desktop app の `start_session` は `model` を呼び元と同じか安い family までしか受けず、 高い指定は黙って捨てる
 (Opus の session から Fable を頼むと Opus で起きる)。 `effort` も同じく黙って呼び元のものになることがある。 返りの文は
-「Started session」 だけで、 何で起きたかを言わない。 新しい session は最初の turn をすぐ始めるので、 記録の model を
-直す (`set_session_model` / `set_session_effort`) のは最初の turn の後になり、 worker の最初の turn の最中に切り替えると
-効かなかった例がある。 起こした側が「起きた」 と言う前に、 app の記録 (scripts/lib/desktop_sessions.py) を読む。
+「Started session」 だけで、 何で起きたかを言わない。 新しい session の最初の turn は起こしてから約 1 分後に始まる
+(SessionStart の hook が終わってから = 実測で約 1 分)。 effort はその前に `set_session_effort` で記録が直れば、 最初の turn から
+頼んだ値で API に送られた (実測、 会話記録の `api-request` の output_config.effort)。 最初の turn の後に直すと、
+worker は step 0 で止まって go を待つ (実測)。 model は最初の turn の前に `set_session_model` が返っても、 最初の turn は
+元の model で動いた (実測) = model は最初の turn の後に直す。 呼び元より高い effort への引き上げは app が本人に承認の
+確認を出す (set_session_effort の説明。 返りは本人が押してから)。 起こした側が「起きた」 と言う前に、 app の記録
+(scripts/lib/desktop_sessions.py) を読む。
 
 mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
   PreToolUse(start_session)   掲示板の request を経ずに worker を起こす start_session を止める (opt-in = 下の BOARD_FIRST)。
@@ -14,8 +18,10 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
                               記録と違う start_session を止める (= 起こし方は掲示板の request が決める)。
   PostToolUse(start_session)  返りの `local_…` の app の記録を読み、 頼んだ model・effort (prompt の「This window must run on
                               <model> at <effort> effort」、 無ければ start_session の引数) と比べる。 違えば additionalContext で
-                              直し方 (下の見張りを Bash の run_in_background で出して turn を終える → 見張りが出す 1 行どおり:
-                              記録が違う = set_session_model / set_session_effort の後にもう一度見張る / 合う = go) を出し、
+                              直し方を出す: effort だけが違う = まず同じ turn に set_session_effort (最初の turn の前に記録が
+                              直れば最初の turn から頼んだ値) → 下の見張り / model が違う = 下の見張りを Bash の
+                              run_in_background で出して turn を終える → 見張りが出す 1 行どおり (記録が違う =
+                              set_session_model / set_session_effort の後にもう一度見張る / 合う = go / claim した = go は無し)。
                               起こした session ごとの台帳 (~/.claude/state/session-launch/<session>.json) に残す。
                               見張りが要る理由 (実測): 起こした側のほかの子が動いていると、 app は子の turn の終わりで起こした側を
                               起こさない (worker が go 待ちで止まった知らせが本人の次の発言まで届かない)。 背景の Bash の終わりは
@@ -24,7 +30,8 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
                               detach_session を出すよう additionalContext で知らせる。 掲示板の既定は worker を依頼元の子のまま
                               置く (一覧で依頼元の下に並ぶ) ので、 記録に detach が無ければ何も言わない。
   PostToolUse(set_session_model / set_session_effort)  台帳の「頼んだ値」 を起こした側の最新の指定に揃える。 起こした時の記録が
-                              頼んだ値と違った worker (= go 待ちで止まる) で、 その見張りが走っていなければ、 見張りの 1 行を出す。
+                              頼んだ値と違った worker (= 最初の turn が切り替えより先なら go 待ちで止まる) で、 その見張りが
+                              走っていなければ、 見張りの 1 行を出す。
   `--wait-first-turn <local_…> [--model M] [--effort E] [--since <epoch|ISO>] [--max-minutes N]` (見張り = 起こした側が
                               Bash の run_in_background で出す): 子の最初の turn が終わる (子の会話記録に --since 〔既定 = app の
                               記録の作成時刻〕 より後の応答があり = turn が始まり、 registry の status が busy・waiting でない) か、 子が掲示板の依頼を
@@ -517,14 +524,29 @@ def post_start(inp: dict) -> str:
            got_model=rec.get("model", ""), got_effort=rec.get("effort", ""), title=ti.get("title") or rec.get("title", ""))
     if not diffs:
         return detach_note(local_id) if detach else ""
-    return ("⚠️ session-launch-check: start_session で起こした session は、 app の記録で "
-            + " / ".join(diffs) + " で起きた。 start_session は呼び元より高い model と受けない effort を黙って捨てる (実測)。"
-            " worker は hand-off 文の model の確かめで最初の turn を止め、 go を待つ。\n"
-            f"  直し方: (1) この turn のうちに Bash の run_in_background で `{watch_cmd(local_id, want_m, want_e)}` を出して"
-            " turn を終える。 ほかの子が動いていると、 app は子の turn の終わりでこの session を起こさない (実測) = 背景の見張りの"
-            " 終わりが起こす。 直すのは worker の最初の turn が終わってから (turn の最中の切り替えは効かなかった例がある)。\n"
-            f"  (2) 見張りが終わったら出た 1 行どおり: 記録が違う = {fix_steps(local_id, want_m, want_e, rec)} を出し、 同じ見張りを"
-            " もう一度 (turn が終わっていればすぐ返る) / 合う = go を送る / worker が掲示板の依頼を claim 済み = go は要らない。\n"
+    head = ("⚠️ session-launch-check: start_session で起こした session は、 app の記録で "
+            + " / ".join(diffs) + " で起きた。 start_session は呼び元より高い model と受けない effort を黙って捨てる (実測)。")
+    if not (want_m and not model_matches(want_m, rec.get("model", ""))):
+        # effort only: the record set before the worker's first turn starts (about a minute after the start) is what that
+        # turn runs on (measured: raised right after the start, the first turn ran at the asked effort; raised after the
+        # first turn, the worker stopped at step 0), so the setter comes first and the watch reads the outcome
+        how = (f"  直し方: (1) この turn のうちに、 まず {fix_steps(local_id, want_m, want_e, rec)} を出す。 worker の最初の turn は"
+               " 起こしてから約 1 分後に始まり、 その前に記録が直れば最初の turn から頼んだ値で動いて step 0 を通り、 claim する"
+               " (実測: 起こした直後に上げると最初の turn から頼んだ値、 最初の turn の後に上げると step 0 で止まった)。"
+               " 呼び元より高い effort は app が本人に承認の確認を出す = 返りは本人が押してから。\n"
+               f"  (2) 返りの後、 同じ turn に Bash の run_in_background で `{watch_cmd(local_id, want_m, want_e)}` を出して turn を"
+               " 終える。 見張りの 1 行どおり: worker が掲示板の依頼を claim した = go は要らない / 承認が最初の turn に間に合わず"
+               " step 0 で止まった (記録は合う) = go を送る。 ほかの子が動いていると、 app は子の turn の終わりでこの session を"
+               " 起こさない (実測) = 背景の見張りの終わりが起こす。\n")
+    else:
+        how = (" worker は hand-off 文の model の確かめで最初の turn を止め、 go を待つ。\n"
+               f"  直し方: (1) この turn のうちに Bash の run_in_background で `{watch_cmd(local_id, want_m, want_e)}` を出して"
+               " turn を終える。 ほかの子が動いていると、 app は子の turn の終わりでこの session を起こさない (実測) = 背景の見張りの"
+               " 終わりが起こす。 model を直すのは worker の最初の turn が終わってから (最初の turn の前に返った model の切り替えが、"
+               " 最初の turn に効かなかった = 実測)。\n"
+               f"  (2) 見張りが終わったら出た 1 行どおり: 記録が違う = {fix_steps(local_id, want_m, want_e, rec)} を出し、 同じ見張りを"
+               " もう一度 (turn が終わっていればすぐ返る) / 合う = go を送る / worker が掲示板の依頼を claim 済み = go は要らない。\n")
+    return (head + how +
             f"  記録が合うまで、 この session への SendMessage はこの検査が止める (本人がこの model でよいと言ったなら message に"
             f" {OK_TOKEN})。 本人に「起きた」 と言うのは記録が合ってから。"
             + (" go の後に detach_session (掲示板の request の --detach)。" if detach else "") + f" 規約 = {RULE}")
@@ -563,7 +585,7 @@ def fix_steps(local_id: str, want_m: str, want_e: str, rec: dict) -> str:
         steps.append(f"set_session_model(session_id={local_id}, model={want_m})")
     if want_e and (model_off or want_e != (rec.get("effort") or "").lower()):
         # after a model switch the effort moved to another value (measured), so it is set again even when it matched
-        steps.append(f"その後に set_session_effort(session_id={local_id}, effort={want_e})")
+        steps.append(("その後に " if model_off else "") + f"set_session_effort(session_id={local_id}, effort={want_e})")
     return " と ".join(steps)
 
 
@@ -613,10 +635,12 @@ def post_set(inp: dict) -> str:
         # and the effort setters come in a row, so the line is said once for the pair
         return ""
     hit = upsert(sid, local_id, set_told=time.time())
-    return (f"[session-launch-check] {local_id} は起こした時の記録が頼んだ値と違った = worker は go 待ちで止まる。"
-            f" この turn のうちに Bash の run_in_background で `{watch_cmd(local_id, hit.get('want_model', ''), hit.get('want_effort', ''))}`"
-            " を出す (worker の最初の turn が終わる = もう終わっていればすぐ、 この session を起こし、 記録を読み直して次の一手を"
-            f" 1 行で出す: 合う = go / 違う = 直してもう一度)。 go は見張りの 1 行の後に送る。 規約 = {RULE}")
+    return (f"[session-launch-check] {local_id} は起こした時の記録が頼んだ値と違った。 worker の最初の turn がこの切り替えより"
+            " 後に始まれば (起こしてから約 1 分。 effort の切り替えはそうなれば最初の turn に効いた = 実測)、 頼んだ値で動いて claim する。"
+            " 先に始まっていれば step 0 で止まって go を待つ。"
+            f" どちらかを見張りが読む = この turn のうちに Bash の run_in_background で `{watch_cmd(local_id, hit.get('want_model', ''), hit.get('want_effort', ''))}`"
+            " を出す (worker が claim する・最初の turn が終わる = もう終わっていればすぐ、 この session を起こし、 記録を読み直して"
+            f" 次の一手を 1 行で出す: claim した = go は要らない / 合う = go / 違う = 直してもう一度)。 go は見張りの 1 行の後に送る。 規約 = {RULE}")
 
 
 # ---- the watch on a worker's first turn (`--wait-first-turn`) and the Stop check (`--hook-stop`) ----
@@ -1325,6 +1349,21 @@ def selftest() -> int:
         check("post-start: capped model and effort → advice with both setters",
               rc == 0 and "set_session_model" in out and "set_session_effort" in out and "claude-opus-5-5" in out)
         check("ledger records the mismatch", load("launcher-1")[0]["state"] == "mismatch")
+        check("post-start: a model mismatch → the watch first, the model setter after the first turn",
+              "model を直すのは worker の最初の turn が終わってから" in out and out.index(WATCH_FLAG) < out.index("set_session_model"))
+        # effort only (an xhigh caller asking max = the measured case): the setter first, before the worker's first turn
+        lid_e = "local_aaaaaaaa-0000-4000-8000-0000000000e1"
+        with open(os.path.join(app, lid_e + ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": lid_e, "cliSessionId": "bbbbbbbb-0000-4000-8000-0000000000e2", "model": "claude-opus-5-5",
+                       "effort": "xhigh", "title": "worker E"}, fh)
+        rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session",
+                          {"initiation": "user_asked", "title": "worker E · opus max", "model": "opus", "effort": "max",
+                           "prompt": "This window must run on opus at max effort."},
+                          [{"type": "text", "text": f'Started session "worker E" (session_id: {lid_e}, name: worker-e). It runs on its own'}],
+                          sid="launcher-e")
+        check("post-start: effort only → the effort setter first (no model setter), then the watch",
+              rc == 0 and f"まず set_session_effort(session_id={lid_e}, effort=max)" in out and "set_session_model" not in out
+              and WATCH_FLAG in out and out.index("set_session_effort") < out.index(WATCH_FLAG) and "go は要らない" in out)
 
         rc, _, err = call("PreToolUse", "SendMessage", {"to": lid, "message": "go — claim して進めて"})
         check("pre-send: go to a still-mismatched worker → blocked", rc == 2 and "model-ok" in err)

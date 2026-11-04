@@ -13,10 +13,13 @@ Usage:
                                        name ListAgents shows
   session-model.py self                this session (a worker checks the model and effort it was started on)
   session-model.py self --expect-model M [--expect-effort E]
-                                       a worker's step 0: compare the app's record of this session with what the
-                                       hand-off asked for. ✅ = go on / ⏸ = stop, and before stopping send the
-                                       printed line to the session that started this one (the app's record names
-                                       it, for a card the owner clicked too)
+                                       a worker's step 0: compare the app's record of this session (= the next
+                                       turn's values) and this turn's values (what the CLI sent to the API = the
+                                       transcript's `api-request`; the transcript's model when none is logged) with
+                                       what the hand-off asked for. ✅ = go on / ⏸ = stop, and before stopping send
+                                       the printed line to the session that started this one (the app's record names
+                                       it, for a card the owner clicked too). The line says when it was written: it
+                                       can be held and arrive after the `go`
   session-model.py --live              every live session on this machine with its model
   session-model.py <target> --json     machine-readable rows
   session-model.py --selftest
@@ -37,7 +40,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import session_model as sm  # noqa: E402
@@ -56,6 +61,8 @@ def fmt(row: dict) -> str:
         app = f"  app の記録={row.get('app_model') or '?'} effort={row.get('app_effort') or '?'}"
         if row.get("model") and row.get("app_model") and row["model"] != row["app_model"]:
             app += " (次の turn から = 最後の応答の model と違う)"
+    if row.get("turn_effort"):
+        app += f"  この turn の API={row.get('turn_model') or '?'} effort={row['turn_effort']}"
     return f"{sid}  {model}  tier={row['tier'] or '?'}{when}{app}{status}{name}{cfg}{to}"
 
 
@@ -82,10 +89,66 @@ def with_starter(row: dict) -> dict:
             "app_parent": row.get("app_parent") or rec.get("parent", "")}
 
 
+TURN_TAIL_BYTES = 512 * 1024
+TURN_FULL_SCAN_MAX = 16 * 1024 * 1024
+# the session's own turns (measured: the api-request entries of recent desktop transcripts were all querySource "sdk")
+MAIN_QUERY_SOURCES = (None, "sdk", "repl_main_thread")
+
+
+def this_turn(path: str) -> dict:
+    """{"model", "effort", "at"} that the CLI sent in this session's last API request (the transcript's `api-request`
+    entry: params.model / params.output_config.effort); {} when the transcript holds none (a CLI that does not log it).
+
+    Why next to the app's record: the record is what the NEXT turn runs on (set_session_* land there at once), and the
+    turn running now keeps the value it started with (measured: a worker's first turn sent effort xhigh while the record
+    said xhigh; the turn after set_session_effort max sent max). A switch that lands after this turn started but before
+    its step 0 reads the record would read the new value while this turn runs on the old one."""
+    def scan(chunk: bytes) -> dict:
+        last = {}
+        for raw in chunk.split(b"\n"):
+            if b'"api-request"' not in raw:
+                continue
+            try:
+                e = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(e, dict) or e.get("type") != "api-request":
+                continue
+            if e.get("querySource") not in MAIN_QUERY_SOURCES:  # a side call (another model) would not be this turn
+                continue
+            p = e.get("params") if isinstance(e.get("params"), dict) else {}
+            oc = p.get("output_config") if isinstance(p.get("output_config"), dict) else {}
+            last = {"model": str(p.get("model") or ""), "effort": str(oc.get("effort") or "").lower(),
+                    "at": str(e.get("timestamp") or "")}
+        return last
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as fh:
+            if size > TURN_TAIL_BYTES:
+                fh.seek(size - TURN_TAIL_BYTES)
+                fh.readline()
+                hit = scan(fh.read())
+                if hit or size > TURN_FULL_SCAN_MAX:
+                    return hit
+                fh.seek(0)
+            return scan(fh.read())
+    except (OSError, TypeError):
+        return {}
+
+
+def bare_model(m: str) -> str:
+    """'claude-opus-5-5[1m]' → 'claude-opus-5-5' (the context-size suffix is not another model)."""
+    return re.sub(r"\[[^\]]*\]$", "", (m or "").strip())
+
+
 def expect_report(row: dict, want_model: str, want_effort: str) -> tuple[int, str]:
-    """(exit, text) of a worker's step 0: does the app's record match what the hand-off asked for? On a mismatch the
-    text carries the SendMessage line to the session that started this one (the app's record names it)."""
+    """(exit, text) of a worker's step 0: do the app's record (the next turn's values) and this turn (what the CLI sent
+    to the API, `turn_model` / `turn_effort` from this_turn; the transcript's model when no API request is logged) match
+    what the hand-off asked for? On a mismatch the text carries the SendMessage line to the session that started this
+    one (the app's record names it), with the time it was written (a held message can arrive after the `go`)."""
     got_m, got_e = row.get("app_model") or "", (row.get("app_effort") or "").lower()
+    turn_m = bare_model(row.get("turn_model") or row.get("model") or "")
+    turn_e = (row.get("turn_effort") or "").lower()
     asked = " / ".join(x for x in (want_model, f"effort {want_effort}" if want_effort else "") if x)
     if not (got_m or got_e):
         diffs = ["app の記録が読めない"]
@@ -93,13 +156,28 @@ def expect_report(row: dict, want_model: str, want_effort: str) -> tuple[int, st
         diffs = [] if matches(want_model, got_m) else [f"model {got_m or '?'}"]
         if want_effort and want_effort.lower() != got_e:
             diffs.append(f"effort {got_e or '?'}")
-    if not diffs:
-        return 0, f"✅ app の記録 ({got_m} / effort {got_e}) は頼まれた {asked} と合う = 手順 1 へ進む"
+    turn_diffs = [] if not turn_m or matches(want_model, turn_m) else [f"model {turn_m}"]
+    if want_effort and turn_e and want_effort.lower() != turn_e:
+        turn_diffs.append(f"effort {turn_e}")
+    now_txt = (f"、 この turn に API へ送った値 ({turn_m or '?'} / effort {turn_e})" if turn_e else "")
+    if not diffs and not turn_diffs:
+        return 0, f"✅ app の記録 ({got_m} / effort {got_e}){now_txt} は頼まれた {asked} と合う = 手順 1 へ進む"
     me = row.get("app_local") or row.get("host") or str(row.get("sessionId", ""))[:8]
     parent = row.get("app_parent") or ""
-    line = (f"go 待ち: この窓 ({me}) は app の記録で {' / '.join(diffs)}、 頼まれたのは {asked}。 依頼の中身はまだ読んでいない。"
-            " set_session_model / set_session_effort で直してから go を送ってください。")
-    out = [f"⏸ app の記録が頼まれた {asked} と違う ({' / '.join(diffs)}) = 依頼の中身を読まずに止まる。"]
+    stamp = time.strftime("%H:%M")
+    if not diffs:
+        # the record already holds the asked values (the starter switched it after this turn began): the next turn runs on
+        # them, so the starter only sends `go`
+        line = (f"go 待ち ({stamp} 時点): この窓 ({me}) のこの turn は {' / '.join(turn_diffs)} で動いている (API に送った値)。"
+                f" app の記録は頼まれた {asked} に直っている = 次の turn から合う。 依頼の中身はまだ読んでいない。 go を送ってください"
+                " (set_session_model / set_session_effort は済んでいる。 この 1 行より後に go を送っていれば、 この 1 行は読み捨てる)。")
+        out = [f"⏸ この turn は {' / '.join(turn_diffs)} で動いている (API に送った値)。 app の記録は頼まれた {asked} に直っている"
+               " = 次の turn から合う。 依頼の中身を読まずにこの turn を止め、 go で次の turn を始める。"]
+    else:
+        line = (f"go 待ち ({stamp} 時点): この窓 ({me}) は app の記録で {' / '.join(diffs)}、 頼まれたのは {asked}。 依頼の中身はまだ"
+                " 読んでいない。 set_session_model / set_session_effort で直してから go を送ってください (この 1 行より後に直して"
+                " go を送っていれば、 この 1 行は読み捨てる)。")
+        out = [f"⏸ app の記録が頼まれた {asked} と違う ({' / '.join(diffs)}) = 依頼の中身を読まずに止まる。"]
     if parent:
         out.append("  止まる前に、 起こした session へ次の 1 行を SendMessage で送る (起こした側のほかの子が動いていると、"
                    " この窓の turn の終わりでは起こした側が起きない。 message は起こす = 実測):")
@@ -245,6 +323,43 @@ def selftest() -> int:
         check("with_starter: the app's record names the starter and this window's local id",
               st.get("app_parent") == "local_starter" and st.get("app_local") == "local_aaa")
         check("with_starter: no app record → the row unchanged", with_starter({"sessionId": "x", "host": "local_none"}).get("app_parent") == "")
+        # this turn = what the CLI sent to the API; the record = the next turn (a switch can land in between)
+        rc, out = expect_report({**base, "app_model": "claude-opus-5-5", "app_effort": "max", "turn_model": "claude-opus-5-5",
+                                 "turn_effort": "xhigh"}, "opus", "max")
+        check("expect: record fixed but this turn sent xhigh → ⏸ asking only for go, with the time",
+              rc == 4 and "go を送ってください" in out and "直っている" in out and "SendMessage(to=local_dad" in out
+              and "時点" in out and "effort xhigh" in out)
+        rc, out = expect_report({**base, "app_model": "claude-opus-5-5", "app_effort": "max", "turn_model": "claude-opus-5-5[1m]",
+                                 "turn_effort": "max"}, "opus", "max")
+        check("expect: record and this turn both max → ✅ naming this turn's values", rc == 0 and "この turn に API へ送った値" in out)
+        rc, out = expect_report({**base, "app_model": "claude-fable-5-1", "app_effort": "high", "model": "claude-opus-5-5"},
+                                "claude-fable-5-1", "high")
+        check("expect: record switched to Fable but this turn ran Opus (no API log) → ⏸ on the transcript's model",
+              rc == 4 and "model claude-opus-5-5" in out)
+        rc, out = expect_report({**base, "app_model": "claude-opus-5-5", "app_effort": "xhigh", "turn_effort": "xhigh"}, "opus", "max")
+        check("expect: record and this turn xhigh → ⏸ asking to set then go, the line says when it was written",
+              rc == 4 and "直してから go" in out and "時点" in out and "読み捨てる" in out)
+        tt = os.path.join(pdir, "-w-p", "turns.jsonl")
+        with open(tt, "w", encoding="utf-8") as fh:
+            for src, eff in (("sdk", "xhigh"), ("sdk", "max"), ("some_side_call", "low")):
+                fh.write(json.dumps({"type": "api-request", "querySource": src, "timestamp": "t", "params": {
+                    "model": "claude-opus-5-5", "output_config": {"effort": eff}}}) + "\n")
+        check("this_turn: the last main request wins, a side call is skipped", this_turn(tt).get("effort") == "max")
+        check("this_turn: no api-request / no file → {}", this_turn(tr) == {} and this_turn(os.path.join(td, "none")) == {})
+        check("bare_model drops the context-size suffix", bare_model("claude-opus-5-5[1m]") == "claude-opus-5-5")
+        # the CLI's step 0 on itself reads this turn from its own transcript
+        with open(tr, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "api-request", "querySource": "sdk", "timestamp": "t4",
+                                 "params": {"model": "claude-opus-5-5", "output_config": {"effort": "xhigh"}}}) + "\n")
+        env3 = dict(env, CLAUDE_CODE_SESSION_ID=sid, CLAUDE_DESKTOP_SESSIONS_DIR=os.path.join(td, "app"))
+        r = subprocess.run([sys.executable, me, "self", "--expect-model", "opus", "--expect-effort", "xhigh"], env=env3,
+                           capture_output=True, text=True)
+        check("CLI self --expect-*: record and this turn xhigh → ✅ exit 0 naming this turn",
+              r.returncode == 0 and "この turn の API=claude-opus-5-5 effort=xhigh" in r.stdout and "✅" in r.stdout)
+        r = subprocess.run([sys.executable, me, "self", "--expect-model", "opus", "--expect-effort", "max"], env=env3,
+                           capture_output=True, text=True)
+        check("CLI self --expect-effort max on an xhigh record and turn → exit 4 with the line to the starter",
+              r.returncode == 4 and "SendMessage(to=local_starter" in r.stdout)
         os.environ.pop("CLAUDE_DESKTOP_SESSIONS_DIR", None)
     print("session-model selftest: " + ("ALL PASS" if not fails else f"FAILED {len(fails)}"))
     return 1 if fails else 0
@@ -276,8 +391,9 @@ def main(argv: list[str] | None = None) -> int:
             print("(該当する session が無い・1 つに決まらない)" if not rows else "\n".join(fmt(r) for r in rows))
             print("⏸ この窓の app の記録を 1 つに決められない = 依頼の中身を読まずに止まる。")
             return 4
-        print(fmt(rows[0]))
-        rc, text = expect_report(with_starter(rows[0]), a.expect_model, a.expect_effort)
+        row = {**rows[0], **{"turn_" + k: v for k, v in this_turn(rows[0].get("path") or "").items()}}
+        print(fmt(row))
+        rc, text = expect_report(with_starter(row), a.expect_model, a.expect_effort)
         print(text)
         return rc
     if a.json:
