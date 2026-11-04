@@ -27,6 +27,12 @@ spec (JSON):
         "only_on": ["Darwin"]}]}                     # 省略可 = その OS (platform.system()) でしか回らない check を当てる mutant。
                                                      # 他の OS では pair の照合だけをして [SKIP] (test 自身がその OS で check を飛ばすとき)
 
+unittest の試験に当てるとき: `"run": "python3 <試験の file> -v <Class>.<test>"`、 `"fail_marker": "FAIL: "`、
+`"pass_marker": "test_"`。 `-v` が出す試験名の行は通っても落ちても出るので基準の PASS 行になり、 落ちた版は
+`FAIL: <試験名>` の行を出す (実測)。 例外で落ちた版の行は `ERROR: <試験名>` で、 この印では FAIL と数えない
+(行頭一致で読むため) = 外した結果が assertion で落ちる形に mutant を作る。 試験の file は target と同じ dir に置く
+(写しは target の親 dir だけ)。
+
 検査 (外れたら exit 1、 spec の誤りは exit 2):
 
 | 何を | なぜ |
