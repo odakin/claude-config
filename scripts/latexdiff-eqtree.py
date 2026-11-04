@@ -37,8 +37,9 @@ of a delimiter (\\pn{..}, ( .. ), \\Big( .. \\Big) are the same bracket), where 
 
 A pair with little in common (WHOLE_BELOW) is shown whole, old struck + new underlined.  A display
 latexdiff takes out in one place and puts in at another has moved: struck there, underlined here.
-Arguments of macros defined in the preamble are read from \\newcommand; macros that only wrap a
-bracket are listed in DELIM_MACRO.
+Arguments of macros defined in the preamble are read from \\newcommand, \\renewcommand and
+\\providecommand (protect reads o.tex and n.tex, restore reads diff.tex); \\def and \\let are not read.
+Macros that only wrap a bracket are listed in DELIM_MACRO.
 """
 import contextlib
 import io
@@ -253,7 +254,7 @@ def brace_arg(s, i):
 def load_macros(text):
     """Macro definitions of the preamble: how many arguments a macro takes decides how it parses."""
     head = text[:text.index("\\begin{document}")]
-    for m in re.finditer(r"\\(?:re|provide)?newcommand\*?\s*\{?\\([A-Za-z]+)\}?\s*(?:\[(\d)\])?(\[[^\]]*\])?\s*\{", head):
+    for m in re.finditer(r"\\(?:(?:re)?new|provide)command\*?\s*\{?\\([A-Za-z]+)\}?\s*(?:\[(\d)\])?(\[[^\]]*\])?\s*\{", head):
         name, n = m.group(1), int(m.group(2) or 0)
         body = brace_arg(head, m.end() - 1)[0].strip()
         if n:
@@ -1285,9 +1286,11 @@ def selftest():
         if "\\DIFadd" not in r and "\\DIFdel" not in r:
             ok = False
             print("no mark:", old, new, r)
-    load_macros("\\newcommand{\\twoarg}[2]{#1#2}\n\\newcommand{\\al}{\\sqrt}\n\\begin{document}")
-    r = diff_seq(parse(r"\twoarg{a}{b}+\al{c}"), parse(r"\twoarg{a}{d}+\al{e}"))
-    if "\\twoarg{a}{\\DIFdel{b}\\DIFadd{d}}" not in r or "\\al{\\DIFdel{c}\\DIFadd{e}}" not in r:
+    load_macros("\\newcommand{\\twoarg}[2]{#1#2}\n\\newcommand{\\al}{\\sqrt}\n\\providecommand{\\acc}{\\widehat}\n"
+                "\\begin{document}")
+    r = diff_seq(parse(r"\twoarg{a}{b}+\al{c}+\acc{f}"), parse(r"\twoarg{a}{d}+\al{e}+\acc{g}"))
+    if "\\twoarg{a}{\\DIFdel{b}\\DIFadd{d}}" not in r or "\\al{\\DIFdel{c}\\DIFadd{e}}" not in r or \
+            "\\acc{\\DIFdel{f}\\DIFadd{g}}" not in r:
         ok = False
         print("macro from the preamble:", r)
     pic = mark_picture("\\node {$f\\fn{a-b}$};\nx", "\\node {$f\\fn{a-c}$};\nx")

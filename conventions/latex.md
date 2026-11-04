@@ -193,6 +193,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - ⚠️ 無印の検査 ([`check-latexdiff-math-markup.py --scan`](../scripts/check-latexdiff-math-markup.py)) は、 この経路では式について常に 0 になる (式に latexdiff の印が無い) = 式の合格の根拠にしない。 式の検査は道具の読み戻し (追加を除くと旧、 削除を除くと新、 合わなければ止まる) と次節。
 - ⚠️ placeholder を自作するなら普通の語を 3 つ並べる。 latexdiff は共通の部分が `MINWORDSBLOCK` (既定 3) 語に満たないと前後の変更に畳むので、 1 語の placeholder は「消して足した」 形になり、 同じ式が 2 回出る (実測)。
 - ⚠️ 比較の記憶を `id()` で引かない。 一時の node の id は使い回されるので、 組むたびに結果が変わる (実測)。 生成の道具は同じ入力で 2 回回し、 頁の文字が一致することを確かめる (`latexdiff-views-check.py --same a.pdf b.pdf`)。
+- ⚠️ 式の中の自作 macro (別名と引数の数) は preamble の `\newcommand` / `\renewcommand` / `\providecommand` から読む (`protect` は両版から、 `restore` は diff.tex から)。 `\def` / `\let` の別名 (`\def\hh{\widehat}` の形) は読まないので、 足した帽子が引数から離れて組版が止まる = 両版でその定義を `\newcommand` に書き換えてから `protect` に渡す (実測)。
 - engine ([`latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh)) には組み込んでいない = repo の手順の script から呼ぶ。
 
 ## <a id="latexdiff-views-check"></a>差分 PDF を元の 2 版に読み戻して確かめる (`latexdiff-views-check.py`)
