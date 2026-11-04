@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage) + 外の新着を定期 job で channel に中継するとき (#channel-as-ledger)
+when: Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage) + 外の新着を定期 job で channel に中継するとき (#channel-as-ledger) + bot に人へ DM を送らせる前・bot の持ち主にもやりとりを見せたいとき (#owner-visible-bot-conversation)
 category: infra
-summary: Discord Bot 運用 (権限ポリシー・private channel 加入・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック・グループへの呼びかけの個別 mention と user ID の根拠つき引き方・第三者の bot の侵害時の点検と token 漏洩時の @everyone の絞り方)
+summary: Discord Bot 運用 (権限ポリシー・private channel 加入・持ち主に見せたいやりとりは 1:1 DM でなく bot が作る非公開 channel で・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック・グループへの呼びかけの個別 mention と user ID の根拠つき引き方・第三者の bot の侵害時の点検と token 漏洩時の @everyone の絞り方)
 -->
 # discord-bot: Discord Bot を運用するときの規律
 
@@ -59,7 +59,15 @@ invite URL の `permissions=` bitfield は **bot 専用 role の guild-level 権
 
 ### Bot 自身が UI 操作の代行をできない理由
 
-Bot が channel の permission overwrite を API 経由で変更するには `Manage Roles` 権限が必要。これを持たない bot は **自分自身に対する allow を API で追加できない** → server admin (人間) が UI で 1 度だけ操作する必要がある。これを最初に踏まえずに「API で全自動」と思い込むと、最後の 1 ステップで詰まる。
+**既存の** channel の permission overwrite を API 経由で変更するには `Manage Roles` 権限が必要。これを持たない bot は **既存の非公開 channel に自分自身の allow を API で追加できない** → server admin (人間) が UI で 1 度だけ操作する必要がある。これを最初に踏まえずに「API で全自動」と思い込むと、最後の 1 ステップで詰まる。 **channel を新しく作るときの overwrite は `Manage Channels` だけで付けられる** (bot 自身と人の user overwrite の allow を作成の request に入れる。 allow できるのは bot が guild で持っている権限だけ、 実測 = `Manage Roles` を持たない bot で通った) = bot に作らせれば人の操作は要らない (下の [#owner-visible-bot-conversation](#owner-visible-bot-conversation))。
+
+### <a id="owner-visible-bot-conversation"></a>持ち主にも見せたいやりとりは、 bot の 1:1 DM でなく非公開 channel で
+
+- bot と人の 1:1 DM は bot とその人にしか見えない。 bot に送らせている持ち主の Discord には出ず、 相手の返事も bot にしか届かない = 持ち主は bot の側の記録 (fetch・読み出し) を通してしか見られない (実測)。
+- bot はフレンドになれず、 グループ DM にも入れない (Discord の仕様)。 持ち主・相手・bot の 3 人の場は、 server の非公開 channel しか無い。
+- 作り方: 相手と bot が両方いる server (持ち主が管理する server) に、 @everyone の View Channel を deny し、 持ち主・相手・bot に user overwrite で allow した text channel を作る。 bot が `Manage Channels` を持っていれば作成の request 1 本で済む (上の段落) = 道具 [`scripts/discord-private-channel.py`](../scripts/discord-private-channel.py) (既定 = 送らずに中身を出す、 `--create` で作って読み戻す)。 相手と bot が同じ server に居るかは [`scripts/discord-post.py`](../scripts/discord-post.py) `--member-probe <USER_ID>` で引く。
+- 1:1 DM で始めてしまった相談は、 channel で相手を名指しして同じ内容を書き直し、 「こちらで」 と添える (DM に返事が来た分は bot の側で拾う)。
+- bot が読み書きしない、 持ち主と相手の 2 人の場なら、 持ち主のアカウントから DM すれば server は要らない。
 
 ### <a id="missing-access-triage"></a>Missing Access (403 / code 50001) は 2 つの場合を区別しない — 所在を引いてから人に頼む
 
