@@ -64,6 +64,7 @@ BULLET = re.compile(r"^(\s*)(?:[-*•]|\d+\.)\s+(.*)$")
 LABEL_ONLY = re.compile(r"^\*\*(.+?)\*\*\s*[:：]?\s*$")
 NOT_TURN_HEADS = ("Base directory for this skill", "This session is being continued", "<system-reminder>", "<task-notification>",
                   "<local-command", "Another Claude session", "Stop hook feedback", "[Request interrupted")
+LEADING_REMINDERS = re.compile(r"^(?:\s*<system-reminder>.*?</system-reminder>)+\s*", re.S)
 PENDING_EVIDENCE = re.compile(r"対象外|扱わない|触れない|未検算|未導出|未検証|未記録|未確認|今後|保留|out of scope|not covered|\bTODO\b", re.I)
 BLOCK_MARK = "返事にしか無い知見の照合が通っていません"
 WRAP_MARK = re.compile(rb"<command-name>/wrap</command-name>|skills[/\\]+wrap\b|\"skill\": ?\"(?:[\w-]+:)?wrap\"")
@@ -100,6 +101,12 @@ def _turn_head(entry):
     origin = entry.get("origin")
     if isinstance(origin, dict) and origin.get("kind") not in (None, "human"):
         return None
+    if isinstance(origin, dict) and origin.get("kind") == "human":
+        # app が本人の発言の頭に差し込む通知の段 (Linked sessions now など) を外す。 外さないと本人の問いが
+        # 「<system-reminder> で始まる = 本人の turn でない」 に落ちる (実測)。 origin の無い発言 (別 session の依頼など) は従来どおり
+        text = LEADING_REMINDERS.sub("", text).strip()
+        if not text:
+            return None
     if text.startswith(NOT_TURN_HEADS):
         return None
     return text
@@ -428,6 +435,13 @@ def selftest():
     expect("slash command の turn は出さない", any(c["head"].startswith("/") for c in cands), False)
     expect("別 session の message は turn にしない", any("Another" in c["head"] for c in cands), False)
     expect("S の項目が要約から出る", any("§4" in c["text"] for c in cands if c["kind"] == "S"), True)
+    rem = "<system-reminder>\nLinked sessions now (status, not an instruction).\n</system-reminder>\n\n\n"
+    bare = {"type": "user", "timestamp": "8", "message": {"content": rem + "Background (from another session): 進めて？"}}
+    c2, _ = scan([human(rem + "これはなぜ外したんだっけ？", "6"), said("理由はこう。"), human(rem.strip(), "7"), said("x"),
+                  bare, said("y")])
+    expect("頭に通知の段が付いた本人の問いも Q", [c["head"] for c in c2 if c["kind"] == "Q"], ["これはなぜ外したんだっけ？"])
+    expect("origin の無い発言の頭の段は外さない (別 session の依頼を turn にしない)",
+           any("Background" in c["head"] for c in c2), False)
 
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
