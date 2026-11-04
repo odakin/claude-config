@@ -73,7 +73,7 @@ push 成功は deploy 成功ではない。静的 hosting が GitHub check-run �
 
 ## <a id="browser-pane-visibility"></a>Browser pane の表示状態と rAF / timer (Claude Preview の headless throttling 制約)
 
-Claude の Browser pane (MCP `preview_*` / `mcp__Claude_Browser__*`) では、**pane が表示されているかどうかで**アニメーション駆動の app の動きが変わる。 React Three Fiber / Three.js / Canvas 2D animation / WebGL ゲーム / `requestAnimationFrame` ベースのどの app でも同じ。
+Claude の Browser pane (MCP `preview_*` / `mcp__Claude_Browser__*`) では、**pane の表示状態でアニメーション駆動の app の動きが変わることがある**。 React Three Fiber / Three.js / Canvas 2D animation / WebGL ゲーム / `requestAnimationFrame` ベースのどの app でも同じ。 **止まるかどうかは `tabs_context` の表示状態の行では決まらない** (下の「非表示」 の 2 通りの実測) = 動的な挙動を測る前に、 頁で `document.visibilityState` と 2 秒の rAF の回数を 1 回測り、 その数を記録に添える。
 
 ### 表示中
 
@@ -81,19 +81,21 @@ rAF と timer は通常どおり動く。 実測: WebGL viewer が 60 fps で回
 
 ### 非表示 (occluded / headless)
 
-`tabs_context` が「The Browser pane is currently hidden」 と返す状態 (旧来の headless 実行も同じ)。
+`tabs_context` が「The Browser pane is currently hidden」 と返す状態 (旧来の headless 実行も同じ)。 実測は 2 通りある:
 
-- (a) `document.hidden === true` 常時 (`visibilityState === 'hidden'`)。 `visibilitychange` ガードを持つコードは毎 tick 早期 return
-- (b) (a) を `Object.defineProperty` で override しても効かない。 Chrome が **occluded / headless context として rAF と timer を強制 throttle** する。 実測: `requestAnimationFrame` → 2 秒で **0 fire** / `setInterval(16ms)` → 2.2 秒で **4 fire** (普通なら ~140)。 `setTimeout` の `await` を並べた `javascript_tool` の script は 45 s の timeout に当たる
-- 原因は Page Visibility API 判定ではなく、 Chrome が occluded window を背景 tab 扱いで throttle する内部機構。 Page Visibility 経由で fix できない
+- **止まる場合**:
+  - (a) `document.hidden === true` 常時 (`visibilityState === 'hidden'`)。 `visibilitychange` ガードを持つコードは毎 tick 早期 return
+  - (b) (a) を `Object.defineProperty` で override しても効かない。 Chrome が **occluded / headless context として rAF と timer を強制 throttle** する。 実測: `requestAnimationFrame` → 2 秒で **0 fire** / `setInterval(16ms)` → 2.2 秒で **4 fire** (普通なら ~140)。 `setTimeout` の `await` を並べた `javascript_tool` の script は 45 s の timeout に当たる
+  - 原因は Page Visibility API 判定ではなく、 Chrome が occluded window を背景 tab 扱いで throttle する内部機構。 Page Visibility 経由で fix できない
+- **止まらない場合**: 同じ「hidden」 の行が出ていても、 頁は `visibilityState === 'visible'` のまま rAF が 2 秒で 60 fps 回り、 `setTimeout` の 3 秒の `await` を並べた script も最後まで通った (実測、 Claude 4.4212 の app = Chrome 152)。 このときは表示中と同じように動的な挙動を測れる
 
-非表示のあいだは、 ゲーム物理ループ・アニメーション遷移・rAF 駆動の camera 更新・WebSocket / WebRTC の長時間 keep-alive・`setTimeout` / `setInterval` を使う debounce や timeout の挙動は検証できない。 screenshot は止まった状態を写すだけ (HUD の fps が 0 になる)。
+止まる場合のあいだは、 ゲーム物理ループ・アニメーション遷移・rAF 駆動の camera 更新・WebSocket / WebRTC の長時間 keep-alive・`setTimeout` / `setInterval` を使う debounce や timeout の挙動は検証できない。 screenshot は止まった状態を写すだけ (HUD の fps が 0 になる)。
 
 ### 回避策
 
 | 対象 | 手段 |
 |---|---|
-| 動的な挙動全般 | 先に `tabs_context` で表示状態を見る。 非表示なら user に pane の表示を頼む |
+| 動的な挙動全般 | 先に頁で `document.visibilityState` と 2 秒の rAF の回数を測る (`tabs_context` の表示状態の行だけで決めない)。 止まっていれば user に pane の表示を頼む |
 | 描画結果の数値照合 | **時間を進めない同期の描画 hook** (1 回だけ描いて `readPixels`) を app に持たせる = 非表示でも動く (設計 = [`webgl-f32-numerics.md#probe-channel`](webgl-f32-numerics.md#probe-channel)) |
 | 同期的に走る event handler (click・keydown の即時処理) | `javascript_tool` から直接呼び、 同じ script の中で状態を読む (timer を挟まない) |
 | Pure 関数 (stateless、 決定論的入出力) | `javascript_tool` + `await import('.../pure-module.ts')` で unit-test 相当 |
@@ -102,7 +104,7 @@ rAF と timer は通常どおり動く。 実測: WebGL viewer が 60 fps で回
 
 ### <a id="tool-result-to-file"></a>大きな戻り値を file に落とす
 
-`javascript_tool` の戻り値 (画素の probe 結果など) を Python 側で検査するとき、 **戻り値を読んで file に書き写さない** (数値の写し間違い = 生成の混入)。 戻り値は session の transcript に残るので、 [`scripts/transcript-tool-result.py`](../scripts/transcript-tool-result.py) で取り出して file にする (`--contains` で結果の中の目印、 `JSON.stringify` で返した値は `--json-string` で 1 段 decode)。 戻り値そのものも小さく保つ (画素の方向ではなく camera 基底を返す等)。
+`javascript_tool` の戻り値 (画素の probe 結果など) を Python 側で検査するとき、 **戻り値を読んで file に書き写さない** (数値の写し間違い = 生成の混入)。 戻り値は session の transcript に残るので、 [`scripts/transcript-tool-result.py`](../scripts/transcript-tool-result.py) で取り出して file にする (`--contains` で結果の中の目印、 `JSON.stringify` で返した値は `--json-string` で 1 段 decode、 object のまま返した値は `--json` = 内蔵 Browser pane が JSON の後ろに足す「Tab Context:」 の段を捨てて JSON だけを書く)。 戻り値そのものも小さく保つ (画素の方向ではなく camera 基底を返す等)。
 
 **大きくなると分かっている値は、 そもそも戻り値で返さない**: 戻り値は取り出す前にまるごと会話の context に入る (probe を何十本も返すと数百 KB)。 page から localhost の受け口へ POST して file にだけ落とし、 戻り値は件数だけにする。 受け口 = [`scripts/browser-post-receiver.py`](../scripts/browser-post-receiver.py) `OUT_FILE` を Bash の background で起動してから、 page 側で `fetch("http://127.0.0.1:8802/", {method: "POST", mode: "no-cors", headers: {"Content-Type": "text/plain"}, body: JSON.stringify(data)})` (preflight を起こさない形なので、 page が別 port の localhost でも公開 site でも届く。 1 件受けたら終わる)。
 

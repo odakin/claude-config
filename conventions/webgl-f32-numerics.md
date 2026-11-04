@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: WebGL / GLSL shader で物理量を f32 で計算するとき + 事前計算 table (texture) の定義域の外まで写像を延ばすとき + shader の出力を f64 の参照実装と画素単位で照合するとき + 実時間 simulation の 1 frame の時間予算を決めるとき + table と metadata を静的 hosting で配るとき (#payload-cache-pairing) + 写真の背景を mip つきで引くとき (#derivatives-in-divergent-flow) + 2 つの lookup engine を切り替えるとき (#engine-handoff) + 操作 (推進のキーなど) を始めた瞬間に画面が跳ぶとき・跳ばないことを確かめるとき (#input-starts-from-shown-state)
+when: WebGL / GLSL shader で物理量を f32 で計算するとき + 事前計算 table (texture) の定義域の外まで写像を延ばすとき + shader の出力を f64 の参照実装と画素単位で照合するとき + 実時間 simulation の 1 frame の時間予算を決めるとき + table と metadata を静的 hosting で配るとき (#payload-cache-pairing) + 写真の背景を mip つきで引くとき (#derivatives-in-divergent-flow) + 2 つの lookup engine を切り替えるとき (#engine-handoff) + 操作 (推進のキーなど) を始めた瞬間に画面が跳ぶとき・跳ばないことを確かめるとき (#input-starts-from-shown-state) + 観測者を止めた状態 (一時停止) を作る・確かめるとき (#paused-state-one-event)
 category: web
-summary: shader の f32 計算と f64 参照の組み方 — table の端は物理の境界ではない (外は最終行 + 弱い領域の厳密な積分で継ぐ、 近似の差分引き継ぎと分岐点の継ぎ目を避ける) / f32 の条件付け (sin≈1・acos≈1・端点の平方根特異性・冪の溢れ) / f32 emulation を export の関門に / 色でなく計算値を画素に書く probe channel で f64 と照合 / 継ぎ目の画素差は「またがない同じ幅」 と比べる / 時間予算は倍率に比例 / 再生成の最下位桁の揺れで公開資産を churn しない / 照合は色の目印でなく probe で / metadata は毎回再検証し table は内容 hash で取る / 画面微分は分岐した return の前に取り、 mip は方向ベクトルの微分から / engine の切替は frame と f64 との精度で決め理由を残す / 操作で始める状態は画面に出ている観測者から作り、 跳びは基準に依らない量で測る / 隠れた pane の GPU 時間は readPixels 同期で測る
+summary: shader の f32 計算と f64 参照の組み方 — table の端は物理の境界ではない (外は最終行 + 弱い領域の厳密な積分で継ぐ、 近似の差分引き継ぎと分岐点の継ぎ目を避ける) / f32 の条件付け (sin≈1・acos≈1・端点の平方根特異性・冪の溢れ) / f32 emulation を export の関門に / 色でなく計算値を画素に書く probe channel で f64 と照合 / 継ぎ目の画素差は「またがない同じ幅」 と比べる / 時間予算は倍率に比例 / 再生成の最下位桁の揺れで公開資産を churn しない / 照合は色の目印でなく probe で / metadata は毎回再検証し table は内容 hash で取る / 画面微分は分岐した return の前に取り、 mip は方向ベクトルの微分から / engine の切替は frame と f64 との精度で決め理由を残す / 操作で始める状態は画面に出ている観測者から作り、 跳びは基準に依らない量で測る / 止めた状態は時計も全部止めて 1 事象の写真にする / 隠れた pane の GPU 時間は readPixels 同期で測る
 -->
 # WebGL の f32 数値計算と f64 参照の組み方
 
@@ -110,6 +110,14 @@ headless の検査が同じ頁を状態ごとに開き直すとき、 load の e
 - 「その場で止まる」 のように、 速度を置き換えること自体が命令の中身なら跳ぶのが仕様。 どちらの命令かを記録に書き分ける。
 - 跳びの有無の確かめ = 操作の直前のコマと直後のコマを headless の browser で取り、 **基準の取り方に依らない量** (2 つの 4 元速度の相対速度・影の角・画素の差) で比べ、 キーを押さない 1 コマの差を並べて noise にする。 shader に渡す速度は engine ごとに基準の観測者が違うので、 engine の切替をまたいで差を取ると同じ観測者でも偽の跳びが出る (実測)。 落下の途中のように動いている状態はキーを押さない間も 1 コマで 4 元速度が変わるので、 閾値は noise の数倍にする。
 
+## <a id="paused-state-one-event"></a>止めた状態は 1 つの事象の写真にする (時計を全部止める)
+
+実時間の viewer で観測者の位置を止めて見せるなら、 その状態が読む時計 (他の物体の時刻・光の遅れ・残り時間の表示) も全部止める。 位置だけを止めて時計を進めると、 画面の観測者はどの世界線にも乗らない = 位置は静止の観測者、 4 元速度と時計は動く観測者のもの、 という混ぜ物になる (実測: 落下の観測者を止めた状態で、 位置と残り時間の表示は止まり、 他の物体の時計だけが落下者の進み方で進んでいた)。
+
+- 静的な時空では、 空や円盤のような定常の背景は位置と向きだけで決まる。 だから動く観測者を止めた絵は、 その位置を通る観測者が撮る 1 枚の写真として正しい。 嘘になるのは、 それを時間が進む状態として見せるところ (残り時間が減らない・他の物体だけが動く)。
+- 確かめ = 時間の倍率を上げて止めた状態で数秒置き、 位置・残り時間・時計を読んで、 どれか 1 つだけが動いていないかを見る。 1 コマの壁時計を打ち切る loop では、 遅い runner (software の GL) で時計の進みが倍率より小さく出るので、 比べるのは「動くか動かないか」 にする。
+- 位置を動かす操作 (slider) で観測者を置き直すとき、 時計を保つか (同じ種類の別の観測者に乗り換える)、 同じ世界線の上の別の事象に移すか (時計も動く) は、 定常の背景の絵には効かず、 時計を読む物 (他の物体) の動きにだけ効く。 どちらにしたかを記録に書く。
+
 ## <a id="gpu-time-from-readpixels"></a>描画 loop が止まっている pane で 1 frame の GPU 時間を測る
 
-pane が隠れていると rAF が間引かれ、 HUD の fps は GPU の重さを表さない ([`preview.md#browser-pane-visibility`](preview.md#browser-pane-visibility))。 同期描画の hook を N 回呼び、 毎回 1 画素の `readPixels` で完了を待たせた時間を N で割る。 機能の有無 (背景画像あり / なし等) の差はこの値で比べる。
+pane が隠れていると rAF が間引かれることがあり (止まらない場合もある = 先に rAF の回数を測る)、 そのとき HUD の fps は GPU の重さを表さない ([`preview.md#browser-pane-visibility`](preview.md#browser-pane-visibility))。 同期描画の hook を N 回呼び、 毎回 1 画素の `readPixels` で完了を待たせた時間を N で割る。 機能の有無 (背景画像あり / なし等) の差はこの値で比べる。
