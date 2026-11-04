@@ -90,3 +90,14 @@ commit は「承認の発言が最新ではない」 で止まり、 本人に 1
 commit し、 生成物は後の commit に分ける (生成物に主張の承認は要らない)。 置換 → 検査 → 組版 → 目視 の間に本人の発言が入る
 流れのときは、 検査の前に commit して検査で直したら追加 commit する方が安い。
 「終わったら次もやって」 のような段階の依頼も同じ形で壊れる。 前の段を commit する前に本人の次の発言が来ると、 後の段はもう予告の発言では記録できない (実測: 後の段の変更をいったん戻し、 次の段と合わせて承認をもらい直した)。 段ごとに、 その段を終えた turn の内に commit する。
+
+### <a id="split-mixed-surgery"></a>保護領域と保護外が混ざる手術は 2 段に分け、 保護領域の段だけを裁定に出す
+
+章・節を別の原稿へ移す手術は、 文の移動と削除 (保護外) と、 式の削除 (保護領域 = `eq:<label>`・`math`) を 1 つの差分に混ぜやすい。
+混ぜたまま書き込むと全体が止まり、 拒否の文は領域を数十件並べるので、 著者には何を裁定するのかが見えない (実測: 式の削除が 1 回の拒否に数十件並んだ)。
+
+1. 手術を script にし、 段を引数で分ける (`--step text` = 保護外だけ / `--step protected` = 保護領域だけ)。 script は手術前の版の source に当てる。
+2. 保護外の段を当てて組み、 commit する (guard を通る)。
+3. 保護領域の段は repo の外の写しに当てて組む。 両方の段の後で組めること、 未解決の参照が無いこと、 消えた label の行き先、 消えた定義の左辺が残りの本文で使われていないことを確かめる ([`paper-audit.md#orphaned-definition-after-move`](paper-audit.md#orphaned-definition-after-move))。
+4. 著者には、 対象の file と変更 (どの節の何件の式を消すか) を名指しして裁定を求める。 発言を記録してから、 写しの全文を候補にして当てる (`apply --file <path> --candidate <全文の file> --change '<1 行>' --latest`)。
+5. 記録 (対応表・SESSION) には、 段ごとの commit と、 保護領域の段を当てた裁定の発言を書く。 共有の checkout では別の session の `pull --rebase` が merge commit を直線に並べ直して hash が変わることがある = 記録の hash は push の後の default の branch で引き直す ([`shared-repo.md#rebased-branch-not-ancestor`](shared-repo.md#rebased-branch-not-ancestor))。
