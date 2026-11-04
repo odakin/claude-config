@@ -70,6 +70,9 @@ sections:
   - id: reflow-overfull-inline-math
     level: 2
     title: "段落を切る・文を分けると、 触っていない行内数式が行末に来てはみ出す — 数式でなく語順で直す"
+  - id: rendered-line-count
+    level: 2
+    title: "組んだ PDF で「何行に収まったか」 を数える — 文字の行を縦の位置でまとめる"
   - id: tcolorbox-footnotes-to-page
     level: 2
     title: "tcolorbox の枠の中の脚注を、 本文と同じ番号で頁の下に出す"
