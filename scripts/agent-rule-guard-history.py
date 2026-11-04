@@ -30,6 +30,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+import time_bound as _tb  # noqa: E402
+
 PROSE_DIRS = ("conventions", "CLAUDE.md", "CONVENTIONS.md", "AGENTS.md")
 
 
@@ -52,7 +55,8 @@ def show(repo: str, rev: str, path: str) -> str:
 
 def versions(repo: str, since: str, engine):
     """(commit, path, old, new) for every changed rule-document version since the date (newest first, as git log)."""
-    for c in git(repo, "log", f"--since={since}", "--format=%H", "--", *PROSE_DIRS).split():
+    # git reads a bare date as that day at the current time of day (measured: the morning's commits fell out)
+    for c in git(repo, "log", f"--since={_tb.git_since(since)}", "--format=%H", "--", *PROSE_DIRS).split():
         for p in git(repo, "show", "--format=", "--name-only", c).split("\n"):
             if not p or not engine.prose_policy_doc(p, ("",)):
                 continue
@@ -192,6 +196,16 @@ def selftest() -> int:
         with contextlib.redirect_stdout(out):
             run_terms(td, "2000-01-01", engine, None)
         check("--terms lists the firing term with an example", "== ただし: 1 sentences" in out.getvalue())
+        day = subprocess.run(["git", "-C", td, "log", "-1", "--format=%cd", "--date=format-local:%Y-%m-%d"],
+                             env=env, capture_output=True, text=True).stdout.strip()
+        check("--since with a bare date counts that whole day (git alone reads it as the current time of day)",
+              len(list(versions(td, day, engine))) == 3)
+        try:
+            _tb.bound("1月2日")
+            rejected = False
+        except argparse.ArgumentTypeError:
+            rejected = True
+        check("a --since in another form is an error, not a silent empty replay", rejected)
     print("agent-rule-guard-history selftest: " + ("ALL PASS" if not fails else f"FAILED {len(fails)}"))
     return 1 if fails else 0
 
@@ -199,7 +213,8 @@ def selftest() -> int:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     ap.add_argument("repo", nargs="?")
-    ap.add_argument("--since", default="2000-01-01")
+    ap.add_argument("--since", type=_tb.bound, default="2000-01-01",
+                    help="local YYYY-MM-DD or YYYY-MM-DDTHH[:MM[:SS]] (a date means from 00:00; other forms are an error)")
     ap.add_argument("--engine", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent-rule-guard.py"))
     ap.add_argument("--compare", help="a second engine file to judge the same versions with")
     ap.add_argument("--terms", nargs="*", help="per-term report (optionally only these terms)")
