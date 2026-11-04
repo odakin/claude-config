@@ -64,6 +64,9 @@ sections:
   - id: inline-math-unbreakable-group-stretches-japanese
     level: 2
     title: "和文の行内数式を `{…}` で包んで折れなくすると、 前の行の字間が開く"
+  - id: ascii-parens-in-japanese
+    level: 2
+    title: "和文の中の括弧は全角で (LuaTeX-ja) — 半角の `( )` は英字の扱いで、 和文との間が開く"
   - id: reflow-overfull-inline-math
     level: 2
     title: "段落を切る・文を分けると、 触っていない行内数式が行末に来てはみ出す — 数式でなく語順で直す"
