@@ -17,6 +17,16 @@
   既知の限界: 区画を箇条書きに並べ、 その下の行で「おすすめどおり直してよいか」 とだけ問う形は見ない (区画の名を問いの直前の
   数行にまで広げると、 校正で鳴る数が 2 倍強になり、 増えた分に本人が「分からない」 と返した問いは無かった)。
 
+本文の行番号の検査 (2026-11-04、 conventions/concise-output.md#locate-by-quote-not-line-number): Stop で最終の返事の本文 (問いの行に
+  限らない) に原稿の行番号の形 (L540・L1071 = L のあとに数字 2〜5 桁 / l.119 / `.tex:540`) があれば、 節の名・式の番号・文の
+  書き出しに言い直す追記を 1 回求める。 code block の中と「」『』 の中は見ない。 code の場所 (`file.py:42`) は押せる link なので
+  当てない (`.tex` だけ当てる)。 差し戻しの続き (stop_hook_active) では見ない。 実測の校正 = 本人の発言の直前の返事の 3% ほど。
+
+箱の承認の検査 (2026-11-04、 conventions/mid-turn-text-visibility.md#turn-closing-question-box): turn 終わりの箱 (wrap_up) の ask の
+  欄が、 文面の送信・投稿の承認 (「送ってよいか」「この文面で」) か、 本文にある下書き・案・条件 (「下の案」「推す条件で」) を指す
+  とき、 箱を止める (permissionDecision = deny、 TOOL_MODE に依らない)。 箱の後の本文は本人に見えないことがあり、 本文を読まない
+  承認になる (実測)。 文面と問いは最終の返事の本文に書き、 箱は要約だけで閉じる。
+
 何を見るか (3 つの面、 どれも「本人が読む問い」):
   Stop                      今の turn の最終 assistant 発話のうち**問いの行** (下の Q_RE) と、 その行に続く字下げの深い行
                             (= list item の sub-bullet。 問いの item の中身は sub-bullet に書かれることが多い)。 問いでない行は見ない。
@@ -186,6 +196,44 @@ def notice(words, pointer=None) -> str:
 
 # ── 変える文を見せずに、 原稿の要旨・序論・題・結論の文の変更を問う ─────────────
 
+LINE_MARK = "🧭 返事の本文に原稿の行番号"   # Stop の差し戻しの印
+LINE_RULE = "claude-config/conventions/concise-output.md#locate-by-quote-not-line-number"
+LINE_REF_RE = re.compile(r"(?<![A-Za-z0-9_$\\])L\d{2,5}(?![0-9])|(?<![A-Za-z0-9_])l\.\s?\d{2,5}(?![0-9])|\.tex:\d{1,5}(?![0-9])")
+_FENCE_BLOCK = re.compile(r"^\s*```.*?^\s*```[^\n]*$", re.M | re.S)
+
+
+def line_refs(text: str) -> list:
+    """返事の本文の原稿の行番号の形 (code block と「」『』 の中を除く)、 出現順に 4 つまで。"""
+    body = QUOTED.sub(" ", _FENCE_BLOCK.sub(" ", text or ""))
+    out = []
+    for m in LINE_REF_RE.finditer(body):
+        if m.group(0) not in out:
+            out.append(m.group(0))
+    return out[:4]
+
+
+def line_notice(refs) -> str:
+    return (f"{LINE_MARK} ({'、 '.join(refs)}) があります: 読む人の手元に行番号は無い。 節の名・式の番号・文の書き出しで"
+            f"言い直す短い追記を書く (前の返事は出し直さない。 code の場所の file:行 はそのまま。 正本 = {LINE_RULE})")
+
+
+BOX_MARK = "📨 箱の問いが文面の承認か本文を指しています"
+BOX_RULE = "claude-config/conventions/mid-turn-text-visibility.md#turn-closing-question-box"
+BOX_APPROVAL_RE = re.compile(
+    r"送(?:って|っても|信して|信しても|ります|信します)[^。\n]{0,8}(?:よい|いい|か)"
+    r"|投稿(?:して|しても|します)[^。\n]{0,8}(?:よい|いい|か)"
+    r"|この(?:下書き|文面|文章)で"
+    r"|(?:下|上|本文|返事)の(?:下書き|文面|案|文|推す|条件|答え)"
+    r"|推す(?:条件|答え|案)で")
+
+
+def box_approval_asks(tool_name: str, tool_input) -> list:
+    """箱の ask の欄のうち、 文面の承認か本文の下書き・案・条件を指す問い (箱だけ。 選択肢 UI は見ない)。"""
+    if not (tool_name or "").endswith("__wrap_up"):
+        return []
+    return [a for a in tool_asks(tool_name, tool_input) if BOX_APPROVAL_RE.search(a)]
+
+
 SHOW_RULE = "claude-config/conventions/concise-output.md#show-the-text-being-changed"
 SHOW_MARK = "🗣 変える文が返事にありません"   # Stop の差し戻しの印 (差し戻しの続きで自分の分を見分ける)
 FEEDBACK_PREFIX = "Stop hook feedback"
@@ -313,6 +361,9 @@ def stop_reason(inp: dict, terms, pointer):
     if words:
         parts.append(notice(words, pointer) + "。 前の返事は本人の画面に出ているので本文は出し直さず、 問いの部分だけを普通の語で"
                      "短い追記に書く (符号を残すなら、 何の話かの説明を直後に添える)。 どの語にも説明が既に添えてあるなら、 その旨の 1 行で終了してよい。")
+    refs = line_refs(final) if (final and not rerun) else []
+    if refs:
+        parts.append(line_notice(refs) + "。 原稿の場所でない (code の行・log の行) なら、 その旨の 1 行で終了してよい。")
     units = [] if skip_show else unshown_change_questions(
         (question_units(final) if final else []) + asks, (final or "") + "\n" + boxtext)
     if units:
@@ -360,11 +411,15 @@ def tool_output(inp: dict, terms, pointer):
         return None
     words = find_jargon(text, terms, as_question=True) if terms else []
     units = unshown_change_questions(tool_asks(name, ti), text)
-    if not words and not units:
+    approvals = box_approval_asks(name, ti)
+    if not words and not units and not approvals:
         return None
     msgs = ([notice(words, pointer)] if words else []) + ([show_notice(units)] if units else [])
+    if approvals:
+        msgs.append(f"{BOX_MARK} (「{approvals[0][:40]}」): 箱の後に書く本文は本人に見えないことがある = 本文を読まない承認になる。"
+                    f" 文面・案・条件と問いは最終の返事の本文に書き、 箱は要約だけで閉じる (正本 = {BOX_RULE})")
     mode = os.environ.get("DECISION_QUESTION_JARGON_TOOL_MODE", "notice")
-    if mode == "deny":
+    if mode == "deny" or approvals:
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                        "permissionDecisionReason": "。 ".join(msgs) + "。 問いと選択肢を書き直してから、 もう一度呼ぶ。"}}
     tail = []
@@ -600,6 +655,27 @@ def selftest() -> int:
     check(tool_asks("mcp__ccd_turn__wrap_up", wr) == [], "変える文: 箱の recap は問いとして見ない")
     s = show_notice(uq("要旨と序論の文を変えますか？"))
     check(SHOW_MARK in s and SHOW_RULE in s and "要旨" in s and "今:" in s, "変える文: 注意文に印・区画・正本・対の形")
+    # 本文の行番号 (2026-11-04、 文は合成)
+    check(line_refs("序論の L1071 の文と、 l.119 の書き出しを直しました。 `paper.tex:540` も。") == ["L1071", "l.119", ".tex:540"],
+          "行番号: L のあと 4 桁・l.N・.tex:N を拾う")
+    check(line_refs("L2 ノルムと L1 の評価、 `script.py:42` を直した。 L^2 の空間。") == [],
+          "行番号: 1 桁の L (ノルム)・code の file:行・L^2 は拾わない")
+    check(line_refs("```\nL540: old\n```\n「L540 と言われても」 は例。") == [], "行番号: code block と「」 の中は見ない")
+    ln = line_notice(["L1071"])
+    check(LINE_MARK in ln and LINE_RULE in ln and "節の名" in ln, "行番号: 注意文に印・正本・言い直し方")
+    # 箱の承認 (2026-11-04、 文は合成)
+    def box(ask):
+        return box_approval_asks("mcp__ccd_turn__wrap_up", {"recap": "下書きを作った。", "ask": ask})
+    check(box("この文面で送ってよいですか？") and box("下の案で直しますか？") and box("推す条件で作りますか？")
+          and box("返事の下書きを送りますか？"), "箱の承認: 送信の承認・本文の案・推す条件を指す問い")
+    check(not box("どちらを先に直しますか？") and not box("commit しますか？")
+          and box_approval_asks("AskUserQuestion", {"questions": [{"question": "この文面で送ってよいですか？"}]}) == [],
+          "箱の承認: 文面を指さない問い・選択肢 UI は見ない")
+    out = tool_output({"tool_name": "mcp__ccd_turn__wrap_up",
+                       "tool_input": {"recap": "下書きを作った。", "ask": "この文面で送ってよいですか？"}}, [], None)
+    dec = ((out or {}).get("hookSpecificOutput") or {})
+    check(dec.get("permissionDecision") == "deny" and BOX_MARK in dec.get("permissionDecisionReason", "")
+          and BOX_RULE in dec.get("permissionDecisionReason", ""), "箱の承認: TOOL_MODE に依らず箱を止める")
     print("--- decision-question-jargon selftest:", "PASS" if ok else "FAIL", "---")
     return 0 if ok else 1
 
