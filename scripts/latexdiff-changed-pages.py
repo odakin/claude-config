@@ -9,7 +9,12 @@
     python3 latexdiff-changed-pages.py diff.pdf                         # diff.pdf をその場で絞る
     python3 latexdiff-changed-pages.py diff.pdf --out changed.pdf --keep 1   # 1 頁目 (説明の頁) は必ず残す
     python3 latexdiff-changed-pages.py diff.pdf --list                  # 絞らずに頁番号だけ出す
+    python3 latexdiff-changed-pages.py diff.pdf --render DIR            # 差分の頁の画像と、 色の所の拡大を DIR に書く (PDF は変えない)
     python3 latexdiff-changed-pages.py --selftest
+
+`--render` は、 組版エラー 0・無印 0 の後に変えた所を目で確かめる段 (conventions/latex.md#latexdiff-fine-markup) の画像を作る:
+差分の色がある頁の全体 (`pNN.png`) と、 色の付いた文字・線を段 (2 段組の左右) ごとに縦に近いものでまとめた拡大 (`pNN-K.png`)。
+印の付き方 (足した行の印がずれていないか、 消した式が読めるか) は拡大で見る。 手で頁を切り出して画像にする作業が繰り返し要ったため (実測)。
 
 色の既定 = latexdiff の `--type=UNDERLINE` / `CFONT` / `COLOR` の既定 (追加 = blue `#0000ff`、 削除 = red `#ff0000`)。
 preamble で色を変えた原稿は `--color '#rrggbb'` を繰り返して渡す (渡すと既定を置き換える)。
@@ -62,6 +67,79 @@ def page_has_colors(page, colors) -> bool:
     return False
 
 
+def colored_rects(page, colors) -> list:
+    """差分の色を持つ文字の span と線・矩形の範囲 (fitz.Rect) の一覧。"""
+    import fitz
+    out = []
+    for block in page.get_text("dict").get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                if span.get("text", "").strip() and any(_close(_span_rgb(int(span.get("color", 0))), c) for c in colors):
+                    out.append(fitz.Rect(span["bbox"]))
+    for d in page.get_drawings():
+        if any(_close(d.get(key), c) for key in ("color", "fill") for c in colors):
+            out.append(fitz.Rect(d["rect"]))
+    return out
+
+
+def change_clusters(page, colors, gap: float = 40.0) -> list:
+    """色の範囲を段 (左右) ごとに、 縦の隙間が gap pt 以下のものでまとめた拡大の範囲。 段をまたぐ範囲 (1 段の概要など) は全幅。"""
+    import fitz
+    w, mid = page.rect.width, page.rect.width / 2
+    groups: dict[str, list] = {"L": [], "R": [], "W": []}
+    for r in colored_rects(page, colors):
+        if r.x0 < mid - 5 and r.x1 > mid + 5:
+            groups["W"].append(r)
+        else:
+            groups["L" if (r.x0 + r.x1) / 2 < mid else "R"].append(r)
+    xs = {"L": (8.0, mid + 2), "R": (mid - 2, w - 8.0), "W": (8.0, w - 8.0)}   # 段の境で行の頭・末尾を切らない
+    found: dict[str, list] = {}
+    for key in ("W", "L", "R"):
+        found[key] = []
+        for r in sorted(groups[key], key=lambda r: r.y0):
+            if found[key] and r.y0 - found[key][-1].y1 <= gap:
+                found[key][-1] |= r
+            else:
+                found[key].append(fitz.Rect(r))
+    # 1 段の塊 (概要など) の中の短い span は左右に振り分けられる = 全幅の塊と縦に重なる左右の塊は全幅の塊に入れる
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(found["W"])):
+            for key in ("L", "R"):
+                for r in list(found[key]):
+                    wr = found["W"][i]
+                    if r.y0 <= wr.y1 + gap and r.y1 >= wr.y0 - gap:
+                        found["W"][i] = wr | r      # Rect の |= は名前を付け替えるだけなので、 一覧に書き戻す
+                        found[key].remove(r)
+                        changed = True
+    clips = [fitz.Rect(xs[key][0], max(0, r.y0 - 30), xs[key][1], min(page.rect.height, r.y1 + 24))
+             for key in ("W", "L", "R") for r in found[key]]
+    return sorted(clips, key=lambda r: (r.y0, r.x0))
+
+
+def render_changes(pdf_path: str, colors, outdir: str, zoom: float = 2.2, page_zoom: float = 0.8) -> list[str]:
+    """差分の色がある頁の全体と、 色の所の拡大を PNG に書く。 書いた file の一覧を返す。"""
+    import fitz
+    os.makedirs(outdir, exist_ok=True)
+    doc = fitz.open(pdf_path)
+    written = []
+    try:
+        for i, pg in enumerate(doc):
+            if not page_has_colors(pg, colors):
+                continue
+            p = os.path.join(outdir, f"p{i + 1:02d}.png")
+            pg.get_pixmap(matrix=fitz.Matrix(page_zoom, page_zoom)).save(p)
+            written.append(p)
+            for k, clip in enumerate(change_clusters(pg, colors), 1):
+                q = os.path.join(outdir, f"p{i + 1:02d}-{k}.png")
+                pg.get_pixmap(matrix=fitz.Matrix(zoom, zoom), clip=clip).save(q)
+                written.append(q)
+    finally:
+        doc.close()
+    return written
+
+
 def changed_pages(pdf_path: str, colors) -> tuple[list[int], int]:
     import fitz
     doc = fitz.open(pdf_path)
@@ -111,7 +189,23 @@ def selftest() -> int:
             pass
         else:
             raise AssertionError("bad color accepted")
-    print("selftest: 4 checks ok")
+        # --render: 色のある頁 (2・3) の全体と拡大だけを書く。 2 段の左右に離れた追加は別の拡大になる
+        p = fitz.open(src)
+        pg = p.new_page(); pg.insert_text((60, 100), "left added", color=(0, 0, 1)); pg.insert_text((400, 500), "right added", color=(0, 0, 1))
+        p.save(os.path.join(td, "diff2.pdf")); p.close()
+        rd = os.path.join(td, "views")
+        files = render_changes(os.path.join(td, "diff2.pdf"), cols, rd)
+        names = sorted(os.path.basename(f) for f in files)
+        assert names == ["p02-1.png", "p02.png", "p03-1.png", "p03.png", "p06-1.png", "p06-2.png", "p06.png"], names
+        assert all(os.path.getsize(f) > 0 for f in files)
+        # 全幅の行と、 同じ高さの左右の短い span は 1 枚の拡大にまとまり、 範囲は両方を含む
+        q = fitz.open(); pg = q.new_page()
+        pg.insert_text((60, 200), "a full-width added line that crosses the middle of the page", color=(0, 0, 1))
+        pg.insert_text((60, 215), "left", color=(0, 0, 1)); pg.insert_text((420, 230), "right", color=(0, 0, 1))
+        cl = change_clusters(pg, cols)
+        assert len(cl) == 1 and cl[0].y1 >= 230 and cl[0].y0 <= 190, cl
+        q.close()
+    print("selftest: 6 checks ok")
     return 0
 
 
@@ -122,6 +216,7 @@ def main(argv=None) -> int:
     ap.add_argument("--keep", type=int, action="append", default=[], help="必ず残す頁 (1 始まり、 繰り返し可)")
     ap.add_argument("--color", action="append", default=[], help="差分の色 #rrggbb (繰り返し可、 渡すと既定を置き換える)")
     ap.add_argument("--list", action="store_true", help="絞らずに、 差分の色がある頁番号だけ出す")
+    ap.add_argument("--render", metavar="DIR", help="絞らずに、 差分の頁の画像 (pNN.png) と色の所の拡大 (pNN-K.png) を DIR に書く")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
@@ -135,6 +230,10 @@ def main(argv=None) -> int:
         return 1
     keep = sorted(set(got) | {k for k in a.keep if 1 <= k <= n})
     print("changed", got, "kept", keep, f"of {n}")
+    if a.render:
+        for f in render_changes(a.pdf, colors, a.render):
+            print(f)
+        return 0
     if a.list:
         return 0
     write_pages(a.pdf, keep, a.out or a.pdf)

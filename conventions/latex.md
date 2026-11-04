@@ -175,12 +175,13 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 | 文中の数式 (`$…$`) は、 記号 1 つの変更でも式ごと削除線と下線になり、 長い式は旧と新が横に並んで右の余白からはみ出す (display の式は記号だけに印が付くのに) | latexdiff は文中の数式を 1 語として切る。 `--math-markup` が効くのは数式環境の中だけ | 両側で文中の数式を数式環境で包んでから比べ、 後で `$…$` に戻す (下の `latexdiff-inline-math.py`) |
 | 分数の分子の記号 1 つの変更で、 分数が丸ごと旧と新の 2 つ並ぶ (文中でも display でも) | `\frac{…}{…}` は引数ごと 1 token | 両側で `\frac{A}{B}` を `{A\over B}` に置き換えてから比べる (組版は同じ。 同じ道具の `wrap` がする) |
 | 旧版にだけある display (消した式) が、 隣の新しい display と 1 つの式に混ざり、 `Undefined control sequence` `\MBLOCKRIGHTBRACE` で止まる。 `\left\{` `\right\}` が無印に数えられる | latexdiff が消した式を新しい式の対にし、 消した側の `\right\}` を `\MBLOCKRIGHTBRACE` (定義の無い名前) に置き換えたまま `\DIFdel{…}` に残す。 `\left` / `\right` は印の外に出る | 両側で `\left\{…\right\}` を素の `\{…\}` にしてから比べる (`\max\left\{a,b\right\}` → `\max\{a,b\}`)。 それでも 2 式が混ざる (消した式の token が新しい式の中に `\DIFdel` で残る) なら、 その式を whole の出力から取った「消した式を丸ごと削除 + 新しい式を丸ごと追加」 に置き換える。 ⚠️ `splice` は、 whole の出力で消した式の削除が新しい式の直前にあり、 新しい式がその追加の塊の最後にある形しか扱わない (新しい式の後に文が続く・削除が離れている形は `ValueError`) = この形は自前で置き換える (実測) |
+| <a id="latexdiff-row-insert-shift"></a>複数行の式に行を 1 本足し、 その行と次の行が同じ token で始まる (`&\quad \times \exp…` が 2 行続く) と、 足した行の頭が無印で、 次の行の頭に下線が付く (PDF では次の行が新しく見える)。 組版エラー・無印の検査・読み戻し ([#latexdiff-views-check](#latexdiff-views-check)) はどれも通る | 挿入の位置が token の列の上で一意でない (足した行の頭と次の行の頭が同じ列なので、 挿入を 1 行後ろへずらしても同じ差分になる)。 latexdiff は後ろへずらした位置を選ぶ。 [#latexdiff-eqtree](#latexdiff-eqtree) の比べ方でも同じ (実測) | `diff.tex` で印を足した行へ移す (足した行の頭の token を印に入れ、 次の行の頭を印から外す)。 移す形を正規表現で決めて 1 件でなければ止め、 移した後に組版と読み戻しをやり直す。 見つける手がかりは画像だけ (下の「頁を画像で見る」) |
 
 - 道具 = [`../scripts/latexdiff-fine-fixups.py`](../scripts/latexdiff-fine-fixups.py): `fix diff.tex [--accents 自作名]` が上 3 行を直し、 `splice diff.tex whole.tex --labels eq:a,eq:b` が 4 行目の差し替えをする (`whole.tex` = 同じ入力を `--math-markup=whole` で比べ、 [`latexdiff-strip-dup-labels.py`](../scripts/latexdiff-strip-dup-labels.py) を当てたもの)。 engine ([`latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh)) は `--math-markup 2` のとき `fix` を自動で通す。
 - 文中の数式と分数 = [`../scripts/latexdiff-inline-math.py`](../scripts/latexdiff-inline-math.py): latexdiff の前に両側を `wrap` (文中の数式を環境 `difinlinemath` で包み、 `\frac` を `\over` に)、 latexdiff に `--add-to-config="MATHENV=difinlinemath"` を渡し、 検査の後に `unwrap` (`$…$` に戻す。 丸ごと消した文中の式は latexdiff が display に組み直すので、 文中に戻す)。 ⚠️ 包むときは `\begin{difinlinemath}` の直後に空白を置く — 空白が無いと、 `{` で始まる式の `{…}` を latexdiff が環境の引数と読み、 旧と新の対応が崩れる (実測)。 engine は `--math-markup 3` のとき自動で通す。
 - 順番 = (`wrap`) → latexdiff → `latexdiff-strip-dup-labels.py` → `fix` → (`splice`) → [`check-latexdiff-math-markup.py --scan`](../scripts/check-latexdiff-math-markup.py) (`difinlinemath` も数式として見る) → (`unwrap`) → 組版。 `fix` の前に検査すると、 削除側の comment out を無印として数える。
 - 項目の印 (`\itemtag{…}` のような自作の macro) を new 側にだけ足して差分に番号を付けるときは、 その macro も `--append-safecmd` に足す。 足さないと、 display の中や直前に入った印が `\DIFadd` の外に出て、 無印検査が式の変更として数える (実測)。
-- 組版エラー 0・無印 0 でも、 変えた式の頁を 1 枚画像で見る (消した側の式が正しく読めるか、 形の書き換えが式ごと表示になっているか)。
+- 組版エラー 0・無印 0 でも、 変えた式の頁を 1 枚画像で見る (消した側の式が正しく読めるか、 形の書き換えが式ごと表示になっているか、 足した行の印が隣の行にずれていないか)。 <a id="latexdiff-render-changes"></a>変わった所を読める倍率で見る道具 = [`latexdiff-changed-pages.py --render DIR`](../scripts/latexdiff-changed-pages.py) (差分の色がある頁の全体と、 色の塊ごとの拡大を png に書く。 2 段組の左右の段は別の塊、 段をまたぐ要旨などは 1 枚)。
 - 上の表を当てても直らない原稿 (組版が止まる式が残る、 whole に差し替える式が増えて記号単位にならない) は、 式を latexdiff に渡さない = 次の [#latexdiff-eqtree](#latexdiff-eqtree)。
 
 ## <a id="latexdiff-eqtree"></a>式を latexdiff に渡さず、 構文木で比べる (`latexdiff-eqtree.py`)
@@ -201,6 +202,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 印の検査は印の形しか見ない。 [`../scripts/latexdiff-views-check.py`](../scripts/latexdiff-views-check.py) は `diff.tex` の `\DIFadd` と `\DIFdel` を定義し直して 2 つの文書を組み、 追加だけを残した版を新の版と、 削除だけを残した版を旧の版と、 抽出した文字で比べる (語でなく文字なので、 改行・ハイフン・図の順に左右されない)。 印の作り方に依らないので、 自作の道具にも素の latexdiff にも当てられる。
 
 - 新の側は一致が合格 (数字・括弧・ハイフンを除く)。 合わなければ exit 1。
+- 読み戻しは印の置き場所を見ない — 挿入の位置が一意でない差分は、 印が 1 行ずれても 2 版に同じに読み戻る ([#latexdiff-row-insert-shift](#latexdiff-row-insert-shift))。 合格の後も、 変わった頁を画像で見る ([#latexdiff-render-changes](#latexdiff-render-changes))。
 - 旧の側は読むだけ。 新にしかない display は番号の空行として残り、 新にしかない節と図は label と図そのものが残り、 latexdiff が語の間の空白を追加の側に入れた所は語がつながる (実測)。 出た語がこの 3 つで説明できることを見る。
 - <a id="latexdiff-flatten-bbl"></a>BibTeX の原稿を `latexdiff --flatten` で比べたなら、 2 版も `.bbl` を埋め込んでから渡す — `--flatten` は両版の隣の `.bbl` を差分の本文に埋め込む。 2 版を `\bibliography{…}` のまま渡すと、 道具が 2 版に写すのは差分の側の `.bbl` (埋め込んだ差分に BibTeX を回すと `\bibdata` が無いので空) なので、 2 版に文献表が出ず、 文献表の語の分だけ差が出て落ちる (実測)。 2 版の `\bibliography{…}` をそれぞれの版の `.bbl` の中身で置き換えて渡し、 差分そのものには BibTeX を回さない。
 
