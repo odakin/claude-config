@@ -65,7 +65,7 @@ usage:
     rewrite_follow: {capable, state, upstream, manifest, prepush_stub, forced_update_seen},  # 下記
     repos: {heads: {repo 名: {head, up, prepush}}, stale: [repo 名], no_stub: [repo 名],
             stub_placed, stub_failed,
-            sync: {repo 名: {ahead, ahead_since, behind, behind_since, wip_overlap}}} }   # --repos-root 指定時のみ、 下記
+            sync: {repo 名: {ahead, ahead_since, behind, behind_since, wip_overlap, untracked_block}}} }   # --repos-root 指定時のみ、 下記
 
 書き換えられた履歴への追従 (rewrite_follow、 部品 = lib/git_rewrite_follow.py、 2026-09-29):
   heartbeat repo の remote が force-push で書き換えられた後、 従来の `pull --rebase` は古い commit を新しい履歴に
@@ -102,7 +102,8 @@ repo ごとの点呼 (repos、 --repos-root DIR、 opt-in、 部品 = lib/git_re
     その machine には「揃える対象なし」 に見える。 読む側が「次の回が揃える」 と言わないための欄。 変化は即 commit
   - heads の各 repo の old_branches = 捨てられた履歴の commit を抱えた手元の branch (今の branch を除く。 在る時だけ載る)
   - sync = 書き換えに依らない同期の事実 (sync_facts): 手元にだけ在る commit の数と最古の commit の時刻・遅れている commit の数と
-    最古の commit の時刻・遅れている時に upstream の変更と重なる未 commit の file の数。 在る repo だけ載る。 path は載せない。
+    最古の commit の時刻・遅れている時に upstream の変更と重なる未 commit の file の数・upstream が足す file と同じ名前の untracked の
+    file の数 (untracked_block)。 在る repo だけ載る。 path は載せない。
     reader (check-fleet-status.py) が古さで判定する = 手元にだけ在る commit が何時間も残る (push に失敗した無人の書き手・分岐) /
     最新化を止める未 commit が何時間も残る (持ち主の居ない変更)。 有無の変化は即 commit (essence)、 数と時刻の変化は入れない
   heads は essence に入れない (どこかの repo に commit するたびに beat を commit しないため。 鮮度の上限 = 定期 commit の間隔)。
@@ -663,7 +664,8 @@ def essence(d: dict):
             "repos": {k: (d.get("repos") or {}).get(k) for k in ("stale", "no_stub", "stopped", "events", "error", "fetch_failed")},
             # 同期の事実は「手元にだけ在る commit が在る / 遅れている / 最新化を止める未 commit が在る」 の有無だけ (数・時刻は入れない
             # = commit が積もるたびに beat を commit しない。 現れた・消えた時だけ即 commit = 他の machine の reader に早く届く)
-            "sync": sorted([n, bool(v.get("ahead")), bool(v.get("behind")), bool(v.get("wip_overlap"))]
+            "sync": sorted([n, bool(v.get("ahead")), bool(v.get("behind")), bool(v.get("wip_overlap")),
+                            bool(v.get("untracked_block"))]
                            for n, v in ((d.get("repos") or {}).get("sync") or {}).items()),
         },
         sort_keys=True,
@@ -793,7 +795,10 @@ def _porcelain_paths(z: str):
 def sync_facts(root: Path, names):
     """root/*/ の clone ごとの同期の事実 (判定はしない = reader が古さで判定する): 手元にだけ在る commit の数と最古の commit の時刻
     (ahead / ahead_since)、 upstream にだけ在る commit の数と最古の commit の時刻 (behind / behind_since = どれだけ前から遅れているか)、
-    behind の時に upstream の変更と重なる未 commit の file の数 (wip_overlap)。 ahead が在るか、 behind で重なりが在る repo だけを返す。
+    behind の時に upstream の変更と重なる未 commit の file の数 (wip_overlap) と、 upstream が足す file と同じ名前の untracked の file の数
+    (untracked_block = 中身が同じでも fast-forward・rebase・reset --keep を止める。 origin から切った worktree で出した新しい file の
+    元の写しが典型 = conventions/multi-session-coordination.md#origin-worktree-untracked-copy)。 ahead が在るか、 behind で重なりか
+    untracked の衝突が在る repo だけを返す。
     重なりが在り手元にだけ在る commit が無い repo は、 読むだけの試走 (lib/intersect_sync.trial = 平文の 3-way と両側の行の照合、
     repo には書かない) の verdict を trial に載せ (clean = 道具なら衝突も欠けも無く解ける見込み / conflict ほか = 人が解く)、
     結果を machine-local の記録に足す (source = heartbeat)。 自動で解く道具に同期を繋ぐかは試走の記録を見てから決める。
@@ -831,6 +836,11 @@ def sync_facts(root: Path, names):
                             _is.record(tr, mode="trial", source="heartbeat")
                         except Exception:
                             e["trial"] = "error"
+                _, unt = git(repo, "ls-files", "--others", "--exclude-standard", "-z")
+                _, add = git(repo, "diff", "--name-only", "--diff-filter=A", "-z", "HEAD...@{u}")
+                ub = {x for x in unt.split("\0") if x} & {x for x in add.split("\0") if x}
+                if ub:
+                    e["untracked_block"] = len(ub)
             if e:
                 if behind:
                     e["behind"] = behind
@@ -1286,6 +1296,25 @@ def selftest():
                 assert essence({"repos": {"sync": {"x": {"wip_overlap": 1, "trial": "clean"}}}}) \
                     == essence({"repos": {"sync": {"x": {"wip_overlap": 1, "trial": "conflict"}}}}), "試走の verdict の変化では commit しない"
             git(rc_root / "stale", "checkout", "-q", "--", "f.txt")
+            # upstream が足す file と同じ名前の untracked (中身が同じでも ff を止める) は数が載る。 upstream が足さない untracked は数えない
+            (seed / "added.md").write_text("same\n")
+            git(seed, "add", "added.md")
+            git(seed, "commit", "-q", "-m", "c4")
+            git(seed, "push", "-q", "origin", "main")
+            git(rc_root / "stale", "fetch", "-q")
+            (rc_root / "stale" / "added.md").write_text("same\n")
+            (rc_root / "stale" / "scratch.txt").write_text("mine\n")
+            sy3 = sync_facts(rc_root, ["stale"])
+            assert sy3.get("stale", {}).get("untracked_block") == 1 and "wip_overlap" not in sy3["stale"] \
+                and isinstance(sy3["stale"].get("behind_since"), int), f"upstream が足す file と同じ名前の untracked: {sy3}"
+            assert "added.md" not in json.dumps(sy3), "path は載せない"
+            rc_ff, _ = git(rc_root / "stale", "merge", "--ff-only", "-q", "@{u}")
+            assert rc_ff != 0, "fixture: 同じ中身の untracked でも ff は止まる"
+            (rc_root / "stale" / "added.md").unlink()
+            (rc_root / "stale" / "scratch.txt").unlink()
+            assert "stale" not in sync_facts(rc_root, ["stale"]), "写しを消せば載らない (遅れているだけ)"
+            assert essence({"repos": {"sync": {"x": {"behind": 1}}}}) \
+                != essence({"repos": {"sync": {"x": {"behind": 1, "untracked_block": 1}}}}), "untracked の衝突が現れたら commit する"
             assert essence({"repos": {"sync": {"x": {"ahead": 1, "ahead_since": 1}}}}) \
                 == essence({"repos": {"sync": {"x": {"ahead": 2, "ahead_since": 5}}}}), "数・時刻の変化では commit しない"
             assert essence({"repos": {"sync": {}}}) != essence({"repos": {"sync": {"x": {"ahead": 1}}}}), \

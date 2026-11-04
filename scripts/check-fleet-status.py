@@ -313,6 +313,8 @@ def sync_findings(host, d, now, age_h=0.0):
     - 🟠 遅れて SYNC_BLOCKED_H 時間以上 (遅れの最古の commit の時刻で測る)、 upstream の変更と重なる未 commit が在る = 最新化できない
       (持ち主の居ない変更の疑い。 file の更新時刻は使わない = よく書かれる台帳の file は何日止まっていても新しく見える)。
       writer が読むだけの試走をしていれば (trial = lib/intersect_sync の verdict) その結果を行に添える
+    - 🟠 遅れて SYNC_BLOCKED_H 時間以上、 upstream が足す file と同じ名前の untracked の file が在る (untracked_block) = 中身が
+      同じでも最新化できない。 分岐・重なりの行にも同じ 1 句を添える (origin から切った worktree で出した新しい file の元の写しが典型)
     なぜ (実測): 無人の書き手の commit が本番の機械の clone に閉じ、 同期の止まった表示は session を開かないその機械の上にしか
     出なかった。 毎時の記録は「止まっている」 を載せていたが、 読む側が出していなかった = 人が使っている別の機械に届く面に出す。"""
     rp = d.get("repos") or {}
@@ -327,13 +329,17 @@ def sync_findings(host, d, now, age_h=0.0):
         if name in stopped or not isinstance(v, dict):
             continue
         a, b, k = v.get("ahead") or 0, v.get("behind") or 0, v.get("wip_overlap") or 0
+        u = v.get("untracked_block") or 0
         since, ws = v.get("ahead_since"), v.get("behind_since")
+        unote = (f"。 止めているのは upstream が足す file と同じ名前の untracked の file {u} 件 (中身が同じでも ff・rebase・"
+                 f"reset --keep が止まる) = そのマシンで upstream の版と同じと確かめて消してから揃える"
+                 f" (multi-session-coordination.md#origin-worktree-untracked-copy)" if u else "")
         if a and isinstance(since, (int, float)) and now - since >= SYNC_UNPUSHED_H * 3600:
             if b:
                 out.append(f"🔴 {host}: {name} が upstream と分岐したまま {_ago(now - since)} (手元にだけ在る commit {a}・"
                            f"upstream にだけ在る commit {b}) = 手元の commit は他の machine に届いていない。 そのマシンの clone で"
                            f" git log @{{u}}..HEAD を見て、 退避 → upstream に無い分を載せ直す → 揃える"
-                           f" (multi-session-coordination.md#ordinary-divergence-replay){note}")
+                           f" (multi-session-coordination.md#ordinary-divergence-replay){unote}{note}")
             else:
                 out.append(f"🟠 {host}: {name} に push されていない commit {a} (最古 {_ago(now - since)}前) = 他の machine に"
                            f"届いていない。 そのマシンの clone で git log @{{u}}..HEAD を見て push する (無人の書き手なら push の失敗を"
@@ -345,7 +351,9 @@ def sync_findings(host, d, now, age_h=0.0):
                      else f" [試走: 道具では解けない = {tr}]" if isinstance(tr, str) and tr else "")
             out.append(f"🟠 {host}: {name} が {b} commit 遅れたまま最新化できない (未 commit の変更 {k} file が upstream の変更と"
                        f"重なる、 遅れの最古 {_ago(now - ws)}前) = 持ち主の session に commit させる / 居なければ"
-                       f" multi-session-coordination.md#owner-gone-intersect-sync{tnote}{note}")
+                       f" multi-session-coordination.md#owner-gone-intersect-sync{tnote}{unote}{note}")
+        elif b and u and isinstance(ws, (int, float)) and now - ws >= SYNC_BLOCKED_H * 3600:
+            out.append(f"🟠 {host}: {name} が {b} commit 遅れたまま最新化できない (遅れの最古 {_ago(now - ws)}前){unote}{note}")
     return out
 
 
@@ -689,6 +697,9 @@ def selftest():
             "pr": {"behind": 15, "wip_overlap": 1, "behind_since": now - 44 * h, "trial": "clean"},
             "pc": {"behind": 3, "wip_overlap": 1, "behind_since": now - 13 * h, "trial": "conflict"},
             "fresh_wip": {"behind": 1, "wip_overlap": 2, "behind_since": now - 2 * h},
+            "ub": {"behind": 4, "untracked_block": 1, "behind_since": now - 13 * h},
+            "ed": {"ahead": 1, "ahead_since": now - 20 * h, "behind": 3, "untracked_block": 2},
+            "fresh_ub": {"behind": 1, "untracked_block": 1, "behind_since": now - 2 * h},
             "rw": {"ahead": 2, "ahead_since": now - 50 * h, "behind": 1}}}}
         fs = sync_findings("mini", sb, now)
         assert any(x.startswith("🔴 mini: eo が upstream と分岐したまま 20 時間") and "手元にだけ在る commit 3" in x
@@ -698,9 +709,13 @@ def selftest():
                    and "#owner-gone-intersect-sync" in x and "[試走: 道具なら衝突も欠けも無く解ける見込み]" in x for x in fs), fs
         assert any(x.startswith("🟠 mini: pc が 3 commit") and "[試走: 道具では解けない = conflict]" in x for x in fs), fs
         assert any(x.startswith("🔴 mini: rw の追従が止まっている") for x in fs), fs
-        assert not any(" new " in x or "mini: new" in x or "fresh_wip" in x for x in fs), f"新しいものは出さない: {fs}"
+        assert any(x.startswith("🟠 mini: ub が 4 commit 遅れたまま最新化できない") and "untracked の file 1 件" in x
+                   and "#origin-worktree-untracked-copy" in x for x in fs), fs
+        assert any(x.startswith("🔴 mini: ed が upstream と分岐したまま") and "untracked の file 2 件" in x for x in fs), fs
+        assert not any("untracked" in x for x in fs if "mini: eo " in x or "mini: pr " in x), f"衝突の無い行には添えない: {fs}"
+        assert not any(" new " in x or "mini: new" in x or "fresh_wip" in x or "fresh_ub" in x for x in fs), f"新しいものは出さない: {fs}"
         assert sum("mini: rw" in x for x in fs) == 1, f"stopped の repo は stopped の行だけ: {fs}"
-        assert len(fs) == 5, fs
+        assert len(fs) == 7, fs
         assert sync_findings("mini", {"host": "mini", "repos": {"error": "x"}}, now) == [], "集計の失敗だけの beat は黙る"
         assert sync_findings("mini", {"host": "mini"}, now) == [], "旧 beat (repos 欄なし) は黙る"
         for f_ in d.glob("*.json"):

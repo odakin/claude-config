@@ -357,6 +357,20 @@ classify() {
   return 0
 }
 
+# upstream が足す file と同じ名前の untracked の file を A 行に添える 1 句 (無ければ何も出さない)。 中身が同じでも
+# fast-forward・rebase・reset --keep を止めるのに、 dirty の数にしか現れず、 止めている理由が見えなかった (実測 = origin から
+# 切った worktree で出した新しい file の元の写しが残り、 無人の書き手の rebase が止まり続けた)。 path は手元の表示なので名指す
+# (fleet heartbeat は数だけ)。 規約 = multi-session-coordination.md#origin-worktree-untracked-copy
+_untracked_collide() {
+  local hit n
+  hit="$(comm -12 <(git -c core.quotepath=off diff --name-only --diff-filter=A HEAD...@{u} 2>/dev/null | sort -u) \
+                  <(git -c core.quotepath=off ls-files --others --exclude-standard 2>/dev/null | sort -u))"
+  [ -n "$hit" ] || return 0
+  n="$(printf '%s\n' "$hit" | wc -l | tr -d ' ')"
+  printf '。 upstream が足す file と同じ名前の untracked %s 件 (%s%s) が最新化を止める = upstream の版と cmp で同じと確かめて消してから揃える (conventions/multi-session-coordination.md#origin-worktree-untracked-copy)' \
+    "$n" "$(printf '%s\n' "$hit" | head -3 | tr '\n' ' ' | sed 's/ $//')" "$([ "$n" -gt 3 ] && printf ' 他 %s 件' "$((n - 3))")"
+}
+
 # lock の内側 (diverged): 履歴が書き換えられた repo なら層1 lib で中身で揃える (P 行)、 揃えられなければ A 行。
 # 判定は fetch 済みの remote-tracking ref だけを読む (--no-fetch = §1 の fetch を使う)。 merge / rebase はしない。
 _follow_locked() {
@@ -374,11 +388,12 @@ _follow_locked() {
       F*) printf '%s\n' "$out" | awk -F'\t' '$1=="F"{print "P\t"$2}'; return 0 ;;
       S*) printf '%s\n' "$out" | awk -F'\t' '$1=="S"{print "A\t"$2}'; return 0 ;;
       # 書き換えの痕跡の無い通常の分岐 = 揃えない。 手元にだけ在る commit の数・古さと解き方の節を A 行で渡す
-      D*) printf '%s\n' "$out" | awk -F'\t' -v d="$dirty" '$1=="D"{print "A\t"$2" (dirty="d")"}'; return 0 ;;
+      D*) printf '%s%s\n' "$(printf '%s\n' "$out" | awk -F'\t' -v d="$dirty" '$1=="D"{print "A\t"$2" (dirty="d")"; exit}')" \
+            "$(_untracked_collide)"; return 0 ;;
     esac
   fi
-  printf 'A\t%s: behind=%s ahead=%s dirty=%s (= diverged、 作業前に手動解決。 remote の履歴が書き換えられたなら pull / merge / rebase をせず中身で揃える = python3 %s follow --repo %s/%s)\n' \
-    "$name" "$behind" "$ahead" "$dirty" "${_FOLLOWER:-claude-config/scripts/git-rewrite-follow.py}" "$_DISP" "$name"
+  printf 'A\t%s: behind=%s ahead=%s dirty=%s (= diverged、 作業前に手動解決。 remote の履歴が書き換えられたなら pull / merge / rebase をせず中身で揃える = python3 %s follow --repo %s/%s)%s\n' \
+    "$name" "$behind" "$ahead" "$dirty" "${_FOLLOWER:-claude-config/scripts/git-rewrite-follow.py}" "$_DISP" "$name" "$(_untracked_collide)"
   return 0
 }
 
@@ -390,8 +405,8 @@ _pull_locked() {
   dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"; dirty="${dirty:-0}"
   [ "$behind" -gt 0 ] 2>/dev/null || return 0     # lock を取るまでに誰かが最新化済 = 沈黙
   if [ "$ahead" -gt 0 ]; then
-    printf 'A\t%s: behind=%s ahead=%s dirty=%s (= diverged、 作業前に手動解決)\n' \
-      "$name" "$behind" "$ahead" "$dirty"
+    printf 'A\t%s: behind=%s ahead=%s dirty=%s (= diverged、 作業前に手動解決)%s\n' \
+      "$name" "$behind" "$ahead" "$dirty" "$(_untracked_collide)"
     return 0
   fi
 
@@ -413,7 +428,7 @@ _pull_locked() {
     if _t 20 git merge --ff-only -q '@{u}' >/dev/null 2>&1; then
       printf 'P\t%s (was behind %s)\n' "$name" "$behind"
     else
-      printf 'A\t%s: behind=%s、 ff-merge 失敗 (= 作業前に手動 pull)\n' "$name" "$behind"
+      printf 'A\t%s: behind=%s、 ff-merge 失敗 (= 作業前に手動 pull)%s\n' "$name" "$behind" "$(_untracked_collide)"
     fi
     return 0
   fi
@@ -482,7 +497,7 @@ _pull_locked() {
     ref="$(_stash_ref_of "$stash")"
     if [ -n "$ref" ] && { { [ "$had_staged" -eq 1 ] && _t 20 git stash pop --index -q "$ref" >/dev/null 2>&1; } \
                           || _t 20 git stash pop -q "$ref" >/dev/null 2>&1; }; then
-      printf 'A\t%s: behind=%s、 ff-merge 失敗のため stash を戻した (= 手動解決)\n' "$name" "$behind"
+      printf 'A\t%s: behind=%s、 ff-merge 失敗のため stash を戻した (= 手動解決)%s\n' "$name" "$behind" "$(_untracked_collide)"
     else
       printf 'A\t%s: behind=%s、 ff-merge 失敗、 stash も戻せなかった。 %s\n' \
         "$name" "$behind" "$(_stash_whereabouts "$name" "$stash")"

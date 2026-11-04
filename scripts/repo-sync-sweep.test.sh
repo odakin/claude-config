@@ -418,6 +418,33 @@ line_of "$out" A repoT | grep -q "diverged" && ok "follower 不在なら diverge
 out="$(run)"
 line_of "$out" P repoT | grep -q "追従した" && ok "follower が在れば次の sweep で揃う" || ng "expected P repoT (got: $out)"
 
+echo "=== T22: behind & upstream が足す file と同じ名前の untracked (中身も同じ) → ff が止まり、 A 行がその file を名指す ==="
+RU="$(mk_remote u)"; git_quiet clone -q "$RU" "$ROOT/repoU"
+( cd "$TMP/seed-u" && mkdir -p plans && echo "spec" > "plans/spec §.md" && git_quiet add -A && git_quiet commit -qm "add spec" && git_quiet push -q origin HEAD:main )
+mkdir -p "$ROOT/repoU/plans"; echo "spec" > "$ROOT/repoU/plans/spec §.md"   # origin から切った worktree で出した file の元の写しの形
+echo "scratch" > "$ROOT/repoU/unrelated.txt"
+out="$(run)"
+line_of "$out" A repoU | grep -q "untracked 1 件 (plans/spec §.md)" && line_of "$out" A repoU | grep -q "#origin-worktree-untracked-copy" \
+  && ok "A 行が衝突した untracked を名指す (非 ASCII の path もそのまま)" || ng "expected A repoU untracked 1 件 (got: $out)"
+if line_of "$out" A repoU | grep -q "unrelated.txt"; then ng "upstream が足さない untracked まで名指した"; else ok "upstream が足さない untracked は名指さない"; fi
+rm "$ROOT/repoU/plans/spec §.md"
+out="$(run)"
+line_of "$out" P repoU | grep -q "was behind" && ok "写しを消せば次の sweep で ff" || ng "expected P repoU (got: $out)"
+
+echo "=== T23: 分岐 (手元の commit + upstream の前進) & 同じ名前の untracked → 分岐の A 行にも名指しを添える ==="
+RV="$(mk_remote v)"; git_quiet clone -q "$RV" "$ROOT/repoV"
+( cd "$ROOT/repoV" && echo "mine" > mine.txt && git_quiet add -A && git_quiet commit -qm "local only" )
+( cd "$TMP/seed-v" && echo "new" > added.md && git_quiet add -A && git_quiet commit -qm "add" && git_quiet push -q origin HEAD:main )
+echo "new" > "$ROOT/repoV/added.md"
+out="$(run)"
+line_of "$out" A repoV | grep -q "untracked 1 件 (added.md)" && ok "分岐の A 行にも名指し" || ng "expected A repoV untracked 1 件 (got: $out)"
+out="$(CLAUDE_SYNC_SWEEP_FOLLOWER=/nonexistent/git-rewrite-follow.py run)"
+line_of "$out" A repoV | grep -q "diverged" && line_of "$out" A repoV | grep -q "untracked 1 件 (added.md)" \
+  && ok "follower が無い環境の分岐の A 行にも名指し" || ng "expected A repoV diverged + untracked (got: $out)"
+rm "$ROOT/repoV/added.md"
+out="$(run)"
+if line_of "$out" A repoV | grep -q "untracked"; then ng "写しを消しても名指しが残る"; else ok "写しを消せば名指しは消える"; fi
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ]

@@ -40,6 +40,11 @@ Codex で default branch へ送る `HEAD:<branch>` refspec の execution-permiss
   `--apply` で当て直した形。 台帳を書く道具は live に書く) `[live] <path>: … UNCOMMITTED` の 1 行で知らせる (live には触らない)。
   残すと live は upstream の同じ file の変更と重なり、 session 開始の同期が最新化を止める (実測 = 共有の clone に live copy が
   溜まり、 人が揃えるまで遅れたままだった)。 規約 = [`conventions/multi-session-coordination.md#origin-worktree-live-copy`](../conventions/multi-session-coordination.md#origin-worktree-live-copy)。
+- 新しい file を `--copy` で出し、 `--remove-live-copies` を付けなかったときは、 live の元の file が **untracked** のまま残る。
+  これには `checkout --` が効かず、 upstream に同じ path が入った後は、 中身が同じでも live の fast-forward・rebase・`reset --keep` が
+  止まる (実測 = 毎時の無人の書き手が rebase できず、 commit が手元に積もった)。 その場合の知らせは `[live] <path>: … UNTRACKED` で、
+  origin と bytes が同じで live が fast-forward できるときだけ消して同じ command で追いつく 1 行を出す (道具は live に触らない。
+  規約 = [`#origin-worktree-untracked-copy`](../conventions/multi-session-coordination.md#origin-worktree-untracked-copy))。
 
 exit: 0 = push 済 / 1 = commit 前に止めた (変更なし・検査失敗・hook 拒否) / 2 = rebase 衝突 (push せず、
 worktree を残して path を出す) / 3 = push が retry 後も失敗。
@@ -266,9 +271,25 @@ def commit_from_origin_worktree(live: Path, message: str, copies=(), apply_cmd: 
         # redid the edit here): it now duplicates origin, and the session-start sync will not fast-forward live while it
         # is there (the file overlaps the upstream change). Say so; never touch live from here (measured: such copies
         # piled up in a shared clone until a person reconciled it).
+        # A NEW file is different: its live original is UNTRACKED, `checkout --` cannot remove it ("pathspec did not
+        # match"), and once origin has the path the live clone's fast-forward / rebase / reset --keep stop on it even with
+        # identical bytes (measured: an hourly unattended writer could not rebase and its commits piled up locally). Give
+        # the recipe that removes it only when it equals origin and live can fast-forward, and catches live up in the
+        # same command (a reader of that file in the lagging live never sees it missing).
         hinted = {d for s_, d in copies if remove_live_copies}
         for f in live_copy_paths(live, wt, head, files):
             if f in hinted:
+                continue
+            if git(live, "ls-files", "--error-unmatch", "--", f, check=False).returncode != 0:
+                lq, up = shlex.quote(str(live)), f"origin/{branch}"
+                log(f"[live] {f}: the live tree still holds this new file UNTRACKED (the original of what was just "
+                    f"pushed). `checkout --` does not apply to an untracked file, and while it is there the live clone "
+                    f"cannot fast-forward / rebase / reset --keep onto {up}. Remove it and catch live up in one command: "
+                    f"git -C {lq} show {shlex.quote(up + ':' + f)} | cmp -s - {shlex.quote(str(live / f))} && "
+                    f"git -C {lq} merge-base --is-ancestor HEAD {up} && rm -- {shlex.quote(str(live / f))} && "
+                    f"git -C {lq} merge --ff-only {up} (stops before removing if the bytes differ or live has unpushed "
+                    f"commits; then remove it while aligning: "
+                    f"conventions/multi-session-coordination.md#origin-worktree-untracked-copy)")
                 continue
             log(f"[live] {f}: the live tree still holds this change UNCOMMITTED (a live copy of what was just pushed). "
                 f"Remove your hunk from the live file (no other session's change in it: git -C {shlex.quote(str(live))} "
@@ -440,6 +461,43 @@ def selftest() -> int:
                                          log=lambda m: msgs4.append(m))
         check("no live-copy report when the live file does not hold the pushed change",
               rc == 0 and not any("UNCOMMITTED" in m for m in msgs4))
+
+        # a NEW file written in live and pushed with --copy (no --remove-live-copies): the live original is untracked,
+        # so the report gives the cmp + rm + ff recipe, not `checkout --` (which fails on an untracked path = the foil),
+        # and the recipe leaves live clean at origin with the file tracked
+        p3 = T / "probe3"
+        subprocess.run(["git", "clone", "-q", str(remote), str(p3)], capture_output=True, check=True)
+        sh(p3, "config", "user.email", "t@t"); sh(p3, "config", "user.name", "t")
+        (p3 / "plans").mkdir()
+        (p3 / "plans" / "spec §.md").write_text("spec\n", encoding="utf-8")
+        msgs5 = []
+        rc = commit_from_origin_worktree(p3, "spec\n", copies=[(p3 / "plans" / "spec §.md", "plans/spec §.md")],
+                                         log=lambda m: msgs5.append(m))
+        rep = next((m for m in msgs5 if m.startswith("[live] plans/spec §.md")), "")
+        check("an untracked live original is reported with the rm recipe, not `checkout --`",
+              rc == 0 and "UNTRACKED" in rep and "rm -- " in rep and "checkout --" not in rep.split("`checkout --`", 1)[1])
+        ff_blocked = subprocess.run(["git", "-C", str(p3), "merge", "--ff-only", "origin/main"],
+                                    capture_output=True, text=True).returncode != 0
+        co_fails = subprocess.run(["git", "-C", str(p3), "checkout", "--", "plans/spec §.md"],
+                                  capture_output=True, text=True).returncode != 0
+        recipe = rep.split("in one command: ", 1)[1].split(" (stops before removing", 1)[0] if "in one command: " in rep else ""
+        subprocess.run(["bash", "-c", recipe], capture_output=True)
+        check("the untracked original blocks the fast-forward and `checkout --` fails on it (the foil has teeth); the "
+              "recipe catches live up with the file tracked",
+              ff_blocked and co_fails and recipe and sh(p3, "status", "--porcelain").stdout == ""
+              and sh(p3, "rev-parse", "HEAD").stdout == sh(p3, "rev-parse", "origin/main").stdout
+              and (p3 / "plans" / "spec §.md").read_text(encoding="utf-8") == "spec\n")
+        # the recipe does not remove a copy whose bytes differ from origin
+        (p3 / "plans" / "other.md").write_text("pushed\n", encoding="utf-8")
+        msgs6 = []
+        rc = commit_from_origin_worktree(p3, "other\n", copies=[(p3 / "plans" / "other.md", "plans/other.md")],
+                                         log=lambda m: msgs6.append(m))
+        rep6 = next((m for m in msgs6 if m.startswith("[live] plans/other.md")), "")
+        (p3 / "plans" / "other.md").write_text("pushed\nedited after the push\n", encoding="utf-8")
+        recipe6 = rep6.split("in one command: ", 1)[1].split(" (stops before removing", 1)[0] if "in one command: " in rep6 else ""
+        subprocess.run(["bash", "-c", recipe6], capture_output=True)
+        check("the recipe keeps an untracked copy that no longer equals origin",
+              rc == 0 and recipe6 and (p3 / "plans" / "other.md").read_text(encoding="utf-8").endswith("edited after the push\n"))
 
         # whole-file copy guard: upstream changed the file / the live base carries a foreign unpushed hunk
         sh(other, "pull", "-q")
