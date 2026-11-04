@@ -11,6 +11,13 @@ Where (measured on a desktop install): ~/Library/Application Support/Claude/clau
 <environment uuid>/local_<uuid>.json — fields sessionId (`local_…`), cliSessionId (the transcript id), model, effort,
 title, spawnedFrom.sessionId (the parent's `local_…`), lineageDetached (detached from that parent = no longer its child),
 isArchived, createdAt / lastActivityAt (epoch ms).
+`lineage` = the app's own reading of that parent link, copied from the app's main process (measured on app 4.16336.0;
+recheck = `scripts/claude-app-bundle.py grep --where asar 'initiator:"claude"'`): a `spawnedFrom` with `sideSession`
+true and no user fork is a side session Claude started (initiator "claude"); a fork, or a `spawnedFrom` without
+`sideSession`, is one the user placed (initiator "user"). A session started from a proposal card the user clicked
+carries `sideSession` true as well (measured), so it is a "claude" child. `detach_session` moves only "claude"
+children: `"self"` from the child, or the child's id from its parent (`detachable_by_self` / `detachable_by_parent`,
+= the app's own checks); the user moves a "user" child from the sidebar.
 Read-only, never raises. Env override (tests): CLAUDE_DESKTOP_SESSIONS_DIR (the claude-code-sessions dir).
 """
 from __future__ import annotations
@@ -30,12 +37,50 @@ def root() -> str:
         "~/Library/Application Support/Claude/claude-code-sessions")
 
 
+def lineage(d: dict) -> dict | None:
+    """The app's parent link of a raw record: {parent, kind, initiator, parent_deleted}, or None (top level / detached).
+    kind = side_session / hand_off / fork / suggested_task (the app's names). Mirrors the app (module docstring)."""
+    if not isinstance(d, dict) or d.get("lineageDetached"):
+        return None
+    sid = d.get("sessionId")
+    sf = d.get("spawnedFrom") if isinstance(d.get("spawnedFrom"), dict) else None
+    n = sf if sf and sf.get("sessionId") and sf.get("sessionId") != sid else None
+    r = d.get("forkedFromSessionId") or None
+    r = None if r == sid else r
+    deleted = n.get("deletedParent") if n else None
+    deleted_id = deleted.get("sessionId") if isinstance(deleted, dict) else None
+    if n and n.get("sideSession") and not n.get("userFork") and (r is None or r == n["sessionId"] or r == deleted_id):
+        return {"parent": str(n["sessionId"]), "kind": "hand_off" if n.get("handOff") else "side_session",
+                "initiator": "claude", "parent_deleted": deleted is not None}
+    if r is not None:
+        return {"parent": str(r), "kind": "fork", "initiator": "user", "parent_deleted": False}
+    if n:
+        return {"parent": str(n["sessionId"]), "kind": "suggested_task", "initiator": "user",
+                "parent_deleted": deleted is not None}
+    return None
+
+
+def detachable_by_self(rec: dict | None) -> bool:
+    """`detach_session("self")` in this session would move it to top level (the app refuses a "user" child)."""
+    lin = (rec or {}).get("lineage")
+    return bool(lin) and lin["initiator"] == "claude"
+
+
+def detachable_by_parent(rec: dict | None, parent_local: str) -> bool:
+    """`detach_session(<this session's local id>)` in `parent_local` would move it (the app's isChildSessionOf:
+    a "claude" child of that parent whose parent was not deleted)."""
+    lin = (rec or {}).get("lineage")
+    return (bool(lin) and bool(parent_local) and lin["parent"] == parent_local and lin["initiator"] == "claude"
+            and not lin["parent_deleted"])
+
+
 def _norm(d: dict, path: str) -> dict:
     sf = d.get("spawnedFrom") if isinstance(d.get("spawnedFrom"), dict) else {}
     return {"local_id": str(d.get("sessionId") or ""), "cli_id": str(d.get("cliSessionId") or ""),
             "model": str(d.get("model") or ""), "effort": str(d.get("effort") or ""),
             "title": str(d.get("title") or ""), "parent": str(sf.get("sessionId") or ""),
             "archived": bool(d.get("isArchived")), "detached": bool(d.get("lineageDetached")),
+            "lineage": lineage(d),
             "created_ms": d.get("createdAt") or 0,
             "last_activity_ms": d.get("lastActivityAt") or 0, "path": path}
 
@@ -117,6 +162,36 @@ def selftest() -> int:
                        "spawnedFrom": {"sessionId": "local_parent"}, "lineageDetached": True}, fh)
         check("a record detached from its parent → detached (still names the parent)",
               find(did)["detached"] is True and find(did)["parent"] == "local_parent")
+        check("detached → no lineage, neither side can detach it",
+              find(did)["lineage"] is None and not detachable_by_self(find(did))
+              and not detachable_by_parent(find(did), "local_parent"))
+        check("spawnedFrom without sideSession → a child the user placed (suggested_task): no detach_session",
+              find(lid)["lineage"]["initiator"] == "user" and not detachable_by_self(find(lid))
+              and not detachable_by_parent(find(lid), "local_parent"))
+        # the shape of a session started from a proposal card the user clicked (measured record, ids made up)
+        cid = "local_0123abcd-0000-4000-8000-000000000003"
+        with open(os.path.join(d, cid + ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": cid, "cliSessionId": "0badc0de-3333-4222-8333-444455556666",
+                       "spawnedFrom": {"sessionId": "local_parent", "taskId": "task_0000abcd", "sideSession": True,
+                                       "sharedFolder": True, "name": "w"}}, fh)
+        r = find(cid)
+        check("card-started side session → a claude child: self and its parent can detach it, another session cannot",
+              r["lineage"] == {"parent": "local_parent", "kind": "side_session", "initiator": "claude",
+                               "parent_deleted": False}
+              and detachable_by_self(r) and detachable_by_parent(r, "local_parent")
+              and not detachable_by_parent(r, "local_other") and not detachable_by_parent(r, ""))
+        check("hand-off and user fork follow the app",
+              lineage({"sessionId": "a", "spawnedFrom": {"sessionId": "p", "sideSession": True, "handOff": True}})["kind"]
+              == "hand_off"
+              and lineage({"sessionId": "a", "spawnedFrom": {"sessionId": "p", "sideSession": True, "userFork": True},
+                           "forkedFromSessionId": "p"})["initiator"] == "user"
+              and lineage({"sessionId": "a", "forkedFromSessionId": "q"})["kind"] == "fork"
+              and lineage({"sessionId": "a"}) is None and lineage({"sessionId": "a", "spawnedFrom": {"sessionId": "a"}}) is None)
+        r = lineage({"sessionId": "a", "spawnedFrom": {"sessionId": "p", "sideSession": True,
+                                                      "deletedParent": {"sessionId": "p0"}}})
+        check("a deleted parent: self can still detach, the parent link cannot",
+              r["initiator"] == "claude" and r["parent_deleted"] is True
+              and not detachable_by_parent({"lineage": r}, "p") and detachable_by_self({"lineage": r}))
         r = find("deadbeef")
         check("transcript id prefix → same record", bool(r) and r["local_id"] == lid)
         check("unknown id → None", find("local_ffffffff-0000-4000-8000-000000000009") is None and find("abc") is None)
