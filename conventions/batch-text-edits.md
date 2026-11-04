@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape) + TeX の数式に macro を正規表現で一括挿入するとき (#regex-into-label-keys)
+when: 同一 file に 3 箇所以上の text 置換をまとめて当てるとき (= Edit tool を N 回叩く代わりに script で一括適用するとき) + 編集 tool で source に `\uXXXX` の escape を書くとき (#tool-arg-unicode-escape) + TeX の数式に macro を正規表現で一括挿入するとき (#regex-into-label-keys) + 新しい file を Write で作るとき (#write-overwrites-unread-file)
 category: infra
 summary: plain-text source への一括置換 script の契約 (= (old, new) pair 列 + 各 old は正確に 1 回 match の assert + read→全 assert→全 replace→単一 write) と 9 つの実測失敗モード (assert の verdict は下流の compile/commit に伝わらない / count==1 は match の一意性を保証するが span の十分性は保証しない = 複数行段落の先頭行だけ置換して新旧両方が印字 / 目視で同じでも trailing space で不一致 / count==0 は typo でなく並行編集による適用済みでもありうる / 1 回一致は prefix 形の key (path・識別子) を守らない = 長い別物の先頭に 1 回だけ一致して誤置換、 終端の区切りまで含めるか構文解析した単位で置換 / 挿入型の pair (new が old を含む) は再実行しても count==1 のまま通って二重に入る = 適用済み検査を足す / TARGET が symlink だと test 用の写しは link 越しに実体へ書き、 一時 file + os.replace は link を普通の file に置き換える = 先に実体の path へ解決する / macOS 付属の python 3.9 は 1023 byte を超える多バイト行を source として読めず Non-UTF-8 の SyntaxError で落ちる = 長い文面は別 file に置いて読む / 計算で作った old 〔slice〕 は終点の anchor が前にも在ると空になり `replace('', new)` が全文字の間に挿入して file が数百倍に膨れる = 終点は始点より後ろで探し、 計算した old にも assert old and count==1、 書いた後に行数の桁を見る、 commit gate = scripts/check-degenerate-text.py。 機械化 = scripts/apply-text-pairs.py)
 -->
@@ -67,6 +67,8 @@ open(path, "w", encoding="utf-8").write(txt)
 <a id="tool-arg-escape-reverse"></a>**逆向きの罠 — 同じ編集の引数に `\uXXXX` の表記があると、 日本語が `\uXXXX` で書かれることがある** (実測 1 回): Edit の old と new の両方に正規表現の文字 class (`[\u3040-\u30ff…]`) を含めた編集で、 new に書いた日本語の docstring とコメントが `\u5148\u982d…` の escape 表記で file に入った (Python の docstring は実行時の値が同じなので試験は通り、 source だけが読めなくなった。 別 context の検品が見つけた)。 同じ session の、 その表記を含まない編集の日本語は正しく入っていた。 **escape 表記の行と日本語を 1 つの編集に混ぜない** — escape の行は元の file の行を script で残し (置換の境目を escape の手前に置く)、 日本語は別の編集で書く。 書いた後に、 足した行の escape を数える: `git diff | grep -n '^+.*\\u[0-9a-f]\{4\}'` (元からある escape の行だけが出れば正しい)。
 
 <a id="edit-empty-new-eats-newline"></a>**編集 tool で置換後を空にすると、 直後の改行も消えることがある** (実測): Edit の `new_string` を空にし、 `old_string` が行の途中から行末までだったとき、 次の行が前の行につながった。 行の一部を消すときは、 前後の文字を `old_string` に含めて空でない `new_string` で置き換え、 置換後の file を期待した全文と `cmp` で照合する。 規則保護の gate は、 Edit のこの削除の扱いを再現して結果を判定する (実物と同じ結果を承認済みの候補と照らす)。 commit 時の gate も、 候補と末尾の改行 1 つでもずれた staged を止める (selftest で実測)。
+
+<a id="write-overwrites-unread-file"></a>**新しい file のつもりで Write した path に、 読んでいない既存の file があっても止まらないことがある** (実測): 道具の説明は「読んでいない既存の file への上書きは失敗する」 と言うが、 隣の file の名前から「まだ無い」 と思い込んで書いた先の既存の file (検査の定義) が、 そのまま全文で置き換わった。 結果の文が手がかり = 新しい file なら `File created successfully`、 既存の file なら `has been updated successfully` と出る。 新しい file を書く前に `git ls-files <path>` か `ls <path>` で在るかを見る。 書いた後なら結果の文を読み、 「updated」 なら `git diff -- <path>` で消えた中身を見て `git show HEAD:<path>` から戻し、 足す分を合わせ直す。
 
 ### <a id="zero-count-is-ambiguous"></a>4. count==0 は「typo」とは限らない
 
