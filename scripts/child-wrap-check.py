@@ -1692,7 +1692,7 @@ def selftest() -> int:
         # the person worked in the child's window; the parent then sent more instructions and accepted (measured shape)
         Rw = "20260102T000000Z-claude-0000a1"
         wl, wc = kid("c100000b", [u("2026-01-02T00:00:00Z", "依頼", origin={"kind": "human"}), reply("2026-01-02T00:20:00Z"),
-                                  stop("2026-01-02T00:20:01Z"), u("2026-01-02T00:55:00Z", "3 か所とも直す", origin={"kind": "human"}),
+                                  stop("2026-01-02T00:20:01Z"), u("2026-01-02T00:55:00Z", "ここも同じ形に直して", origin={"kind": "human"}),
                                   reply("2026-01-02T00:57:00Z"), stop("2026-01-02T00:57:01Z"),
                                   peer_uds("2026-01-02T00:58:00Z", "差し戻し: 1 文足して再提出を", bp_l), reply("2026-01-02T01:05:00Z"),
                                   stop("2026-01-02T01:05:01Z")])
