@@ -14,6 +14,10 @@
      行そのものが「直していない」「未確認」「not yet」 などを含む項目 (本人の発言の一覧の節は見ない)
   Q  本人の問い (？ / なぜ / って何 / だっけ / why など) と、 その turn の返事 — 説明・導出・判断の理由は問いへの答えに出やすい
   R  圧縮より前の turn の返事のうち、 問いでない依頼 (「進めて」 など) への返事 — 圧縮の後は手元に無い
+  P  (--delegated のときだけ) 最後の圧縮の後の、 問いでない依頼への返事 — 締めを別の worker に渡したとき
+     (closing-sweep.md#delegated-sweep)。 依頼元はこの返事を context に持つが、 worker は持たない = 既定では出さない。
+     本文は turn の返事を全部つなぐ (Q・R は turn の中の一番長い返事)
+     この返事を worker が並べられず、 会話記録を手で抜き出して読んだ (実測)
   ⏪ = 圧縮より前 (今の context に無い。 全文 = --show <id>)
 
 処分の file (--check FILE) — 1 行 1 候補、 空白区切り、 # から行末は注記:
@@ -28,6 +32,7 @@
   session-reply-knowledge-report.py <session id か先頭の数文字>     # 既定は環境変数 CLAUDE_CODE_SESSION_ID
   session-reply-knowledge-report.py abcd1234 --show Q3                # その候補の返事 (要約の項目) の全文
   session-reply-knowledge-report.py abcd1234 --check dispositions.txt [--base ~/work]
+  session-reply-knowledge-report.py abcd1234 --delegated [--check …]  # 締めを渡された worker が回す (P も並べる・照合する)
   session-reply-knowledge-report.py abcd1234 --json
   session-reply-knowledge-report.py --hook-stop < <Stop hook の JSON>   # 締め (/wrap) の turn で照合が通っていなければ 1 回差し戻す
   session-reply-knowledge-report.py --selftest
@@ -146,11 +151,12 @@ def summary_items(text):
     return items
 
 
-def scan(entries):
-    """候補を時刻順の dict の list で返す (id, kind, ts, pre, head, text)。"""
+def scan(entries, delegated=False):
+    """候補を時刻順の dict の list で返す (id, kind, ts, pre, head, text)。
+    delegated = 最後の圧縮の後の、 問いでない依頼への返事も P として並べる (締めを渡された worker の context には無い)。"""
     bounds = [i for i, e in enumerate(entries) if e.get("type") == "system" and e.get("subtype") == "compact_boundary"]
     last_bound = bounds[-1] if bounds else -1
-    cands, s_n, num = [], 0, {"Q": 0, "R": 0}
+    cands, s_n, num = [], 0, {"Q": 0, "R": 0, "P": 0}
     for n, b in enumerate(bounds):
         ts = entries[b].get("timestamp", "")
         summ = next((e for e in entries[b + 1:b + 8] if e.get("isCompactSummary")), None)
@@ -172,12 +178,13 @@ def scan(entries):
             continue
         pre = i < last_bound
         is_q = bool(QUESTION.search(head))
-        if not is_q and not pre:
+        if not is_q and not pre and not delegated:
             continue
-        kind = "Q" if is_q else "R"
+        kind = "Q" if is_q else ("R" if pre else "P")
         num[kind] += 1
+        # P は渡された worker が返事を全部読む = turn の返事をつなぐ (Q・R は turn の中の一番長い返事)
         cands.append({"id": kind + str(num[kind]), "kind": kind, "ts": entries[i].get("timestamp", ""),
-                      "pre": pre, "head": head, "text": max(texts, key=len)})
+                      "pre": pre, "head": head, "text": "\n\n".join(texts) if kind == "P" else max(texts, key=len)})
     return cands, len(bounds)
 
 
@@ -337,7 +344,7 @@ def report(session, pdirs, args):
         return 2
     cands, n_comp = [], 0
     for p in paths:
-        c, n = scan(load(p))
+        c, n = scan(load(p), delegated=args.delegated)
         cands += c
         n_comp += n
     if args.show:
@@ -367,6 +374,8 @@ def report(session, pdirs, args):
     kinds = [("S", "圧縮の要約が「未決」 と書いた項目 (締めの入力。 要約の文で済ませず、 1 件ずつ今の記録と照らす)"),
              ("Q", "本人の問いと、 その turn の返事"),
              ("R", "圧縮より前の、 問いでない依頼への返事")]
+    if args.delegated:
+        kinds.append(("P", "最後の圧縮の後の、 問いでない依頼への返事 (--delegated = 締めを渡された worker の context に無い)"))
     for kind, title in kinds:
         cs = [c for c in cands if c["kind"] == kind]
         print("%s. %s: %d 件" % (kind, title, len(cs)))
@@ -432,6 +441,10 @@ def selftest():
     q = [c for c in cands if c["kind"] == "Q"][1]
     expect("問いの返事 = turn の中の最長の文", q["text"], "自明な理由: 両辺が同じ対称性の下で同じように変わる。")
     expect("圧縮の後の問いでない依頼は出さない", any(c["head"] == "次も進めて" for c in cands), False)
+    cd, _ = scan(entries, delegated=True)
+    expect("--delegated: 圧縮の後の問いでない依頼は P", [(c["id"], c["head"], c["text"]) for c in cd if c["kind"] == "P"],
+           [("P1", "次も進めて", "進めた\n\n受け取った")])
+    expect("--delegated: ほかの候補の番号は変えない", [c["id"] for c in cd if c["kind"] != "P"], [c["id"] for c in cands])
     expect("slash command の turn は出さない", any(c["head"].startswith("/") for c in cands), False)
     expect("別 session の message は turn にしない", any("Another" in c["head"] for c in cands), False)
     expect("S の項目が要約から出る", any("§4" in c["text"] for c in cands if c["kind"] == "S"), True)
@@ -520,6 +533,8 @@ def main(argv=None):
     ap.add_argument("--check", metavar="FILE", help="処分の file を照合する")
     ap.add_argument("--base", default=".", help="処分の根拠の path の基準 (既定 = 今の dir)")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--delegated", action="store_true",
+                    help="最後の圧縮の後の、 問いでない依頼への返事も P として並べる (締めを渡された worker が回す)")
     ap.add_argument("--strict", action="store_true", help="候補が 1 件でもあれば exit 1")
     ap.add_argument("--hook-stop", action="store_true", help="Stop hook として stdin の JSON を読む (締めの turn で照合が通っていなければ 1 回差し戻す)")
     ap.add_argument("--selftest", action="store_true")
