@@ -20,7 +20,8 @@
   B  先送りの語 (次に…とき・時・際 / 後で / あとで / 次回 / そのうち / いずれ / later / next time) があり、 同じ行に carrier
      (TODO の id = 日付で始まる id / plan / TODO / 掲示板 / thread / request / 期限 / deadline / carrier) が無い
   C  漏れが無いの語 (足した・加えた・記録したものは無い / 記録に無いものは無い / すべて・全部 … 記録済み・入っている / 漏れは無い /
-     nothing new / all … recorded) があり、 同じ行に照合の印 (reply-knowledge / --check / 照合 / 処分) が無い
+     nothing new / all … recorded) があり、 同じ行に照合の印 (reply-knowledge / --check / 照合 / 処分) が無い。
+     引用 (「」『』 か "…") の中に丸ごと収まる語は数えない (型そのものを説明・引用した文 = 自分の信号への誤検出、 実測)
 誤検出は出る (説明の中の「後で」 など)。 1 行ずつ読んで、 A は今 script にして回すか主張を消す、 B は今やるか carrier に載せる、
 C は session-reply-knowledge-report.py の一覧に処分を書いて --check を通してから書き直すか、 主張を消す。
 締めの報告そのものの C は、 報告を書いた後に回し直さないと出ない (締めはこの道具を先に回し、 報告を後で書く)。
@@ -59,9 +60,9 @@ A2_RE = re.compile(INDEP, re.I)
 EV_RE = re.compile(EVIDENCE, re.I)
 B_RE = re.compile(DEFER, re.I)
 CAR_RE = re.compile(CARRIER, re.I)
-NONE_LEFT = (r"((足し|加え|追加し|記録し|書き足し)たもの[はも][^。\n]{0,10}(ありません|無い|ない|無かった|なかった)"
-             r"|記録に無い[^。\n]{0,20}は[^。\n]{0,80}(ありません|無い|ない)"
-             r"|(すべて|全て|全部)[^。\n]{0,30}(記録済み|記録しました|記録できました|記録してあ|入っています|ありました)"
+NONE_LEFT = (r"((足し|加え|追加し|記録し|書き足し)たもの[はも][^。\n」』]{0,10}(ありません|無い|ない|無かった|なかった)"
+             r"|記録に無い[^。\n」』]{0,20}は[^。\n」』]{0,80}(ありません|無い|ない)"
+             r"|(すべて|全て|全部)[^。\n」』]{0,30}(記録済み|記録しました|記録できました|記録してあ|入っています|ありました)"
              r"|(漏れ|抜け|見落とし)[はが](ありません|無い|ない|無かった|なかった)|(これで|以上で)(全部|すべて|全て)"
              r"|\bnothing (new|left|missed)\b|\ball\b[^.\n]{0,40}\b(recorded|captured)\b)")
 C_RE = re.compile(NONE_LEFT, re.I)
@@ -102,6 +103,20 @@ def written_texts(calls):
     return out
 
 
+def _quoted(line, start, end):
+    """match [start, end) が引用 (「」『』 か "…") の中に丸ごと収まるか。 型そのものを説明・引用した文を C から外す
+    (conventions/hook-authoring.md の「自分を説明する文で一度は誤検出する」)。"""
+    depth = 0
+    for ch in line[:start]:
+        if ch in "「『":
+            depth += 1
+        elif ch in "」』" and depth:
+            depth -= 1
+    if depth and not any(ch in "」』" for ch in line[start:end]):
+        return True
+    return line[:start].count('"') % 2 == 1 and '"' not in line[start:end]
+
+
 def scan(items):
     """items = [(ts, where, text)] → findings [(kind, ts, where, line)] (同じ行は 1 回)。"""
     seen, found = set(), []
@@ -117,7 +132,7 @@ def scan(items):
                 kinds.append("A2 根拠の無い独立検査")
             if B_RE.search(line) and not CAR_RE.search(line):
                 kinds.append("B 先送り")
-            if C_RE.search(line) and not CHK_RE.search(line):
+            if not CHK_RE.search(line) and any(not _quoted(line, m.start(), m.end()) for m in C_RE.finditer(line)):
                 kinds.append("C 漏れが無いの主張")
             for k in kinds:
                 key = (k, line[:200])
@@ -174,10 +189,13 @@ def selftest():
         ("t13", "返事", "Nothing new to record from the replies."),
         ("t14", "返事", "誤りは無い。 図は 3 枚ある"),
         ("t15", "返事", "見直して記録した。これで全部です。"),
+        ("t16", "返事", "報告の「新しく足したものはありません」 を拾う網は無かった"),
+        ("t17", "Bash", '("t10", "返事", "中身はノートにあるので、新しく足したものはありません。"),'),
+        ("t18", "返事", "「確認した」 と書いた後、 足したものはありません。"),
     ]
     got = sorted((k[:2], ts) for k, ts, _w, _l in scan(items))
     expect("findings", got, [("A1", "t1"), ("A2", "t1"), ("A2", "t6"), ("B ", "t3"), ("B ", "t8"),
-                             ("C ", "t10"), ("C ", "t11"), ("C ", "t13"), ("C ", "t15")])
+                             ("C ", "t10"), ("C ", "t11"), ("C ", "t13"), ("C ", "t15"), ("C ", "t18")])
     # end to end on a synthetic transcript
     with tempfile.TemporaryDirectory() as d:
         proj = Path(d) / "proj"
