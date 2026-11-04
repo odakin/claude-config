@@ -55,9 +55,14 @@ STOP_OK = re.compile(r"#\s*stop-ok:\s*(.+?)\s*$", re.M)
 # The app's continuation after a compaction ("This session is being continued from a previous conversation …") is a user
 # entry the app writes, not the person's: it carries isCompactSummary (read below); the text is the fallback (measured: the
 # summary read as the person talking kept a wrapped child with no question from being archived).
+# The brief a session started from another session (start_session, or a card the person pressed) opens with is the
+# requester's text, not the person's: it arrives as a plain prompt like the person's (both carry promptSource "sdk",
+# measured), so its header is the marker (measured: a child started from a pressed card had its brief read as the person
+# talking in the child's window, and the archive of the wrapped child was stopped twice).
 NOT_HUMAN = ("<task-notification", "<cross-session-message", "Another Claude session sent a message", "Stop hook feedback",
              "<local-command", "<command-name>", "<command-message>", "<side-sessions-event", "[Request interrupted",
-             "This session is being continued from a previous conversation")
+             "This session is being continued from a previous conversation",
+             "Background (from the session that started this one)")
 TAIL_BYTES = 512 * 1024
 REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 
@@ -404,6 +409,17 @@ def selftest() -> int:
             fh.write(json.dumps({"type": "user", "message": {"content": "This session is being continued from a previous "
                                  "conversation that ran out of context. The summary below"}, "timestamp": "2099-04-02T00:00:00.000Z"}) + "\n")
         ok("the compaction continuation text without the flag is not the person's prompt either", last_human(tr) == ("", ""))
+        with open(tr, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "user", "promptSource": "sdk", "message": {"content":
+                                 "<system-reminder>\nLinked sessions now ...\n</system-reminder>\n"
+                                 "Background (from the session that started this one):\nBoard request r for role x.\n\nTask:\n直して"},
+                                 "timestamp": "2099-04-03T00:00:00.000Z"}) + "\n")
+        ok("the brief of a session started from another session (a pressed card, start_session) is not the person's prompt",
+           last_human(tr) == ("", ""))
+        with open(tr, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "user", "promptSource": "sdk", "message": {"content": "送って"},
+                                 "timestamp": "2099-04-04T00:00:00.000Z"}, ensure_ascii=False) + "\n")
+        ok("... and the person's own prompt with the same promptSource still is", last_human(tr)[1] == "送って")
         for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "BUSY_WORKER_STOP_STATE_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR",
                   "CHILD_WRAP_REPOS_GLOB"):
             os.environ.pop(k, None)
