@@ -38,7 +38,8 @@ of a delimiter (\\pn{..}, ( .. ), \\Big( .. \\Big) are the same bracket), where 
 A pair with little in common (WHOLE_BELOW) is shown whole, old struck + new underlined.  A display
 latexdiff takes out in one place and puts in at another has moved: struck there, underlined here.
 Arguments of macros defined in the preamble are read from \\newcommand, \\renewcommand and
-\\providecommand (protect reads o.tex and n.tex, restore reads diff.tex); \\def and \\let are not read.
+\\providecommand, the aliases \\def\\X{\\Y} and \\let\\X\\Y, and \\def\\X#1#2{..} (protect reads o.tex and
+n.tex, restore reads diff.tex); a \\def with delimited arguments (\\def\\X#1.{..}), \\edef and \\gdef are not read.
 Macros that only wrap a bracket are listed in DELIM_MACRO.
 """
 import contextlib
@@ -263,6 +264,18 @@ def load_macros(text):
             ALIAS[name] = body[1:]
         else:
             USER_NOARG.add(name)
+    # \def\X{\Y} / \def\X{body} / \def\X#1#2{..} (undelimited arguments only) and \let\X\Y / \let\X=\Y
+    for m in re.finditer(r"\\def\s*\\([A-Za-z]+)((?:#\d)*)\s*\{", head):
+        name, n = m.group(1), len(m.group(2)) // 2
+        body = brace_arg(head, m.end() - 1)[0].strip()
+        if n:
+            USER_ARGS[name] = n
+        elif re.fullmatch(r"\\[A-Za-z]+", body):
+            ALIAS[name] = body[1:]
+        else:
+            USER_NOARG.add(name)
+    for m in re.finditer(r"\\let\s*\\([A-Za-z]+)\s*=?\s*\\([A-Za-z]+)", head):
+        ALIAS[m.group(1)] = m.group(2)
     for m in re.finditer(r"\\DeclareMathOperator\*?\s*\{\\([A-Za-z]+)\}", head):
         USER_NOARG.add(m.group(1))
 
@@ -1293,6 +1306,12 @@ def selftest():
             "\\acc{\\DIFdel{f}\\DIFadd{g}}" not in r:
         ok = False
         print("macro from the preamble:", r)
+    load_macros("\\def\\tw#1#2{#1#2}\n\\def\\hh{\\widehat}\n\\let\\sq=\\sqrt\n\\begin{document}")
+    r = diff_seq(parse(r"\tw{a}{b}+\hh{c}+\sq{f}"), parse(r"\tw{a}{d}+\hh{e}+\sq{g}"))
+    if "\\tw{a}{\\DIFdel{b}\\DIFadd{d}}" not in r or "\\hh{\\DIFdel{c}\\DIFadd{e}}" not in r or \
+            "\\sq{\\DIFdel{f}\\DIFadd{g}}" not in r:
+        ok = False
+        print("\\def / \\let from the preamble:", r)
     pic = mark_picture("\\node {$f\\fn{a-b}$};\nx", "\\node {$f\\fn{a-c}$};\nx")
     if "\\DIFdel{b}" not in pic or "\\DIFadd{c}" not in pic or not pic.startswith("\\node {$"):
         ok = False

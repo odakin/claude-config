@@ -54,9 +54,9 @@ DISPLAY_ENVS = ("align", "align*", "equation", "equation*", "gather", "gather*",
 DEF_PREFIXES = ("\\newcommand{", "\\renewcommand{", "\\providecommand{", "\\def",
                 "\\newcommand*{", "\\renewcommand*{", "\\providecommand*{")
 WRAPPER_RE = re.compile(
-    r"^\s*\\(?:re|provide)?newcommand\*?\s*\{\\([A-Za-z]+)\}\s*\[1\]\s*\{\s*"
+    r"^\s*\\(?:(?:re)?new|provide)command\*?\s*\{\\([A-Za-z]+)\}\s*\[1\]\s*\{\s*"
     r"\\begin\{([A-Za-z*]+)\}\s*#1\s*\\end\{\2\}\s*\}", re.M)
-ZEROARG_RE = re.compile(r"^\s*\\(?:re|provide)?newcommand\*?\s*\{\\([A-Za-z]+)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}", re.M)
+ZEROARG_RE = re.compile(r"^\s*\\(?:(?:re)?new|provide)command\*?\s*\{\\([A-Za-z]+)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}", re.M)
 
 
 def derive_macros(text):
@@ -227,6 +227,9 @@ def _selftest():
         ("derived end-to-end", expand(pre + "\\eq{a \\nl b}", w, r),
          pre + "\\begin{equation}a \\\\[2mm] b\\end{equation}"),
     ]
+    w2, r2 = derive_macros("\\providecommand{\\pa}[1]{\\begin{align}#1\\end{align}}\n"
+                           "\\providecommand{\\pb}{\\notag\\\\}\n\\begin{document}\n")
+    dcases.append(("derived from \\providecommand", (w2, r2), ({"pa": "align"}, {"pb": "\\notag\\\\"})))
     for name, got, want in dcases:
         ok = got == want
         bad += not ok

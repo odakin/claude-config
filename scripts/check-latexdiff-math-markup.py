@@ -62,7 +62,7 @@ COLOUR_MACROS = ("red", "blue", "green", "magenta", "cyan", "orange", "yellow")
 MATH_ENVS = ("align", "align*", "equation", "equation*", "gather", "gather*",
              "multline", "multline*", "eqnarray", "eqnarray*", "flalign", "flalign*", "difinlinemath")
 ARGDEF_RE = re.compile(
-    r"^\s*\\(?:re|provide)?newcommand\*?\s*\{?\\([A-Za-z]+)\}?\s*\[(\d+)\](\[[^\]]*\])?", re.M)
+    r"^\s*\\(?:(?:re)?new|provide)command\*?\s*\{?\\([A-Za-z]+)\}?\s*\[(\d+)\](\[[^\]]*\])?", re.M)
 
 
 COMMENT_RE = re.compile(r"(?<!\\)%[^\n]*")
@@ -333,7 +333,12 @@ def _selftest(tex_path=None):
                 print(("PASS " if ok else "FAIL ") + name)
                 if not ok:
                     print("   ", " ".join(eq.split()))
-    total = len(cases) + len(cases2) + 8
+    # \providecommand is read like \newcommand (the pattern once spelled only the non-existent \providenewcommand)
+    ok = ("pv", 1) in _arg_macros("\\providecommand{\\pv}[1]{\\left(#1\\right)}\n\\begin{document}\n")
+    bad += not ok
+    if not ok or "--verbose" in sys.argv:
+        print(("PASS " if ok else "FAIL ") + "\\providecommand is read as an argument macro")
+    total = len(cases) + len(cases2) + 9
     print("%d/%d PASS (%s; safecmd: %d macros; wrappers/row-breaks derived from the preamble)"
           % (total - bad, total, tex_path or "built-in synthetic manuscript",
              safecmd.count(",") + 1))

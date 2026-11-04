@@ -112,7 +112,7 @@ LEAD_SKIP = re.compile(r"\s+|\\label\s*\{[^}]*\}|\\noindent(?![A-Za-z])|\\(?:sma
                        r"\\[vh]space\*?\s*\{[^}]*\}|\\phantomsection(?![A-Za-z])")
 _IT_BODY = (r"(?:\\(?:%s)\s*\{\s*#1\s*\}|\{\s*\\(?:%s)(?![A-Za-z])\s*#1\s*\})"
             % ("|".join(ITALIC_CMDS), "|".join(ITALIC_DECLS)))
-WRAPPER_DEF = re.compile(r"\\(?:(?:re|provide)?newcommand|DeclareRobustCommand)\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?"
+WRAPPER_DEF = re.compile(r"\\(?:(?:(?:re)?new|provide)command|DeclareRobustCommand)\*?\s*\{?\s*\\([A-Za-z@]+)\s*\}?"
                          r"\s*\[1\]\s*\{\s*" + _IT_BODY
                          + r"|\\(?:New|Renew|Provide)DocumentCommand\s*\{?\s*\\([A-Za-z@]+)\s*\}?\s*\{\s*m\s*\}\s*\{\s*"
                          + _IT_BODY + r"|\\def\s*\\([A-Za-z@]+)\s*#1\s*\{\s*" + _IT_BODY)
@@ -699,6 +699,8 @@ def selftest():
     fm, _, _ = check(LEAD.replace(r"\newcommand{\lead}[1]{\textit{#1}}", ""), italic_macros=["lead"])
     expect("--italic-macro names a wrapper the preamble does not define",
            lat("A wrapper macro") in [ln for ln, c, _ in fm if c == "I1"], fm)
+    pw = italic_wrappers("\\providecommand{\\pl}[1]{\\textit{#1}}\n")
+    expect("I1: a wrapper defined with \\providecommand is read like \\newcommand", pw == ["pl"], pw)
     fa, _, _ = check(LEAD, only="ALPW")
     expect("--only without I skips the gate", "I1" not in {c for _, c, _ in fa}, fa)
     with tempfile.TemporaryDirectory() as td:
