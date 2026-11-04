@@ -16,8 +16,12 @@ Why (実測): 見え方や model を直すために、 動いている worker �
     差し戻し・task の通知は数えない) があれば通す = 聞いて答えをもらった後の 2 回目は通る。
   - archive_session で子が busy でないときは、 子が本人とのやりとりの途中かを見る (scripts/child-wrap-check.py の
     owner_reasons = 本人も親も答えていない問い・本人だけが答えられる問い (承認・外部への発信) が残る / 本人が
-    子の窓で発言している = その後の親の message では終わらず、 子が答えてから既定 30 分で終わる)。 該当すれば同じく
+    子の窓で発言している = その後の親の message では終わらず、 子が答えてから既定 10 分で終わる)。 該当すれば同じく
     1 回目は止め、 本人の発言の後は通す (正本 = conventions/multi-session-coordination.md#tidy-after-child-turn-ends)。
+    本人がこの窓 (親の窓) で、 子の理由が始まった時刻 (子の問い・本人の子の窓での最後の発言 = child-wrap-check.py の
+    owner_hold の since) より後に、 子を畳んでよいと言っていれば (CLOSE_WORD = 「閉じていいよ」「畳んで」 など。
+    同じ節が打ち消し・問いなら数えない) 1 回目から通す (実測: 本人の「閉じていいよ」 の 1 分後の archive を、 その言葉が
+    1 回目の止めより前だったために 2 回止めた)。 どの子を指すかは見ない (止めた後の本人の発言で通すのと同じ粒度)。
   - Bash だけ: 本人が直前の発言で止めるよう明示に言ったなら、 command に `# stop-ok: <本人の発言の一部を逐語で>` を
     付けると、 その文字列が本人の最新の発言に在る時に限って 1 回目から通す (逐語でなければ通さない)。
 
@@ -121,8 +125,8 @@ def _human_text(e: dict) -> str:
     return t
 
 
-def last_human(path: str) -> tuple[str, str]:
-    """(timestamp, text) of the person's latest prompt in a transcript, ('', '') when none is found."""
+def human_prompts(path: str) -> list[tuple[str, str]]:
+    """(timestamp, text) of each of the person's prompts in the last TAIL_BYTES of a transcript, in file order."""
     try:
         size = os.path.getsize(path)
         with open(path, "rb") as fh:
@@ -131,8 +135,8 @@ def last_human(path: str) -> tuple[str, str]:
                 fh.readline()
             raw = fh.read().decode("utf-8", "replace")
     except OSError:
-        return "", ""
-    best = ("", "")
+        return []
+    out = []
     for line in raw.splitlines():
         try:
             e = json.loads(line)
@@ -141,10 +145,51 @@ def last_human(path: str) -> tuple[str, str]:
         if not isinstance(e, dict):
             continue
         t = _human_text(e)
-        ts = str(e.get("timestamp") or "")
-        if t and ts >= best[0]:
+        if t:
+            out.append((str(e.get("timestamp") or ""), t))
+    return out
+
+
+def last_human(path: str) -> tuple[str, str]:
+    """(timestamp, text) of the person's latest prompt in a transcript, ('', '') when none is found."""
+    best = ("", "")
+    for ts, t in human_prompts(path):
+        if ts >= best[0]:
             best = (ts, t)
     return best
+
+
+# The person's word in the parent's window that the child may be folded (「閉じていいよ」「畳んで」「片づけて」
+# 「アーカイブして」, measured: 「閉じていいよ」 a minute before the archive, which this guard stopped twice because the
+# word came before its first stop). The word does not count when the rest of its clause negates or asks it
+# (「閉じてはだめ」「閉じてほしくない」「閉じてない」「閉じていい？」「閉じていいのかな」; 「閉じないで」 has no match),
+# nor an English "don't archive". Conservative on purpose: a missed word costs one more stop, a wrong one folds a
+# child the person still works with.
+CLOSE_WORD = re.compile(r"(?:閉じ|とじ|片[づ付]け)(?:て|と|ちゃ)|(?:畳|たた)ん(?:で|ど|じゃ)|アーカイブ(?:し|で)"
+                        r"|(?<![A-Za-z])archive(?![A-Za-z])", re.I)
+CLOSE_NOT_AFTER = re.compile(r"な|は|ほし|欲し|だめ|ダメ|駄目|いけ|いいの|よいの|いいか|よいか|[？?]")
+CLOSE_NOT_BEFORE = re.compile(r"(?:don'?t|do not|not|never)\s+$", re.I)
+CLAUSE_END = re.compile(r"[。．！!\n、,.]")
+
+
+def close_consent(text: str) -> bool:
+    """Whether a prompt says the child may be folded (CLOSE_WORD, not negated or asked in the rest of its clause)."""
+    for m in CLOSE_WORD.finditer(text or ""):
+        tail = CLAUSE_END.split(text[m.end():], 1)[0][:16]
+        if CLOSE_NOT_AFTER.search(tail) or CLOSE_NOT_BEFORE.search(text[max(0, m.start() - 12):m.start()]):
+            continue
+        return True
+    return False
+
+
+def consent_after(path: str, since: str) -> str:
+    """The timestamp of the person's latest prompt in this window, later than `since`, that says the child may be folded
+    ('' when there is none). `since` = when the child's reason to wait started (child-wrap-check.py owner_hold): a word
+    from before the person went on talking with the child, or before its open ask, does not count."""
+    if not since:
+        return ""
+    hits = [ts for ts, t in human_prompts(path) if ts[:19] > since[:19] and close_consent(t)]
+    return max(hits, default="")
 
 
 def busy_targets(ids: list[str]) -> list[dict]:
@@ -258,21 +303,27 @@ def check(inp: dict) -> tuple[int, str]:
 
 def owner_check(inp: dict, ids: list[str]) -> tuple[int, str]:
     """archive_session of an idle child that still owes the person (an ask left open, or the person talking with it
-    after the parent's last message): stopped once, passes after the person speaks in this window
-    (scripts/child-wrap-check.py owner_reasons; rule = CHILD_RULE)."""
+    after the parent's last message): stopped once, passes after the person speaks in this window, and passes at once
+    when the person already said in this window, after the child's reason started, that it may be folded
+    (scripts/child-wrap-check.py owner_hold; rule = CHILD_RULE)."""
     if not (inp.get("tool_name") or "").endswith("__archive_session") or not ids:
         return 0, ""
     try:
         spec = _ilu.spec_from_file_location("child_wrap_check", os.path.join(HERE, "child-wrap-check.py"))
         cw = _ilu.module_from_spec(spec)
         spec.loader.exec_module(cw)
-        reasons = cw.owner_reasons(ids[0])
+        hold = cw.owner_hold(ids[0])
     except Exception:
         return 0, ""  # fail-open
+    reasons = hold.get("reasons") or []
     if not reasons:
         return 0, ""
     sid, key = inp.get("session_id") or "", "owner:" + ids[0]
     st = load_state(sid)
+    if consent_after(inp.get("transcript_path") or "", hold.get("since") or ""):
+        if st.pop(key, None) is not None:
+            save_state(sid, st)
+        return 0, ""
     h_ts, _ = last_human(inp.get("transcript_path") or "")
     if st.get(key) and h_ts and h_ts > st[key]:
         st.pop(key, None)
@@ -283,7 +334,8 @@ def owner_check(inp: dict, ids: list[str]) -> tuple[int, str]:
     return 2, ("🛑 busy-worker-stop-check: 畳もうとした子は、 本人とのやりとりが終わっていないので 1 回目は止めた。\n"
                + "\n".join("  - " + r for r in reasons) + "\n"
                "  判断の問いなら親が子に答えを送ってから畳む (送った後なら同じ操作は通る)。 本人だけが答えられる問い"
-               " (承認・外部への発信) と本人が子と話している途中は、 本人に 1 行で伝えて畳んでよいかを聞く (本人が答えた後なら通る)。"
+               " (承認・外部への発信) と本人が子と話している途中は、 本人に 1 行で伝えて畳んでよいかを聞く (本人が答えた後なら通る。"
+               " 本人がこの窓で、 子の問い・子の窓での最後の発言より後に「閉じていい」 などと言っていれば 1 回目から通る)。"
                " 照合の全体 = `python3 ~/Claude/claude-config/scripts/child-wrap-check.py "
                f"{ids[0]}`。 規約 = {CHILD_RULE}")
 
@@ -378,6 +430,48 @@ def selftest() -> int:
         transcript(("2026-01-01T00:00:00.000Z", "x"), ("2099-01-01T00:00:00.000Z", "それはもういい、畳んで"))
         rc, _ = run("mcp__ccd_session_mgmt__archive_session", {"session_id": idle_local}, sid="L9")
         ok("after the person answered in this window → passes", rc == 0)
+        arch = "mcp__ccd_session_mgmt__archive_session"
+        transcript(("2026-01-01T01:05:00.000Z", "閉じていいよ。ここもおわったら wrap して閉じて"))
+        rc, _ = run(arch, {"session_id": idle_local}, sid="L10")
+        ok("the person said 「閉じていいよ」 in this window after the child's reason started → passes at the first try", rc == 0)
+        for n, said in enumerate(("閉じていい？", "まだ閉じないで", "閉じてはだめ", "閉じてないよ", "閉じていいのかな", "don't archive it")):
+            transcript(("2026-01-01T01:05:00.000Z", said))
+            rc, _ = run(arch, {"session_id": idle_local}, sid=f"L11{n}")
+            ok(f"a negated or asked word ({said}) → blocked as before", rc == 2)
+        transcript(("2026-01-01T01:01:00.000Z", "閉じていいよ"), ("2026-01-01T01:04:00.000Z", "次はこれ"))
+        rc, _ = run(arch, {"session_id": idle_local}, sid="L12")
+        ok("「閉じていいよ」 before the person's last prompt in the child's window → blocked (the person went on talking there)",
+           rc == 2)
+        transcript(("2026-01-01T01:03:00.000Z", "畳んでいいよ"), ("2026-01-01T01:04:00.000Z", "次はこれ"))
+        rc, _ = run(arch, {"session_id": idle_local}, sid="L13")
+        ok("the word after the child's reason, then an unrelated prompt → passes (the word still stands)", rc == 0)
+        ok("close_consent: the words that say fold",
+           all(close_consent(s) for s in ("畳んでいいよ", "アーカイブして", "片づけといて", "閉じちゃって", "archive it", "閉じて大丈夫")))
+        ok("close_consent: not a fold word", not any(close_consent(s) for s in ("ありがとう", "この file を開いて", "")))
+        # The measured scene (the chore conductor, 2026-11-04): the person spoke in the child's window, the child answered and
+        # stopped; 21 minutes later the person said 「閉じていいよ」 in the parent's window and the archive a minute after it
+        # was stopped twice under the 30-minute grace. Timestamps are relative to now (the grace is counted from now).
+        def iso(m: float) -> str:
+            return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - m * 60))
+        sc_local, sc_cli = "local_00000005-0000-4000-8000-000000000000", "c0c0c0c0-0000-4000-8000-00000000000c"
+        with open(os.path.join(ddir, sc_local + ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": sc_local, "cliSessionId": sc_cli, "spawnedFrom": {"sessionId": parent_local}}, fh)
+        with open(os.path.join(pdir, "-w", sc_cli + ".jsonl"), "w", encoding="utf-8") as fh:
+            for e in ({"type": "user", "timestamp": iso(60), "message": {"content": "Background (from the session that started this one): 依頼"}},
+                      {"type": "user", "timestamp": iso(23), "origin": {"kind": "human"}, "message": {"content": "これで承認します"}},
+                      {"type": "assistant", "timestamp": iso(22), "message": {"content": [{"type": "text", "text": "当てました"}]}},
+                      {"type": "system", "subtype": "stop_hook_summary", "timestamp": iso(22)}):
+                fh.write(json.dumps(e, ensure_ascii=False) + "\n")
+        os.environ["CHILD_WRAP_ANSWERED_GRACE_MIN"] = "30"
+        transcript((iso(1), "閉じていいよ。ここもおわったら wrap して閉じて"))
+        rc, _ = run(arch, {"session_id": sc_local}, sid="L14")
+        ok("scene, the old 30-minute grace: 「閉じていいよ」 a minute before → passes at the first try (was stopped twice)", rc == 0)
+        transcript((iso(1), "次はメールを見て"))
+        rc, _ = run(arch, {"session_id": sc_local}, sid="L15")
+        ok("scene, the old 30-minute grace, no word to fold → still blocked (the wait itself is unchanged)", rc == 2)
+        os.environ.pop("CHILD_WRAP_ANSWERED_GRACE_MIN", None)
+        rc, _ = run(arch, {"session_id": sc_local}, sid="L16")
+        ok("scene, the default 10-minute grace: 22 minutes after the child answered → passes with no word", rc == 0)
         rc, _ = run("Bash", {"command": "claude agents --json | head"})
         ok("listing sessions → passes", rc == 0)
         rc, _ = run("Bash", {"command": "git rm b0b0b0b0.txt"})

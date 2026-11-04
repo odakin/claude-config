@@ -1,5 +1,5 @@
 {
-  "_comment": "busy-worker-stop-check.py の「文脈圧縮の要約の続きを本人の発言に数えない」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。",
+  "_comment": "busy-worker-stop-check.py の「文脈圧縮の要約の続きを本人の発言に数えない」 と「本人が親の窓で子を畳んでよいと言った後は、 子の待ちの中でも archive を 1 回目から通す」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。",
   "target": "busy-worker-stop-check.py",
   "run": "python3 {} --selftest",
   "fail_marker": "NG: ",
@@ -10,8 +10,20 @@
      "expect_fail": ["a compaction summary (isCompactSummary) is not the person's prompt"],
      "expect_pass": ["the compaction continuation text without the flag"]},
     {"name": "印の無い要約の続きの文を本人の発言から外さない",
-     "pairs": [["             \"This session is being continued from a previous conversation\")", "             )"]],
+     "pairs": [["             \"This session is being continued from a previous conversation\",\n", ""]],
      "expect_fail": ["the compaction continuation text without the flag"],
-     "expect_pass": ["a compaction summary (isCompactSummary) is not the person's prompt"]}
+     "expect_pass": ["a compaction summary (isCompactSummary) is not the person's prompt"]},
+    {"name": "本人の「閉じていい」 を読まない (直す前の判定)",
+     "pairs": [["    if consent_after(inp.get(\"transcript_path\") or \"\", hold.get(\"since\") or \"\"):\n", "    if False:\n"]],
+     "expect_fail": ["passes at the first try", "scene, the old 30-minute grace: 「閉じていいよ」"],
+     "expect_pass": ["a negated or asked word (閉じていい？)", "scene, the default 10-minute grace"]},
+    {"name": "子の理由が始まる前の言葉も数える",
+     "pairs": [["    hits = [ts for ts, t in human_prompts(path) if ts[:19] > since[:19] and close_consent(t)]", "    hits = [ts for ts, t in human_prompts(path) if close_consent(t)]"]],
+     "expect_fail": ["「閉じていいよ」 before the person's last prompt in the child's window", "archive of an idle child the person is still talking with"],
+     "expect_pass": ["passes at the first try", "a negated or asked word (閉じていい？)"]},
+    {"name": "打ち消し・問いの形も同意と読む",
+     "pairs": [["        if CLOSE_NOT_AFTER.search(tail) or CLOSE_NOT_BEFORE.search(text[max(0, m.start() - 12):m.start()]):", "        if False:"]],
+     "expect_fail": ["a negated or asked word (閉じていい？)", "a negated or asked word (don't archive it)"],
+     "expect_pass": ["close_consent: the words that say fold", "passes at the first try"]}
   ]
 }

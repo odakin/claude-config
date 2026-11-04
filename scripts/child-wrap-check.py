@@ -36,8 +36,9 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
     送っていても数える = 実測: 本人が子の窓で仕事をしている間に親が差し戻しを送り、 その message が本人の最後の発言を
     隠して、 `--wait-due` が本人の発言のすぐ後に「親の番」 と出した。 その前の実測: 親が「wrap して終えて」 と送った
     直後に本人が同じ子に「どうやって消すの？」 と打ち、 子が答えた 2 分後に親が畳んだ)。 子がその発言に答えて問いを
-    残さず turn を終えていれば、 その時刻を添えて出す (子が止まってから ANSWERED_GRACE_MIN 分 〔既定 30、 env
-    CHILD_WRAP_ANSWERED_GRACE_MIN、 `none` = 数え続ける〕、 本人がその窓で話さなければ、 話している途中ではない)
+    残さず turn を終えていれば、 その時刻を添えて出す (子が止まってから ANSWERED_GRACE_MIN 分 〔既定 10、 env
+    CHILD_WRAP_ANSWERED_GRACE_MIN、 `none` = 数え続ける〕、 本人がその窓で話さなければ、 話している途中ではない。
+    既定は持ち主の裁定の値 = DEFAULT_ANSWERED_GRACE_MIN の注釈)
   - wrap の依頼: 親の message のうち wrap を頼む形のもの (wrap_kind = 語の直後の依頼の形。 道具の名前・thread id・
     「」 の引用・「wrap 済み」 などの報告は依頼でない。 実測: 道具の名前を書いただけの報告が依頼と読まれた)。 親が後から
     取り消した (「wrap の依頼は取り消します」) 依頼と、 それより前の子の wrap の起動は数えない
@@ -175,19 +176,24 @@ def wrap_kind(text: str) -> str:
 OWNER_ONLY_ASK = re.compile(r"承認|裁定|許可|同意|送信|送って|送る|投稿|公開|返信|approv|permission|consent|publish"
                             r"|(?<![A-Za-z])(?:send|post)(?![A-Za-z])", re.I)
 ID8 = re.compile(r"^([0-9a-f]{8})\b")
+# Minutes after the child answered the person's last prompt in its window (and left no question) from which that prompt
+# no longer counts as "talking" = the child is the parent's to fold. The default is the owner's ruling: 30 where this was
+# built, then 10 (the owner: a reply is read and the next prompt typed well within 10 minutes; 30 kept a finished child
+# open long after the person had moved on, measured). env CHILD_WRAP_ANSWERED_GRACE_MIN=<minutes> overrides it, `none`
+# keeps counting it (then an answered child is raised as "ask the person").
+DEFAULT_ANSWERED_GRACE_MIN = 10.0
+
+
 def _grace_from_env() -> float | None:
     v = (os.environ.get("CHILD_WRAP_ANSWERED_GRACE_MIN") or "").strip().lower()
     if v in ("none", "off"):
         return None
     try:
-        return float(v) if v else 30.0
+        return float(v) if v else DEFAULT_ANSWERED_GRACE_MIN
     except ValueError:
-        return 30.0
+        return DEFAULT_ANSWERED_GRACE_MIN
 
 
-# Minutes after the child answered the person's last prompt in its window (and left no question) from which that prompt
-# no longer counts as "talking" = the child is the parent's to fold. Default 30 (the owner's ruling where this was built);
-# env CHILD_WRAP_ANSWERED_GRACE_MIN=none keeps counting it (then an answered child is raised as "ask the person").
 ANSWERED_GRACE_MIN: float | None = _grace_from_env()
 ASK_AFTER_MIN = 10  # an "answered" child idle this long is raised once as "ask the person whether to fold" (--hook-stop / --wait-due)
 RAW_ROOTS: list[str] = []  # the --board-root values as given (patterns), repeated in the commands the hooks suggest
@@ -493,21 +499,31 @@ def _called_off(ev: dict, parent: str, sent: list[str] | None = None) -> str:
     return max([ts for ts, frm in ev["peer_unwraps"] if frm == parent] + list(sent or []), default="")
 
 
-def owner_reasons(target: str) -> list[str]:
+def owner_hold(target: str, as_of: str = "") -> dict:
     """Only the person-side reasons to keep a child (an ask left open / the person talking with it): the cheap part
-    of check_child, for the archive guard (scripts/busy-worker-stop-check.py). [] when the child is not found."""
+    of check_child, for the archive guard (scripts/busy-worker-stop-check.py). {"reasons": [...], "since": the latest
+    time a reason starts from (the open ask, the person's last prompt in the child's window), '' with no reason}: the
+    guard lets the archive through when the person said in the parent's window, after `since`, that the child may be
+    folded. `as_of` = read the records up to then (replaying a past scene). No reasons when the child is not found."""
     c = locate(target)
     if not c:
-        return []
-    ev = scan_child(c["path"])
-    out = []
-    ask = open_ask(ev, parent_wait_notes(c["parent_path"], c["local"]), c["parent"])
+        return {"reasons": [], "since": ""}
+    ev = scan_child(c["path"], as_of)
+    reasons, since = [], []
+    ask = open_ask(ev, parent_wait_notes(c["parent_path"], c["local"], as_of), c["parent"])
     if ask:
-        out.append(_ask_text(ask))
-    talking = owner_after_parent(ev, c["parent"])
+        reasons.append(_ask_text(ask))
+        since.append(ask["at"])
+    talking = owner_after_parent(ev, c["parent"], _epoch(as_of) if as_of else None)
     if talking:
-        out.append(_talking_text(talking))
-    return out
+        reasons.append(_talking_text(talking))
+        since.append(talking["at"])
+    return {"reasons": reasons, "since": max(since, key=lambda t: t[:19]) if since else ""}
+
+
+def owner_reasons(target: str) -> list[str]:
+    """The reasons of owner_hold (callers that do not need the time)."""
+    return owner_hold(target)["reasons"]
 
 
 def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since: str = "") -> dict:
@@ -1297,9 +1313,14 @@ def selftest() -> int:
         ok("waited on the person, the person answered in the child's window → no open ask", not r["open_ask"])
         ok("... with no grace (keep counting) the person's answer is the person working there → kept as talking",
            any("話している途中" in x for x in r["reasons"]))
-        ANSWERED_GRACE_MIN = 30
-        ok("... answered long ago (grace 30), wrapped → ok", check_child(ids("answered")[0])["ok"])
+        ANSWERED_GRACE_MIN = DEFAULT_ANSWERED_GRACE_MIN
+        ok("... answered long ago (the default grace), wrapped → ok", check_child(ids("answered")[0])["ok"])
+        ok("... and the archive guard has no reason to keep it (owner_hold: no reasons, no time)",
+           owner_hold(ids("answered")[0]) == {"reasons": [], "since": ""})
         ANSWERED_GRACE_MIN = None
+        hold = owner_hold(ids("answered")[0])
+        ok("owner_hold with no grace: the reason starts from the person's prompt in the child's window",
+           hold["reasons"] and hold["since"] == max(p[0] for p in scan_child(locate(ids("answered")[0])["path"])["said"]))
         r = check_child(ids("overridden")[0])
         ok("waited on the person, only another session answered (reminder first) → kept with the ask", (not r["ok"])
            and r["open_ask"] and any("本人待ち" in x for x in r["reasons"]))
@@ -1449,11 +1470,18 @@ def selftest() -> int:
            ("2026-01-01T01:00:00Z", parent_l) in ev_u["peers"] and ("2026-01-01T01:00:00Z", parent_l) in ev_u["peer_wraps"])
         ok("the person spoke 5 minutes before the parent's wrap request → still 'talking' (the request does not end it)",
            any("話している途中" in x and "では本人の話は終わらない" in x for x in check_child(sf_l, need_wrap=False)["reasons"]))
+        ok("the default grace is the owner's ruling (10 minutes)", DEFAULT_ANSWERED_GRACE_MIN == 10.0)
+        ANSWERED_GRACE_MIN = DEFAULT_ANSWERED_GRACE_MIN
+        ok("... grace 10: 8 minutes after the child answered → still 'talking'",
+           any("話している途中" in x for x in check_child(sf_l, as_of="2026-01-01T01:03:00", need_wrap=False)["reasons"]))
+        ok("... grace 10: 11 minutes after the child answered → not 'talking' (it was still 'talking' under 30)",
+           not any("話している途中" in x for x in check_child(sf_l, as_of="2026-01-01T01:06:00", need_wrap=False)["reasons"]))
+        ok("... owner_hold replays the same scene: 8 minutes → kept from the person's prompt, 11 minutes → nothing",
+           owner_hold(sf_l, as_of="2026-01-01T01:03:00")["since"].startswith("2026-01-01T00:50:00")
+           and owner_hold(sf_l, as_of="2026-01-01T01:06:00") == {"reasons": [], "since": ""})
         ANSWERED_GRACE_MIN = 30
-        ok("... grace 30: 11 minutes after the child answered → still 'talking'",
+        ok("... an explicit grace of 30 (env) still holds at 11 minutes",
            any("話している途中" in x for x in check_child(sf_l, as_of="2026-01-01T01:06:00", need_wrap=False)["reasons"]))
-        ok("... grace 30: an hour after the child answered → not 'talking'",
-           not any("話している途中" in x for x in check_child(sf_l, as_of="2026-01-01T02:00:00", need_wrap=False)["reasons"]))
         ANSWERED_GRACE_MIN = None
         ok("uds: --wait counts from the uds-delivered request", since_for(sf_l, None, st) == req)
         transcript(sf_c, uds_rows[:5] + [stop("2026-01-01T01:05:00Z")])
@@ -1480,7 +1508,7 @@ def selftest() -> int:
         ok("the person spoke in the child's window after the parent's wrap request → kept", (not r["ok"])
            and any("話している途中" in x and "どうやって" in x for x in r["reasons"]))
         ok("... and the child's answer (turn end, no question) is shown", any("答えて turn を終え" in x for x in r["reasons"]))
-        ANSWERED_GRACE_MIN = 30
+        ANSWERED_GRACE_MIN = DEFAULT_ANSWERED_GRACE_MIN
         ok("with a grace (the owner's call), an answered prompt long ago no longer keeps the child", check_child(ids("nowrap")[0])["ok"])
         ANSWERED_GRACE_MIN = None
         transcript(ids("nowrap")[1], talk[:2] + talk[3:])
@@ -1681,6 +1709,10 @@ def selftest() -> int:
         ok("hook-accept: someone else's child → silent", hook_accept(acc, [board], "") == "")
         acc["session_id"] = bp_c
         ok("hook-accept: --extra text rides on the 'fold' line", "聞かない" in hook_accept(acc, [board], "", "畳む前に聞かない"))
+        ANSWERED_GRACE_MIN = DEFAULT_ANSWERED_GRACE_MIN
+        ok("grace 10 (the default): answered 10.5 minutes ago → due",
+           {r["local"]: r for r in finished(bp_l, [board], as_of="2026-01-02T01:10:30")}[cases["said"][0]]["state"] == "due")
+        # the cases below test the 'answered' state itself, so they keep a grace longer than the accept's distance
         ANSWERED_GRACE_MIN = 30
         st30 = {r["local"]: r for r in finished(bp_l, [board])}
         ok("grace 30: the person spoke, the child answered long ago → due", st30[cases["said"][0]]["state"] == "due")
@@ -1703,6 +1735,10 @@ def selftest() -> int:
            w_at["state"] == "answered" and not _settled(w_at))
         ok("grace 30: an hour after the child answered → due",
            {r["local"]: r for r in finished(bp_l, [board], as_of="2026-01-02T02:00:00")}[wl]["state"] == "due")
+        ANSWERED_GRACE_MIN = DEFAULT_ANSWERED_GRACE_MIN
+        ok("grace 10 (the default): the same child 15 minutes after it answered → due",
+           {r["local"]: r for r in finished(bp_l, [board], as_of="2026-01-02T01:12:00")}[wl]["state"] == "due")
+        ANSWERED_GRACE_MIN = 30
         # the parent asked the child to wrap and called it off soon after; the child stopped the run
         Rc = "20260102T000000Z-claude-0000a2"
         cl, cc = kid("c100000c", base + [peer("2026-01-02T01:20:05Z", "wrap skill を起動してください", bp_l),
@@ -1726,7 +1762,7 @@ def selftest() -> int:
         ok("grace 30: the long-answered child is in the 'fold' part, no 'ask' part",
            cases["said"][0] in why30.split("本人を待っている子")[0] and "本人に 1 行で聞く" not in why30)
         ANSWERED_GRACE_MIN = None
-        for v, want in (("none", None), ("", 30.0), ("45", 45.0), ("x", 30.0)):
+        for v, want in (("none", None), ("", 10.0), ("30", 30.0), ("45", 45.0), ("x", 10.0)):
             os.environ["CHILD_WRAP_ANSWERED_GRACE_MIN"] = v
             ok(f"env grace {v!r} → {want}", _grace_from_env() == want)
         os.environ.pop("CHILD_WRAP_ANSWERED_GRACE_MIN", None)
