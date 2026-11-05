@@ -178,6 +178,16 @@ RELAX_FORMS: dict[str, re.Pattern] = {
     "なくても": re.compile(r"なくても\s*(?:よい|良い|いい|構わない|かまわない|足りる|通る|可|済む|済ませ|済み|OK|問題ない|支障ない)"),
     # the guard's own words: "緩和の語" names the list, "緩めない / 緩める位置 / 緩める語" describe the line (measured: every
     # sentence about the guard tripped on them); "規則を緩和する" and "検査を緩める" still count
+    # 「歴史」 historicises when it is said of the document's own text: a rule noun / 以下 / 上記 / この節 as the topic
+    # ("この節の規則は歴史的経緯", "以下は歴史"), a predicate ("歴史として残す", "歴史的記録にすぎない", "歴史扱い"), or a
+    # bare label in parentheses ("(歴史的経緯)"). As an ordinary noun or an artifact's description ("楽器の歴史の年表",
+    # "株価の歴史的な高値", "歴史的な試作の実装", "歴史上の人物名", "(歴史保存)") it passes (measured on the committed
+    # rule-document history: nearly every bare-substring hit was one of these; the one sentence that filed text below it as
+    # not a recipe still stops). Headings keep _HISTORICISING_HEAD.
+    "歴史": re.compile(r"(?:" + _RULE_NOUN + r"|以下|上記|下記|この(?:記述|文|段落|項|表|部分|一覧|規定))(?:の[^。．、]{0,12})?"
+                     r"(?:は|も)[^。．]{0,30}歴史"
+                     r"|歴史(?:的)?[^。．、()（）・]{0,10}?(?:として(?:残|扱|置|保存|記録)|であ(?:る|り|って)|にすぎ|に過ぎ|扱い|に回|へ回|に移|へ移)"
+                     r"|[(（]\s*歴史(?:的(?:経緯|記録|資料|なもの))?\s*[)）]"),
     "緩和": re.compile(r"緩和(?!の語|の項|の位置|の形)"),
     "緩め": re.compile(r"緩め(?!ない|ず|ません|る位置|る語|る言い直し|る変更|る方向|るなら|るのでなければ|た文)"),
 }
@@ -1142,9 +1152,24 @@ def selftest() -> int:
                            ("precedence", "急ぐ deploy を優先する。"),
                            ("a rule revoked", "この節の手順を取り消す。"),
                            ("a revocation noun", "この節の手順は取り消しとする。"),
-                           ("revoked next to a strikethrough", "取り消し線の節は取り消す。")):
+                           ("revoked next to a strikethrough", "取り消し線の節は取り消す。"),
+                           ("a rule filed as history", "この節の規則は歴史的経緯として残す。"),
+                           ("the text below called history", "以下は歴史であり、 現行の手順ではない。"),
+                           ("history as a predicate", "上の手順は歴史として扱う。"),
+                           ("a history label in parentheses", "送信は agent が行う (歴史的経緯)。")):
         check("relaxing position still needs approval: " + name,
               exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is False)
+    # 「歴史」 as an ordinary noun or an artifact's description is not a sentence about the rules (measured: the bare
+    # substring stopped a project line naming a poster of a history timeline)
+    for name, inserted in (("history as a subject matter", "楽器の歴史の年表の原稿を置く。"),
+                           ("a statistic's name", "株価の歴史的な高値を表に出す。"),
+                           ("an artifact's description", "この実装は歴史的な試作で、 公開版の元ではない。"),
+                           ("a person category", "姓の短い語が地名・歴史上の人物名に当たる。"),
+                           ("a list of kinds", "分け方の違い (対象別・問い別・歴史別…) であって、 並べ替えではない。")):
+        check("everyday use of 歴史 passes: " + name,
+              exempt("conventions/deploy.md", doc, doc + "\n" + inserted + "\n") is True)
+    check("a new heading that files the lines under it as history still needs approval",
+          exempt("conventions/deploy.md", doc, doc + "\n## 歴史\n\n送信は agent が行う。\n") is False)
     check("a unit list is judged unit by unit", relax_hit(["様式が改訂されても同じ。", "急ぐ時は deploy してよい。"]) == "してよい")
     # Second round of position rules: "not needed" / "without" and the English everyday words (measured on the
     # committed additions that the first round still sent to approval).
