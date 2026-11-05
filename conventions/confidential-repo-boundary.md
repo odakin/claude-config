@@ -354,9 +354,10 @@ fresh な index に置き、 **全 file が「追加行」 に見える状態**�
 「0」 と記録した (commit の gate は差分が小さいので同じ照合が効いていた = 型は [`shell-env.md#pipefail-grep-q-sigpipe`](shell-env.md#pipefail-grep-q-sigpipe))。
 もう 1 つの形 = **漏洩以外の段が漏洩の段より前にある** runner は、 その段が止めた tree で漏洩の段に届かない
 (SESSION の形・壊れた text の検査が止めた tree を「0」 と記録する作りだった)。 ∴ 棚卸しの道具は
-(1) 走査の前に、 架空の非公開 repo 名を先頭に置いた大きな tree で検出器が拾うかを 1 回確かめ、 拾えなければ台帳に 0 を書かない
+(1) 走査の前に、 架空の非公開 repo 名を先頭に置いた大きな tree で検出器が拾うかを 1 回確かめ、 拾えなければ走査せずに止める
 (2) runner が非 0 で終わったのに漏洩の段の見出しも「漏洩の段を通った」 の 1 行も無いときは「未走査」 と記録する
-(実装 = [`scripts/scan-public-tree.sh`](../scripts/scan-public-tree.sh) の `control_check` と `scan_one`)。
+(3) 台帳は repo ごとの最新の行で読み、 対照が通った回の 0 だけを走査済に数える (= 対照を入れる前の 0 は、 検出器が直った後の回で自動で走査し直される)
+(実装 = [`scripts/scan-public-tree.sh`](../scripts/scan-public-tree.sh) の `control_check` / `scan_one` / `already_scanned`)。
 一般則 = [`docs/convention-design-principles.md#sweep-null-needs-per-form-control`](../docs/convention-design-principles.md#sweep-null-needs-per-form-control)。
 
 <a id="ledger-skips-bypassed-commits"></a>⚠️ 台帳は走査済の repo を HEAD が進んでも見直さない (新しい行は commit の gate が見る前提)。
