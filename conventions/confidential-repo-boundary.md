@@ -19,7 +19,9 @@ summary: 暗号化は中身しか守らない (file 名・commit message・path 
 git-crypt のような透過暗号は **file の中身だけ**を暗号化する。 次はすべて remote に平文で残る:
 
 - **file 名・dir 名** (= ツリーに一覧として見える)
-- **commit message**
+- **commit message**。 暗号化した台帳を更新した commit の要約に、 金額・為替レートがそのまま入りやすい (実測)。
+  止める engine = [`scripts/check-message-amounts.py`](../scripts/check-message-amounts.py) (repo の `.gitattributes` に
+  `filter=git-crypt` があるときだけ見る。 入れる前に `--replay` で過去の message の当たりを数え、 誤検出を確かめる)
 - **追跡されている path そのもの** (`.gitignore` の行を含む)
 - **commit の author 欄 (名前と email)**。 <a id="external-pr-squash-author"></a>外部からの PR を GitHub の squash merge で入れると、
   author は PR を出した人の account の email になる (本人が GitHub で email を非公開にしていないとき。 PR の commit が noreply の email でも同じ。 実測)。

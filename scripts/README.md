@@ -82,6 +82,7 @@
 - **[check-md-tex-copy.py](check-md-tex-copy.py)** — md が正本・TeX が写しのノートで、 写しの文が正本と一致しているか、 写しが古くなっていないかを見る (骨格 raw/ と数式を直した TeX の突き合わせ)。
 - **[check-media-ledger.py](check-media-ledger.py)** — 画像 stream の読取記録 (transcript ledger) に、 読んでいない画像が残っていないかを見る detector。
 - **[check-memory-file-bloat.py](check-memory-file-bloat.py)** — memory file (CLAUDE.md / SESSION.md) の肥大 surface。
+- **[check-message-amounts.py](check-message-amounts.py)** — git-crypt で中身を暗号化する repo の commit message に、 金額・為替レートを平文で入れさせない: commit gate (--commit-msg / --text-file、 違反で exit 1) + 過去の message の replay (--replay、 報告だけ)。
 - **[check-mktemp-template.py](check-mktemp-template.py)** — `mktemp` の template で X の後ろに拡張子を付けた書き方を見つける (BSD/macOS で固定名になる)。
 - **[check-note-quotes.py](check-note-quotes.py)** — Check that a review note's quotations of a manuscript are verbatim and sit on the lines the note cites: every 「…」 (or "…" / “…”) fragment must be a substring of a source file, and a `:NNN「…」` citation must find the fragment on line NNN; --selftest.
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).
