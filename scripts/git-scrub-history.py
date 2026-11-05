@@ -38,6 +38,8 @@
 ## 設定 (JSON。 旧 path の literal を含みうる = repo の外に置く。 repo の中なら警告)
 
   name (必須) / remote / local (手元の clone: plan-current の対象・暗号化し直しの鍵) / branch (既定 main) /
+  base (この commit とその祖先は書き換えない = 消す値が最初に入った commit の親。 sha か ref。 書き換えの範囲 = base..branch。
+  既定 = 無し = 全履歴。 base より下に消す値が残れば verify (2)(5) が落ちる) /
   work (mirror と対応表の置き場。 git の work tree の中なら止まる) / identity_file (下) /
   id_shape (識別子の形の正規表現。 英数字の境界で囲んで使う。 既定は大文字小文字を区別しない = id_shape_ignore_case) /
   id_shape_verify (検証だけに使う緩い形。 既定 = id_shape) / hex_exclusion ("lower" 既定 = 16 進の小文字だけの token は
@@ -68,6 +70,9 @@
 - 改名は `--filename-callback` で行う。 `--file-info-callback` で改名すると後の commit の削除が旧名のまま残り、 消えたはずの
   file が最新の版に復活する (selftest-rewrite が再現を試し、 verify (2)(3) が捕まえる)。
 - filter-repo は `--filename-callback` と `--file-info-callback` を同じ実行で受け付けない = 2 pass。
+- 署名つきの commit (GitHub の画面で merge した commit など) は fast-export で署名が落ち、 中身が同じでもその commit から先の
+  sha が全部変わる (実測: 消す値は最後の数十 commit にしか無いのに、 base 無しでは履歴の 9 割の sha が変わった = 記録に残る旧 sha が
+  ほぼ全部引き直しになる)。 消す値が後ろにしか無いなら base を置く (selftest-rewrite が署名つきの commit で再現を試す)。
 - 検証は置き換えの一覧から独立させる: 識別子は **形** で全 path・全 message・全平文 blob を走査し、 姓は台帳の **全部の姓** で
   走査する。 置き換えと同じ一覧で検証すると、 一覧が見落としたものは検証も見落とす (自己参照)。
 - git の短い hash は識別子の形に当たる = 16 進だけの token は形から外す (既知の識別子の一覧に在るものは外さない)。
@@ -262,7 +267,7 @@ def compose_maps(m1, m2):
 # ---------------------------------------------------------------- config
 
 DEFAULTS = {
-    "name": None, "remote": None, "local": None, "branch": "main", "work": None, "identity_file": None,
+    "name": None, "remote": None, "local": None, "branch": "main", "base": None, "work": None, "identity_file": None,
     "id_shape": None, "id_shape_verify": None, "id_shape_ignore_case": True, "hex_exclusion": "lower",
     "id_replacement": "<ID>", "name_replacement": "<NAME>",
     "path_rules": [], "path_id_token": None, "content_rules": [], "message_rules": [],
@@ -722,6 +727,7 @@ class Work:
         self.map2 = os.path.join(self.dir, f"{n}.pass2.commit-map")
         self.map = os.path.join(self.dir, f"{n}.final.commit-map")  # git-drop-path-history の <name>.commit-map と別の名前
         self.forbidden = self.map + ".forbidden-blobs"
+        self.basef = os.path.join(self.dir, f"{n}.base")  # 設定の base を解いた sha (この commit とその祖先は書き換えない)
         self.vjson = os.path.join(self.dir, f"{n}.verify.json")
         self.vtxt = os.path.join(self.dir, f"{n}.verify.txt")
         self.bundle = os.path.join(self.dir, f"{n}-pre-scrub.bundle")
@@ -736,7 +742,27 @@ class Work:
         if m2 is None:
             raise Stop("commit-map が無い (rehearse の途中で止まった?)")
         m1 = load_map(self.map1) if os.path.isfile(self.map1) else {}
-        return compose_maps(m1, m2)
+        m = compose_maps(m1, m2)
+        if os.path.isfile(self.basef):
+            # base とその祖先は filter-repo が見ない = 表に無い。 同じ sha として数える (verify の unmapped にしない)
+            for c in gits(self.mirror, "rev-list", open(self.basef).read().strip()).split():
+                m.setdefault(c, c)
+        return m
+
+
+def resolve_base(repo, cfg, head):
+    """設定の base を mirror の sha に解く (無ければ None)。 branch の先頭の真の祖先でなければ止まる。"""
+    spec = cfg.get("base")
+    if not spec:
+        return None
+    sha = rev(repo, f"{spec}^{{commit}}")
+    if not sha:
+        raise Stop(f"base {spec} が remote の履歴に無い")
+    if sha == head:
+        raise Stop("base が先頭と同じ = 書き換える commit が無い")
+    if subprocess.run(["git", "-C", repo, "merge-base", "--is-ancestor", sha, head], capture_output=True).returncode != 0:
+        raise Stop(f"base {spec} が {cfg['branch']} の先頭の祖先でない")
+    return sha
 
 
 # ---------------------------------------------------------------- filter-repo callbacks
@@ -826,7 +852,7 @@ def cmd_rehearse(cfg, message_diff=None, out=print):
             raise Stop("reencrypt には local (unlock 済みの clone) が要る")
         rules.clean(b"probe\n")
     os.makedirs(w.dir, exist_ok=True)
-    for f in (w.map1, w.map2, w.map, w.forbidden, w.vjson, w.vtxt):
+    for f in (w.map1, w.map2, w.map, w.forbidden, w.vjson, w.vtxt, w.basef):
         if os.path.exists(f):
             os.remove(f)
     if os.path.exists(w.mirror):
@@ -836,6 +862,7 @@ def cmd_rehearse(cfg, message_diff=None, out=print):
     old = rev(w.mirror, f"refs/heads/{b}")
     if not old:
         raise Stop(f"remote に refs/heads/{b} が無い")
+    since = resolve_base(w.mirror, cfg, old)
     open(w.old, "w").write(old + "\n")
     open(w.remote, "w").write(cfg["remote"] + "\n")
     gits(w.mirror, "update-ref", ANCHOR, old)
@@ -844,6 +871,10 @@ def cmd_rehearse(cfg, message_diff=None, out=print):
     out(f"########## {cfg['name']}")
     out(f"  土台 = remote の {b} {old[:12]} ({gits(w.mirror, 'rev-list', '--count', old).strip()} commits)、 "
         f"ref: " + ", ".join(f"{k} {v}" for k, v in sorted(kinds.items())))
+    if since:
+        open(w.basef, "w").write(since + "\n")
+        out(f"  範囲 = base {since[:12]} より後の {gits(w.mirror, 'rev-list', '--count', f'{since}..{old}').strip()} commit"
+            f" (base とその祖先 {gits(w.mirror, 'rev-list', '--count', since).strip()} commit は sha が変わらない)")
     hist = all_history_paths(w.mirror, old)
     pm, numbered = rules.path_map(hist)
     head_paths = {p for _m, t, _s, p in ls_tree(w.mirror, old) if t == "blob"}
@@ -862,7 +893,8 @@ def cmd_rehearse(cfg, message_diff=None, out=print):
         env = _env({"PATH": str(Path(fr).parent) + os.pathsep + os.environ.get("PATH", ""),
                     "GIT_SCRUB_HISTORY_SELF": SELF, "GIT_SCRUB_HISTORY_CONFIG": cfg["_path"],
                     "GIT_SCRUB_HISTORY_PATHMAP": pmf})
-        base = ["git", "-C", w.mirror, "filter-repo", "--force", "--quiet", "--refs", f"refs/heads/{b}",
+        refs = ([f"^{since}"] if since else []) + [f"refs/heads/{b}"]
+        base = ["git", "-C", w.mirror, "filter-repo", "--force", "--quiet", "--refs", *refs,
                 "--prune-empty", "never", "--prune-degenerate", "never"]
         m1 = {}
         if pm:
@@ -1578,6 +1610,39 @@ def _fx(tmp, crypt_py):
     return remote, src, cfg_d
 
 
+def _fx_base(tmp, signed=False):
+    """base の試験の合成の repo: b1 (きれい) → b2 (消す値) → b3 → b4 (今の版で直した)。 signed = b1 の上に署名の header を持つ
+    commit を 1 つ挟む (GitHub の画面の merge の模型。 署名そのものは検証しない = fast-export が header を落とすかだけを見る)。
+    返り値 = (dir, remote, 作業 clone, base にする commit, 消す値が最初に入った commit)。"""
+    tb = os.path.join(tmp, "base-signed" if signed else "base")
+    os.makedirs(tb)
+    rem, src = os.path.join(tb, "remote.git"), os.path.join(tb, "src")
+    run(["git", "init", "-q", "--bare", "-b", "main", rem])
+    run(["git", "init", "-q", "-b", "main", src])
+    _fx_commit(src, {"a.txt": "clean\n"}, "b1")
+    if signed:
+        raw = (f"tree {rev(src, 'HEAD^{tree}')}\nparent {rev(src, 'HEAD')}\n"
+               "author t <t@example.invalid> 1700000000 +0000\ncommitter t <t@example.invalid> 1700000000 +0000\n"
+               "gpgsig -----BEGIN PGP SIGNATURE-----\n \n c3ludGhldGlj\n -----END PGP SIGNATURE-----\n\nb1s signed\n")
+        sc = gits(src, "hash-object", "-t", "commit", "-w", "--stdin", input=_enc(raw)).strip()
+        gits(src, "update-ref", "refs/heads/main", sc)
+        gits(src, "reset", "-q", "--hard")
+    c_base = rev(src, "HEAD")
+    _fx_commit(src, {"a.txt": "value WIDGET-917 copied\n"}, "b2")
+    c_leak = rev(src, "HEAD")
+    _fx_commit(src, {"b.txt": "more\n"}, "b3 (see b2)")
+    _fx_commit(src, {"a.txt": "value WIDGET-000 synthetic\n"}, "b4 fix")
+    gits(src, "remote", "add", "origin", rem)
+    gits(src, "push", "-q", "origin", "main")
+    return tb, rem, src, c_base, c_leak
+
+
+def _fx_base_cfg(tb, rem, src, base):
+    return {"name": "bx", "remote": rem, "local": src, "work": os.path.join(tb, "work"), "id_shape": None,
+            "scrub_ids": False, "scrub_names": False, "scrub_path_refs": False,
+            "content_rules": [{"literal": "WIDGET-917 copied", "to": "WIDGET-000 synthetic"}], "base": base}
+
+
 def _write_cfg(tmp, d, name="cfg.json"):
     p = os.path.join(tmp, name)
     json.dump(d, open(p, "w"), ensure_ascii=False)
@@ -1592,12 +1657,16 @@ def _sim_rewrite(cfg, *, resurrect=False, skip_msg_scrub=None):
     os.makedirs(w.dir, exist_ok=True)
     if os.path.exists(w.mirror):
         shutil.rmtree(w.mirror)
-    for f in (w.map1, w.map2, w.map, w.vjson):
+    for f in (w.map1, w.map2, w.map, w.vjson, w.basef):
         if os.path.exists(f):
             os.remove(f)
     run(["git", "clone", "-q", "--mirror", cfg["remote"], w.mirror])
     repo, b = w.mirror, cfg["branch"]
     old = rev(repo, f"refs/heads/{b}")
+    since = resolve_base(repo, cfg, old)
+    below = set(gits(repo, "rev-list", since).split()) if since else set()
+    if since:
+        open(w.basef, "w").write(since + "\n")
     open(w.old, "w").write(old + "\n")
     open(w.remote, "w").write(cfg["remote"] + "\n")
     gits(repo, "update-ref", ANCHOR, old)
@@ -1607,6 +1676,8 @@ def _sim_rewrite(cfg, *, resurrect=False, skip_msg_scrub=None):
     cmap, cache, ghosts, prev = {}, {}, {}, {}
     idx = os.path.join(w.dir, "sim-index")
     for c in gits(repo, "rev-list", "--reverse", "--topo-order", old).split():
+        if c in below:
+            continue  # filter-repo の --refs ^base と同じ = 表に載せない (commit_map が同じ sha として数える)
         entries = {}
         cur = {}
         for mode, typ, sha, p in ls_tree(repo, c):
@@ -1640,7 +1711,7 @@ def _sim_rewrite(cfg, *, resurrect=False, skip_msg_scrub=None):
             msg = scr.scrub(msg, "message")
         args = ["commit-tree", tree]
         for p in parents:
-            args += ["-p", cmap[p]]
+            args += ["-p", cmap.get(p, p)]
         cenv = _env({"GIT_AUTHOR_NAME": an, "GIT_AUTHOR_EMAIL": ae, "GIT_AUTHOR_DATE": ad, "GIT_COMMITTER_NAME": cn,
                      "GIT_COMMITTER_EMAIL": ce, "GIT_COMMITTER_DATE": cd})
         cmap[c] = gits(repo, *args, "-F", "-", input=_enc(msg), env=cenv).strip()
@@ -1895,6 +1966,27 @@ def selftest():
         json.dump(dict(json.load(open(w.vjson)), config="x"), open(w.vjson, "w"))
         out = []
         check("push-command: 検証の後に設定が変わったら止まる", cmd_push_command(cfg_b, out=out.append) == 1)
+
+        # --- base (この commit とその祖先は書き換えない)
+        tb, rem_x, src_x, c_b1, c_b2 = _fx_base(tmp)
+        cfg_bd = _fx_base_cfg(tb, rem_x, src_x, c_b1)
+        cfg_bb = _write_cfg(tb, cfg_bd)
+        _old_x, cmap_x = _sim_rewrite(cfg_bb)
+        out = []
+        okx = cmd_verify(cfg_bb, out=out.append)
+        mx = Work(cfg_bb).commit_map()
+        check("base: base とその祖先は sha が変わらず、 後ろだけが書き換わって verify PASS",
+              okx and mx.get(c_b1) == c_b1 and mx.get(c_b2) not in (None, c_b2) and c_b1 not in cmap_x, " | ".join(out[-3:]))
+        check("base: commit_map は base の下を同じ sha として数える (verify の unmapped = 0)",
+              any("unmapped=0" in x for x in out), " | ".join(out[:3]))
+        verify_fails("base: 消す値の入った commit を base の下に置くと verify が落ちる",
+                     _write_cfg(tb, dict(cfg_bd, base=c_b2), "cfg-bad.json"), "FAIL")
+        for bad, label in (("f" * 40, "履歴に無い base"), ("refs/heads/main", "先頭と同じ base")):
+            try:
+                _sim_rewrite(_write_cfg(tb, dict(cfg_bd, base=bad), "cfg-x.json"))
+                check(f"base: {label} で止まる", False)
+            except Stop:
+                check(f"base: {label} で止まる", True)
     print(f"selftest: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
     return 1 if fails else 0
 
@@ -1947,6 +2039,21 @@ def selftest_rewrite():
         head2 = {p for _m, _t, _s, p in ls_tree(lesson, "refs/heads/main")}
         print(f"  info: file-info-callback で改名すると削除が旧名のまま → 消した file が"
               f" {'復活した (教訓どおり)' if any(p.startswith('people/s-a/') for p in head2) else '復活しない (filter-repo が変わった?)'}")
+        # --- base: 署名つきの commit より後だけを書き換える
+        tb, rem_x, src_x, c_base, c_leak = _fx_base(tmp, signed=True)
+        cfg_x = _write_cfg(tb, _fx_base_cfg(tb, rem_x, src_x, c_base))
+        out = []
+        rc = cmd_rehearse(cfg_x, out=out.append)
+        mx = Work(cfg_x).commit_map()
+        check("base: rehearse (filter-repo の --refs ^base) → verify PASS、 署名つきの base とその祖先の sha は変わらない",
+              rc == 0 and mx.get(c_base) == c_base and mx.get(c_leak) not in (None, c_leak), " | ".join(out[-6:]))
+        check("base: 公開する対応表 (元 → 最終) は書き換えた commit だけ (base の下は載せない)",
+              c_base not in load_map(Work(cfg_x).map) and c_leak in load_map(Work(cfg_x).map))
+        cfg_n = _write_cfg(tb, dict(_fx_base_cfg(tb, rem_x, src_x, None), name="bnone"), "cfg-nobase.json")
+        cmd_rehearse(cfg_n, out=lambda *_a, **_k: None)
+        mn = Work(cfg_n).commit_map()
+        print(f"  info: base 無しでは、 中身の変わらない署名つきの commit の sha が"
+              f" {'変わる (教訓どおり = base を置く理由)' if mn.get(c_base) not in (None, c_base) else '変わらない (fast-export が変わった?)'}")
     print(f"selftest-rewrite: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
     return 1 if fails else 0
 
