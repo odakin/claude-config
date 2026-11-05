@@ -149,6 +149,19 @@ out="$(run "$ST10" --repo "$CLEAN")"; rc=$?
 printf '%s' "$out" | grep -q '台帳に走査済' && check ng "T10b: skip で素通りしない" || check ok "T10b: skip で素通りしない"
 rm -f "$CLEAN/.claude/public-tree-accept.txt"
 
+# ---- (12) 台帳は repo ごとの最新の行で読む (2026-11-05): 古い 0 の後に finding を記録したら、
+# 次の回は skip しない (= 「どこかの行が 0」 で skip すると、 新しく見つけた finding が次の回から隠れる) ----
+ST12="$T/state12"
+out="$(run "$ST12" --repo "$DIRTY")"; rc=$?
+[ "$rc" -eq 1 ] && check ok "T12: finding を記録する" || check ng "T12: finding を記録する (rc=$rc)"
+# 台帳の path は scanner が書いた形 (macOS の /private 付き) をそのまま使い、 その前に古い 0 の行を置く
+REC_PATH="$(awk -F'\t' 'NR == 1 { print $1 }' "$ST12/public-tree-scan.tsv" 2>/dev/null)"
+{ printf '%s\tdeadbeef\t2026-09-15\t0\n' "$REC_PATH"; cat "$ST12/public-tree-scan.tsv"; } > "$ST12/ledger.new" \
+  && mv "$ST12/ledger.new" "$ST12/public-tree-scan.tsv"
+out="$(run "$ST12" --repo "$DIRTY")"; rc=$?
+printf '%s' "$out" | grep -q '台帳に走査済' \
+  && check ng "T12b: 最新の行が finding なら古い 0 で skip しない" || check ok "T12b: 最新の行が finding なら古い 0 で skip しない"
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ] || exit 1
