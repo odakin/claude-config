@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# commit-msg-leak-guard-runner.sh — git commit-msg hook（BLOCK mode）: 全 repo = 学生の識別子 (2026-09-29) + 個人層が宣言すれば検出語 (sensitive-terms.txt) / 公開 repo = leak 検出 (2026-05-26 追加。 shared matcher library を source。 claude-code 2.1.x harness invoke bug の修復 option B）
+# commit-msg-leak-guard-runner.sh — git commit-msg hook（BLOCK mode）: 全 repo = 学生の識別子 (2026-09-29) + 個人層が宣言すれば検出語 (sensitive-terms.txt) + git-crypt の repo なら金額・為替レート (2026-11-04) / 公開 repo = leak 検出 (2026-05-26 追加。 shared matcher library を source。 claude-code 2.1.x harness invoke bug の修復 option B）
 # commit-msg-leak-guard-runner.sh — git native commit-msg hook (BLOCK mode)
 #
 # 正本: claude-config/scripts/commit-msg-leak-guard-runner.sh (layer 1)
@@ -26,7 +26,8 @@
 # Gating: Stage 0 (学生の識別子、 2026-09-29) は全 repo で走る = private repo にも
 #   `install-public-commit-msg.sh --any-repo` が同じ stub を置く。 Stage 0b (検出語) は
 #   marker 不在の repo で、 個人層の `commit-msg-literal-scope.txt` に `all` の行があるときに走る
-#   (下の Stage 0b の節)。 Stage 1 以降 (公開 repo の leak 検出) は `.claude/public-repo.marker`
+#   (下の Stage 0b の節)。 Stage 0c (金額・為替レート) は全 repo で engine を呼び、 engine が git-crypt の
+#   repo だけを見る (下の Stage 0c の節)。 Stage 1 以降 (公開 repo の leak 検出) は `.claude/public-repo.marker`
 #   を持つ repo だけ = 本 runner の marker の safety net が marker 不在の repo を Stage 0b の後で
 #   silent pass させる。
 #
@@ -130,6 +131,29 @@ EOF
         fi
       fi
     fi
+  fi
+fi
+
+# ----------------------------------------------------------------------
+# Stage 0c (2026-11-04、 全 repo の stub。 範囲は engine が決める): 金額・為替レートが message に入っていないか。
+# git-crypt で中身を暗号化する repo でも commit message は平文で remote に載る = 額やレートを要約として書くと
+# そこで平文になる。 engine = check-message-amounts.py (範囲 = repo の .gitattributes に filter=git-crypt が
+# あるときだけ。 述語・誤検出の較正の正本 = その docstring)。 下の marker の safety net より前に置く =
+# 非公開の repo でも走る。 止めるのは「exit 1 かつ engine の BLOCK 見出し」 のときだけ。 engine の見出しの
+# 無い非 0 (異常終了) は 1 行出して通す (Stage 0 と同じ扱い)。
+# 1 回だけ通す: CLAUDE_MESSAGE_AMOUNT_GUARD=0 (engine が読む。 拒否の出力には書かない)
+# ----------------------------------------------------------------------
+AMT_ENGINE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/check-message-amounts.py"
+if [ -f "$AMT_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  amt_rc=0
+  amt_out="$(python3 "$AMT_ENGINE" --commit-msg "$MSG_FILE" 2>&1)" || amt_rc=$?
+  [ -n "$amt_out" ] && printf '%s\n' "$amt_out" >&2
+  if [ "$amt_rc" -eq 1 ] && printf '%s' "$amt_out" | grep -q 'message-amounts: BLOCK'; then
+    echo "[commit-msg-leak-guard-runner] commit rejected (money amount or exchange rate in the message)." >&2
+    exit 1
+  fi
+  if [ "$amt_rc" -ne 0 ] && ! printf '%s' "$amt_out" | grep -q 'message-amounts:'; then
+    echo "⚠️ commit-msg: 金額の検査が異常終了した (rc=${amt_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${AMT_ENGINE} --selftest" >&2
   fi
 fi
 

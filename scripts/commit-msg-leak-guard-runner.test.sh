@@ -138,6 +138,33 @@ expect_pass() {
   PASS=$((PASS+1))
 }
 
+# expect_in_repo <case_name> <want_exit> <repo_dir> <message_content>
+# runner を指定の repo の中で走らせる (Stage 0c = 金額は git-crypt の repo だけで止まる)
+expect_in_repo() {
+  local name="$1" want="$2" repo="$3" content="$4"
+  local msg_file stderr_out exit_code
+  msg_file="$TMPDIR_TEST/msg-$RANDOM.txt"
+  printf '%s' "$content" > "$msg_file"
+  stderr_out="$(cd "$repo" && "$RUNNER" "$msg_file" message 2>&1 >/dev/null)"
+  exit_code=$?
+  if [ "$exit_code" != "$want" ]; then
+    FAIL=$((FAIL+1))
+    FAILED_CASES="${FAILED_CASES}  [exit=$exit_code want=$want] $name\n"
+    return
+  fi
+  if [ "$want" = "1" ] && ! echo "$stderr_out" | grep -q "message-amounts: BLOCK"; then
+    FAIL=$((FAIL+1))
+    FAILED_CASES="${FAILED_CASES}  [no-amount-heading] $name\n"
+    return
+  fi
+  if [ "$want" = "1" ] && echo "$stderr_out" | grep -q "CLAUDE_MESSAGE_AMOUNT_GUARD"; then
+    FAIL=$((FAIL+1))
+    FAILED_CASES="${FAILED_CASES}  [block text shows the bypass] $name\n"
+    return
+  fi
+  PASS=$((PASS+1))
+}
+
 # cd to claude-config (= 親 repo に marker あり、 runner が marker pass する)
 cd "$(dirname "$RUNNER")/.." || exit 1
 [ -f ".claude/public-repo.marker" ] || {
@@ -425,6 +452,22 @@ s0b "block-0b-commit-msg-only-term" 1 "記録: モック講師さんの返事"
 rm -f "$SCOPE"
 expect_block "block-commit-msg-only-term-in-public-repo" "記録: モック講師さんの返事"
 rm -f "$MOCK_LAYER/commit-msg-terms.txt"
+
+# ====================================================================
+# Stage 0c (2026-11-04): 金額・為替レート。 git-crypt の repo だけで止める (値はすべて合成)
+# ====================================================================
+AMT_ENC="$TMPDIR_TEST/amt-enc"; AMT_PLAIN="$TMPDIR_TEST/amt-plain"
+mkdir -p "$AMT_ENC" "$AMT_PLAIN"
+git init -q "$AMT_ENC"; git init -q "$AMT_PLAIN"
+printf 'secret/** filter=git-crypt diff=git-crypt\n' > "$AMT_ENC/.gitattributes"
+expect_in_repo "amount-block-gitcrypt-yen" 1 "$AMT_ENC" "記録: 参加費 1,234 円"
+expect_in_repo "amount-block-gitcrypt-rate" 1 "$AMT_ENC" "記録: 1 ドル = 123.4 円で両替"
+expect_in_repo "amount-pass-gitcrypt-count" 0 "$AMT_ENC" "fix: 1,234 行を削った"
+expect_in_repo "amount-pass-plain-repo" 0 "$AMT_PLAIN" "記録: 参加費 1,234 円"
+AMT_SAVED="${CLAUDE_MESSAGE_AMOUNT_GUARD-}"
+export CLAUDE_MESSAGE_AMOUNT_GUARD=0
+expect_in_repo "amount-pass-escape-env" 0 "$AMT_ENC" "記録: 参加費 1,234 円"
+if [ -n "$AMT_SAVED" ]; then export CLAUDE_MESSAGE_AMOUNT_GUARD="$AMT_SAVED"; else unset CLAUDE_MESSAGE_AMOUNT_GUARD; fi
 
 # ====================================================================
 echo ""
