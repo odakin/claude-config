@@ -65,6 +65,11 @@ BOARD_FIRST: `~/.claude/session-launch-board-first.on` が在るか env SESSION_
 user_asked の start_session は prompt に掲示板の request id が無いと止める (title か prompt に `[no-board]` で通す)。
 hand-off が掲示板の依頼を名指すのにこの機械に起動の記録が無い start_session (本人が押す card も) も止め、
 `board.py launch --request <id>` で記録と引数を作らせる (相手側の AI が出した依頼・別の機械で出した依頼)。
+worker でない session (掲示板の依頼を受けない指揮役など) の起動は、 利用者が `~/.claude/session-launch-not-worker.txt`
+(env SESSION_LAUNCH_NOT_WORKER_FILE) に書いた署名 (1 行 1 つ、 `re:` = 正規表現、 ほかは literal、 `#` 行は飛ばす) を
+hand-off が含めば、 request id の無い start_session として止めない (例 = 指揮役が最初の turn で自分を登録する 1 行)。
+掲示板の依頼を名指す hand-off の照合 (記録の有無・model・effort) と PREMIUM_GATE は署名があっても今までどおり。
+file が無い・読めない = 署名なし。
 既定は off (層1 の利用者が掲示板を使うとは限らない)。 起動の記録は whole-repo の掲示板なら `<root>/.local/outbox`、
 project の repo の中の掲示板なら `<git common dir>/board-outbox/<path>` (board.py の outbox_dir と同じ)。
 
@@ -400,6 +405,44 @@ def premium_refusal(miss: list[str], where: list[str]) -> str:
             f" 規約 = {PREMIUM_RULE}")
 
 
+def not_worker_signatures() -> list[tuple[str, str]]:
+    """The user's signatures of a launch that starts a coordinator rather than a worker: [(kind, text)], kind "re" or
+    "lit". One per line of ~/.claude/session-launch-not-worker.txt (env SESSION_LAUNCH_NOT_WORKER_FILE): `re:` = a
+    regular expression, anything else = a literal; blank lines and `#` lines are skipped, a line that does not compile
+    is skipped. No file / unreadable = no signatures (the board-first gate stays as it was)."""
+    path = os.environ.get("SESSION_LAUNCH_NOT_WORKER_FILE") or os.path.expanduser("~/.claude/session-launch-not-worker.txt")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    out = []
+    for ln in lines:
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("re:"):
+            try:
+                re.compile(s[3:])
+            except re.error:
+                continue
+            out.append(("re", s[3:]))
+        else:
+            out.append(("lit", s))
+    return out
+
+
+def not_worker_launch(prompt: str) -> bool:
+    """A hand-off that carries one of the user's not-worker signatures (e.g. the line a coordinator session runs first
+    to register itself): such a session is not a board worker, so the gate that asks a worker for a board request does
+    not ask it for one (measured: a rule that starts a coordinator session with start_session met this gate and was
+    passed only by writing the bypass token)."""
+    for kind, s in not_worker_signatures():
+        if (kind == "lit" and s in (prompt or "")) or (kind == "re" and re.search(s, prompt or "")):
+            return True
+    return False
+
+
 def pre_start(inp: dict) -> tuple[int, str]:
     ti = inp.get("tool_input") or {}
     if ti.get("proposal_id") and not ti.get("prompt"):
@@ -408,7 +451,7 @@ def pre_start(inp: dict) -> tuple[int, str]:
     rid, root = board_named(prompt)
     rec = board_launch_record(prompt)
     if board_first_on() and NO_BOARD not in title + prompt:
-        if ti.get("initiation") == "user_asked" and not REQUEST_ID.search(prompt):
+        if ti.get("initiation") == "user_asked" and not REQUEST_ID.search(prompt) and not not_worker_launch(prompt):
             return 2, ("🛑 session-launch-check: worker は掲示板の request を経て起こす (この機械の設定 = 掲示板を経路の軸にする)。\n"
                        "  1. board.py request … --to claude --to-session role-<project>-<仕事> --surface desktop で依頼を出す\n"
                        "  2. 出力の start_session の引数 (model・effort・title・prompt) で起こす\n"
@@ -1309,7 +1352,9 @@ def selftest() -> int:
                           SESSION_LAUNCH_WAIT="0", SESSION_LAUNCH_BOARD_FIRST_MARKER=os.path.join(td, "no-marker"),
                           # the machine's own markers must not reach the cases (measured: with the premium-gate
                           # marker on the machine, a pre-start case that expects a pass was blocked)
-                          SESSION_LAUNCH_PREMIUM_GATE_MARKER=os.path.join(td, "no-premium-marker"))
+                          SESSION_LAUNCH_PREMIUM_GATE_MARKER=os.path.join(td, "no-premium-marker"),
+                          # and the machine's own not-worker signatures must not pass a case that expects a block
+                          SESSION_LAUNCH_NOT_WORKER_FILE=os.path.join(td, "no-not-worker"))
         os.environ.pop("SESSION_LAUNCH_BOARD_FIRST", None)
         os.environ.pop("SESSION_LAUNCH_PREMIUM_GATE", None)
         app = os.path.join(td, "app", "acct", "env")
@@ -1398,6 +1443,25 @@ def selftest() -> int:
         check("pre-start: [no-board] → pass", rc == 0)
         rc, _, _ = call("PreToolUse", "mcp__ccd_session__start_session", {"initiation": "own_initiative", "title": "t", "prompt": "do x"})
         check("pre-start: a proposal card is not a start → pass", rc == 0)
+        # the user's not-worker signatures: a coordinator's hand-off (its first line registers it) is not a board worker
+        nw = os.path.join(td, "not-worker.txt")
+        with open(nw, "w", encoding="utf-8") as fh:
+            fh.write("# coordinators\nre:coordinator\\.py['\"]?\\s+register\\b\nplain-coordinator-line\nre:([unclosed\n\n")
+        os.environ["SESSION_LAUNCH_NOT_WORKER_FILE"] = nw
+        coord = "You coordinate chores. First run `python3 ~/x/coordinator.py register` and follow its output."
+        rc, _, _ = call("PreToolUse", "mcp__ccd_session__start_session", {"initiation": "user_asked", "title": "coordinator", "prompt": coord})
+        check("pre-start: board-first on, a hand-off with a not-worker signature (re:) → pass", rc == 0)
+        rc, _, _ = call("PreToolUse", "mcp__ccd_session__start_session", {"initiation": "user_asked", "title": "c", "prompt": "x plain-coordinator-line y"})
+        check("pre-start: a literal not-worker signature → pass", rc == 0)
+        rc, _, err = call("PreToolUse", "mcp__ccd_session__start_session", {"initiation": "user_asked", "title": "t", "prompt": "do x"})
+        check("pre-start: signatures present, a hand-off without one → still blocked", rc == 2 and "掲示板" in err)
+        rc, _, err = call("PreToolUse", "mcp__ccd_session__start_session",
+                          {"initiation": "user_asked", "title": "t", "prompt": handoff.replace(rid, "20260101T000000Z-claude-0000b2") + "\n" + coord})
+        check("pre-start: a signature does not pass a hand-off that names a board request with no launch record",
+              rc == 2 and "起動の記録が無い" in err)
+        os.environ["SESSION_LAUNCH_NOT_WORKER_FILE"] = os.path.join(td, "no-such-not-worker.txt")
+        rc, _, err = call("PreToolUse", "mcp__ccd_session__start_session", {"initiation": "user_asked", "title": "coordinator", "prompt": coord})
+        check("pre-start: no signature file → a coordinator's hand-off is blocked as before", rc == 2 and "掲示板" in err)
         os.environ.pop("SESSION_LAUNCH_BOARD_FIRST")
 
         with open(os.path.join(board, ".local", "outbox", rid + ".launch.json"), "w", encoding="utf-8") as fh:

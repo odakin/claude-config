@@ -64,6 +64,16 @@
     {"name": "detach の知らせを本人が worker の窓で答える向きに戻す",
      "pairs": [["子の turn の終わりの知らせを依頼元に来させない\"\n            f\" (判断の問いは子が掲示板の note か SendMessage で依頼元に出す。", "子の turn の終わりの知らせと本人への問いを\"\n            f\"依頼元に来させない (本人は worker の窓で答える。"]],
      "expect_fail": ["post-start: the detach note sends the child's questions of judgment to the requester"],
-     "expect_pass": ["post-start: right model and the record asks detach → detach_session note"]}
+     "expect_pass": ["post-start: right model and the record asks detach → detach_session note"]},
+    {"name": "worker でない起動の署名を見ない",
+     "pairs": [[" and not not_worker_launch(prompt):", ":"]],
+     "expect_fail": ["a hand-off with a not-worker signature (re:) → pass", "a literal not-worker signature → pass"],
+     "expect_pass": ["signatures present, a hand-off without one → still blocked",
+                     "a signature does not pass a hand-off that names a board request with no launch record",
+                     "no signature file → a coordinator's hand-off is blocked as before"]},
+    {"name": "署名の re: の行を literal として読む",
+     "pairs": [["        if s.startswith(\"re:\"):\n", "        if False:\n"]],
+     "expect_fail": ["a hand-off with a not-worker signature (re:) → pass"],
+     "expect_pass": ["a literal not-worker signature → pass", "signatures present, a hand-off without one → still blocked"]}
   ]
 }
