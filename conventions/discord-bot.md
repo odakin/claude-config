@@ -218,6 +218,7 @@ python3 ~/Claude/claude-config/scripts/discord-post.py \
 外部へ送る文面の承認は、 user が最後に見た版に対して出る。 chat に下書きを手で打ち直して見せると、 送る file と見せた版がずれる (実測: 直しの途中で chat の版から末尾の 1 段落が落ち、 file にはその段落が残ったまま送信の承認が出た)。
 
 - 直すたびに、 file を直してから `discord-post.py` の dry-run (または file の全文) をそのまま見せる。 chat の側で文面を組み立てない。
+  auto mode では `--send` の無い dry-run も外への書き込みと見なされて止まることがある (実測) = そのときは dry-run を別の形で通さず、 file の全文と添付の一覧と channel を chat に出して承認を取り、 承認の後に `--send` を 1 回打つ ([`claude-code-permissions.md#classifier-blocks-send-dry-run`](claude-code-permissions.md#classifier-blocks-send-dry-run))。
 - 送る直前の確認 (channel の新着を読む手) で file の全文も出し、 最後に見せた版と同じかを確かめる。 違っていたら送らずに見せ直す。
 - 一般の送信 (メール・投稿) でも同じ: 承認の対象は「送る file の中身」 で、 説明の文ではない。
 
