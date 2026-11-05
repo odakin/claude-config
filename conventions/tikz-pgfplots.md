@@ -145,6 +145,29 @@ node も同じ = `\node[anchor=south, yshift=0.9mm] at (axis cs:1e-5, 1e35) {...
 
 隅で縦軸の数字と重なる目盛りは数字を出さず線だけにする。 線と数字の描き方は上の 2 節 (1 行ずつ書き出す か `\pgfplotsinvokeforeach` / `[yshift=…]axis cs:`) に従う。
 
+**確かめ方** — 上の 4 節の直し方をまとめた最小の文書。 `lualatex` で組むと、 上辺に z の目盛りと数字が出て、 上辺に a の鏡像の目盛りが出ない (実測):
+```latex
+\documentclass{article}
+\usepackage{pgfplots}\pgfplotsset{compat=1.18}
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}[xmode=log, ymode=log, xmin=1e-9, xmax=10, ymin=1e-5, ymax=1e35,
+    xtick pos=lower, clip mode=individual,
+    /tikz/ztick/.style={anchor=south, inner sep=0pt, yshift=0.9mm, font=\scriptsize}]
+  \addplot[domain=1e-9:10, samples=2] {0.3*x^(-3)};
+  % 上辺に z の目盛り (a = 1/(1+z) の位置)
+  \pgfplotsinvokeforeach{1e-8, 9.99e-4, 0.0909, 1}{
+    \draw (axis cs:#1, 1e35) -- ([yshift=-1.1mm]axis cs:#1, 1e35);
+  }
+  \node[ztick] at (axis cs:1e-8,    1e35) {$10^{8}$};
+  \node[ztick] at (axis cs:9.99e-4, 1e35) {$10^{3}$};
+  \node[ztick] at (axis cs:0.0909,  1e35) {$10$};
+  \node[ztick] at (axis cs:1,       1e35) {$0$};
+\end{axis}% ここで集めた \draw と \node が描かれる
+\end{tikzpicture}
+\end{document}
+```
+
 ## smooth functional curve は `\draw plot[smooth, samples=N]` を使う、 Bezier 4-segment は angular
 
 **症状**: Higgs potential / Mexican hat / 任意の 4 次関数を `\draw .. controls (a,b) and (c,d) .. (e,f)` 形式の Bezier で描くと、 制御点が少ない (= 4-8 segment) と curve が angular (= 「W 文字風」) に見える。 user feedback で「4 次関数に見えない、 W みたい」 と指摘される類。
