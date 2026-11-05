@@ -92,29 +92,58 @@ TikZ や pgfplots を含む LaTeX project で適用。 一般 LaTeX 規約は [`
 
 **★ aspect を変えたら回転角を都度再計算する (reflex)**: 手動 `rotate=` で線ラベルを線と平行にした後、 **`ymax` / `xmax` / `xmin` / `ymin` / `width` / `height` のどれか 1 つでも変えると** Dx/Dy (= decade 数比) または H/W (= data area 縦横比) が変わり、 線の visual slope が変わる → 回転角がズレる。 角度 = `atan(n × (H/W) × Dx/Dy)` (n = 冪の絶対値、 例 ρ∝a⁻⁴ なら 4)。 H/W は data area の縦横比で、 1 度 visual 一致させた角度から逆算 calibration するのが速い (= cosmology infographic では H/W≈0.49)。 これを怠ると「軸を広げたら線とラベルがズレた」 が必ず起きる (= 本 session で `ymax` を 1e16→1e20→1e30→1e35、 `xmax` を 2→10 と変える度に放射ラベルを -41→-36→-28→-25 と再補正した)。
 
-## TikZ `\foreach` で多変数 + 色名引数は `\col` 等 expansion で失敗
+## <a id="foreach-inside-axis"></a>axis の中の `\foreach` は `\end{axis}` まで展開されず、 loop 変数が未定義になる
 
-**症状**:
+**症状**: `axis` 環境の中で
 ```latex
 \foreach \i/\x/\col in {1/1.05e-7/c0, 2/1.5e-7/c1, ...} {
   \node[circle, fill=\col, ...] at (axis cs:\x, 4e-5) {\i};
 }
 ```
-で `! Undefined control sequence. \col` が出る。 単純なはずなのに動かない。
+と書くと `! Undefined control sequence.` が `\end{axis}` の行で出る (`<argument> axis cs:\x` や `\col` と表示される)。 変数が 2 つで数値だけでも同じ (実測)。
 
-**原因**: pgfmath / TikZ math と pgfkeys のスタイル expansion が tangle、 特に `axis cs:\x` の数値 parse と `fill=\col` の color name expansion が干渉する場合がある。
+**原因**: pgfplots は axis の中の `\node` / `\draw` を集めておき、 `\end{axis}` で座標系が決まってから描く。 `\foreach` の本体はそのとき初めて展開されるが、 loop はもう終わっていて `\x` / `\col` は定義されていない。 axis の外 (普通の `tikzpicture` / `scope`) の `\foreach` は即座に展開されるので動く。
 
-**対処**: 個別 node に展開する。 多少冗長だが reliable。
+**対処** (3 つとも実測で動く):
+1. **1 行ずつ書き出す** (いちばん確実。 長いなら script で生成する):
+   ```latex
+   \node[circle, fill=c0, ...] at (axis cs:1.05e-7, 4e-5) {1};
+   \node[circle, fill=c1, ...] at (axis cs:1.5e-7,  4e-5) {2};
+   ```
+2. `\stagebadge{i}{x}{col}` 系の `\newcommand` を作って呼ぶ (引数は呼んだ時点で入る)
+3. 変数が 1 つなら `\pgfplotsinvokeforeach{1e-8, 1e-7}{\draw (axis cs:#1, 1e35) -- ...;}` (pgfplots の loop。 本体の `#1` は値に置き換わってから集められる)
 
+## <a id="relative-coordinates-inside-axis"></a>axis の中の相対座標 `++(0,-1mm)` は真下に動かない
+
+**症状**: log 軸の axis の中で、 目盛りの印を `\draw (axis cs:\a, 1e35) -- ++(0, -1.1mm);` と描くと、 真下へ 1.1mm の線ではなく、 右へ斜めに伸びる長い線になる (実測)。
+
+**原因**: axis の中では、 単位の付かない数は TikZ の長さでなく axis の座標として読まれる。 `++(0,-1.1mm)` の `0` は「0mm」 ではなくなる (対数軸では特に、 期待した位置から大きくずれる)。
+
+**対処**: 動かした先も axis の点として書き、 ずらしは `shift` で与える:
 ```latex
-\node[circle, fill=c0, ...] at (axis cs:1.05e-7, 4e-5) {1};
-\node[circle, fill=c1, ...] at (axis cs:1.5e-7,  4e-5) {2};
-...
+\draw (axis cs:1e-5, 1e35) -- ([yshift=-1.1mm]axis cs:1e-5, 1e35);
 ```
+node も同じ = `\node[anchor=south, yshift=0.9mm] at (axis cs:1e-5, 1e35) {...};`。
 
-または `\stagebadge{i}{x}{col}` 系の `\newcommand` macro を作って明示展開。
+## <a id="axis-option-style-namespace"></a>axis の option に置いた style は `/tikz/` を付けないと node から見えない
 
-**Why**: pgfmath は `\x` を数値として、 `\col` を color macro として、 同 expansion 中に異なる context で解釈しようとすると失敗する。 macro 展開 timing と expansion context の問題。 動くケースもある (= `\foreach \i/\x in {1/22.5, ...}` のような 2 変数 + 数値のみは安定) ので、 失敗時は個別 node fallback が rule of thumb。
+**症状**: `\begin{axis}[ ..., ztick/.style={anchor=south, font=...}, ]` と定義して、 中で `\node[ztick] at (...) {...};` と書くと `! Package pgfkeys Error: I do not know the key '/tikz/ztick'` (実測)。
+
+**原因**: axis の option は `/pgfplots/` の名前空間で処理されるので、 そこで作った style は `/pgfplots/ztick` になる。 `\node[...]` は `/tikz/` で探すので見つからない。
+
+**対処**: axis の option に置くなら `/tikz/ztick/.style={...}` と名前空間を書く。 または axis の前に `\tikzset{ztick/.style={...}}` で定義する。
+
+## <a id="second-axis-by-hand"></a>上辺に別の量の目盛り (例: a に対する z) は twin axis にせず同じ axis に手で描く
+
+**目的**: 横軸 a (スケール因子) の上辺に z (= 1/a − 1) のような非線形に対応する別の量の目盛りを付けたい。
+
+**罠**: 第 2 の `axis` を同じ `width`/`height` で重ねる twin axis は、 本 file 冒頭の節 (`width` / `height` は label を含めて bounding しない) のとおり大きさが目盛りの数字・軸ラベル込みで決まる (`scale only axis` を付けない限り)。 数字の付き方が違う 2 つの axis は枠がずれ、 上下の目盛りが揃わない。
+
+**対処**: 本体の axis の中で、 上辺 (`ymax`) に `axis cs` で目盛りの線と数字を描く (座標が同じなので揃うことが保証される)。 位置は対応式で出す (z なら `a = 1/(1+z)`)。 本体の axis には
+- `xtick pos=lower` を付け、 上辺に鏡像で出る下の軸の目盛りを消す
+- `clip mode=individual` (か `clip=false`) を付ける = 既定の clip では枠より上に置いた数字が切られて**見えない** (PDF の文字としては残るので、 text 抽出では在るように見える。 実測)
+
+隅で縦軸の数字と重なる目盛りは数字を出さず線だけにする。 線と数字の描き方は上の 2 節 (1 行ずつ書き出す か `\pgfplotsinvokeforeach` / `[yshift=…]axis cs:`) に従う。
 
 ## smooth functional curve は `\draw plot[smooth, samples=N]` を使う、 Bezier 4-segment は angular
 
