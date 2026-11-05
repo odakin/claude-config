@@ -100,7 +100,7 @@ TikZ や pgfplots を含む LaTeX project で適用。 一般 LaTeX 規約は [`
   \node[circle, fill=\col, ...] at (axis cs:\x, 4e-5) {\i};
 }
 ```
-と書くと `! Undefined control sequence.` が `\end{axis}` の行で出る (`<argument> axis cs:\x` や `\col` と表示される)。 変数が 2 つで数値だけでも同じ (実測)。
+と書くと `! Undefined control sequence.` が `\end{axis}` の行で出る (`<argument> axis cs:\x` や `\col` と表示される)。 色名の変数に限らず、 座標に入れる数値の変数 (`axis cs:\x` の `\x`) でも同じ (実測)。
 
 **原因**: pgfplots は axis の中の `\node` / `\draw` を集めておき、 `\end{axis}` で座標系が決まってから描く。 `\foreach` の本体はそのとき初めて展開されるが、 loop はもう終わっていて `\x` / `\col` は定義されていない。 axis の外 (普通の `tikzpicture` / `scope`) の `\foreach` は即座に展開されるので動く。
 
