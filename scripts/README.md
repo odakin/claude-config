@@ -101,6 +101,7 @@
 - **[check-script-layering.mutants.json](check-script-layering.mutants.json)** — check-script-layering.py の selftest の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[check-script-layering.py](check-script-layering.py)** — Detect duplicated cross-layer script engines and unreviewed lower-layer additions.
 - **[check-seal-attachments.py](check-seal-attachments.py)** — 印影画像の入った file を、file のまま相手に渡す前に止める (メール添付・共有・upload の出口用)。
+- **[check-session-carryover.py](check-session-carryover.py)** — 公開 repo の commit に、 同じ session で非公開の source から読んだ値 (金額・数・コードの並び) を持ち込ませない: commit gate (--staged、 違反で exit 1) + 過去の公開 commit の replay (--replay) + --selftest
 - **[check-session-shape.py](check-session-shape.py)** — SESSION.md の形 (案件ごとの現在地 + 正本への link) を commit と書き込みの瞬間に守る gate + fleet 走査
 - **[check-session-sot.py](check-session-sot.py)** — Detect durable-data accretion and bloat in SESSION.md files.
 - **[check-sot-drift.py](check-sot-drift.py)** — 「規則の正本は 1 か所、 他所は参照だけ」 を目印の文字列で機械検査する (registry 駆動)

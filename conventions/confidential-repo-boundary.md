@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 人 (学生・応募者など) を指す path・台帳の id・commit message を付けるとき (#role-words-in-names) / 履歴から個人情報を消すとき (#history-scrub-identity-from-all-versions) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
+when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 人 (学生・応募者など) を指す path・台帳の id・commit message を付けるとき (#role-words-in-names) / 履歴から個人情報を消すとき (#history-scrub-identity-from-all-versions) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 較正・再現で読んだ非公開の値を公開 repo の例・selftest に書くとき (#session-carryover-gate) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
 category: infra
 summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (入室の暗証番号は暗号化 repo にも入れず所在だけ記録 #physical-access-codes、 通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる、 触れない dir の中身を機械で処理する必要が出ても deny を外して戻す形にしない (外れている間は dir 全体が無関係な call にも開く) = user が 1 file だけ許可 scope に複製 → 作業 → 複製と中間生成物を消す、 複製は元の SoT から分岐し記録には file 名も中身も書かない
 -->
@@ -233,6 +233,35 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
 - **配線の確認は 2 段**: `--check-wiring` = 本番の索引でカナリアが止まるか。 `--check-wiring --through-hooks` = 一時の公開 repo に両 hook を入れ、 引用を含む stage と message が実際の commit で拒否され、 平文の commit が通るか。 後者は runner の配線切れや設定の解決失敗まで捕まえる (約 5 秒)。
 - 止まったときは file と行と源の名前だけを出し、 一致した本文は出さない。 公刊版に在る文だと確かめた場合だけ
   `CLAUDE_UNPUBLISHED_GUARD=0` で 1 回通す (agent が使うのは本人の指示があるときだけ = [agent-rule-ownership.md#guard-escape-hatch](agent-rule-ownership.md#guard-escape-hatch))。
+
+### <a id="session-carryover-gate"></a>公開 repo には「同じ session で非公開の source から読んだ値」 の gate を置く (2026-11-05)
+
+検出器を較正する・例を本物らしくする turn では、 非公開の記録 (暗号化した repo の commit message、 非公開 repo の file) を
+tool で読み、 その値を同じ session の中で公開 repo の selftest・コメント・docstring の例に写す (実測: 額の組・本数・
+コードの一覧の 3 か所が、 公開 repo の新しい検出器の selftest とコメントに入り、 force push で履歴から消した)。
+写した値は識別子でも語の一覧の語でも 5 語以上の文でもないので、 上の網 (Tier A-F) はどれも見ない。
+「commit の前に、 較正で目にした値で追加行を grep する」 は散文の手順で、 commit と push を 1 本で打つと気づくのは push の後になる。
+
+- **源は会話記録**: 「この session で何を読んだか」 は会話記録が持っている。 engine =
+  [`scripts/check-session-carryover.py`](../scripts/check-session-carryover.py) は、 commit の時点までの記録の tool の出力のうち
+  **非公開の source を読んだもの** から値を集める (公開とみなすのは、 tool の入力に出る場所がすべて公開の印の repo の中のときと
+  web だけ。 場所の分からない出力は非公開に数える)。 **agent 自身が先に書いた値は数えない** (= 合成の値)。
+- **規則は「額の形」 に絞る**: 3 桁区切りの数の組 / 7 桁以上の 3 桁区切りの数 / 数と大文字 3 字のコードの組 / コード 4 つの並び。
+  件数の単位が続く数・合成の例の形 (連番・同じ数字)・主要通貨と形式名だけの並び・日付の断片・CSS の色は数えない。
+- **較正** (公開 repo の commit のうち、 message の session の印から会話記録を引けたもの 1,631 commit に replay):
+
+| 設定 | 当たった commit | 内訳 |
+|---|---|---|
+| 数 (4 桁以上) の組 + 6 桁の数 + 数と後ろの 2 語 + コードの並び | 210 | 大半が一般の定数・ID・寸法・言い回し (「数と後ろの 2 語」 だけで 321 行) |
+| 3 桁区切りの組 + 7 桁 + 数とコードの組 + コードの並び | 7 | CSS の色・日付の断片 + 大文字の語・規格番号が残る |
+| **上 + 日付の断片・CSS の色・規格名の除外** | **3** | **漏れた 1 commit (3 か所とも)・会話記録から数えた件数 1・公開の料金の表 1** ← 採用 |
+
+- **捕まえないもの**: 言い換え・計算し直した値 (足した・丸めた)、 1 つだけの短い数、 Codex の commit (会話記録の場所が違う)、
+  subagent の中の commit。 規律 ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak)) はそのまま要る。
+- **配線先** = 公開 repo の pre-commit の Tier G (`public-precommit-runner.sh`、 session の env `CLAUDE_CODE_SESSION_ID` が在るときだけ。
+  tree の棚卸しでは走らせない = session が読んだものでなく tree 全体を見る場だから)。 runner は保護の file (`.agent-rule-guard.json`)
+  なので、 当たるまでは commit の前に `check-session-carryover.py --staged` を手で回す。 止まったら file と行と規則の名前だけを出す。
+  公開の値がたまたま同じ (公開の料金など) と確かめた場合だけ `CLAUDE_CARRYOVER_GUARD=0` で 1 回通す (本人の指示があるときだけ)。
 
 ---
 
@@ -527,6 +556,7 @@ visibility の **判断基準そのもの** (何を公開する人なのか) は
 | [`scan-private-vocabulary.py`](../scripts/scan-private-vocabulary.py) | 公開 repo が非公開 repo と共有する珍しい語の一覧 (言い換えを読む候補、 gate ではない。 tree 全体 / `--staged` / `--diff`) | 無し (`.claude/public-repo.marker` の有無で公開・非公開を分ける、 `--source` / `--exclude` で絞る) |
 | [`commit-hunk-anchors.py`](../scripts/commit-hunk-anchors.py) | commit の hunk の所在 (file・行・直前の anchor / def) だけを出す = 是正の記録を本文なしで書く | 無し |
 | [`scan-public-tree.sh`](../scripts/scan-public-tree.sh) | 公開 repo の tree 全体を pre-commit gate の全 Tier に通す (= gate は差分しか見ないので、 gate より古い中身はこれでしか見つからない)。 `--all` で横断、 台帳で 1 repo 1 回 | 各 repo の `.claude/public-tree-accept.txt` (棚卸しでだけ効く受理一覧) |
+| [`check-session-carryover.py`](../scripts/check-session-carryover.py) | 同じ session で非公開の source から読んだ値 (額の組・本数・コードの並び) を公開 repo の commit で BLOCK (Tier G、 #session-carryover-gate) / 過去の公開 commit の replay (較正) | 無し (源 = その session の会話記録) |
 | [`check-value-index.py`](../scripts/check-value-index.py) | 暗号化した値 (電話・口座・生年月日・住所) の平文の写しを、 公開 repo の commit と message (Tier F) と非公開 repo の pre-commit の連鎖で BLOCK / 全 repo の棚卸し (`--scan-root --explain`) ([§1 の decrypted-echo](#decrypted-echo)) | 個人層の `value-index.txt` (索引の在り処 = 暗号化 file の節) |
 | [`pdf-review-render.py`](../scripts/pdf-review-render.py) | 様式の PDF を目視用の PNG にする前に住所・口座・電話の行を塗る / `--audit` = 塗りの外に残る語を形だけで | 無し (見出しの語は `--label` で足す) |
 | [`hooks/protected-dir-access-guard.py`](../hooks/protected-dir-access-guard.py) | 保護 dir へ Bash / Grep / Glob で触れうる操作の前に確認を出す (PreToolUse、 ask) / `--canary` で本番配線の実効性 ([§5 の節](#protected-dir-access-guard)) | `~/.claude/protected-dirs.txt` / `~/.claude/leak-pattern-sources.txt` |

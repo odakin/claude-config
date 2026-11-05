@@ -65,7 +65,7 @@ claude-config/
 │   ├── collaborators.md                    # 共同研究者 DB (collaborators.yaml) を作成・更新するとき
 │   ├── concise-output.md                   # user への応答・報告・deliverable (README / 案内 doc / PDF) を書くとき常時 + **user 自身に操作してもらう手順を書くとき** (= #user-facing-steps) + **user に判断や確認を頼む質問を書くとき** (= #decision-questions)
 │   ├── conference-candidate-search.md      # 「次はどの会議で話すか」 を決めるために候補を洗い出すとき + 旅費の補助・出張の承認の〆切が先に来ていて、 まだ日程の出ていない会議に出せるかを判断するとき + 候補を比べた結果を次の年のために残すとき
-│   ├── confidential-repo-boundary.md       # 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 人 (学生・応募者など) を指す path・台帳の id・commit message を付けるとき (#role-words-in-names) / 履歴から個人情報を消すとき (#history-scrub-identity-from-all-versions) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
+│   ├── confidential-repo-boundary.md       # 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 人 (学生・応募者など) を指す path・台帳の id・commit message を付けるとき (#role-words-in-names) / 履歴から個人情報を消すとき (#history-scrub-identity-from-all-versions) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 較正・再現で読んだ非公開の値を公開 repo の例・selftest に書くとき (#session-carryover-gate) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
 │   ├── consumer-review-posting.md          # 宿・店・サービスの口コミ (レビュー) を本人の代わりに起草して投稿先を選ぶとき + 「予約サイトに書けない」 と分かった時 + 写真のキャプションや投稿後のアンケートを埋める時
 │   ├── data-pipeline-automation.md         # 下流自動化 (build / mirror / template render) を伴うデータ管理をするとき
 │   ├── debugging-discipline.md             # bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch)
@@ -209,7 +209,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (414 file + formcase/ 26 module + lib/ 81 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (415 file + formcase/ 26 module + lib/ 81 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
