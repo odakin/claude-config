@@ -74,11 +74,11 @@ if [ -f "$SID_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
   sid_rc=0
   sid_out="$(python3 "$SID_ENGINE" --commit-msg "$MSG_FILE" 2>&1)" || sid_rc=$?
   [ -n "$sid_out" ] && printf '%s\n' "$sid_out" >&2
-  if [ "$sid_rc" -eq 1 ] && printf '%s' "$sid_out" | grep -q 'check-student-identifiers: BLOCK'; then
+  if [ "$sid_rc" -eq 1 ] && grep -q 'check-student-identifiers: BLOCK' <<< "$sid_out"; then
     echo "[commit-msg-leak-guard-runner] commit rejected (student identifiers). 1 回だけ通す: CLAUDE_STUDENT_ID_GUARD=0" >&2
     exit 1
   fi
-  if [ "$sid_rc" -ne 0 ] && ! printf '%s' "$sid_out" | grep -q 'check-student-identifiers:'; then
+  if [ "$sid_rc" -ne 0 ] && ! grep -q 'check-student-identifiers:' <<< "$sid_out"; then
     echo "⚠️ commit-msg: 学生の識別子の検査が異常終了した (rc=${sid_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${SID_ENGINE} --selftest" >&2
   fi
 fi
@@ -148,11 +148,11 @@ if [ -f "$AMT_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
   amt_rc=0
   amt_out="$(python3 "$AMT_ENGINE" --commit-msg "$MSG_FILE" 2>&1)" || amt_rc=$?
   [ -n "$amt_out" ] && printf '%s\n' "$amt_out" >&2
-  if [ "$amt_rc" -eq 1 ] && printf '%s' "$amt_out" | grep -q 'message-amounts: BLOCK'; then
+  if [ "$amt_rc" -eq 1 ] && grep -q 'message-amounts: BLOCK' <<< "$amt_out"; then
     echo "[commit-msg-leak-guard-runner] commit rejected (money amount or exchange rate in the message)." >&2
     exit 1
   fi
-  if [ "$amt_rc" -ne 0 ] && ! printf '%s' "$amt_out" | grep -q 'message-amounts:'; then
+  if [ "$amt_rc" -ne 0 ] && ! grep -q 'message-amounts:' <<< "$amt_out"; then
     echo "⚠️ commit-msg: 金額の検査が異常終了した (rc=${amt_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${AMT_ENGINE} --selftest" >&2
   fi
 fi
@@ -208,7 +208,7 @@ if [ -z "$HITS" ] && [ "${CLAUDE_UNPUBLISHED_GUARD:-1}" != "0" ] && [ -f "$UQ_EN
     uq_rc=0
     uq_out="$(python3 "$UQ_ENGINE" --config "$UQ_LAYER/unpublished-sources.txt" --message-file "$MSG_FILE" 2>&1)" || uq_rc=$?
     [ -n "$uq_out" ] && printf '%s\n' "$uq_out" >&2
-    if [ "$uq_rc" -eq 1 ] && printf '%s' "$uq_out" | grep -q '\[unpublished-quote\] the commit message contains'; then
+    if [ "$uq_rc" -eq 1 ] && grep -q '\[unpublished-quote\] the commit message contains' <<< "$uq_out"; then
       echo "[commit-msg-leak-guard-runner] commit rejected (unpublished-quote). bypass once: CLAUDE_UNPUBLISHED_GUARD=0" >&2
       exit 1
     fi
@@ -225,7 +225,7 @@ if [ -z "$HITS" ] && [ "${CLAUDE_ACTIVITY_FACTS_GUARD:-1}" != "0" ] && [ -f "$AF
   af_rc=0
   af_out="$(python3 "$AF_ENGINE" --message-file "$MSG_FILE" 2>&1)" || af_rc=$?
   [ -n "$af_out" ] && printf '%s\n' "$af_out" >&2
-  if [ "$af_rc" -eq 1 ] && printf '%s' "$af_out" | grep -q '\[activity-facts\] the commit message contains a literal'; then
+  if [ "$af_rc" -eq 1 ] && grep -q '\[activity-facts\] the commit message contains a literal' <<< "$af_out"; then
     echo "[commit-msg-leak-guard-runner] commit rejected (activity-facts). bypass once: CLAUDE_ACTIVITY_FACTS_GUARD=0" >&2
     exit 1
   fi
@@ -246,7 +246,7 @@ if [ -z "$HITS" ] && [ "${CLAUDE_VALUE_INDEX_GUARD:-1}" != "0" ] && [ -f "$VI_EN
     vi_rc=0
     vi_out="$(python3 "$VI_ENGINE" --config "$VI_LAYER/value-index.txt" --message-file "$MSG_FILE" 2>&1)" || vi_rc=$?
     [ -n "$vi_out" ] && printf '%s\n' "$vi_out" >&2
-    if [ "$vi_rc" -eq 1 ] && printf '%s' "$vi_out" | grep -q '\[value-index\] the commit message contains'; then
+    if [ "$vi_rc" -eq 1 ] && grep -q '\[value-index\] the commit message contains' <<< "$vi_out"; then
       echo "[commit-msg-leak-guard-runner] commit rejected (value-index). bypass once: CLAUDE_VALUE_INDEX_GUARD=0" >&2
       exit 1
     fi

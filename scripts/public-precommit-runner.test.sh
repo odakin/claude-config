@@ -473,6 +473,59 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/lib/publishe
 fi
 
 # ====================================================================
+# 大きな入力と段の順番 (2026-11-05): tree の棚卸し (scan-public-tree.sh) は tree 全体を追加行として runner に
+# 渡す。 照合器が pipefail の下で `printf | grep -q` を使っていたので、 本文が pipe の容量を超えると
+# grep -q の早い終了で printf が SIGPIPE になり、 一致が黙って消えた (実測 = 公開 repo の非公開 repo の
+# path を「0」 と記録)。 漏洩以外の段が漏洩の段より前にあると、 それが止めた tree では漏洩の段に届かない。
+# 正本 = conventions/shell-env.md#pipefail-grep-q-sigpipe
+# ====================================================================
+# expect_output_has <name> <file> <content> <needle>: staged して runner の出力に needle が出るか
+expect_output_has() {
+  local name="$1" fname="$2" content="$3" needle="$4" out
+  mkdir -p "$MOCK_REPO/$(dirname "$fname")"
+  printf '%s' "$content" > "$MOCK_REPO/$fname"
+  out="$(
+    cd "$MOCK_REPO"
+    git add -f "$fname" 2>/dev/null
+    CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 "$RUNNER" 2>&1
+    git reset HEAD "$fname" >/dev/null 2>&1
+    rm -f "$fname"
+  )"
+  case "$out" in
+    *"$needle"*) PASS=$((PASS+1)) ;;
+    *) FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [no '$needle'] $name\n" ;;
+  esac
+}
+BIG_FILLER="$(awk 'BEGIN { for (i = 1; i <= 4000; i++) printf "line %d: filler text for the large input case\n", i }')"
+expect_output_has "tier-c-private-repo-name-before-large-body" "big.txt" \
+  "see mockpriv-foo for this
+$BIG_FILLER" "[tier-c]"
+expect_output_has "tier-c-not-masked-by-session-shape" "SESSION.md" \
+  "# SESSION
+## 直近の変更 (2026-06-02)
+mockpriv-foo の件
+" "[tier-c]"
+expect_output_has "leak-pass-line-when-asked" "clean.txt" "nothing to see here" "leak tiers passed"
+# 判定に `printf '%s' "$x" | grep -q` を使わない (gate の 4 file に上の罠の形を残さない)。
+# 1 行の形と、 printf の行末の `\` で次の行の `| grep -q` へ続ける形の両方を見る
+PF_DIR="$(dirname "$RUNNER")"
+PF_FORM="$(python3 - "$PF_DIR/public-precommit-runner.sh" "$PF_DIR/commit-msg-leak-guard-runner.sh" \
+  "$PF_DIR/lib/commit-msg-leak-matcher.sh" "$PF_DIR/scan-public-tree.sh" <<'PY'
+import re, sys
+pat = re.compile(r"""printf\s+'%s'\s+"\$\{?\w+\}?"\s*(?:\\\n\s*)?\|\s*grep\s+-[A-Za-z]*q""")
+for f in sys.argv[1:]:
+    try:
+        s = open(f, encoding="utf-8").read()
+    except OSError:
+        continue
+    for m in pat.finditer(s):
+        print(f"{f}:{s.count(chr(10), 0, m.start()) + 1}")
+PY
+)"
+if [ -z "$PF_FORM" ]; then PASS=$((PASS+1)); else
+  FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [printf|grep -q] gate files still use the SIGPIPE-prone form:\n$PF_FORM\n"; fi
+
+# ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="
 echo "PASS: $PASS"

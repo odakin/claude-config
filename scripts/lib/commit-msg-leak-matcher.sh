@@ -196,14 +196,17 @@ run_leak_matcher() {
         *[!\ -~]*)
           # 非 ASCII (= 日本語等): 単純含有判定 (boundary 概念不明確、 false
           # positive 多めだが OK)
-          if printf '%s' "$message" | grep -qF -- "$repo" 2>/dev/null; then
+          # ⚠️ 照合は here-string で (`printf | grep -q` にしない)。 file 本文の検査 (public-precommit-runner.sh の
+          # Tier C) は pipefail の下でこの関数を呼び、 tree の棚卸しは tree 全体を 1 本の message として渡す。
+          # `printf | grep -q` だと grep -q の早い終了で printf が SIGPIPE になり、 入力が pipe の容量を
+          # 超えると一致が黙って消えた (2026-11-05 実測、 正本 = conventions/shell-env.md#pipefail-grep-q-sigpipe)
+          if grep -qF -- "$repo" <<< "$message" 2>/dev/null; then
             repo_hits="${repo_hits}${repo} "
           fi
           ;;
         *)
           # ASCII: word boundary
-          if printf '%s' "$message" \
-              | grep -qE "(^|[^A-Za-z0-9_-])${repo}([^A-Za-z0-9_-]|$)" 2>/dev/null; then
+          if grep -qE "(^|[^A-Za-z0-9_-])${repo}([^A-Za-z0-9_-]|$)" <<< "$message" 2>/dev/null; then
             repo_hits="${repo_hits}${repo} "
           fi
           ;;
@@ -224,8 +227,7 @@ run_leak_matcher() {
   if [ -z "$repo_hits" ] && [ -n "$filtered_repos" ]; then
     while IFS= read -r repo; do
       [ -n "$repo" ] || continue
-      if printf '%s' "$message" \
-          | grep -qE "~/Claude/${repo}/|/Users/[^/]+/Claude/${repo}/" 2>/dev/null; then
+      if grep -qE "~/Claude/${repo}/|/Users/[^/]+/Claude/${repo}/" <<< "$message" 2>/dev/null; then
         path_hits="${path_hits}~/Claude/${repo}/ "
       fi
     done <<< "$filtered_repos"
@@ -277,8 +279,7 @@ run_leak_matcher() {
     fi
     rm -f "$ra_terms" "$rn_terms"
     if [ -n "$subject_hit" ] \
-        && printf '%s' "$message" \
-             | grep -qE '評点|評定|採点|点数|スコア|score|採否|採択可否|不採択' 2>/dev/null; then
+        && grep -qE '評点|評定|採点|点数|スコア|score|採否|採択可否|不採択' <<< "$message" 2>/dev/null; then
       LEAK_MATCHER_HITS="${LEAK_MATCHER_HITS}
   [review-instance] 種目名 × 評価語の共起 ($(printf '%s' "$subject_hit" | tr '\n' ' '))— 公開面に特定の申請への評価が出る"
     fi

@@ -111,38 +111,6 @@ if [ -n "${CLAUDE_CONFIG_AGENT_SESSION:-}${CLAUDE_CODE_SESSION_ID:-}${CODEX_SESS
 fi
 [ -z "$STAGED" ] && exit 0
 
-# ----------------------------------------------------------------------
-# script 置換の暴走で壊れた text の gate (1 行の異常な繰り返し / HEAD 比の爆発的な増加。 縮小は ⚠️ だけ)。
-# 述語・閾値・escape hatch (CLAUDE_DEGENERATE_TEXT_GUARD=0) の SoT = check-degenerate-text.py docstring。
-# 止めるのは「exit 1 かつ engine の見出し」 のときだけ (= engine の故障 〔rc 3〕 で全 commit を止めない)。
-# ----------------------------------------------------------------------
-DGT_ENGINE="$(dirname "$0")/check-degenerate-text.py"
-if [ -f "$DGT_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
-  dgt_rc=0
-  dgt_out="$(python3 "$DGT_ENGINE" --staged 2>&1)" || dgt_rc=$?
-  [ -n "$dgt_out" ] && printf '%s\n' "$dgt_out" >&2
-  if [ "$dgt_rc" -eq 1 ] && printf '%s' "$dgt_out" | grep -q 'check-degenerate-text:'; then
-    exit 1
-  fi
-fi
-
-# shell script で波括弧の無い変数の直後に全角文字が続く形 ("$name、") の gate (UTF-8 の locale では bash 3.2 が全角文字の
-# 先頭 byte を変数名に取り込む)。 述語・escape hatch (CLAUDE_UNBRACED_MB_VAR_GUARD=0) の SoT = check-unbraced-multibyte-var.py
-# docstring、 規約 = conventions/shell-multibyte-truncation.md#unbraced-var-before-multibyte。
-# 止めるのは「exit 1 かつ engine の BLOCK 見出し」 のときだけ。 見出しの無い非 0 (engine の異常終了) は 1 行出して通す。
-UMV_ENGINE="$(dirname "$0")/check-unbraced-multibyte-var.py"
-if [ -f "$UMV_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
-  umv_rc=0
-  umv_out="$(python3 "$UMV_ENGINE" --staged 2>&1)" || umv_rc=$?
-  [ -n "$umv_out" ] && printf '%s\n' "$umv_out" >&2
-  if [ "$umv_rc" -eq 1 ] && printf '%s' "$umv_out" | grep -q 'check-unbraced-multibyte-var: BLOCK'; then
-    exit 1
-  fi
-  if [ "$umv_rc" -ne 0 ] && ! printf '%s' "$umv_out" | grep -q 'check-unbraced-multibyte-var:'; then
-    echo "⚠️ pre-commit: 変数の直後の全角文字の検査が異常終了した (rc=${umv_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${UMV_ENGINE} --selftest" >&2
-  fi
-fi
-
 # 学生の識別子 (学籍番号の形・氏名・path の姓) を平文で新しく入れる commit の gate (pre-commit-bib と同じ engine・同じ契約)。
 # 値の一覧は machine-local、 無い機械では何もしない。 述語・escape hatch (CLAUDE_STUDENT_ID_GUARD=0) の SoT =
 # check-student-identifiers.py docstring。 止めるのは「exit 1 かつ engine の BLOCK 見出し」 のときだけ。
@@ -151,61 +119,12 @@ if [ -f "$SID_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
   sid_rc=0
   sid_out="$(python3 "$SID_ENGINE" --staged 2>&1)" || sid_rc=$?
   [ -n "$sid_out" ] && printf '%s\n' "$sid_out" >&2
-  if [ "$sid_rc" -eq 1 ] && printf '%s' "$sid_out" | grep -q 'check-student-identifiers: BLOCK'; then
+  if [ "$sid_rc" -eq 1 ] && grep -q 'check-student-identifiers: BLOCK' <<< "$sid_out"; then
     exit 1
   fi
-  if [ "$sid_rc" -ne 0 ] && ! printf '%s' "$sid_out" | grep -q 'check-student-identifiers:'; then
+  if [ "$sid_rc" -ne 0 ] && ! grep -q 'check-student-identifiers:' <<< "$sid_out"; then
     echo "⚠️ pre-commit: 学生の識別子の検査が異常終了した (rc=${sid_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${SID_ENGINE} --selftest" >&2
   fi
-fi
-
-# SESSION.md の形の gate (= 案件ごとの現在地 + 正本への link。 日付を見出しにした節・commit hash・messageId・経緯を詰めた
-# 1 行・200 行を超えて育つ commit を止める。 README の自称正本 = 公開 repo では warn / CLAUDE.md の「SESSION・README に書け」 = warn)。
-# 述語・閾値・escape hatch (CLAUDE_SESSION_SHAPE_GUARD=0) の SoT = check-session-shape.py docstring、 規約 = CONVENTIONS.md#session-no-durable-record。
-# 止めるのは「exit 1 かつ engine の見出し」 のときだけ (= engine の故障 〔rc 3〕 で全 commit を止めない)。
-SSH_ENGINE="$(dirname "$0")/check-session-shape.py"
-if [ -f "$SSH_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
-  ssh_rc=0
-  ssh_out="$(python3 "$SSH_ENGINE" --staged 2>&1)" || ssh_rc=$?
-  [ -n "$ssh_out" ] && printf '%s\n' "$ssh_out" >&2
-  if [ "$ssh_rc" -eq 1 ] && printf '%s' "$ssh_out" | grep -q 'check-session-shape:'; then
-    exit 1
-  fi
-fi
-
-# 差分の効かない file (build した PDF・暗号化した台帳) の頻繁な commit と、 大きすぎる file を知らせる。
-# 止めるのは GitHub が push を拒否する大きさ (1 file 100 MiB 超) だけ = 「exit 1 かつ engine の見出し」 のとき
-# (engine の故障 〔rc 3〕 では止めない)。 SoT = check-history-growth.py docstring / conventions/repo-history-growth.md。
-HG_ENGINE="$(dirname "$0")/check-history-growth.py"
-if [ -f "$HG_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
-  hg_rc=0
-  hg_out="$(python3 "$HG_ENGINE" --staged 2>&1)" || hg_rc=$?
-  [ -n "$hg_out" ] && printf '%s\n' "$hg_out" >&2
-  if [ "$hg_rc" -eq 1 ] && printf '%s' "$hg_out" | grep -q 'check-history-growth: BLOCK'; then
-    exit 1
-  fi
-fi
-
-# 文中の節参照 (「path §「節名」」 / `path#anchor`) が実在する file の実在しない節を指していたら知らせる
-# + この commit で消した見出しを他の file が指していたら知らせる。 止めない (exit 1 = 🔴 あり・警告済み、
-# 3 = 検査が走っていない → 1 行出す)。 承知済み一覧は engine が各 repo root と個人層から読む。
-# 述語・escape hatch (CLAUDE_TEXT_SECTION_REFS=0) の SoT = check-text-section-refs.py docstring、
-# 一般則 = docs/convention-design-principles.md#text-section-refs。
-TSR_ENGINE="$(dirname "$0")/check-text-section-refs.py"
-if [ -f "$TSR_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
-  tsr_rc=0
-  tsr_out="$(python3 "$TSR_ENGINE" --staged 2>&1)" || tsr_rc=$?
-  [ -n "$tsr_out" ] && printf '%s\n' "$tsr_out" >&2
-  if [ "$tsr_rc" -ne 0 ] && [ "$tsr_rc" -ne 1 ] && ! printf '%s' "$tsr_out" | grep -q 'check-text-section-refs:'; then
-    echo "⚠️ pre-commit: 文中の節参照の検査が異常終了した (rc=${tsr_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${TSR_ENGINE} --selftest" >&2
-  fi
-fi
-
-# root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)
-AGENTS_WARN_LIB="$(dirname "$0")/lib/agents-entrypoint-warn.sh"
-if [ -f "$AGENTS_WARN_LIB" ]; then
-  . "$AGENTS_WARN_LIB"
-  warn_missing_agents_entrypoint
 fi
 
 # ----------------------------------------------------------------------
@@ -412,7 +331,7 @@ if [ -f "$REPO_NAME_MATCHER" ] && [ -s "$ADDED_BUF" ]; then
   ADDED_TEXT="$(awk -F'\t' '{ print $2 }' "$ADDED_BUF")"
   run_leak_matcher "$ADDED_TEXT"
   REPO_NAME_HITS="$(printf '%s\n' "${LEAK_MATCHER_HITS:-}" \
-    | grep -E '^[[:space:]]*\[(repo-name|claude-path)\]' || true)"
+    | grep -E '^[[:space:]]*\[(repo-name|repo-path|claude-path)\]' || true)"
   if [ -n "$REPO_NAME_HITS" ]; then
     HITS="${HITS}
 [tier-c]${REPO_NAME_HITS#*]}"
@@ -439,7 +358,7 @@ if [ -z "$HITS" ]; then
       uq_rc=0
       uq_out="$(python3 "$UQ_ENGINE" --config "$PERSONAL_LAYER/unpublished-sources.txt" 2>&1)" || uq_rc=$?
       [ -n "$uq_out" ] && printf '%s\n' "$uq_out" >&2
-      if [ "$uq_rc" -eq 1 ] && printf '%s' "$uq_out" | grep -q '\[unpublished-quote\] the staged change contains'; then
+      if [ "$uq_rc" -eq 1 ] && grep -q '\[unpublished-quote\] the staged change contains' <<< "$uq_out"; then
         echo "[public-precommit-runner] commit rejected by Tier D (unpublished-quote). bypass once: CLAUDE_UNPUBLISHED_GUARD=0" >&2
         exit 1
       fi
@@ -449,7 +368,7 @@ if [ -z "$HITS" ]; then
       cl_rc=0
       cl_out="$(python3 "$CL_ENGINE" 2>&1)" || cl_rc=$?
       [ -n "$cl_out" ] && printf '%s\n' "$cl_out" >&2
-      if [ "$cl_rc" -eq 1 ] && printf '%s' "$cl_out" | grep -q '\[confidential-leak\]'; then
+      if [ "$cl_rc" -eq 1 ] && grep -q '\[confidential-leak\]' <<< "$cl_out"; then
         echo "[public-precommit-runner] commit rejected by Tier D (confidential-leak). bypass once: CLAUDE_LEAK_GUARD=0" >&2
         exit 1
       fi
@@ -465,7 +384,7 @@ if [ -z "$HITS" ]; then
       af_rc=0
       af_out="$(CLAUDE_PERSONAL_LAYER="${PERSONAL_LAYER:-${CLAUDE_PERSONAL_LAYER:-}}" python3 "$AF_ENGINE" 2>&1)" || af_rc=$?
       [ -n "$af_out" ] && printf '%s\n' "$af_out" >&2
-      if [ "$af_rc" -eq 1 ] && printf '%s' "$af_out" | grep -q '\[activity-facts\] the staged change contains a literal'; then
+      if [ "$af_rc" -eq 1 ] && grep -q '\[activity-facts\] the staged change contains a literal' <<< "$af_out"; then
         echo "[public-precommit-runner] commit rejected by Tier E (activity-facts). bypass once: CLAUDE_ACTIVITY_FACTS_GUARD=0" >&2
         exit 1
       fi
@@ -480,12 +399,102 @@ if [ -z "$HITS" ]; then
       vi_rc=0
       vi_out="$(python3 "$VI_ENGINE" --config "$PERSONAL_LAYER/value-index.txt" 2>&1)" || vi_rc=$?
       [ -n "$vi_out" ] && printf '%s\n' "$vi_out" >&2
-      if [ "$vi_rc" -eq 1 ] && printf '%s' "$vi_out" | grep -q '\[value-index\] the staged change contains'; then
+      if [ "$vi_rc" -eq 1 ] && grep -q '\[value-index\] the staged change contains' <<< "$vi_out"; then
         echo "[public-precommit-runner] commit rejected by Tier F (value-index). bypass once: CLAUDE_VALUE_INDEX_GUARD=0" >&2
         exit 1
       fi
     fi
   fi
+  # ----------------------------------------------------------------------
+  # 漏洩の段 (Tier A-F) をここまでで全部通った。 漏洩以外の段 (壊れた text・全角の直前の変数・SESSION の形・
+  # 履歴の増え方・節参照・AGENTS の入口) はこの後に回す (2026-11-05)。 前に置くと、 それらが止めた commit と
+  # tree の棚卸し (scan-public-tree.sh = tree 全体が追加行に見える) では漏洩の段まで届かず、 棚卸しが「0」 と
+  # 記録した (実測)。 棚卸しは CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 を渡し、 下の 1 行で「漏洩の段は通った」 を知る。
+  # ----------------------------------------------------------------------
+  if [ "${CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS:-0}" = "1" ]; then
+    echo "[public-precommit-runner] leak tiers passed" >&2
+  fi
+# ----------------------------------------------------------------------
+# script 置換の暴走で壊れた text の gate (1 行の異常な繰り返し / HEAD 比の爆発的な増加。 縮小は ⚠️ だけ)。
+# 述語・閾値・escape hatch (CLAUDE_DEGENERATE_TEXT_GUARD=0) の SoT = check-degenerate-text.py docstring。
+# 止めるのは「exit 1 かつ engine の見出し」 のときだけ (= engine の故障 〔rc 3〕 で全 commit を止めない)。
+# ----------------------------------------------------------------------
+DGT_ENGINE="$(dirname "$0")/check-degenerate-text.py"
+if [ -f "$DGT_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  dgt_rc=0
+  dgt_out="$(python3 "$DGT_ENGINE" --staged 2>&1)" || dgt_rc=$?
+  [ -n "$dgt_out" ] && printf '%s\n' "$dgt_out" >&2
+  if [ "$dgt_rc" -eq 1 ] && grep -q 'check-degenerate-text:' <<< "$dgt_out"; then
+    exit 1
+  fi
+fi
+
+# shell script で波括弧の無い変数の直後に全角文字が続く形 ("$name、") の gate (UTF-8 の locale では bash 3.2 が全角文字の
+# 先頭 byte を変数名に取り込む)。 述語・escape hatch (CLAUDE_UNBRACED_MB_VAR_GUARD=0) の SoT = check-unbraced-multibyte-var.py
+# docstring、 規約 = conventions/shell-multibyte-truncation.md#unbraced-var-before-multibyte。
+# 止めるのは「exit 1 かつ engine の BLOCK 見出し」 のときだけ。 見出しの無い非 0 (engine の異常終了) は 1 行出して通す。
+UMV_ENGINE="$(dirname "$0")/check-unbraced-multibyte-var.py"
+if [ -f "$UMV_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  umv_rc=0
+  umv_out="$(python3 "$UMV_ENGINE" --staged 2>&1)" || umv_rc=$?
+  [ -n "$umv_out" ] && printf '%s\n' "$umv_out" >&2
+  if [ "$umv_rc" -eq 1 ] && grep -q 'check-unbraced-multibyte-var: BLOCK' <<< "$umv_out"; then
+    exit 1
+  fi
+  if [ "$umv_rc" -ne 0 ] && ! grep -q 'check-unbraced-multibyte-var:' <<< "$umv_out"; then
+    echo "⚠️ pre-commit: 変数の直後の全角文字の検査が異常終了した (rc=${umv_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${UMV_ENGINE} --selftest" >&2
+  fi
+fi
+
+# SESSION.md の形の gate (= 案件ごとの現在地 + 正本への link。 日付を見出しにした節・commit hash・messageId・経緯を詰めた
+# 1 行・200 行を超えて育つ commit を止める。 README の自称正本 = 公開 repo では warn / CLAUDE.md の「SESSION・README に書け」 = warn)。
+# 述語・閾値・escape hatch (CLAUDE_SESSION_SHAPE_GUARD=0) の SoT = check-session-shape.py docstring、 規約 = CONVENTIONS.md#session-no-durable-record。
+# 止めるのは「exit 1 かつ engine の見出し」 のときだけ (= engine の故障 〔rc 3〕 で全 commit を止めない)。
+SSH_ENGINE="$(dirname "$0")/check-session-shape.py"
+if [ -f "$SSH_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  ssh_rc=0
+  ssh_out="$(python3 "$SSH_ENGINE" --staged 2>&1)" || ssh_rc=$?
+  [ -n "$ssh_out" ] && printf '%s\n' "$ssh_out" >&2
+  if [ "$ssh_rc" -eq 1 ] && grep -q 'check-session-shape:' <<< "$ssh_out"; then
+    exit 1
+  fi
+fi
+
+# 差分の効かない file (build した PDF・暗号化した台帳) の頻繁な commit と、 大きすぎる file を知らせる。
+# 止めるのは GitHub が push を拒否する大きさ (1 file 100 MiB 超) だけ = 「exit 1 かつ engine の見出し」 のとき
+# (engine の故障 〔rc 3〕 では止めない)。 SoT = check-history-growth.py docstring / conventions/repo-history-growth.md。
+HG_ENGINE="$(dirname "$0")/check-history-growth.py"
+if [ -f "$HG_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  hg_rc=0
+  hg_out="$(python3 "$HG_ENGINE" --staged 2>&1)" || hg_rc=$?
+  [ -n "$hg_out" ] && printf '%s\n' "$hg_out" >&2
+  if [ "$hg_rc" -eq 1 ] && grep -q 'check-history-growth: BLOCK' <<< "$hg_out"; then
+    exit 1
+  fi
+fi
+
+# 文中の節参照 (「path §「節名」」 / `path#anchor`) が実在する file の実在しない節を指していたら知らせる
+# + この commit で消した見出しを他の file が指していたら知らせる。 止めない (exit 1 = 🔴 あり・警告済み、
+# 3 = 検査が走っていない → 1 行出す)。 承知済み一覧は engine が各 repo root と個人層から読む。
+# 述語・escape hatch (CLAUDE_TEXT_SECTION_REFS=0) の SoT = check-text-section-refs.py docstring、
+# 一般則 = docs/convention-design-principles.md#text-section-refs。
+TSR_ENGINE="$(dirname "$0")/check-text-section-refs.py"
+if [ -f "$TSR_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  tsr_rc=0
+  tsr_out="$(python3 "$TSR_ENGINE" --staged 2>&1)" || tsr_rc=$?
+  [ -n "$tsr_out" ] && printf '%s\n' "$tsr_out" >&2
+  if [ "$tsr_rc" -ne 0 ] && [ "$tsr_rc" -ne 1 ] && ! grep -q 'check-text-section-refs:' <<< "$tsr_out"; then
+    echo "⚠️ pre-commit: 文中の節参照の検査が異常終了した (rc=${tsr_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${TSR_ENGINE} --selftest" >&2
+  fi
+fi
+
+# root AGENTS.md の入口が無い repo を知らせる (止めない、 SoT = lib/agents-entrypoint-warn.sh header)
+AGENTS_WARN_LIB="$(dirname "$0")/lib/agents-entrypoint-warn.sh"
+if [ -f "$AGENTS_WARN_LIB" ]; then
+  . "$AGENTS_WARN_LIB"
+  warn_missing_agents_entrypoint
+fi
+
   # markdown 相対 link guard (= leak ではないので leak 判定を通った後で走らせる)。
   # file を sub-dir や archive へ MOVE すると ../ の段数がずれて link が黙って死ぬ。
   # engine = 同 dir の fix-md-links.py --staged (staged .md の index の中身、 0.1 秒)。
@@ -499,7 +508,7 @@ if [ -z "$HITS" ]; then
     [ -n "$mdl_out" ] && printf '%s\n' "$mdl_out" >&2
     # block only on "exit 1 AND the finding header": a syntax/import error in the engine also
     # exits 1, and must not stop every commit in every public repo
-    if [ "$mdl_rc" -eq 1 ] && printf '%s' "$mdl_out" | grep -q 'point nowhere at their'; then
+    if [ "$mdl_rc" -eq 1 ] && grep -q 'point nowhere at their' <<< "$mdl_out"; then
       echo "[public-precommit-runner] commit rejected by the markdown link guard (run the fix above; bypass: CLAUDE_MD_LINKS_GUARD=0)" >&2
       exit 1
     fi

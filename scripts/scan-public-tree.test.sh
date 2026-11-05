@@ -162,6 +162,26 @@ out="$(run "$ST12" --repo "$DIRTY")"; rc=$?
 printf '%s' "$out" | grep -q '台帳に走査済' \
   && check ng "T12b: 最新の行が finding なら古い 0 で skip しない" || check ok "T12b: 最新の行が finding なら古い 0 で skip しない"
 
+# ---- (11) 照合器の対照 (2026-11-05): 個人層ありの走査では、 先頭に架空の非公開 repo 名を置いた大きな tree を
+# 偽の個人層で runner に通す。 照合器が大きな入力で一致を落とす間は 🔴 を出して台帳に 0 を書かない。
+# 照合器が直った版 (here-string) では 🔴 が出ず、 clean な tree は台帳に 0 で残る ----
+MOCK_LAYER="$T/mock-layer"
+mkdir -p "$MOCK_LAYER"
+: > "$MOCK_LAYER/.claude-personal-layer"
+printf '# mock\n' > "$MOCK_LAYER/CLAUDE.md"
+printf '| repo | desc | visibility |\n|---|---|---|\n| `mockpriv-foo/` | mock | private |\n' > "$MOCK_LAYER/repos.md"
+ST11="$T/state11"
+out="$(CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST11" "$SELF" --repo "$CLEAN" 2>/dev/null)"; rc=$?
+printf '%s' "$out" | grep -q '照合器の対照が落ちた' \
+  && check ng "T11: 照合器は大きな入力でも一致を拾う (対照が落ちた: $out)" || check ok "T11: 照合器は大きな入力でも一致を拾う"
+grep -q "	0	ctl$" "$ST11/public-tree-scan.tsv" 2>/dev/null \
+  && check ok "T11b: 対照が通った回は clean を 0 で記録" || check ng "T11b: 対照が通った回は clean を 0 で記録 (rc=$rc)"
+# 非公開 repo 名を先頭に置いた大きな tree は Tier C で finding になる (= 9/15 型の取りこぼしの再現)
+BIGLEAK="$(mk_repo bigleak "$(printf 'see mockpriv-foo for this\n'; awk 'BEGIN { for (i = 1; i <= 6000; i++) printf "line %d: filler\n", i }')")"
+out="$(CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST11" "$SELF" --repo "$BIGLEAK" 2>/dev/null)"; rc=$?
+[ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 'tier-c' \
+  && check ok "T11c: 大きな tree の非公開 repo 名を拾う" || check ng "T11c: 大きな tree の非公開 repo 名を拾う (rc=$rc: $out)"
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ] || exit 1
