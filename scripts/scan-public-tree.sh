@@ -100,6 +100,43 @@ has_record() {
   awk -F'\t' -v r="$1" '$1 == r { found = 1 } END { exit found ? 0 : 1 }' "$LEDGER"
 }
 
+# ----------------------------------------------------------------------
+# 照合器の対照 (positive control、 2026-11-05)。 tree の棚卸しは tree 全体を 1 回の「追加行」 として runner に
+# 渡すので、 入力が数百 KB になる。 非公開 repo 名の照合 (Tier C) が pipefail の下で `printf | grep -q` を
+# 使っていた間、 入力が pipe の容量を超えると grep -q の早い終了で printf が SIGPIPE になり、 一致が黙って
+# 消えた = 公開 repo の tree に非公開 repo の path が在るのに「0 finding」 と台帳に記録した (実測)。
+# 走査の前に、 架空の非公開 repo 名を先頭に置いた大きな tree を偽の個人層で runner に通し、 Tier C が
+# それを拾うかを 1 回確かめる。 拾えなければ「0 finding」 は信用できないので台帳に 0 を書かない
+# (= 次の回にまた走査される)。 個人層を切った呼び出し (CLAUDE_PERSONAL_LAYER=none) は Tier C を
+# 使わないので確かめない。 規律 = conventions/shell-env.md#pipefail-grep-q-sigpipe
+# ----------------------------------------------------------------------
+CONTROL_STATE=""   # "" = 未実施 / ok / blind / skip
+control_check() {
+  [ -n "$CONTROL_STATE" ] && return 0
+  if [ "${CLAUDE_PERSONAL_LAYER:-}" = "none" ]; then CONTROL_STATE="skip"; return 0; fi
+  local c out
+  c="$(mktemp -d)" || { CONTROL_STATE="skip"; return 0; }
+  mkdir -p "$c/layer" "$c/repo"
+  : > "$c/layer/.claude-personal-layer"
+  printf '# scan control layer\n' > "$c/layer/CLAUDE.md"
+  printf '| repo | desc | visibility |\n|---|---|---|\n| `scanctl-canary/` | control | private |\n' > "$c/layer/repos.md"
+  {
+    printf 'see scanctl-canary for this\n'
+    awk 'BEGIN { for (i = 1; i <= 6000; i++) printf "line %d: filler text for the scan control\n", i }'
+  } > "$c/repo/control.txt"
+  ( cd "$c/repo" && git init -q 2>/dev/null && git add -A -f 2>/dev/null )
+  out="$(cd "$c/repo" && CLAUDE_PERSONAL_LAYER="$c/layer" "$RUNNER" 2>&1)"
+  rm -rf "$c"
+  if grep -q '\[tier-c\]' <<< "$out"; then
+    CONTROL_STATE="ok"
+  else
+    CONTROL_STATE="blind"
+    printf '%s\n' "🔴 [scan-public-tree] 照合器の対照が落ちた: 先頭に架空の非公開 repo 名を置いた大きな tree で Tier C が何も拾わない"
+    printf '%s\n' "    = 大きな tree の「0 finding」 は信用できない。 この回は台帳に 0 を書かない (直した後にまた走査される)"
+    printf '%s\n' "    → 原因の候補 = 照合器が \`printf | grep -q\` を pipefail の下で使っている (conventions/shell-env.md#pipefail-grep-q-sigpipe)"
+  fi
+}
+
 already_scanned() {
   [ "$FORCE" -eq 1 ] && return 1
   [ -f "$LEDGER" ] || return 1
@@ -228,11 +265,17 @@ scan_one() {
     git add -A -f 2>/dev/null
   )
 
-  out="$(cd "$tmp" && "$RUNNER" 2>&1)"
+  # CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 = 漏洩の段 (Tier A-F) を全部通ったら runner が 1 行出す (出す版の runner のとき)。
+  # 漏洩以外の段 (SESSION の形・壊れた text など) が止めた tree を「漏洩の段は通った」 と「届かなかった」 に分けるため
+  out="$(cd "$tmp" && CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 "$RUNNER" 2>&1)"
   rc=$?
   rm -rf "$tmp"
 
   if [ "$rc" -eq 0 ]; then
+    if [ "$CONTROL_STATE" = "blind" ]; then
+      say "[scan-public-tree] $name: 0 finding — ⚠️ 照合器の対照が落ちているので台帳に記録しない (= 未確認)"
+      return 0
+    fi
     say "[scan-public-tree] $name: 0 finding"
     record "$repo" "$sha" 0
     return 0
@@ -252,14 +295,43 @@ scan_one() {
     # `commit rejected:` (= Tier A/B/C の汎用見出し) は上で filter 済の詳細に対応するので
     # ここでは見ない。 見るのは `commit rejected by ...` (= Tier D/E / link guard 等、
     # 見出し行を持たない別経路) だけ
-    if printf '%s' "$out" | grep -q 'commit rejected by'; then
+    # ⚠️ `printf | grep -q` にしない (runner の出力は大きくなりうる。 pipefail の下では grep -q の早い終了で
+    # printf が SIGPIPE になり、 見出しが在っても偽になる = conventions/shell-env.md#pipefail-grep-q-sigpipe)
+    if grep -q 'commit rejected by' <<< "$out"; then
       # 受理 filter で消えたが、 見出しを持たない別の理由で落ちている = 黙って通さない
       printf '%s\n' "⚠️ [scan-public-tree] $name: 受理済み以外の理由で runner が落ちた"
       printf '%s\n' "$out" | sed 's/^/    /'
       record "$repo" "$sha" 1
       return 1
     fi
-    say "[scan-public-tree] $name: 0 finding (= 残りは .claude/public-tree-accept.txt の受理済みのみ)"
+    if grep -q '\[public-precommit-runner\] commit rejected: potential leak detected' <<< "$out" \
+        && ! grep -q '\[public-precommit-runner\] leak tiers passed' <<< "$out"; then
+      # Tier A-C の見出しが出て、 その行が全部受理済みだった形 (= 以前からの「受理済みのみ」)。
+      # ⚠️ runner は A-C に hit があると D-F (未公開文書の逐語・活動の事実・暗号化した値) を回さない作り =
+      # この repo の D-F はこの回は走っていない。 従来どおり 0 と記録するが、 そのことを毎回出す
+      if [ "$CONTROL_STATE" = "blind" ]; then
+        say "[scan-public-tree] $name: 0 finding (受理済みのみ) — ⚠️ 照合器の対照が落ちているので台帳に記録しない (= 未確認)"
+        return 0
+      fi
+      say "[scan-public-tree] $name: 0 finding (= 残りは .claude/public-tree-accept.txt の受理済みのみ。 ⚠️ Tier D-F はこの回走っていない)"
+      record "$repo" "$sha" 0
+      return 0
+    fi
+    if ! grep -q '\[public-precommit-runner\] leak tiers passed' <<< "$out"; then
+      # runner は非 0 で終わったのに、 漏洩の段の見出しも「漏洩の段は通った」 の 1 行も無い = 漏洩以外の段
+      # (SESSION の形・壊れた text・履歴の増え方 など) が漏洩の段より前で止めた。 漏洩の段は走っていないので、
+      # 「0 finding」 と記録しない (2026-11-05 まで、 この形は 0 と記録されていた)
+      printf '%s\n' "⚠️ [scan-public-tree] $name: runner が漏洩の段に届く前に止まった (= 未走査、 0 ではない)"
+      printf '%s\n' "$out" | tail -n 15 | sed 's/^/    /'
+      printf '%s\n' "    → 止めた段を直して回し直す (runner が漏洩の段を先に回す版なら、 この形にはならない)"
+      record "$repo" "$sha" 1
+      return 1
+    fi
+    if [ "$CONTROL_STATE" = "blind" ]; then
+      say "[scan-public-tree] $name: 漏洩の 0 finding — ⚠️ 照合器の対照が落ちているので台帳に記録しない (= 未確認)"
+      return 0
+    fi
+    say "[scan-public-tree] $name: 0 finding (= 残りは受理済みのみ、 または runner は漏洩の段を通った後の段で止まった)"
     record "$repo" "$sha" 0
     return 0
   fi
@@ -274,6 +346,7 @@ scan_one() {
 
 # ----------------------------------------------------------------------
 RC=0
+control_check   # 1 回だけ (= 走査の前。 結果は CONTROL_STATE、 落ちたら 🔴 を 1 行目に出す)
 if [ "$MODE" = "all" ]; then
   [ -d "$ROOT" ] || { echo "scan-public-tree.sh: no such root: $ROOT" >&2; exit 2; }
   found=0

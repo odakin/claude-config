@@ -348,6 +348,17 @@ fresh な index に置き、 **全 file が「追加行」 に見える状態**�
 そのまま tree 全体に当たる)。 `--all` で marker つき repo を横断、 結果は machine-local の台帳に記録し、
 **finding があった repo は「走査済」 にしない**。
 
+<a id="scan-zero-needs-control"></a>⚠️ **棚卸しの「0 finding」 は、 検出器がその大きさの入力で効くと確かめた回だけ信用する**。 棚卸しは tree 全体を
+1 回の入力として渡すので、 commit 1 本の差分より桁で大きい。 実測: 非公開 repo 名の照合が `printf | grep -q` を
+`pipefail` の下で使っていて、 入力が pipe の容量を超えると一致が黙って消え、 非公開 repo の path を含む公開 repo を
+「0」 と記録した (commit の gate は差分が小さいので同じ照合が効いていた = 型は [`shell-env.md#pipefail-grep-q-sigpipe`](shell-env.md#pipefail-grep-q-sigpipe))。
+もう 1 つの形 = **漏洩以外の段が漏洩の段より前にある** runner は、 その段が止めた tree で漏洩の段に届かない
+(SESSION の形・壊れた text の検査が止めた tree を「0」 と記録する作りだった)。 ∴ 棚卸しの道具は
+(1) 走査の前に、 架空の非公開 repo 名を先頭に置いた大きな tree で検出器が拾うかを 1 回確かめ、 拾えなければ台帳に 0 を書かない
+(2) runner が非 0 で終わったのに漏洩の段の見出しも「漏洩の段を通った」 の 1 行も無いときは「未走査」 と記録する
+(実装 = [`scripts/scan-public-tree.sh`](../scripts/scan-public-tree.sh) の `control_check` と `scan_one`)。
+一般則 = [`docs/convention-design-principles.md#sweep-null-needs-per-form-control`](../docs/convention-design-principles.md#sweep-null-needs-per-form-control)。
+
 <a id="ledger-skips-bypassed-commits"></a>⚠️ 台帳は走査済の repo を HEAD が進んでも見直さない (新しい行は commit の gate が見る前提)。
 この前提は gate を通った commit にしか成り立たない: GitHub の画面での編集・他の人の PR の merge・hook の入っていない機械からの commit は gate を通らない。
 台帳を持たない runner (CI) で棚卸しを回すと毎回 tree 全体を見直すので、 それがこの抜け道を定期的に見る唯一の網になっていることがある (実測)。
