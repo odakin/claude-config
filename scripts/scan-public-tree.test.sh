@@ -182,6 +182,18 @@ out="$(CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST11" "$SELF" --re
 [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 'tier-c' \
   && check ok "T11c: 大きな tree の非公開 repo 名を拾う" || check ng "T11c: 大きな tree の非公開 repo 名を拾う (rc=$rc: $out)"
 
+# ---- (13) agent の session から回しても漏洩の段まで届く (2026-11-05): 原稿の主張と権限規約の gate は agent の
+# session の commit を見るので、 tree 全体が追加に見える棚卸しで規則の文書 (CLAUDE.md) に当たって止まる。
+# 棚卸しは agent の env を外して runner を回す (replay-public-gate.sh と同じ) ----
+ST13="$T/state13"
+RULEDOC="$(mk_repo ruledoc 'ふつうの文。')"
+printf '# CLAUDE.md\n\n規則の文書の例。\n' > "$RULEDOC/CLAUDE.md"
+git -C "$RULEDOC" add -A >/dev/null 2>&1
+git -C "$RULEDOC" -c user.email=t@example.com -c user.name=t commit -qm rule >/dev/null 2>&1
+out="$(CLAUDE_CODE_SESSION_ID=scan-test-session CLAUDE_STATE_DIR="$ST13" "$SELF" --repo "$RULEDOC" 2>/dev/null)"; rc=$?
+[ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '0 finding' \
+  && check ok "T13: agent の session から回しても漏洩の段まで届く" || check ng "T13: agent の session から回しても漏洩の段まで届く (rc=$rc: $out)"
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ] || exit 1

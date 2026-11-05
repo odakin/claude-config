@@ -133,7 +133,7 @@ control_check() {
     awk 'BEGIN { for (i = 1; i <= 6000; i++) printf "line %d: filler text for the scan control\n", i }'
   } > "$c/repo/control.txt"
   ( cd "$c/repo" && git init -q 2>/dev/null && git add -A -f 2>/dev/null )
-  out="$(cd "$c/repo" && CLAUDE_PERSONAL_LAYER="$c/layer" "$RUNNER" 2>&1)"
+  out="$(cd "$c/repo" && CLAUDE_PERSONAL_LAYER="$c/layer" env -u CLAUDE_CONFIG_AGENT_SESSION -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID "$RUNNER" 2>&1)"
   rm -rf "$c"
   if grep -q '\[tier-c\]' <<< "$out"; then
     CONTROL_STATE="ok"
@@ -288,8 +288,11 @@ scan_one() {
   )
 
   # CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 = 漏洩の段 (Tier A-F) を全部通ったら runner が 1 行出す (出す版の runner のとき)。
-  # 漏洩以外の段 (SESSION の形・壊れた text など) が止めた tree を「漏洩の段は通った」 と「届かなかった」 に分けるため
-  out="$(cd "$tmp" && CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 "$RUNNER" 2>&1)"
+  # 漏洩以外の段 (SESSION の形・壊れた text など) が止めた tree を「漏洩の段は通った」 と「届かなかった」 に分けるため。
+  # agent の session の env は外す (replay-public-gate.sh と同じ): 原稿の主張と権限規約の gate は「今の session に著者の
+  # 承認があるか」 を見るので、 tree 全体が追加に見える棚卸しを agent の commit として通すと規則の文書で必ず止まり、
+  # 漏洩の段に届かない (2026-11-05 まで、 この形は「0」 と記録されていた = agent の session から回した棚卸しは盲目だった)
+  out="$(cd "$tmp" && CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 env -u CLAUDE_CONFIG_AGENT_SESSION -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID "$RUNNER" 2>&1)"
   rc=$?
   rm -rf "$tmp"
 
