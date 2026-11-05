@@ -237,8 +237,8 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
 ### <a id="session-carryover-gate"></a>公開 repo には「同じ session で非公開の source から読んだ値」 の gate を置く (2026-11-05)
 
 検出器を較正する・例を本物らしくする turn では、 非公開の記録 (暗号化した repo の commit message、 非公開 repo の file) を
-tool で読み、 その値を同じ session の中で公開 repo の selftest・コメント・docstring の例に写す (実測: 額の組・本数・
-コードの一覧の 3 か所が、 公開 repo の新しい検出器の selftest とコメントに入り、 force push で履歴から消した)。
+tool で読み、 その値を同じ session の中で公開 repo の selftest・コメント・docstring の例に写す (実測。 額の組・本数・
+コードの一覧の形で入った)。
 写した値は識別子でも語の一覧の語でも 5 語以上の文でもないので、 上の網 (Tier A-F) はどれも見ない。
 「commit の前に、 較正で目にした値で追加行を grep する」 は散文の手順で、 commit と push を 1 本で打つと気づくのは push の後になる。
 
