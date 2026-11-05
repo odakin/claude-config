@@ -10,9 +10,13 @@
 拾うもの (session 本体の記録 <projects-dir>/<project>/<session id>.jsonl の道具の呼び出し):
   1. arXiv の原典 — Bash の command か WebFetch の URL に arxiv.org/pdf/ か arxiv.org/e-print/ があれば、 その中の arXiv の番号を全部。
      loop (`for id in A B C; do curl …/pdf/$id`) も拾える。 session が Write した script の本文にその URL があれば、 その script を
-     起動した command の番号も数える (実測: 取得を script に書いて番号を引数で渡すと 0 件と出た)。 URL の無い command の番号は数えない (書誌の API・INSPIRE の検索を除くため)
+     起動した command の番号も数える (実測: 取得を script に書いて番号を引数で渡すと 0 件と出た)。 URL の無い command の番号は数えない (書誌の API・INSPIRE の検索を除くため)。
+     ただし取得の道具 (KNOWN_FETCHERS = ai-collaboration の fetch-literature.py) の起動は、 URL が無くても引数の番号と、
+     `--list <file>` の一覧の番号を数える (一覧の file が今あれば中身、 もう無ければ同じ session でその file に書いた command の本文。
+     実測: この道具で番号を渡して取得した session で 0 件と出た)
   2. 手元の PDF — (a) Read の file_path、 (b) Bash の curl -o / wget -O の書き先、 (c) Bash の command に現れる取り込み口
-     (DROP_DIRS = ~/Desktop・~/Downloads) の下の `….pdf`、 (d) arXiv 以外の URL で WebFetch が保存した PDF (結果の「also saved to」 の path)。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
+     (DROP_DIRS = ~/Desktop・~/Downloads) の下の `….pdf`、 (d) arXiv 以外の URL で WebFetch が保存した PDF (結果の「also saved to」 の path)、
+     (e) メールの添付を保存した PDF (名前が `download_attachment` で終わる MCP の道具。 結果の「Saved to:」 の path、 無ければ入力の savePath と filename)。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
      隣に同じ名前の .tex がある PDF (組版の生成物) は数えない。 path の変数は同じ command で先に代入したものだけ展開し、
      展開できない path と glob は数えない (loop の取得は 1 の番号で拾う)
 
@@ -61,6 +65,16 @@ WEBFETCH_SAVED_RE = re.compile(r"also saved to (\S+?\.pdf)\b", re.I)
 OUTPUT_RE = re.compile(r"\b(?:curl|wget)\b[^\n;|&]*?\s(?:-o|--output|-O|--output-document)\s+(['\"]?)([^\s'\";|&<>]+)\1")
 # 取り込む前の検査のために空の dir へ写した写し (`cp <元> <写し>`)。 写しが消えても元で照合する
 CP_RE = re.compile(r"(?:^|[\s;&|(])cp\s+(?:-\w+\s+)*(['\"]?)([^\s'\";|&<>]+)\1\s+(['\"]?)([^\s'\";|&<>]+)\3(?=\s*(?:$|[;&|\n)]))")
+# 番号を引数か一覧の file で受け取る取得の道具 (command に URL が出ない)。 名前で見分ける
+KNOWN_FETCHERS = ("fetch-literature.py",)
+LIST_OPT_RE = re.compile(r"--list(?:=|\s+)(['\"]?)([^\s'\";|&<>]+)\1")
+REDIRECT_RE = re.compile(r">>?\s*(['\"]?)([^\s'\";|&<>]+)\1")
+# メールの添付を保存する MCP の道具 (例 = Gmail の server) の結果の行
+SAVED_TO_RE = re.compile(r"Saved to:\s*(\S+)")
+
+
+def _invokes(cmd, names):
+    return any(os.path.basename(t.strip("'\"")) in names for t in cmd.split())
 
 
 def _expand_at(cmd, pos, raw, cwd):
@@ -75,6 +89,7 @@ def collect(calls, drop_dirs=DROP_DIRS):
     local = {path: {"how": 取得の形, "time": 最初の時刻}}。"""
     drops = [os.path.realpath(os.path.expanduser(d)) for d in drop_dirs]
     arxiv, local, copied_from, fetchers = {}, {}, {}, set()
+    list_files, writes = {}, []      # 取得の道具の --list の file = {path: (時刻, 先頭)}、 Bash が書いた file = [(path, command)]
 
     def add_local(path, how, ts):
         if path and path.lower().endswith(".pdf") and path not in local:
@@ -90,6 +105,15 @@ def collect(calls, drop_dirs=DROP_DIRS):
         if name == "Write" and ARXIV_URL_RE.search(inp.get("content") or ""):
             fetchers.add(os.path.basename(inp.get("file_path") or ""))
         cmd = inp.get("command") or "" if name == "Bash" else ""
+        for m in REDIRECT_RE.finditer(cmd):
+            w = _expand_at(cmd, m.start(2), m.group(2), cwd)
+            if w:
+                writes.append((os.path.normpath(w), cmd))
+        if _invokes(cmd, KNOWN_FETCHERS):
+            for m in LIST_OPT_RE.finditer(cmd):
+                lp = _expand_at(cmd, m.start(2), m.group(2), cwd)
+                if lp:
+                    list_files.setdefault(os.path.normpath(lp), (ts, cmd.strip().splitlines()[0][:120]))
         for m in CP_RE.finditer(cmd):
             src, dst = _expand_at(cmd, m.start(2), m.group(2), cwd), _expand_at(cmd, m.start(4), m.group(4), cwd)
             if src and dst and src.lower().endswith(".pdf"):
@@ -112,10 +136,17 @@ def collect(calls, drop_dirs=DROP_DIRS):
                 if saved:
                     add_local(saved.group(1), "WebFetch が保存した (" + url[:80] + ")", ts)
             continue
+        if name.endswith("download_attachment"):
+            saved = SAVED_TO_RE.search(out or "")
+            p = saved.group(1) if saved else (
+                os.path.join(inp.get("savePath") or ".", inp["filename"]) if inp.get("filename") else "")
+            if p:
+                add_local(ssr._expand(p, cwd), "メールの添付を保存した (" + name.split("__")[-2 if "__" in name else 0] + ")", ts)
+            continue
         if name != "Bash":
             continue
         cmd = inp.get("command") or ""
-        if ARXIV_URL_RE.search(cmd) or any(os.path.basename(t) in fetchers for t in cmd.split()):
+        if ARXIV_URL_RE.search(cmd) or _invokes(cmd, fetchers) or _invokes(cmd, KNOWN_FETCHERS):
             add_arxiv(cmd, ts, cmd.strip().splitlines()[0][:120])
         for m in OUTPUT_RE.finditer(cmd):
             add_local(_expand_at(cmd, m.start(2), m.group(2), cwd), "URL から取得 (curl / wget の書き先)", ts)
@@ -123,6 +154,13 @@ def collect(calls, drop_dirs=DROP_DIRS):
             p = _expand_at(cmd, m.start(2), m.group(2), cwd)
             if p and any(os.path.realpath(p).startswith(d + os.sep) for d in drops):
                 add_local(p, "取り込み口の file (" + os.path.dirname(p) + ")", ts)
+    for lp, (ts, head) in list_files.items():
+        try:
+            add_arxiv(Path(lp).read_text(encoding="utf-8", errors="replace"), ts, head + " (一覧 " + os.path.basename(lp) + ")")
+        except OSError:      # 一覧の file がもう無い = 同じ session でその file に書いた command の本文から拾う
+            for w, wcmd in writes:
+                if w == lp:
+                    add_arxiv(wcmd, ts, head + " (一覧 " + os.path.basename(lp) + " を書いた command)")
     for p, rec in local.items():
         if p in copied_from:
             rec["origin"] = copied_from[p]
@@ -307,12 +345,26 @@ def selftest():
         call(16, "Bash", {"command": "bash " + os.path.join(scratch, "fetch.sh") + " 2407.00007 quant-ph/0311107"})
         call(17, "Write", {"file_path": os.path.join(scratch, "other.py"), "content": "print('no url')"})
         call(18, "Bash", {"command": "python3 " + os.path.join(scratch, "other.py") + " 2408.00008"})
+        # 取得の道具 (KNOWN_FETCHERS) は URL が無くても数える: 引数の番号、 --list の一覧 (今ある file と、 もう無い file を書いた command)
+        call(19, "Bash", {"command": "python3 /opt/x/scripts/fetch-literature.py 2409.00009 hep-ph/0101001v2 --out " + scratch + "/lit"})
+        call(20, "Bash", {"command": "L=" + scratch + "/gone-list.txt; cat > \"$L\" <<'EOF'\n2410.00010\n# comment\n2411.00011\nEOF"})
+        call(21, "Bash", {"command": "python3 fetch-literature.py --list " + scratch + "/gone-list.txt --out /tmp/lit2"})
+        Path(scratch, "list.txt").write_text("2412.00012\n", encoding="utf-8")
+        call(22, "Bash", {"command": "python3 ~/x/fetch-literature.py --list '" + os.path.join(scratch, "list.txt") + "' --out /tmp/lit3"})
+        call(23, "Bash", {"command": "python3 lit-search.py arxiv 2413.00013"})      # 検索の道具 = 取得ではない
+        Path(scratch, "att.pdf").write_bytes(b"%PDF-1.4 mail attachment")
+        call(24, "mcp__gmail-x__download_attachment", {"messageId": "m", "attachmentId": "a", "savePath": scratch},
+             "Attachment downloaded successfully:\nFile: att.pdf\nSaved to: " + os.path.join(scratch, "att.pdf"))
         Path(proj, sid + ".jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
 
         calls = ssr.read_calls(Path(proj, sid + ".jsonl"))
         arxiv, local = collect(calls, drop_dirs=(drop,))
-        check(set(arxiv) == {"2401.00001", "2402.00002", "hep-th/9901001", "2405.00005", "2407.00007", "quant-ph/0311107"},
-              "arXiv = URL のある command と、 URL を本文に持つ script の引数と、 WebFetch の PDF の番号だけ (loop も、 古い形も。 書誌の API と abs の頁と URL の無い script の引数は数えない)")
+        check(set(arxiv) == {"2401.00001", "2402.00002", "hep-th/9901001", "2405.00005", "2407.00007", "quant-ph/0311107",
+                             "2409.00009", "hep-ph/0101001", "2410.00010", "2411.00011", "2412.00012"},
+              "arXiv = URL のある command と、 URL を本文に持つ script の引数と、 WebFetch の PDF の番号と、 取得の道具の引数と一覧の番号だけ (loop も、 古い形も。 書誌の API と abs の頁と URL の無い script の引数と検索の道具は数えない)")
+        check(arxiv["hep-ph/0101001"]["versions"] == {"v2"}, "取得の道具の引数の版も取る")
+        check({"2410.00010", "2411.00011"} <= set(arxiv) and "一覧" in arxiv["2410.00010"]["cmd"],
+              "もう無い一覧の file は、 同じ session でその file に書いた command の本文から拾う")
         check(arxiv["2405.00005"]["versions"] == {"v2"}, "WebFetch の URL の版も取る")
         check(arxiv["hep-th/9901001"]["versions"] == {"v3"}, "版を取る")
         rows = {r["what"]: r for r in judge(arxiv, local, tracked_files([repo]))}
@@ -326,14 +378,18 @@ def selftest():
         check(rows[os.path.join(scratch, "dl.pdf")]["mark"] == "⚠️", "curl -o の書き先は変数を展開して数える")
         check(not any("q.pdf" in k for k in rows), "展開できない変数の書き先は数えない")
         check(rows[saved]["mark"] == "⚠️", "WebFetch が保存した PDF (arXiv 以外) も数える")
+        att = rows.get(os.path.join(scratch, "att.pdf"))
+        check(att is not None and att["mark"] == "⚠️" and "メールの添付" in att["note"],
+              "メールの添付を保存した PDF (download_attachment の結果の Saved to:) も数える")
         copy = [r for k, r in rows.items() if k.startswith(os.path.join(t, "scan", "paper.pdf"))]
         check(len(copy) == 1 and copy[0]["mark"] == "✅" and "写し" in copy[0]["what"],
               "消えた写しは cp の元で照合する (❌ にしない)")
         res = []
         _capture(lambda: res.append(report(sid[:8], [Path(t, "projects")], root, True, False, drop_dirs=(drop,))))
-        check(res == [(0, 9)], "保存なし・もう無い = 9 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・other・vanished・dl・WebFetch の PDF)")
+        check(res == [(0, 15)], "保存なし・もう無い = 15 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・"
+              "取得の道具の 5 件・other・vanished・dl・WebFetch の PDF・メールの添付)")
         out = json.loads(_capture(lambda: report(sid[:8], [Path(t, "projects")], root, True, True, drop_dirs=(drop,))))
-        check(out["unsaved"] == 9 and out["repos"] == 1, "json も同じ数")
+        check(out["unsaved"] == 15 and out["repos"] == 1, "json も同じ数")
     print("selftest: " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
 
