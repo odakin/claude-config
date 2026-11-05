@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands) + スライド・文書に置く図の大きさと文字の pt を決めるとき・図の文字が頁で小さく見えるとき (#draw-at-placed-size)
+when: matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands) + スライド・文書に置く図の大きさと文字の pt を決めるとき・図の文字が頁で小さく見えるとき (#draw-at-placed-size) + matplotlib の絵を並べて短い動画 (紹介・タイトル映像、 音楽つき) を作るとき (#short-video-from-frames)
 category: paper
-summary: matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・既存図を置換するときの情報 inventory / snapshot / actual-render layering review・機構 fact・射程の限界
+summary: matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・既存図を置換するときの情報 inventory / snapshot / actual-render layering review・機構 fact・射程の限界・絵を ffmpeg に流して短い動画を作る経路 (#short-video-from-frames)
 -->
 # matplotlib 図の QA — ラベルはみ出しは目視でなく機械 gate で落とす
 
@@ -207,3 +207,17 @@ matplotlib の文字の大きさと線の太さは pt で決まる。 大きな 
 matplotlib の mathtext は LaTeX の部分集合で、 `\tfrac` のような命令を知らない。
 図の文字列に書くと、 描画の時点 (`tight_layout()` / `savefig()`) で `ValueError` (`ParseFatalException: Unknown symbol: \tfrac`) で落ちる (実測)。
 `\frac{3}{2}` か `3/2` に書き換える。 本文の TeX と同じ macro で図の文字を書きたいなら `rcParams["text.usetex"] = True` で TeX に描かせる (TeX の install が要る)。
+
+## <a id="short-video-from-frames"></a>matplotlib の絵を並べて短い動画 (数十秒の紹介・タイトル映像) を作る
+
+- **経路**: figure を 1920×1080 (`figsize=(19.2, 10.8), dpi=100`) で 1 枚ずつ描き、 `fig.canvas.buffer_rgba()` の bytes を ffmpeg の標準入力 (`-f rawvideo -pix_fmt rgba -s 1920x1080 -r 30 -i -`) に流して、 `-c:v libx264 -pix_fmt yuv420p -movflags +faststart` で書く (`yuv420p` = 標準の player がそのまま開く)。 PNG を書かないので速い (実測: 30 秒 900 枚が数十秒〜1 分)。 matplotlib の animation の仕組みを経由せずに書ける
+- **時刻 t から 1 枚を描く関数** `draw(ax, t)` にし、 場面は t の区間で分ける。 同じ関数で、 指定した時刻の静止画を書く口 (`stills 5 15 …`) を付け、 全体を書き出す前に配置を見る
+- **締めのある仕事は粗い版を先に置く**: `<名前>.part.mp4` に書いて、 書き終えてから `os.replace` で本名にする = 置き場の file は常に再生できる。 直しは別名で書き、 長さを確かめてから置き換える
+- **確かめ方**: `ffprobe -show_entries format=duration:stream=codec_type,nb_frames` で長さ・枚数・音の流れの有無。 `ffmpeg -ss <t> -i <file> -frames:v 1` で場面ごとに 1 枚を切り出し、 文字の切れと重なりを目で見る。 音は `-af volumedetect` の `max_volume` が 0 dB 未満
+- **動き**:
+  - 出てくる文字を弾ませる = 大きさに `1 - exp(-5x)·cos(9x)` (x = 出始めからの時間 ÷ 0.45 秒) を掛ける (行き過ぎて戻る)
+  - 拍に合わせる = 拍 (120 BPM なら 0.5 秒) ごとに表示範囲を少し内側へ寄せて戻す (`z = 0.12·exp(-(t mod 0.5)/0.07)` を xlim・ylim に足し引き)。 文字は pt で決まるので大きさが変わらず、 図形だけが弾む
+  - 動画投稿サイトの「テロップ」 風の字 = 太い字 (macOS ならヒラギノ角ゴシック W8・W9 の `.ttc` を `FontProperties(fname=…)` で直接渡せる) を白か原色で塗り、 `path_effects=[withStroke(linewidth=字の pt × 0.22, foreground=黒に近い色)]` で太く縁取る。 明るい地でも読める
+- **画面の外から入る線 (光線・軌道) の端を画面の中で切らない**: 始点が画面の中にあると縦の切り口が見える (実測)。 始点を画面の外に置くか、 `LineCollection` で区間ごとに alpha を 0 から上げて淡く出す。 区間ごとの alpha で太い半透明の線を描くと、 丸い端 (`capstyle="round"`) が継ぎ目で重なって点々に見える = `capstyle="butt"` と `joinstyle="round"` にする (実測)
+- **音楽はその場で合成すると権利の心配が無い**: キック = 周波数を 160 Hz から 50 Hz へ落とす正弦波、 クラップ = 雑音の短い減衰、 ハイハット = 雑音の差分、 ベース・和音の裏打ち・旋律。 合計を `tanh` で軽く丸め、 最後の 0.5 秒ほどで fade し、 最大を 0.85 程度に揃えて WAV に書く。 映像を書く同じ ffmpeg に 2 つ目の入力で渡し、 `-map 0:v -map 1:a -c:a aac -shortest`。 合成の音の罠 = [`podcast-audio-finishing.md#synth-bgm-sound-pitfalls`](podcast-audio-finishing.md#synth-bgm-sound-pitfalls)
+- **スライドと同じ素材から紹介動画を作ると、 スライドの見た目 (地・色・字の階層) を動かしただけのものになりやすい**。 頼んだ人は動画にスライドと別の役 (楽しさ・勢い・音楽) を求めていることがある (実測)。 作り始める前に調子 (スライドに揃える / 別の楽しい調子) を 1 行で確かめるか、 締めが迫っていれば両方を出す
