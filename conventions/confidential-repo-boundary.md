@@ -455,6 +455,17 @@ replay が見るのは leak の gate だけ: CI の bot (author が `[bot]`) の
 (新旧の engine を import し、 同じ索引で `quoted_hits` を呼んで差を取る)。 新しい版は、 元の `scripts/` を全部 symlink で写した一時 dir に置いて動かす
 ([`agent-rule-ownership.md#candidate-in-mirror-dir`](agent-rule-ownership.md#candidate-in-mirror-dir))。
 
+#### <a id="boundary-rule-change-sweeps-repo-policies"></a>公開の境界の規則を変えたら、 公開 repo ごとの「何を書くか」 の方針を新しい規則の語で探す
+
+公開 repo の DESIGN / CLAUDE には、 その repo で何を書くかを決めた方針の文があることがある (外部の指摘の書き方・匿名化の仕方など)。
+層1 の境界の規則 (本 doc・[`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak) とその下の class) を足す・締めるとき、
+**それより緩い repo の方針は残ったまま、 その方針どおりに書いた中身が公開に残る** (実測: ある公開 repo の方針が「氏名を伏せれば、 原文と非公開 repo への path は書く」 としていた)。
+方針の文は普通の語で書かれるので、 検出器では止められない。 ∴ 境界の規則を変えた turn に、 公開の印のある repo の方針の文を新しい規則の語で 1 回探し、 緩い方針を言い直す:
+
+```bash
+for d in ~/Claude/*/; do [ -f "${d}.claude/public-repo.marker" ] && git -C "$d" grep -n -i -E '<新しい規則の語 (例: レビュー|コメント|PII|匿名)>' -- DESIGN.md CLAUDE.md AGENTS.md; done
+```
+
 ### <a id="visibility-decided-at-publish-time"></a>公開にするかは、 中身が出来てから・公開する直前に決める
 
 repo を作る時点の「公開してよいか」 は、 **まだ書かれていない中身についての予測**でしかない。
