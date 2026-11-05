@@ -34,6 +34,7 @@ browser・メール・curl で手元に来た file を repo や作業 dir に入
 段ごとの注意:
 
 - <a id="quarantine-download-bit"></a>**quarantine の flags の最下位 bit (0x0001) がダウンロードの印。** 実測: browser で落とした file には立ち、 sandbox の app (Preview など) が書き出した file には立たない (どちらも属性そのものは持つ)。 属性の有無だけで「ネット由来」 と決めると、 手元の app で作った file まで拾う。 macOS の `cp` (`-p` なしでも) と `mv` は拡張属性も写すので、 一度 scratch に写した file も印を持ったままになる (実測)。
+- <a id="arxiv-eprint-gzip"></a>**arXiv の e-print (`https://arxiv.org/e-print/<id>vN`) は gzip で届く** (中身は多くが tar で、 1 本の TeX のこともある)。 `.tar` の名前で保存すると、 種類の段が拡張子と中身の食い違いを要確認に出す (実測)。 `file` で中身を見てから名前を付け (tar なら `.tar.gz`)、 gzip のままでは中身を見ないので展開した dir も検査する。 PDF は版と sha256 を記録する ai-collaboration の [`fetch-literature.py`](../../ai-collaboration/scripts/fetch-literature.py) で取り、 e-print も同じ版の番号で取る (版を付けない URL は後で別の版を返しうる)。
 - **PDF の名前の `#xx` escape** (`/J#61vaScript`) は PyMuPDF が解いてから数える。 PyMuPDF で開けない file は生の bytes を数えるが、 圧縮された object stream の中は見ないので「未検査の部分あり」 にする。
 - **PDF の link の種類で起動の判定をしない。** 実測: MuPDF は scheme の無い URI (書き損じた `mailto;…` など) も「起動する link」 に分ける。 本物の起動は `/Launch` の数で数える。
 - **password つきの Office は OLE2 の容れ物になる** (中身の OOXML を `EncryptedPackage` に包む)。 実測: `.xlsx` の実体が OLE2 だった file はこれだった。 拡張子の食い違いではなく「暗号化 = 未検査」 として扱う。
