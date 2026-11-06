@@ -15,6 +15,9 @@ subcommand:
   get <path> [--json|--text]                                    任意 path を GET (= /g/... の HTML/JSON)。 path は貼った URL でもよい (同じ組織の host だけ)。
                                                                 --text = script/style を落として tag を剥がした読める行 (ワークフローの進行状況など)。
                                                                 Garoon のエラー画面 (例: fid の無い view.csp) は code と説明を stderr に出して exit 65
+  user <名前> [--limit N]                                       名前で人を引き、 uid・ログイン名・所属・E-mail・役職を並べる
+                                                                (REST の /base/users は id と名前しか返さない = 1 人ずつユーザー情報の画面を読む。
+                                                                 欄が空なら「(空)」 と出す = 空の欄の値を推測で埋めない)
   status                                                        いま読めるか (GET 1 本。 切れていれば下の復帰を試す)
   doctor                                                        配線だけを見る (cookie を復号できて値が壊れていないか。 network なし、 健全なら無言)
   probe [path ...]                                              切れ方の採取 (cookie なし・偽の session id で撃ち、 302 の行き先・Set-Cookie の名前・切れ判定を並べる)
@@ -192,6 +195,24 @@ def error_page(page):
     return (m.group(1), m.group(2).strip()) if m else ("?", "")
 
 
+PROFILE_LABELS = ("名前", "ログイン名", "ロケール", "拠点", "所属する組織", "優先する組織", "よみ",
+                  "E-mail", "メモ", "役職", "連絡先", "URL", "画像")
+
+
+def profile_fields(text):
+    """ユーザー情報の画面 (`/g/grn/user_view.csp?uid=<id>`) の page_text から、 ラベルの次の行を値として取る (`user`)。
+    値の空いた欄は次の行が別のラベルになる = 空文字。 画面の上の menu に同じ語が出ても拾わないよう、
+    「ユーザー情報の詳細」 の見出しより後だけを見る。 REST の `/base/users` は id と名前しか返さない (実測)。"""
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line == "ユーザー情報の詳細"), 0)
+    out = {}
+    for i in range(start, len(lines)):
+        if lines[i] in PROFILE_LABELS and lines[i] not in out:
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            out[lines[i]] = "" if nxt in PROFILE_LABELS else nxt
+    return out
+
+
 def site_path(path, base):
     """`get` の引数を path にする。 同じ組織の https URL なら origin を外す (= 画面から貼った URL で動く)。
     origin を足し重ねると host が `<org>.cybozu.comhttps` になって名前解決で落ちていた (実測)。 別 host は止める。"""
@@ -269,6 +290,15 @@ def selftest():
          and _raises(lambda: site_path("http://x.cybozu.com/g/", b))),
         ("get --text は subcommand の後ろで受ける", _parsed(["get", "/g/", "--text"]).text is True
          and _parsed(["get", "/g/"]).text is False),
+        ("user: 画面の欄を読み、 空の欄は空文字 (次の行が別のラベル)",
+         profile_fields("メモ\n架空のメニュー\nユーザー情報の詳細\n甲野 太郎\n名前\n標準:\n甲野 太郎\nログイン名\nkouno\n"
+                        "所属する組織\n架空課 (架空大学>事務局>架空課)\n優先する組織\nよみ\nこうの たろう\n"
+                        "E-mail\nkouno@example.org\nメモ\n役職\n連絡先")
+         == {"名前": "標準:", "ログイン名": "kouno", "所属する組織": "架空課 (架空大学>事務局>架空課)",
+             "優先する組織": "", "よみ": "こうの たろう", "E-mail": "kouno@example.org", "メモ": "", "役職": "", "連絡先": ""}),
+        ("user: E-mail と所属の欄が空の人", profile_fields("ユーザー情報の詳細\nログイン名\notsu\n所属する組織\n優先する組織\n"
+                                                           "E-mail\nメモ\n役職\n連絡先").get("E-mail") == ""),
+        ("user の subcommand を受ける", _parsed(["user", "甲野", "--limit", "5"]).limit == 5),
     ]
     for name, good in checks:
         ok &= bool(good)
@@ -308,6 +338,8 @@ def build_parser():
     p = sub.add_parser("download", parents=[common]); p.add_argument("fid"); p.add_argument("--app", default="bulletin"); p.add_argument("--out", required=True)
     p = sub.add_parser("get", parents=[common]); p.add_argument("path")
     p.add_argument("--text", action="store_true", help="script/style を落として tag を剥がした読める行で出す")
+    p = sub.add_parser("user", parents=[common], help="名前で人を引き、 所属・E-mail・ログイン名を画面から読む")
+    p.add_argument("name"); p.add_argument("--limit", type=int, default=20)
     sub.add_parser("status", parents=[common])
     sub.add_parser("doctor", parents=[common])
     p = sub.add_parser("probe", parents=[common], help="切れ方の採取 (cookie を使わない)")
@@ -375,6 +407,18 @@ def run(a, g):
             _say(f"エラー画面 ({err[0]}): {err[1]} — path と引数を確かめる (ワークフローの view.csp は fid も要る = conventions/garoon.md#garoon-workflow-status-read)")
             sys.exit(EX_GAROON_ERROR)
         print(json.dumps(r.json(), ensure_ascii=False) if a.json else page_text(r.text) if a.text else r.text)
+    elif a.cmd == "user":
+        rows = []
+        for u in g.rest("/base/users", name=a.name, limit=a.limit).get("users", []):
+            f = profile_fields(page_text(g.get(f"/g/grn/user_view.csp?uid={u.get('id')}").text))
+            rows.append({"uid": u.get("id"), "name": u.get("name"), "login": f.get("ログイン名", ""),
+                         "org": f.get("所属する組織", ""), "email": f.get("E-mail", ""), "title": f.get("役職", "")})
+        if a.json:
+            print(json.dumps(rows, ensure_ascii=False)); return
+        print(f"# user '{a.name}': {len(rows)} 人")
+        for r in rows:
+            print(f"- {r['uid']} | {r['name']} | login={r['login'] or '(空)'} | 所属={r['org'] or '(空)'}"
+                  f" | E-mail={r['email'] or '(空)'}" + (f" | 役職={r['title']}" if r["title"] else ""))
     elif a.cmd == "status":
         g.get(Garoon.alive_path)
         print("読める" + {None: "", "reload": " (cookie を読み直した)", "refresh": " (browser に入り直させた)"}[g.recovered_by])

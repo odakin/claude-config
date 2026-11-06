@@ -9,7 +9,7 @@ summary: Garoon cloud の自動化 (= SSO でも logged-in session 越しに読�
 
 ## <a id="garoon-script-route"></a>第一選択 = script 経路 (browser session cookie 再利用、 画面 drive 不要)
 
-SAML-only 組織では REST の password auth が admin 限定・OAuth client も admin 登録要 = user 側で発行できる credential が無い。 残る機械経路 = **user が browser で login 済みの session cookie を script が再利用する**: [`scripts/chromium-cookies.py`](../scripts/chromium-cookies.py) (macOS Keychain "Brave Safe Storage" → AES-128-CBC 復号、 Chromium 130+ の SHA-256 prefix 対応) + [`scripts/garoon-client.py`](../scripts/garoon-client.py) (全文検索 / 掲示板 REST / 添付 download / 任意 GET)。 2026-09-07 実測 (Garoon 6.31 cloud):
+SAML-only 組織では REST の password auth が admin 限定・OAuth client も admin 登録要 = user 側で発行できる credential が無い。 残る機械経路 = **user が browser で login 済みの session cookie を script が再利用する**: [`scripts/chromium-cookies.py`](../scripts/chromium-cookies.py) (macOS Keychain "Brave Safe Storage" → AES-128-CBC 復号、 Chromium 130+ の SHA-256 prefix 対応) + [`scripts/garoon-client.py`](../scripts/garoon-client.py) (全文検索 / 掲示板 REST / 添付 download / 人の検索 / 任意 GET)。 2026-09-07 実測 (Garoon 6.31 cloud):
 
 | 操作 | 機構 |
 |---|---|
@@ -17,6 +17,7 @@ SAML-only 組織では REST の password auth が admin 限定・OAuth client �
 | csrf ticket | `/g/cabinet/search.csp` 等の inline `grn.__PRELOADED_DATA__.csrfTicket` (portal は 302 なので注意) |
 | 掲示板 REST | `GET /g/api/v1/bulletin/categories` 等、 cookie + `X-Requested-With: XMLHttpRequest` で session auth |
 | <a id="garoon-facility-list"></a>施設予約の施設一覧 (実測) | `GET /g/api/v1/schedule/facilities?limit=<n>` (`garoon-client.py get` で読める)。 ⚠️ REST は `/g/` の下 = `/api/v1/…` だと 404。 返るのは施設予約に登録された施設 (会議室・談話室など) の id・code・name・notes だけで、 notes が空なら定員や設備は分からない = 教室の定員・機器は別の配布物 (施設担当課の一覧表など) を引く |
+| <a id="garoon-user-lookup"></a>人の所属・E-mail (実測) | `GET /g/api/v1/base/users?name=<名前>` は id と名前しか返さない (E-mail・所属の欄が無い)。 ユーザー情報の画面 `GET /g/grn/user_view.csp?uid=<id>` に ログイン名・所属する組織・E-mail・役職の欄がある = `garoon-client.py user <名前>` が両方を回して 1 人 1 行で並べる。 欄が空の人もいる (E-mail も所属も空) = ログイン名から address を組み立てない (推測)。 同姓の別の人が並ぶので、 所属で見分ける |
 | 添付 download | `GET /g/bulletin/file_download.csp/-/<name>?fid=F` は session 内 GET で 200 (application/pdf)。 cabinet の `download.csp/-/<name>?fid=F` も session 内 GET で 200 (application/pdf) = UI が付ける time= token は要らない (実測) |
 | <a id="garoon-cabinet-folder-list"></a>ファイル管理の folder の中身 (実測) | `GET /g/cabinet/index.csp?hid=<folder id>` の HTML に、 file は `view.csp?…fid=<F>` のリンク、 上位の folder は `index.csp?hid=<n>` の breadcrumb で出る。 子 folder の木は画面の script が別に読み込むので HTML には出ず、 `folder_json.csp` は素の GET では空だった = folder を網羅するには hid を順に開いて breadcrumb で木を組む (開けない hid = 無いか権限外)。 1 本ずつ間をあけて取る (大学のシステムに負荷をかけない)。 取った file は原本を手元に置き一覧を正本にする = [`machine-route-first.md#keep-fetched-originals`](machine-route-first.md#keep-fetched-originals) |
 | login 切れ | 302 → `<org>.ex-tic.com` (SSO) / **302 → `<org>.cybozu.com/login?redirect=…` (cybozu 自身の login)** / login page HTML / REST API の 401 `GRN_REST_API_00003` → 下の [#garoon-session-recovery](#garoon-session-recovery) を 1 回試し、 だめなら user が browser で 1 回 login (script はパスワード・OTP を代行しない)。 ⚠️ 死活検査で「SSO への 302 だけ切れ、 他の 302 は健全」 と書くと、 自前 login への 302 で切れているのに silent になる (実測) 。 ⚠️ **login 直後は browser が cookie DB (SQLite) に新しい session cookie を書くまで遅れがある** (数秒〜30 秒ほどで一定しない、 下の「Garoon 固有の実測」) = login の直後に 1 回目の検査が「切れ」 のままでも、 少し待って読み直す |
