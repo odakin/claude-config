@@ -526,7 +526,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
 
 ### <a id="notation-rename-sweep"></a>記法を原稿全体で統一する pass の受け入れ検査 (2026-09-12)
 
-一括改稿そのものの純粋性 (置換以外が紛れていないか) は機械で見る = [`ai-collaboration/scripts/check-rename-purity.py`](../../ai-collaboration/scripts/check-rename-purity.py) (逆写像して残差だけ読む、 規律 = [`physics-verification-cycle.md#inverse-map-purity`](../../ai-collaboration/conventions/physics-verification-cycle.md#inverse-map-purity))。 機械が通った後に人が読むのは次の 4 点で、 どれも「置換は正しいが原稿が読めない」 型:
+一括改稿そのものの純粋性 (置換以外が紛れていないか) は機械で見る = [`ai-collaboration/scripts/check-rename-purity.py`](../../ai-collaboration/scripts/check-rename-purity.py) (逆写像して残差だけ読む、 規律 = [`physics-verification-cycle.md#inverse-map-purity`](../../ai-collaboration/conventions/physics-verification-cycle.md#inverse-map-purity))。 機械が通った後に人が読むのは次の点で、 1〜4 は「置換は正しいが原稿が読めない」 型、 5 以降は置換の取りこぼしと範囲の型:
 
 1. **初出で scheme を定義したか** — 改稿は綴りを揃えるだけで、 **記法の意味を導入する文は増えない**。 新綴りの初出箇所で、 (a) 区切り記号の後ろが何を表すか、 (b) 区切りの無い素の形が何を意味するか、 (c) 複合添字の区切り (`,` 等) の意味、 の 3 つが読者に渡っているか見る。 実測では初出は 2 つの具体例を語で説明するだけで、 一般則は遠く後ろの付録にしか無かった。
 2. **同じ対象の 2 綴りの関係を、 必要な位置で述べたか** — 全体を表す綴りと、 その一部 (特定の寄与) を表す下付きつきの綴りが併存するのは正しい。 述べるべきは**どこで一致するか**で、 その 1 文が最初に必要になる箇所より後ろにあると読者は橋を架けられない ([`#statement-placement-check`](#statement-placement-check) の記法版)。
@@ -540,6 +540,7 @@ giving-talks の題の基準 (主題 / レベル / 引き / 既知語、 平叙�
    - <a id="decorate-after-definition"></a>**記号を飾る (hat・太字) 前に、 その記号・括弧が文書の中で何と定義されているかを確かめる** — 期待値の括弧 `\langle\cdots\rangle` に見えても、 中身が 1PI の 2 点関数 (2 次の有効作用の係数) なら、 揃える先の頂点関数の名で書く。 見た目どおりに飾ると別の量 (期待値なら伝播関数) を指す表記になる (実測)。 著者に問うときも定義を添える ([`concise-output.md#define-before-notation-ruling`](concise-output.md#define-before-notation-ruling))。
    - **純粋性の検査の使い分け**: 改名が単射 (旧い綴り 1 つ → 新しい綴り 1 つ) なら逆写像 (`check-rename-purity.py --map`)、 2 つの旧い綴りが 1 つになる改名は前向き (`--forward`、 行数が同じこと)。 記号を飾るだけの pass は PDF の文字も数で比べる ([`compare-tex-builds.py --chars`](../../ai-collaboration/scripts/compare-tex-builds.py))。
    - **他の文書から写した式 (引用・転記) の記法をどうするかを pass の前に決め、 全 note で同じにする** — note ごとに「原典のまま」 と「揃える先に合わせる」 が割れると、 同じ引用が note によって違う綴りになる (実測)。 決めた方針は記録に残す。
+7. <a id="decision-covers-every-spelling"></a>**記法の決定は意味に掛かる = 古い記号の出現だけでなく、 同じ意味の別の書き方も並べてから範囲を決める** — 「この量は記号 A でなく B で書く」 という決定を「A を B に置き換える」 と字面で受けると、 同じ意味を別の macro (`\overline` に対する `\bar`、 `\f[*]` のような角括弧の引数で付ける上付き、 語で書いた所) で書いた箇所が範囲の外に残る (実測: 古い記号だけを対象にした依頼で、 別の macro で書いた箇所が範囲外として報告され、 検収で範囲を広げた)。 逆に古い記号は別の意味も持つ (overline は複素共役のほかに閉包・平均) ので、 意味で 1 つずつ分けて別の意味の出現は残す ([`#single-letter-macro-pass`](#single-letter-macro-pass) と同じ)。 置き換える前に 3 つを並べる: その意味の全部の書き方 / 既に新しい記号で書いた所 (引数つきの関数で星を引数の前に置くか後ろに置くかなど、 形をそれに揃える) / 新しい記号の既存の別の意味 (作用素の随伴の `^*` など = 同じ記号が 2 つの意味になる所と、 字形の近い記号 `\star` が同じ項に並ぶ所)。 置き換えた式は組版して 1 つずつ目で読む — 置換の pass は式の中身を読まないので、 読むと同じ式の添字の入れ替わりのような誤記が見つかる (実測)。
 
 ### <a id="one-name-per-object"></a>1 つの対象には 1 つの名 — 同格で並べた 2 名は「どちらが類か」 を決めない (2026-09-12)
 
