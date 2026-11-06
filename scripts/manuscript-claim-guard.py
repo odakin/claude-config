@@ -53,7 +53,9 @@
   照合し、 無ければ拒否する。 引けるのは記録する時点で著者の最新の発言だけ (exit 5 = それより前の発言。 既に
   引かれた発言も、 まだ引かれていない発言も、 後に著者が発言していれば別の案の承認に使わせない = 流用を事後に人が
   記録から探さなくてよい。 1 つの発言で複数の file をまとめて承認する記録は、 著者が次に発言するまで通す。 実測の
-  承認記録では、 引いた発言と記録の間に著者の発言が挟まった正当な承認は 0 件)。 短い引用 (SHORT_QUOTE 文字未満) は、 発言の全体 (端の空白・句読点を除く) と一致する時だけ
+  承認記録では、 引いた発言と記録の間に著者の発言が挟まった正当な承認は 0 件)。 --latest は、 最新の発言が作業中に
+  届いた発言 (queued_command) なら引かない (exit 5 = 作業を始めさせた発言より後の発言で、 別の項目への答えのことがある。
+  中身を読んで、 この変更の裁定なら --quote で引く)。 短い引用 (SHORT_QUOTE 文字未満) は、 発言の全体 (端の空白・句読点を除く) と一致する時だけ
   照合する (「OK」 が「BOOK」「OK じゃない」「OK?」 に当たらないように。 足りなければ発言の全体か、 それ以上の長さを
   引く)。 承認は session に束縛され (別 session は使えない)、 machine-local の state に置く
   (公開 repo に著者の発言を書かない)。 監査の本体は transcript。 記録したら、 そのターンの最後の返事に引いた発言と対象の
@@ -66,6 +68,9 @@
   manuscript-claim-guard.py hook claude|codex      PreToolUse の event を stdin で受け deny JSON を出す
   manuscript-claim-guard.py git-precommit          repo (cwd) の staged 差分を検査 (agent session のみ、 違反 exit 1)
   manuscript-claim-guard.py approve --file F --region R [--region R2 …] --change '<1 行>' --quote '<著者の発言>'
+  manuscript-claim-guard.py apply --file F (--candidate 全文 | --old A --new B [--old … --new …] | --edits 置換の file)
+                                   --change '<1 行>' [--quote '<著者の発言>' | --latest] [--dry-run]
+                                   承認の記録 + 書込み + 照合を 1 command で。 置換は Edit と同じ (old は 1 回だけ現れる)
   manuscript-claim-guard.py approvals [--session agent:id]    記録済み承認の一覧
   manuscript-claim-guard.py stop claude|codex      Stop の event を stdin で受け、 記録した承認を最後の返事に書いていなければ差し戻す (fail-open)
   manuscript-claim-guard.py scan FILE [--rev HEAD]            HEAD (または rev) と作業ツリーの保護領域の差分を表示
@@ -1961,12 +1966,17 @@ def human_text_segments(text: str, excluded_tags: dict[str, int] | None = None, 
 
 
 def user_messages(path: Path, excluded_tags: dict[str, int] | None = None, *,
-                  choice_answers: bool = False) -> list[tuple[str, str]]:
+                  choice_answers: bool = False, queued: set[int] | None = None) -> list[tuple[str, str]]:
     """transcript の、 人が書いた user 発言だけ (時刻, 本文)。
 
     choice_answers = 選択肢 UI の答えも引ける文の無い発言として数える (承認の記録だけが使う)。 答えは turn の途中に
     入るので、 turn の起点を最新の発言で決める Stop の照合では数えない (数えると照合の窓が答えの時刻から始まり、
-    答えの前に記録した承認・追記を返事に書かせなくなる)。"""
+    答えの前に記録した承認・追記を返事に書かせなくなる)。
+
+    queued = 渡せば、 作業中 (turn の途中) に届いた本人の発言 (Claude の queued_command) の位置 (返す list の index)
+    を詰める。 承認の --latest だけが使う (作業中に届いた発言は、 作業を始めさせた発言より後の発言)。 会話記録に入るのは
+    agent に渡した時 (次の API の呼び出しの前) = 本人が打っただけでまだ渡っていない発言 (queue-operation の enqueue) は
+    数えない (agent にも見えていない)。"""
     out: list[tuple[str, str]] = []
     ask_ids: set[str] = set()  # Claude の選択肢 UI (AskUserQuestion) の問いの id
     try:
@@ -2034,8 +2044,11 @@ def user_messages(path: Path, excluded_tags: dict[str, int] | None = None, *,
                     text = "".join(b.get("text", "") for b in p if isinstance(b, dict) and b.get("type") == "text")
                 else:
                     continue
-                out.extend((str(a.get("timestamp") or e.get("timestamp", "")), t) for t in human_text_segments(
-                    text, excluded_tags, claude_human=True))
+                rows = [(str(a.get("timestamp") or e.get("timestamp", "")), t) for t in human_text_segments(
+                    text, excluded_tags, claude_human=True)]
+                if queued is not None:
+                    queued.update(range(len(out), len(out) + len(rows)))
+                out.extend(rows)
             elif e.get("type") == "event_msg":  # Codex
                 p = e.get("payload") or {}
                 if isinstance(p, dict) and p.get("type") == "user_message" and isinstance(p.get("message"), str):
@@ -2408,6 +2421,8 @@ def deny_reason(left: list[dict], session: tuple[str, str] | None) -> str:
         "  権限規約・配線・設定には --candidate <適用後の全文 file> も必要。 承認はその候補の内容だけに効く。 記録してから同じ変更をやり直す。\n"
         "  本人の最新の発言がこの変更を含むなら --quote の代わりに --latest (発言そのものを引く = 写し間違いが無い)。\n"
         f"  記録 + 候補の書込み + 照合を 1 command で: {engine_cmd()} apply --file <path> --candidate <全文 file> --change '<1 行>' --latest\n"
+        "  候補の全文を作らずに、 Edit と同じ置換で渡せる: --candidate の代わりに --old '<前の文>' --new '<後の文>' (組を繰り返す。"
+        " old は file の中に 1 回だけ現れる文。 長い文・引用符を含む文は --edits <file>。 当てる前の確かめ = --dry-run)\n"
         "  ⚠️ Claude の auto mode では、 この記録の command を classifier が Self-Modification として止めることがある (--help でも)。"
         " 記録は単独の 1 command で、 engine を絶対 path で打つ (cd・変数の代入・&& ; | と繋ぐと宣言済みの allow に当たらない)。"
         " それでも止められたら形を変えて (分割・複製・別 session・sub-agent) 試さず、 本人に伝える:"
@@ -3427,7 +3442,8 @@ def approve_mode(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 3
     excluded_tags: dict[str, int] = {}
-    msgs = user_messages(transcript, excluded_tags, choice_answers=True)
+    queued: set[int] = set()
+    msgs = user_messages(transcript, excluded_tags, choice_answers=True, queued=queued)
     latest = bool(getattr(args, "latest", False))
     if latest and args.quote:
         print("approve: --latest と --quote は同時に渡さない (--latest = 本人の最新の発言そのものを引く)。", file=sys.stderr)
@@ -3449,6 +3465,17 @@ def approve_mode(args: argparse.Namespace) -> int:
                   "自分の言葉で 1 行打ってもらってから引く。", file=sys.stderr)
             print_excluded_tags(excluded_tags)
             return 4
+        if idx in queued:
+            # 作業中に届いた発言は、 いま記録しようとしている作業を始めさせた発言 (turn を始めた発言) より後の発言 =
+            # 本人が次の項目へ答え続ける場では、 別の項目への答え・脇の発言であることが多い (実測: 会議中に承認を記録
+            # しようとした時点の最新の発言が、 作業中に届いた別の項目への答えだった)。 中身を見ずには引かない
+            said = collapse_ws(quote)
+            said = said if len(said) <= 60 else said[:60] + "…"
+            print(f"approve: --latest: 本人の最新の発言は作業中に届いたもの ({msgs[idx][0] or '時刻不明'} 「{said}」) ="
+                  " 作業を始めさせた発言より後の発言で、 別の項目への答えのことがあるので、 中身を見ずには引かない。 記録しない。\n"
+                  "  この発言がこの変更の裁定なら --quote '<その発言をそのまま>' で記録する。 別の項目への答えなら、"
+                  " この変更の裁定を本人に聞き直す。", file=sys.stderr)
+            return 5
     else:
         quote = args.quote
         idx = quote_index(quote, msgs)
@@ -3508,6 +3535,135 @@ def approve_mode(args: argparse.Namespace) -> int:
     return 0
 
 
+EDITS_OLD, EDITS_NEW, EDITS_END = "@@@ old", "@@@ new", "@@@ end"
+
+
+def parse_edits_file(text: str) -> tuple[list[tuple[str, str]] | None, str]:
+    """apply --edits の file を (old, new) の組の並びに読む。 失敗なら (None, 理由)。
+
+    書き方 (組を何個でも並べる。 印の行は行の全体 = 前後に空白を置かない):
+        @@@ old
+        <置き換える前の行 (何行でも)>
+        @@@ new
+        <置き換えた後の行 (書かなければ削除)>
+        @@@ end
+    old と new の文は、 印の間の各行に改行を 1 つずつ付けて繋いだもの = 行の単位の置換。 行の途中だけを変えるなら
+    --old / --new で渡す。 引用符・backslash・$ をそのまま書ける (shell を通らない) ので、 長い段落・引用符を含む文に使う。
+    組の外の空行は読み飛ばし、 組の外の文・閉じていない組は止める (書き間違いを推測で埋めない)。"""
+    pairs: list[tuple[str, str]] = []
+    state = None
+    old_lines: list[str] = []
+    new_lines: list[str] = []
+    for n, line in enumerate(text.split("\n"), 1):
+        if line == EDITS_OLD:
+            if state is not None:
+                return None, f"{n} 行目: 前の組が「{EDITS_END}」 で閉じていない"
+            state, old_lines, new_lines = "old", [], []
+        elif line == EDITS_NEW:
+            if state != "old":
+                return None, f"{n} 行目: 「{EDITS_NEW}」 の前に「{EDITS_OLD}」 が無い"
+            state = "new"
+        elif line == EDITS_END:
+            if state != "new":
+                return None, f"{n} 行目: 「{EDITS_END}」 の前に「{EDITS_NEW}」 が無い"
+            pairs.append(("".join(x + "\n" for x in old_lines), "".join(x + "\n" for x in new_lines)))
+            state = None
+        elif state == "old":
+            old_lines.append(line)
+        elif state == "new":
+            new_lines.append(line)
+        elif line.strip():
+            return None, f"{n} 行目: 組の外に文がある (印は「{EDITS_OLD}」「{EDITS_NEW}」「{EDITS_END}」 の 3 行)"
+    if state is not None:
+        return None, f"最後の組が「{EDITS_END}」 で閉じていない"
+    return pairs, ""
+
+
+def replace_each_once(text: str, pairs: list[tuple[str, str]]) -> tuple[str | None, str]:
+    """(old, new) の組を順に当てる。 Edit の old_string / new_string と同じ = 各 old は、 その時点の文の中に
+    ちょうど 1 回現れること (重なる出現も数える)。 前の組を当てた後の文に次の組を当てる (動かす = old を消す組と、
+    行き先の前後の文を old にして new に足す組の 2 つ)。 当たらない・2 回以上当たる組が 1 つでもあれば (None, 理由)。
+    backslash の escape (\\n など) は読まない = TeX の \\nu・\\newcommand をそのまま書ける。"""
+    for i, (old, new) in enumerate(pairs, 1):
+        if not old:
+            return None, f"{i} 組目: old が空 (足すだけなら、 足す位置の前後の文を old にし、 new にその文と足す文を書く)"
+        if old == new:
+            return None, f"{i} 組目: old と new が同じ = 何も変わらない"
+        hits: list[int] = []
+        pos = text.find(old)
+        while pos != -1 and len(hits) < 6:
+            hits.append(pos)
+            pos = text.find(old, pos + 1)
+        if len(hits) != 1:
+            if hits:
+                where = ", ".join(f"{text.count(chr(10), 0, h) + 1} 行目" for h in hits[:5])
+                times = f"{len(hits)} 回" if len(hits) < 6 else "6 回以上"
+                return None, f"{i} 組目: old が {times}現れる ({where}) = 前後の文を old に足して 1 か所に絞る"
+            first = old.split("\n", 1)[0]
+            near = ""
+            if first.strip() and first in text:
+                at = [n + 1 for n, ln in enumerate(text.split("\n")) if first in ln][:3]
+                near = f" (old の 1 行目は {', '.join(str(n) for n in at)} 行目にある = その後ろで食い違う)"
+            return None, f"{i} 組目: old が見つからない{near} = 今の file を読み直して、 その文をそのまま写す"
+        text = text[:hits[0]] + new + text[hits[0] + len(old):]
+    return text, ""
+
+
+def apply_replacements(args: argparse.Namespace) -> int:
+    """apply --old/--new (か --edits): 置換を今の対象に当てた全文を候補にして、 --candidate と同じ照合・記録・書込みに
+    渡す。 候補は一時 dir に置き、 終わったら消す。 照合は候補を作ったときの対象 (expect_base) と書く直前の対象を比べ、
+    間に別の手 (本人の editor の保存など) が書いていれば書かない。"""
+    import tempfile
+    if getattr(args, "candidate", None):
+        print("apply: --candidate と置換 (--old/--new・--edits) は同時に渡さない。", file=sys.stderr)
+        return 2
+    olds, news = list(args.old or []), list(args.new or [])
+    if len(olds) != len(news):
+        print(f"apply: --old ({len(olds)} 個) と --new ({len(news)} 個) の数が合わない = 組で渡す (削除は --new '')。",
+              file=sys.stderr)
+        return 2
+    pairs = list(zip(olds, news))
+    if getattr(args, "edits", None):
+        if pairs:
+            print("apply: --old/--new と --edits は同時に渡さない。", file=sys.stderr)
+            return 2
+        try:
+            raw = Path(args.edits).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            print("apply: --edits の file を UTF-8 の text として読めない。", file=sys.stderr)
+            return 2
+        parsed, why = parse_edits_file(raw)
+        if parsed is None:
+            print(f"apply: --edits の file の書き方が違う: {why}。 何も書かず、 何も記録しない。", file=sys.stderr)
+            return 2
+        pairs = parsed
+    if not pairs:
+        print("apply: 置換の組が 1 つも無い。", file=sys.stderr)
+        return 2
+    p = Path(args.file)
+    if not p.is_absolute():
+        p = Path.cwd() / p
+    if guard_state_path(p) or p.is_symlink() or not p.is_file():
+        print("apply: 置換は既存の通常 file にだけ当てる (新しい file は --candidate で)。 guard の state と symlink には写さない。",
+              file=sys.stderr)
+        return 2
+    base = read_text(p)
+    if base is None:
+        print("apply: 対象を UTF-8 の text として読めない。", file=sys.stderr)
+        return 2
+    built, why = replace_each_once(base, pairs)
+    if built is None:
+        print(f"apply: 置換を当てられない = 何も書かず、 何も記録しない。 {why}", file=sys.stderr)
+        return 2
+    with tempfile.TemporaryDirectory(prefix="guard-apply-") as td:
+        cp = Path(td) / p.name
+        cp.write_text(built, encoding="utf-8")
+        os.chmod(cp, stat.S_IMODE(p.stat().st_mode))
+        ns = argparse.Namespace(**{**vars(args), "candidate": str(cp), "old": None, "new": None, "edits": None,
+                                   "expect_base": base})
+        return apply_mode(ns)
+
+
 def apply_mode(args: argparse.Namespace) -> int:
     """承認の記録 + 候補の書込み + 内容と Git mode の照合を 1 command で行う。
 
@@ -3516,7 +3672,14 @@ def apply_mode(args: argparse.Namespace) -> int:
     --target-mode は通常 file の 100644 / 100755。省略時は既存対象の属性、新設時は候補の属性を使う。
     読み書きの権限を広げず、明示の 100755 は所有者の実行 bit を足し、100644 は実行 bit を外す。
     裁定なしで通る変更は additive-log に残す。guard の state・symlink・git repo の外には写さない。
+    候補は --candidate の全文 file か、 置換 (--old/--new の組・--edits の file) から作った全文 (apply_replacements)。
+    --dry-run は差分と触る保護領域を出すだけで、 記録も書込みもしない。
     """
+    if any(getattr(args, k, None) for k in ("old", "new", "edits")):
+        return apply_replacements(args)
+    if not getattr(args, "candidate", None):
+        print("apply: --candidate <適用後の全文 file> か、 置換 (--old と --new の組 / --edits <file>) が要る。", file=sys.stderr)
+        return 2
     p = Path(args.file)
     if not p.is_absolute():
         p = Path.cwd() / p
@@ -3541,6 +3704,11 @@ def apply_mode(args: argparse.Namespace) -> int:
     if old is None:
         print("apply: 対象が読めない。", file=sys.stderr)
         return 2
+    expect = getattr(args, "expect_base", None)
+    if expect is not None and old != expect:
+        print("apply: 置換を当てた後に対象が変わった (別の手の保存・書込み) = 書かず、 記録もしない。"
+              " 同じ command をもう一度打つ (今の file に当て直す)。", file=sys.stderr)
+        return 1
     target_mode = requested_mode or (current_mode if exists else candidate_mode)
     if requested_mode == "100755":
         permissions |= stat.S_IXUSR
@@ -3579,6 +3747,25 @@ def apply_mode(args: argparse.Namespace) -> int:
         if r not in regions:
             regions.append(r)
     unchanged = exists and old == new and current_mode == target_mode
+    if getattr(args, "dry_run", False):
+        PENDING_EXEMPTIONS.clear()
+        import difflib
+        diff = list(difflib.unified_diff(old.splitlines(), new.splitlines(), f"a/{rel}", f"b/{rel}", lineterm="", n=1))
+        print("\n".join(diff[:60]) + (f"\n… ほか {len(diff) - 60} 行" if len(diff) > 60 else ""))
+        seen: list[str] = []
+        for c in changes:
+            r = c["region"].split("~", 1)[0]
+            if r not in seen:
+                seen.append(r)
+        print("apply: --dry-run = 何も記録せず、 何も書いていない。 触る保護領域 = " + (", ".join(seen) if seen else "なし"))
+        if regions:
+            print("  承認の要る領域 = " + ", ".join(regions) + " (裁定を受けたら、 この command に --quote '<裁定の発言>' を"
+                  "足して打つ。 先に approve で記録するなら --region にこの名を並べる)")
+        return 0
+    if left and not args.quote and not getattr(args, "latest", False):
+        print("apply: 記録済みの承認が覆わない保護領域がある = 書かず、 記録もしない: " + ", ".join(regions) + "\n"
+              "  裁定の発言を --quote で渡して打ち直すか、 approve でこの領域を記録してから打ち直す。", file=sys.stderr)
+        return 2
     if left:
         ns = argparse.Namespace(file=str(p), region=regions, change=args.change, quote=args.quote,
                                 latest=getattr(args, "latest", False), session=args.session,
@@ -4330,6 +4517,218 @@ def apply_mode_selftests(check) -> None:
                   "`apply` は拒む" not in doc and "同じ候補の再実行" in doc and "HEAD との差" in doc)
             check("[apply-3] docstring は content と Git mode と再実行を説明する",
                   "Git mode" in (apply_mode.__doc__ or "") and "HEAD → 候補" in apply_mode.__doc__)
+        finally:
+            os.environ.clear()
+            os.environ.update(saved_env)
+            PENDING_EXEMPTIONS.clear()
+            reset_caches()
+
+
+def apply_replacement_selftests(check) -> None:
+    """apply の置換 (--old/--new・--edits・--dry-run) を、 合成の原稿・発言・state だけで検証する。"""
+    import contextlib
+    import io
+    import tempfile
+    saved_env = dict(os.environ)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td).resolve()
+        repo = root / "repo"
+        repo.mkdir()
+        home = root / "home"
+        home.mkdir()
+        env = dict(saved_env, HOME=str(home), GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                   GIT_AUTHOR_NAME="fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
+                   GIT_COMMITTER_NAME="fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid",
+                   MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root / "state"), MANUSCRIPT_CLAIM_GUARD_HOME=str(home))
+        for key in (*AGENT_ENV_KEYS, "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+            env.pop(key, None)
+        os.environ.clear()
+        os.environ.update(env)
+        try:
+            def g(*args):
+                return subprocess.run(["git", *args], cwd=repo, env=env, capture_output=True, text=True, check=True)
+
+            paper = ("\\documentclass{article}\n\\begin{document}\n\\begin{abstract}\nThe toy lattice relaxes.\n"
+                     "\\end{abstract}\n\\section{Introduction}\nWe study a toy lattice.\n\\section{Setup}\n"
+                     "The rate is $\\nu$.\n"
+                     "\\begin{table}\n\\small\n\\caption{Toy rates.}\n\\label{tab:a}\n\\begin{tabular}{cc}\na & b\\\\\n"
+                     "\\end{tabular}\n\\end{table}\n"
+                     "\\begin{table}\n\\small\n\\caption{Toy sizes.}\n\\label{tab:b}\n\\begin{tabular}{cc}\nc & d\\\\\n"
+                     "\\end{tabular}\n\\end{table}\n"
+                     "\\section{Conclusion}\nThe toy relaxes.\n\nWe predict a toy peak. It's sharp.\n\nNo case is open.\n"
+                     "\\end{document}\n")
+            rule_body = '# agent-authority:file\nprint("before")\n'
+            target = repo / "paper.tex"
+            rule = repo / "rule.py"
+            target.write_text(paper, encoding="utf-8")
+            rule.write_text(rule_body, encoding="utf-8")
+            g("init", "-q")
+            g("add", "paper.tex", "rule.py")
+            g("commit", "-qm", "fixture")
+            ruling = "結論の予言の段落を消してよい、 表の caption は下へ。"
+            para = "We predict a toy peak. It's sharp.\n\n"
+            counter = [0]
+
+            def session(*said):
+                """新しい session (承認の state は session ごと) と、 本人の発言 said を並べた会話記録。"""
+                counter[0] += 1
+                sid = f"fixture-replace-{counter[0]}"
+                tr = root / f"{sid}.jsonl"
+                tr.write_text("".join(json.dumps({"type": "user", "timestamp": f"2026-01-01T00:00:0{k}Z",
+                                                  "message": {"content": s}}, ensure_ascii=False) + "\n"
+                                      for k, s in enumerate(said)), encoding="utf-8")
+                return sid, tr
+
+            def fresh():
+                g("reset", "--hard", "-q", "HEAD")
+                g("clean", "-qfd")
+                reset_caches()
+
+            def run(sid, tr, **overrides):
+                ns = dict(file=str(target), candidate=None, old=None, new=None, edits=None, dry_run=False,
+                          change="fixture replace", quote=None, latest=False, session=f"claude:{sid}",
+                          transcript=str(tr), target_mode=None)
+                ns.update(overrides)
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = apply_mode(argparse.Namespace(**ns))
+                return rc, out.getvalue(), err.getvalue()
+
+            def records(sid):
+                return load_approvals("claude", sid)
+
+            def text():
+                return target.read_text(encoding="utf-8")
+
+            # 1. 段落を消す (結論 = 保護領域) を、 裁定の引用つきで 1 command に
+            fresh()
+            sid, tr = session(ruling)
+            rc, _, _ = run(sid, tr, old=[para], new=[""], quote=ruling)
+            rec = records(sid)
+            check("[replace-1] 段落を消す: 置換を当てた全文を書き、 結論の承認を裁定の引用で記録する",
+                  rc == 0 and text() == paper.replace(para, "") and len(rec) == 1
+                  and "conclusion" in rec[0]["regions"] and rec[0]["quote"] == collapse_ws(ruling))
+
+            # 2. 動かす (caption を表の下へ。 保護領域の外) = 消す組と、 行き先の前後を old にして足す組
+            fresh()
+            sid, tr = session(ruling)
+            cap_a, cap_b = "\\small\n\\caption{Toy rates.}\n\\label{tab:a}\n", "\\small\n\\caption{Toy sizes.}\n\\label{tab:b}\n"
+            end_a, end_b = "a & b\\\\\n\\end{tabular}\n", "c & d\\\\\n\\end{tabular}\n"
+            moved = paper.replace(cap_a, "").replace(cap_b, "").replace(end_a, end_a + cap_a).replace(end_b, end_b + cap_b)
+            rc, _, _ = run(sid, tr, old=[cap_a, end_a, cap_b, end_b], new=["", end_a + cap_a, "", end_b + cap_b])
+            check("[replace-2] 動かす: 2 つの表の caption を表の下へ (保護の外 = 記録なしで書く)",
+                  rc == 0 and text() == moved and records(sid) == [])
+
+            # 3. 当たらない・2 回以上当たる・数が合わない・同時指定は書かずに止まる
+            fresh()
+            sid, tr = session(ruling)
+            rc, _, err = run(sid, tr, old=["The toy relaxes.\n\nWe predict a toy valley."], new=[""], quote=ruling)
+            check("[replace-3] old が見つからない: 書かず記録せず、 1 行目の在りかを出す",
+                  rc == 2 and text() == paper and records(sid) == [] and "見つからない" in err and "old の 1 行目は" in err)
+            rc, _, err = run(sid, tr, old=["\\small\n"], new=[""], quote=ruling)
+            check("[replace-3] old が 2 回現れる: 書かず記録せず、 行を出す",
+                  rc == 2 and text() == paper and records(sid) == [] and "2 回現れる" in err)
+            rc, _, _ = run(sid, tr, old=[para, "No case is open."], new=[""], quote=ruling)
+            check("[replace-3] --old と --new の数が合わない: 止まる", rc == 2 and text() == paper)
+            rc, _, _ = run(sid, tr, old=[para], new=[""], candidate=str(target), quote=ruling)
+            check("[replace-3] --candidate と置換の同時指定: 止まる", rc == 2 and text() == paper)
+            rc, _, _ = run(sid, tr, old=[""], new=["x"], quote=ruling)
+            check("[replace-3] 空の old: 止まる", rc == 2 and text() == paper)
+            rc, _, _ = run(sid, tr, old=[para], new=[para], quote=ruling)
+            check("[replace-3] old と new が同じ: 止まる", rc == 2 and text() == paper)
+            rc, _, _ = run(sid, tr, file=str(repo / "absent.tex"), old=[para], new=[""], quote=ruling)
+            check("[replace-3] 無い file への置換: 止まる (新しい file は --candidate)", rc == 2)
+            two = [("No case is open.", "No case is closed."), ("Toy rates.", "Toy speeds.")]
+            rc, _, _ = run(sid, tr, old=[two[0][0], two[1][0], "absent text"], new=[two[0][1], two[1][1], ""], quote=ruling)
+            check("[replace-3] 組の 1 つでも当たらなければ、 前の組も含めて何も書かない", rc == 2 and text() == paper)
+
+            # 4. escape を読まない (TeX の \nu)・前の組を当てた後の文に次の組を当てる
+            fresh()
+            sid, tr = session(ruling)
+            rc, _, _ = run(sid, tr, old=["The rate is $\\nu$.", "No case is open.", "is closed."],
+                           new=["The rate is $\\nu_0$.", "No case is closed.", "is shut."], quote=ruling)
+            check("[replace-4] backslash の escape は読まず、 組は順に当てる",
+                  rc == 0 and "The rate is $\\nu_0$." in text() and "No case is shut." in text()
+                  and text() == paper.replace("$\\nu$", "$\\nu_0$").replace("No case is open.", "No case is shut."))
+
+            # 5. --edits の file (引用符・backslash をそのまま書く行の単位の置換)
+            fresh()
+            sid, tr = session(ruling)
+            edits = root / "edits.txt"
+            edits.write_text(f"{EDITS_OLD}\nWe predict a toy peak. It's sharp.\n\n{EDITS_NEW}\n{EDITS_END}\n\n"
+                             f"{EDITS_OLD}\n\\caption{{Toy rates.}}\n{EDITS_NEW}\n\\caption{{Toy speeds.}}\n{EDITS_END}\n",
+                             encoding="utf-8")
+            rc, _, _ = run(sid, tr, edits=str(edits), quote=ruling)
+            check("[replace-5] --edits: 行の単位の組を順に当て、 結論の承認を記録する",
+                  rc == 0 and text() == paper.replace(para, "").replace("\\caption{Toy rates.}", "\\caption{Toy speeds.}")
+                  and len(records(sid)) == 1)
+            fresh()
+            for bad in (f"{EDITS_OLD}\nNo case is open.\n{EDITS_NEW}\nNo case.\n",
+                        f"stray\n{EDITS_OLD}\nNo case is open.\n{EDITS_NEW}\nNo case.\n{EDITS_END}\n",
+                        f"{EDITS_NEW}\nNo case.\n{EDITS_END}\n"):
+                edits.write_text(bad, encoding="utf-8")
+                rc, _, err = run(sid, tr, edits=str(edits), quote=ruling)
+                check(f"[replace-5] 書き方の違う --edits は止まる ({bad.splitlines()[0]})",
+                      rc == 2 and text() == paper and "書き方が違う" in err)
+            edits.write_text(f"{EDITS_OLD}\nNo case is open.\n{EDITS_NEW}\nNo case.\n{EDITS_END}\n", encoding="utf-8")
+            rc, _, _ = run(sid, tr, edits=str(edits), old=[para], new=[""], quote=ruling)
+            check("[replace-5] --edits と --old/--new の同時指定は止まる", rc == 2 and text() == paper)
+
+            # 6. --dry-run は差分と領域を出すだけ
+            fresh()
+            sid, tr = session(ruling)
+            rc, out, _ = run(sid, tr, old=[para], new=[""], dry_run=True)
+            check("[replace-6] --dry-run: 書かず記録せず、 触る領域と承認の要る領域を出す",
+                  rc == 0 and text() == paper and records(sid) == [] and "承認の要る領域 = conclusion" in out
+                  and "-We predict a toy peak." in out)
+
+            # 7. 先に approve で記録 (裁定を受けた turn の最初の呼び出し) → 引用なしの apply
+            fresh()
+            sid, tr = session(ruling)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                arc = approve_mode(argparse.Namespace(file=str(target), region=["conclusion"], change="fixture",
+                                                      quote=ruling, latest=False, session=f"claude:{sid}",
+                                                      transcript=str(tr), candidate=None, target_mode=None))
+            rc, _, _ = run(sid, tr, old=[para], new=[""])
+            check("[replace-7] 先に記録した領域の中の置換は、 引用なしの apply で書く",
+                  arc == 0 and rc == 0 and text() == paper.replace(para, ""))
+            fresh()
+            rc, _, err = run(sid, tr, old=["The toy lattice relaxes."], new=["The toy lattice cools."])
+            check("[replace-7] 記録の覆わない領域 (概要) は書かず、 領域の名を出す",
+                  rc == 2 and text() == paper and "abstract" in err and "覆わない" in err)
+
+            # 8. 置換を作った後に対象が変わったら書かない (本人の editor の保存が間に入った形)
+            fresh()
+            sid, tr = session(ruling)
+            cand = root / "cand.tex"
+            cand.write_text(paper.replace(para, ""), encoding="utf-8")
+            target.write_text(paper.replace("We study", "We now study"), encoding="utf-8")
+            rc, _, err = run(sid, tr, candidate=str(cand), quote=ruling, expect_base=paper)
+            check("[replace-8] 候補を作った時の対象と書く直前の対象が違えば、 書かず記録しない",
+                  rc == 1 and "We now study" in text() and records(sid) == [] and "変わった" in err)
+
+            # 9. 規則の file: 承認は置換から作った全文の hash に結ぶ (述語は --candidate と同じ)
+            fresh()
+            sid, tr = session("rule.py の before を after にしてよい。")
+            rc, _, _ = run(sid, tr, file=str(rule), old=['"before"'], new=['"after"'], latest=True)
+            after = rule_body.replace("before", "after")
+            rec = records(sid)
+            check("[replace-9] 規則の file: 記録の content_sha256 = 置換から作った全文の hash",
+                  rc == 0 and rule.read_text(encoding="utf-8") == after and rec
+                  and rec[-1].get("content_sha256") == hashlib.sha256(after.encode("utf-8")).hexdigest())
+
+            # 10. CLI: - で始まる文は --old=<文>、 空の --new は削除
+            fresh()
+            sid, tr = session(ruling)
+            target.write_text(paper.replace("No case is open.", "--- toy remark."), encoding="utf-8")
+            g("commit", "-qam", "dash")
+            reset_caches()
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = main(["apply", "--file", str(target), "--old=--- toy remark.\n", "--new", "",
+                           "--change", "fixture", "--quote", ruling, "--session", f"claude:{sid}", "--transcript", str(tr)])
+            check("[replace-10] CLI: --old=<- で始まる文> と空の --new を読む",
+                  rc == 0 and "--- toy remark." not in text() and "We predict a toy peak." in text())
         finally:
             os.environ.clear()
             os.environ.update(saved_env)
@@ -5524,6 +5923,32 @@ def selftest() -> int:
         check("approve: 作業中に届いた本人の発言の後は、 その前の発言は引けない (exit 5)", approve_mode(qns) == 5)
         qns.quote = "案 Q は結論の段も直して"
         check("approve: 作業中に届いた本人の発言そのものは引ける", approve_mode(qns) == 0)
+        # --latest は作業中に届いた発言を引かない = 作業を始めさせた発言より後の発言で、 本人が次の項目へ答え続ける場では
+        # 別の項目への答えのことがある (実測: 会議中に記録しようとした時点の最新の発言がそうだった)
+        q2 = tr_dir / "sess-q2.jsonl"
+        append(q2, said("案 R はこの形でいい", iso(-10)),
+               {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt",
+                "origin": {"kind": "human"}, "prompt": "別の項目の 3 はそれでよい", "timestamp": iso(-5)}})
+        q2ns = argparse.Namespace(session="claude:sess-q2", region=["abstract"], change="案 R", quote=None, latest=True,
+                                  file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve --latest: 最新の発言が作業中に届いたものなら引かない (exit 5、 記録しない)",
+              approve_mode(q2ns) == 5 and load_approvals("claude", "sess-q2") == [])
+        q2ns.latest, q2ns.quote = False, "別の項目の 3 はそれでよい"
+        check("approve: 作業中に届いた発言は、 中身を読んで --quote で引けば記録できる (従来どおり)", approve_mode(q2ns) == 0)
+        append(q2, said("案 S はこの形でいい", iso(1)))
+        q2ns.latest, q2ns.quote, q2ns.change = True, None, "案 S"
+        check("approve --latest: turn を始めた発言が最新なら従来どおり引く",
+              approve_mode(q2ns) == 0 and load_approvals("claude", "sess-q2")[-1].get("quote") == "案 S はこの形でいい")
+        q3 = tr_dir / "sess-q3.jsonl"
+        append(q3, said("案 T はこの形でいい", iso(-10)),
+               {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "task-notification",
+                "prompt": "<task-notification>done</task-notification>", "timestamp": iso(-5)}},
+               {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt",
+                "origin": {"kind": "peer"}, "prompt": "別 session からの連絡", "timestamp": iso(-4)}})
+        q3ns = argparse.Namespace(session="claude:sess-q3", region=["abstract"], change="案 T", quote=None, latest=True,
+                                  file=str(repo / "src" / "main.tex"), transcript=None)
+        check("approve --latest: 作業中に届いた背景 task の通知・別 session の連絡は本人の発言でない = 従来どおり引く",
+              approve_mode(q3ns) == 0 and load_approvals("claude", "sess-q3")[-1].get("quote") == "案 T はこの形でいい")
         # Codex の追い打ちの提案 (:codex-followup[題]{prompt="…"}) は本人が押して送っても agent が書いた文
         fu = ':codex-followup[表題を直す]{prompt="表題と概要を書き換えて修正して。"}'
         fu_segs = human_text_segments("これもよろしく 1. " + fu)
@@ -7055,6 +7480,7 @@ def selftest() -> int:
         reset_caches()
 
     apply_mode_selftests(check)
+    apply_replacement_selftests(check)
 
     print(f"selftest: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
     return 1 if fails else 0
@@ -7081,7 +7507,13 @@ def main(argv: list[str] | None = None) -> int:
                    help="保護 file の Git mode/type。省略時は候補 file の属性を使う。000000 は削除")
     y = sub.add_parser("apply", help="承認の記録 + 候補の書込み + 照合を 1 command で (裁定なしで通る変更なら記録して写す)")
     y.add_argument("--file", required=True)
-    y.add_argument("--candidate", required=True, help="適用後の全文 file (承認はこの内容の SHA-256 に束縛)")
+    y.add_argument("--candidate", help="適用後の全文 file (承認はこの内容の SHA-256 に束縛)。 置換 (--old/--new・--edits) と排他")
+    y.add_argument("--old", action="append",
+                   help="置換の前の文 (Edit の old_string と同じ = 今の file の中にちょうど 1 回現れる文。 backslash の escape は"
+                        "読まない)。 --new と同じ回数だけ渡し、 前から順に組にして順に当てる。 - で始まる文は --old=<文> と書く")
+    y.add_argument("--new", action="append", help="置換の後の文 (空 = 削除)。 - で始まる文は --new=<文> と書く")
+    y.add_argument("--edits", help="置換の組を書いた file (長い文・引用符を含む文。 書き方 = parse_edits_file の docstring)")
+    y.add_argument("--dry-run", action="store_true", help="候補の差分と、 触る保護領域・承認の要る領域を出すだけ (記録も書込みもしない)")
     y.add_argument("--change", required=True, help="何を変えるか 1 行")
     y.add_argument("--quote", help="本人の発言そのもの")
     y.add_argument("--latest", action="store_true", help="本人の最新の発言そのものを引く")
