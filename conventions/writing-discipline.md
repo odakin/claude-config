@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose) + 日本語の下書きから英語の文を起こすとき (#ga-is-not-but)
+when: AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・メール・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose) + 日本語の下書きから英語の文を起こすとき (#ga-is-not-but)
 category: paper
 summary: 文章の標語 = 「平易に、論理の流れがスッキリ追えるように、簡潔に」 (AI の文章は放っておくと冗長になる = 書いた文ごとに標語を当てる) + 多義語 kernel を汎称に使わない (重み関数・窓関数・伝播関数・積分核など、その式が表す対象を名指す) + 「柔らかく」 は自分の行為を形容する語 (gently 等) でなく構文で出す + 初学者向けの導入は、 図のある実物と古典の予想を裏切る観察から始め、 新しい数学は既知の現象の類推で要ると分かってから最小の形で出す + 論文の文章の一般則 (構成 = 講演の 3 message を紙に翻訳、 他人の仕事は序論に集め、 要約は「何をしたか / 何を意味するか / 次に何をするか」 / 文と段落 = 言い切り・圧縮の検算・検算の 3 拍・式の項の呼び方・裸の括弧参照を書かない / 引用 = 方向ごとに入口 1 つ・文献ごとに何をしたか / 記号 = 無駄に定義しない・本文で定義・パラメータは定義の式に / 注記は用件だけ・示していない検証を書かない / 日本語の接続詞の糊)
 -->
@@ -18,7 +18,7 @@ AI が書く文章にかかる規律。 1〜3 は owner の裁定 (発言その�
 - **論理の流れがスッキリ追えるように**: 1 文 1 段の論理。 「A なら B、 それが C の起源」 は 2 文に分ける。 指示語は指示先を名詞で名指す。 段落は主張 → 根拠 → 帰結の順で、 順序を示すだけの接続語 (Methodologically, / Note that) を足さない。
 - **簡潔に**: 書いた語を 1 つずつ「落として意味が変わるか」 と問い、 変わらない語は落とす。 ただし load-bearing な語 (量化子・条件・範囲) は落とさない。
 
-適用範囲 = 論文・ノート・報告書・README・chat の返事・code の docstring・図のラベルと caption。 chat の返事だけの規律 (結論先行・deliverable の 1 画面) は [concise-output.md](concise-output.md)、 英語の論文の文の形は [#plain-short-sentences](#plain-short-sentences)、 原稿ごとの実例は各 project の執筆スタイル (層 3 / 層 2 digest) が持つ。
+適用範囲 = 論文・ノート・報告書・メール・README・chat の返事・code の docstring・図のラベルと caption。 chat の返事だけの規律 (結論先行・deliverable の 1 画面) は [concise-output.md](concise-output.md)、 英語の論文の文の形は [#plain-short-sentences](#plain-short-sentences)、 原稿ごとの実例は各 project の執筆スタイル (層 3 / 層 2 digest) が持つ。
 
 ## <a id="kernel"></a>2. 「kernel」 を汎称に使わない
 
