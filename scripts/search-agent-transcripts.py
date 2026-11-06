@@ -113,6 +113,19 @@ INJECTED_PREFIXES = ("<", "# AGENTS.md", "This session is being continued from a
 QUOTED_SPEAKER_RE = re.compile(r"\[\d+\]\s*(?:user|assistant)\s*:\s*$")
 # 行頭・行末の錨 (^ / $ / \A / \Z / \z)。 [^…] の ^ にも当たるが、 その時は先読みを止めるだけ (結果は同じ)
 _ANCHOR_RE = re.compile(r"(?<!\\)[\^$]|\\[AZz]")
+# 生の JSON 行は本文の \ " 改行・tab を escape した形 (\\ \" \n \t)。 pattern がこれらの文字か regex の escape
+# (\s・\\ など) を含むと、 本文に当たる pattern が生の行の先読みで落ちる (実測: LaTeX の \ を含む発言と、
+# 改行をまたぐ \s* の regex が、 黙って 0 件になった)。 その pattern では、 生の行で外れた行を escape を戻した形でも当てる
+_ESCAPE_SENSITIVE_RE = re.compile(r'[\\"\x00-\x1f]')
+_JSON_ESCAPE_RE = re.compile(r'\\(["\\/bfnrt])')
+_JSON_ESCAPE_MAP = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f"}
+
+
+def _loose_unescape(line: str) -> str:
+    """生の JSON 行の escape を戻した形 (\\uXXXX は戻さない = 先読み用の近似、 本番の照合は json.loads の本文で行う)。"""
+    return _JSON_ESCAPE_RE.sub(lambda m: _JSON_ESCAPE_MAP.get(m.group(1), m.group(1)), line)
+
+
 DEFAULT_CODEX_DIRS = ("~/.codex/sessions", "~/.codex/archived_sessions")
 
 
@@ -287,6 +300,7 @@ def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | Non
     # 生の JSON 行での先読みは、 行頭・行末に錨を置いた regex (^…$ / \A / \Z) では本文に当たっても行で外れる
     # (行は {"type": … で始まる) = 錨のある regex は先読みせず、 本文だけで照合する (遅いが落とさない)
     line_rx = rx if rx is not None and not _ANCHOR_RE.search(pattern) else None
+    sensitive = bool(_ESCAPE_SENSITIVE_RE.search(pattern))
     seen: set = set()
     hits: list[tuple] = []
     for ag, files, label in iter_files(agent, claude_dir, codex_dir):
@@ -299,11 +313,13 @@ def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | Non
         for line in _lines(files, tally):
             if ag == "codex" and child is None:
                 child = _is_codex_child(line)
-            if raw_probe is not None and raw_probe not in line:
+            if raw_probe is not None and raw_probe not in line and not (
+                    sensitive and raw_probe in _loose_unescape(line)):
                 continue
-            if line_rx is not None and not line_rx.search(line):
-                # 本文の改行は JSON では \n なので、 行単位の先読みで落ちる match はない
-                # (改行をまたぐ regex は対象外)
+            if line_rx is not None and not line_rx.search(line) and not (
+                    sensitive and line_rx.search(_loose_unescape(line))):
+                # 生の行は 1 record = 1 行 (本文の改行は \n に escape される) = 行単位の先読みで record をまたぐ
+                # match は落ちない。 escape される文字を含む pattern は、 escape を戻した形でも当てる (_ESCAPE_SENSITIVE_RE)
                 continue
             try:
                 rec = json.loads(line)
@@ -495,6 +511,20 @@ def selftest() -> int:
                   == ["2099-01-03T00:00:00Z", "2099-01-03T00:05:00Z"]),
             check("行頭・行末に錨を置いた --regex も本文に当たる",
                   len(search("^みかんの話$", **{**base, "agent": "claude", "regex": True})) == 2),
+        ]
+        # JSON が escape する文字 (\ " 改行) を含む本文: 生の行の先読みで落とさない
+        esc = Path(td) / "claude-esc" / "proj"
+        esc.mkdir(parents=True)
+        (esc / "dddddddd-4444.jsonl").write_text(json.dumps(
+            {"type": "user", "timestamp": "2099-04-01T00:00:00Z",
+             "message": {"content": '式は C_{\\tx c} と書く。\n次の行で "梨" と言う'}}, ensure_ascii=False) + "\n",
+            encoding="utf-8")
+        eb = {**base, "agent": "claude", "claude_dir": Path(td) / "claude-esc"}
+        results += [
+            check("backslash を含む --regex が本文に当たる", len(search(r"C_\{\\tx", **{**eb, "regex": True})) == 1),
+            check("改行をまたぐ --regex が本文に当たる", len(search(r"書く。[\s　]*次の行", **{**eb, "regex": True})) == 1),
+            check("backslash を含む文字列が本文に当たる", len(search("C_{\\tx c}", **eb)) == 1),
+            check('" を含む文字列が本文に当たる', len(search('"梨"', **eb)) == 1),
         ]
         # アーカイブされた Codex session (平置き) と、 別 session に貼られた会話の抜粋
         arch = Path(td) / "codex-archived"

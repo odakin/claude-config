@@ -216,6 +216,8 @@ collaborator 本人の連絡先（メールアドレス等）や PII を layer 2
 
 配布器は source の公開範囲・必須項目と、選択された全 target の生成 marker を**書込み前に**検査する。エラーを数えて終了コードを失敗にするだけでは、途中で不正な本文を配布できてしまう。検査と書込みを分け、後段の target が不正でも先行 target を変更しないことを fixture で検査する。配布先を限定する場合は registry の既存 target を明示選択し、未知の名前を無視しない。部分同期の成功を digest 全体の一致と報告せず、残る差分と次の完全同期の入口を区別する。
 
+<a id="l2-digest-hand-edits"></a>**配布器は、 区画に手で足された行を消す前に止まる** (実測): 共有 repo の session が生成区画に直接行を足すと、 次の生成がそれを黙って消す。 書くと消える行のうち、 配布 source の履歴 (`git log -S`) に一度も現れない行は手で足された行なので、 配布器はその target を書かずに止まり、 行の一覧と「source に移してから作り直す」 を出す。 source から消した・言い直した行は履歴にあるので止まらない。 消すと決めたときだけ明示の flag で消す。 区画に置きたい規則は配布 source に足す ([closing-sweep.md#sot-and-refs](closing-sweep.md#sot-and-refs) の生成物の行)。
+
 <a id="l2-digest-first-deploy"></a>**初めて配る repo では、 生成してから承認を記録する** (実測): 規則の文書 (CLAUDE.md) の変更に承認を要する guard がある環境で、 空の marker を置いた候補を先に承認すると、 その後の生成で block の中身が変わり、 commit の検査が「承認した候補と違う」 で止まる。 順番は marker を置く → 配布器で生成する → 生成後の全文を候補にして承認を記録する → commit。 配布先の registry に足す変更も同じ commit の範囲に含める。
 
 ### <a id="style-checker-mirror"></a>機械化できる style subset は layer 1 engine + layer 2 mirror にする
