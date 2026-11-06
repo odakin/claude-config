@@ -1,8 +1,8 @@
 // Hermetic self-test for classroom-courses.mjs; uses a fake Classroom client and needs no network or googleapis.
 import assert from "node:assert/strict";
 import {
-  summarize, createCourse, updateCourse, createAnnouncement, inviteMembers, rosterStatus, emailsFromRosterText, gradeHistory,
-  shortAnswers, listCourseWork,
+  summarize, createCourse, updateCourse, createAnnouncement, checkAnnouncement, inviteMembers, rosterStatus, emailsFromRosterText,
+  gradeHistory, shortAnswers, listCourseWork,
 } from "./classroom-courses.mjs";
 
 const apiError = (status, code) => Object.assign(new Error(status), { code, response: { status: code, data: { error: { status, message: status } } } });
@@ -20,6 +20,7 @@ function fakeClient({ createdState = "ACTIVE" } = {}) {
       patch: async (req) => { calls.push(["patch", req]); return { data: { id: req.id, ...req.requestBody } }; },
       announcements: {
         create: async ({ courseId, requestBody }) => ({ data: { id: "a1", courseId, ...requestBody, materials: (requestBody.materials || []).map((m) => ({ driveFile: { driveFile: { title: `t-${m.driveFile.driveFile.id}` } } })) } }),
+        get: async ({ id }) => ({ data: { id, state: "PUBLISHED", text: "line one\n・項目 ∂S/∂U", materials: [{ driveFile: { driveFile: { id: "f1", title: "handout.pdf" } } }] } }),
       },
       students: {
         get: async ({ userId }) => {
@@ -78,6 +79,26 @@ await check("createAnnouncement attaches Drive files and keeps the state", async
   const r = await createAnnouncement(fakeClient(), "c1", "hello", ["f1", "f2"], "DRAFT");
   assert.equal(r.state, "DRAFT");
   assert.deepEqual(r.attachments, ["t-f1", "t-f2"]);
+});
+
+await check("checkAnnouncement matches the draft exactly, ignoring the draft's trailing newline", async () => {
+  const r = await checkAnnouncement(fakeClient(), "c1", "a9", "line one\n・項目 ∂S/∂U\n\n", ["f1"]);
+  assert.equal(r.ok, true);
+  assert.equal(r.textMatch, true);
+  assert.deepEqual(r.attachments, ["handout.pdf"]);
+  assert.equal(r.firstDiff, undefined);
+});
+
+await check("checkAnnouncement reports the first differing character and attachment differences", async () => {
+  const r = await checkAnnouncement(fakeClient(), "c1", "a9", "line one\n・項目 ∂S/∂V", ["f2"]);
+  assert.equal(r.ok, false);
+  assert.equal(r.textMatch, false);
+  assert.equal(r.firstDiff, "line one\n・項目 ∂S/∂".length);
+  assert.deepEqual(r.missingFiles, ["f2"]);
+  assert.deepEqual(r.extraFiles, ["f1"]);
+  const short = await checkAnnouncement(fakeClient(), "c1", "a9", "line one", ["f1"]);
+  assert.equal(short.firstDiff, "line one".length);  // posted text is longer than the draft
+  await assert.rejects(checkAnnouncement(fakeClient(), "c1", "", "x"), /required/);
 });
 
 await check("inviteMembers keeps input order and tallies already / error", async () => {

@@ -357,6 +357,14 @@ LuaTeX-ja は英数字と和文の間に空き (xkanjiskip) を入れる。 半�
 
 - **確かめ方**: 本文の脚注・`\newtcolorbox` の枠の中の脚注・定理の枠の中の脚注を並べた試しの文書で、 印が続き番号になり、 本文が頁の下に並ぶこと。 本全体は前と後を組み比べ、 変わるのは枠の中に脚注がある頁と、 その後ろの脚注の番号だけ
 
+## <a id="macro-block-name-clashes"></a>英語の文書の macro の一揃いを和文の文書と tcolorbox の枠に持ち込むときの衝突
+
+英語の論文で使っている macro の一揃いを、 和文の配布物 (ltjsarticle) にそのまま写して組むと、 次の 3 つで止まる (実測)。 どれも log の 1 行で分かる:
+
+- **`Command \mc already defined`**: jsclasses 系 (ltjsarticle・ltjsbook・jsarticle) は `\mc` (明朝) と `\gt` (ゴシック) を和文の書体の切り替えとして定義済み。 一揃いの `\newcommand{\mc}{\mathcal}` が当たる。 和文の文書では `\mc` を定義しない (`\mathcal` を直接書くか別の名前にする)。 `\renewcommand` で上書きすると和文の書体の切り替えが壊れる
+- **`Command \ng already defined`**: `\ng` は LaTeX の本体が定義する字 (ŋ)。 枠や印の短い名前 (`\ng` = ✗ の印など) を新しく作るときは、 `\newcommand` が止めるので、 そこで別の名前にする (`\renewcommand` で通さない)
+- **`I do not know the key '/tcb/…'`** (tcolorbox): `\newtcolorbox{名前}[1]{…,title=解説: #1,…}` の title に、 呼ぶ側が `,` を含む文 (例 = `$S(U,V,N)$`) を渡すと、 key の並びが `,` で切られ、 残りが key として読まれる。 引数の入る値は波括弧で包む: `title={解説: #1}`。 tcolorbox の他の key (`subtitle`・`before upper` など) も同じ
+
 ## <a id="lua-ul-highlight-emph"></a>`\emph` を色の帯 (蛍光ペン) にする — lua-ul の罠と文献表
 
 - lua-ul (LuaLaTeX の下線・帯。 行をまたいでも続く) の `\highLight[色]{…}` で帯を引く。 **色を付けるには luacolor を lua-ul より前に読む** (無いと「Color support in lua-ul requires luacolor」 で止まる)

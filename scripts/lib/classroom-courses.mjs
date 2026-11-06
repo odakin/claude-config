@@ -1,4 +1,4 @@
-// Google Classroom course engine: create / update, invite (parallel), announcements, roster match by address, coursework list, short answers without names; takes a googleapis classroom client, no imports.
+// Google Classroom course engine: create / update, invite (parallel), announcements (post + read back against the draft), roster match by address, coursework list, short answers without names; takes a googleapis classroom client, no imports.
 //
 // Every function takes the `classroom` client (googleapis `google.classroom({version: "v1", auth})`) as its
 // first argument, so the caller owns the credentials and the googleapis install; this module needs neither.
@@ -65,6 +65,40 @@ export async function createAnnouncement(classroom, courseId, text, driveFileIds
     id: a.id, state: a.state, text: a.text, alternateLink: a.alternateLink, creationTime: a.creationTime,
     attachments: (a.materials || []).map((m) => m.driveFile?.driveFile?.title || Object.keys(m)[0]),
   };
+}
+
+// Read a posted announcement back and compare it with the draft, so "the post matches the draft" is a machine
+// comparison, not a look (conventions/google-classroom-api.md#readback-after-post). The draft's trailing whitespace is
+// ignored (the CLI trims it before posting). Attachments are compared by Drive file id. On a text mismatch,
+// firstDiff is the first differing character index and around shows ~30 characters of each side there.
+export async function checkAnnouncement(classroom, courseId, announcementId, text, driveFileIds = []) {
+  if (!courseId || !announcementId || typeof text !== "string") throw new Error("courseId, announcementId and text are required");
+  const res = await classroom.courses.announcements.get({ courseId, id: announcementId });
+  const a = res.data;
+  const want = text.replace(/\s+$/, "");
+  const got = a.text || "";
+  let firstDiff = -1;
+  if (got !== want) {
+    firstDiff = Math.min(got.length, want.length);
+    for (let i = 0; i < Math.min(got.length, want.length); i++) {
+      if (got[i] !== want[i]) { firstDiff = i; break; }
+    }
+  }
+  const attachedIds = (a.materials || []).map((m) => m.driveFile?.driveFile?.id).filter(Boolean);
+  const missingFiles = driveFileIds.filter((id) => !attachedIds.includes(id));
+  const extraFiles = attachedIds.filter((id) => !driveFileIds.includes(id));
+  const out = {
+    ok: got === want && missingFiles.length === 0 && extraFiles.length === 0,
+    id: a.id, state: a.state, textMatch: got === want, length: { posted: got.length, draft: want.length },
+    attachments: (a.materials || []).map((m) => m.driveFile?.driveFile?.title || Object.keys(m)[0]),
+    missingFiles, extraFiles,
+  };
+  if (firstDiff >= 0) {
+    const s = Math.max(0, firstDiff - 10);
+    out.firstDiff = firstDiff;
+    out.around = { posted: got.slice(s, firstDiff + 20), draft: want.slice(s, firstDiff + 20) };
+  }
+  return out;
 }
 
 // Run fn over items with a few calls in flight, keeping results in input order.
