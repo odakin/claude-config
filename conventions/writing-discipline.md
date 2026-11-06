@@ -188,6 +188,7 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 - 文ごとに「この文は主張を述べているか、 読者に推論させているか」 を問う。 専門の読者向けでも同じ (「この読者なら分かるはず」 が当のバイアス)。
 - 式で言えることは式で書く (display 1 本は曖昧な散文 3 文より安い)。
 - 結論の修飾語 (uniquely など) の理由が文面に載っているかを確かめる。
+- 前提 (仮定・適用の条件) は、 論証が使う条件を名指して書く。 定義から必ず成り立つ修飾を前提の形で書かない (合成例: 「for a symmetric metric $g$」 = 計量は定義で対称)。 論証が Lorentz 符号を使うなら「for a metric $g$ of Lorentzian signature」 と書く。 冗長な修飾は条件を課しているように読め、 効いている条件は読者の推論に残る。
 - 事実が「現れない」 なら、 現れないと書き、 術語に置き換えない (decouple は動力学的な切り離しに響く)。 条件を変えると効きうるなら、 その条件の限定 (minimally coupled など) は残す。
 
 ### <a id="say-hypothetical-upfront"></a>意図して現実と違う設定を選んだら、 序論で仮想だと言い、 理由を 1 文
@@ -370,13 +371,13 @@ slash は割り算、 中黒は乗算 (\cdot) と紛らわしい。 2 個は「$
 ### <a id="symbol-definition-economy"></a>無駄な記号・量を定義しない
 
 - 新しい記号 (中間量・略記・単位記号) は、 読者が覚える負担に見合うだけ使われるときだけ導入する。 数回しか使わない量は、 その場で書き下すか散文で言う。 計算の都合で要る中間量は付録に置くか消す。
-- 逆に、 節をまたいで何度も使われ主張そのものを運ぶ変数は、 定義した方が読みやすい。 判断の基準 = 定義を消したとき、 式が二重根号や長い積になって、 より読みにくくなるか。
-- 新しい記号を打つ前に「何回使うか、 消したら式はどうなるか」 を問う。 原稿の review では `\newcommand` と `:=` の定義を列挙し、 使用が 2〜3 回以下のものを撤去の候補に挙げる。
+- 逆に、 節をまたいで何度も使われ主張そのものを運ぶ変数は、 定義した方が読みやすい。 判断の基準 = 定義を消したとき、 式が二重根号や長い積になって、 より読みにくくなるか。 1 つの導出の中で同じ合成量 (記号を持たない同じ式の組) が繰り返し出るときも、 名前と記号を付け、 名前の直後の display で定義する ([#definition-display](#definition-display))。 後から名づける文 (「The … term is the …」) はそれで消える。
+- 新しい記号を打つ前に「何回使うか、 消したら式はどうなるか」 を問う。 原稿の review では `\newcommand` と `:=` の定義を列挙し、 使用が 2〜3 回以下のものを撤去の候補に挙げる。 逆向きに、 記号を持たない同じ式の組が 1 つの導出の中で繰り返し出ていれば、 記号を付ける候補に挙げる。
 - 一度しか使わない記号が他の記法と文字を共有するなら、 記号を落として言葉で言う。
 - 言葉で言い切った内容を繰り返すだけの display は落とす。
-- 前の節で定義した演算子・接続を付録で再定義しない。
+- 前の節で定義した対象 (演算子・接続・関数) を、 後の節や付録で定義し直さない。 式番号で引く。
 - 数値検証の詳細 (手法・精度・桁数・再現の主張) を本文の脚注に書かない。 付録の末尾の検証の段落に集め、 脚注は本文の流れに要る最小限と付録への pointer にする。
-- 同じ対象は本文から付録まで同じ記法で書き、 定義した略記は定義の後の全部の式で使う = [paper-audit.md#notation-continuity-across-sections](paper-audit.md#notation-continuity-across-sections)。 記号の衝突 = [paper-audit.md#symbol-collision-sweep](paper-audit.md#symbol-collision-sweep)。
+- 同じ対象は本文から付録まで (双子・連作の論文の間でも) 同じ記法で書き、 同じ種類の修飾には同じ印を付け、 定義した略記は定義の後の全部の式で使う = [paper-audit.md#notation-continuity-across-sections](paper-audit.md#notation-continuity-across-sections)。 記号の衝突 = [paper-audit.md#symbol-collision-sweep](paper-audit.md#symbol-collision-sweep)。
 
 ### <a id="definition-display"></a>定義する名前は強調して、 その直後の display で定義する — 補助の記号は display の後の where 節で
 
@@ -397,6 +398,26 @@ where $\omega_0$ denotes the undamped angular frequency and $\gamma$ the half-wi
 ```
 
 避ける形 (合成例) = 「We introduce a function that gives the steady-state amplitude at each driving frequency, namely $G(\omega):=(\omega_0^2-\omega^2-2i\gamma\omega)^{-1}$. We call $G$ the transfer function.」 (言葉の長い前置き、 文中の定義の式、 後からの名づけ)。 display の macro・分数の書き方・display の導入の colon は project の家風に従う。
+
+### <a id="quantity-in-its-own-representation"></a>同じ量を 2 つの表示で書けるときは、 記号の属する表示で定義し、 1 つの導出の中で表示を行き来させない — 証明が出す演算子の主張は演算子で書く
+
+- 同じ量が 2 つの表示で書ける (測定値の分布の統計と演算子の期待値、 など) とき、 量子の記号 (演算子を引数や添字に持つ記号) の量は、 演算子の式で定義する。 測定値の分布の統計 (古典の表示) がそれに等しいことは、 等式で示す。 古典の式で定義すると、 量子の記号の量が古典の量から作られたように読め、 後の演算子の式とのつながりが見えにくくなる。
+- 1 つの導出の中では、 同じ量を一方の表示で通す。 前の display の最後の行の表示を、 次の式でも使う。 2 つの表示が 1 本の式に混ざると、 読者は上の式とのつながりを自分で組み直す。
+- 証明が状態によらない演算子の主張 (演算子の不等式・恒等式) を出すなら、 記号も演算子で定義し、 主張も演算子で書く。 ある状態の期待値の不等式に落とすと、 その状態についての主張に読め、 証明が出したものより弱く見える。
+
+(合成例)
+
+```latex
+A counter registers $n$ quanta of an oscillator of angular frequency $\omega$ with probability $p_\psi(n)$ in the state $\psi$.
+The energy above the ground state is given by the \emph{excitation operator}
+\begin{equation} \hat E := \hat H - \tfrac12\hbar\omega, \end{equation}
+where $\hat H$ denotes the oscillator Hamiltonian.
+Since $\hat E=\hbar\omega\,\hat a^\dagger\hat a$ with the annihilation operator $\hat a$, the operator inequality $\hat E\ge0$ holds.
+The mean energy recorded by the counter equals the expectation value of $\hat E$,
+\begin{equation} \sum_n \hbar\omega\,n\,p_\psi(n) = \langle\psi|\hat E|\psi\rangle . \end{equation}
+```
+
+以後の式は右辺の $\langle\psi|\hat E|\psi\rangle$ で書く。 避ける形 (合成例) = 平均を $\langle\hat E\rangle_\psi:=\sum_n\hbar\omega\,n\,p_\psi(n)$ と古典の式で定義する (量子の記号の量を古典の式で定義)、 分散を $\sum_n(\hbar\omega n)^2p_\psi(n)-\langle\psi|\hat E|\psi\rangle^2$ と書く (1 本の式に 2 つの表示)、 下限を $\langle\psi|\hat E|\psi\rangle\ge0$ と書く (その状態についての主張に読める)。
 
 ### <a id="parameter-in-defining-equation"></a>本文が使うパラメータは、 定義の式に入れる
 
