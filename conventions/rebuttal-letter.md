@@ -9,6 +9,8 @@ paper revision で referee report に point-by-point 回答する rebuttal lette
 
 **Sibling docs** (= 全 5 で paper / proposal lifecycle を cover): 自分 paper の internal audit = [`paper-audit.md`](paper-audit.md) / 自分が referee として外部 paper / 申請書を評価 = [`peer-review-workflow.md`](peer-review-workflow.md) / grant 申請書の submit = [`erad-submission.md`](erad-submission.md) / 論文の journal / arXiv 投稿ポータル経由の submit = [`paper-submission.md`](paper-submission.md)。 本書 (= author response) はこれら 4 の方向違いで、 referee からの指摘に著者として返す側。
 
+**書く前**: 返答書 (と、 それへの共同研究者のコメントに答える案) を著者の代わりに起草するときは、 英文の下書きの前に方針 (答える論点と骨子・referee や共同研究者の主張の採否と拠り所・原稿の変更の要否・著者に決めてもらうこと) を出して著者の確認を取る。 下請けに起草を渡すなら依頼を方針の段と起草の段に分ける = [`concise-output.md#policy-before-draft`](concise-output.md#policy-before-draft)。
+
 ## 構造
 
 - LaTeX standalone document (例: `response-to-referees.tex`)。 referee comment を色付き italic quote (= `\newenvironment{referee}{\begin{quote}\color{blue!65!black}\itshape}{\end{quote}}`) で表示、 各 comment に `\textbf{Response.}` で回答。
