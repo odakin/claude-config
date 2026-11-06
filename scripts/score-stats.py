@@ -36,7 +36,7 @@ def load(path, items=None):
             import yaml
         except ImportError:
             sys.exit("score-stats: YAML には PyYAML が要る = pip install pyyaml (JSON なら要らない)")
-        data = yaml.safe_load(text)
+        data = yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))  # safe_load と同じ結果を C 版で
     if isinstance(data, dict):
         if not items:
             sys.exit("score-stats: top-level が dict = --items <list の key> を渡す")
