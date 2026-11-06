@@ -49,6 +49,9 @@ sections:
   - id: figures-in-body-references-last
     level: 2
     title: "本文の図を本文の中に置き、 文献表を付録の後ろに置く — `placeins` の section option と `[tbp]`"
+  - id: table-caption-position
+    level: 2
+    title: "表の caption を上に置くか下に置くかは、 投稿先の雛形を開いて決める"
   - id: align-split-tag-orphan
     level: 2
     title: "長い display の式番号が下の行に回るのは amsmath の標準 — 欠陥として報告しない (2026-09-12、 著者裁定)"
