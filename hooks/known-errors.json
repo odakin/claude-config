@@ -173,6 +173,11 @@
     },
     {"match": "MBLOCKRIGHTBRACE", "doc": "conventions/latex.md#latexdiff-eqtree", "hint": "latexdiff の fine が波括弧の途中まで一致させた跡。 1 式なら #latexdiff-fine-markup の表で直し、 繰り返すなら式を latexdiff に渡さない"},
     {"match": "Command \\mc already defined", "doc": "conventions/latex.md#macro-block-name-clashes", "hint": "jsclasses 系 (ltjsarticle など) は \\mc を明朝の切り替えとして定義済み。 和文の文書では macro の一揃いから \\mc の定義を外す (上書きしない)"},
-    {"match": "I do not know the key '/tcb/", "doc": "conventions/latex.md#macro-block-name-clashes", "hint": "tcolorbox の title などに , を含む引数が入り、 key の並びが切られた疑い。 引数の入る値を波括弧で包む: title={…#1}"}
+    {"match": "I do not know the key '/tcb/", "doc": "conventions/latex.md#macro-block-name-clashes", "hint": "tcolorbox の title などに , を含む引数が入り、 key の並びが切られた疑い。 引数の入る値を波括弧で包む: title={…#1}"},
+    {
+      "match": "no writeable cache path",
+      "doc": "conventions/latex.md#latex-pdf-audit",
+      "hint": "LuaLaTeX のキャッシュを確認する。source と依存ファイルを新しい作業 directory に写し、その中で相対キャッシュを指定して再ビルドする。診断は scripts/latex-sandbox-cache-probe.py。"
+    }
   ]
 }
