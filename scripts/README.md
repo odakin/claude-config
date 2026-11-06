@@ -521,6 +521,7 @@
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
 - **[lib/seal_artifact.py](lib/seal_artifact.py)** — 画像の押印 (ハンコ画像) が入った成果物に、作る時に印を付け、出口で見つける。
 - **[lib/sensitive-terms.sh](lib/sensitive-terms.sh)** — 実名 gate (Tier B) の検出語 file を読む共通部品 (source して使う、 bash 3.2 可)
+- **[lib/session_background_tasks.py](lib/session_background_tasks.py)** — 1 つの Claude Code session が仕掛けて今も生きている背景の作業 (Bash の run_in_background・前景から背景へ移った command・Monitor) を並べ、 見張りか・Monitor の残り秒を付ける (照合の道具 child-wrap-check.py と締めの手順 conventions/closing-sweep.md#stop-own-watches の共通の部品。 `<id|self>` で CLI)。
 - **[lib/session_model.py](lib/session_model.py)** — a Claude Code session's actual model, read from its transcript (never from a title or a tag).
 - **[lib/session_touch.py](lib/session_touch.py)** — script が書いた file の repo を、 その session の「触った repo」 の list に載せる (hooks/session-commit-nudge.sh が読む)。
 - **[lib/spawn_dedupe.py](lib/spawn_dedupe.py)** — 同じ依頼に worker session を 2 つ起動させない検出の engine (chip の二重起票)。

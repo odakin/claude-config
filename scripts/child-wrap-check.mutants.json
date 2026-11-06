@@ -56,6 +56,22 @@
     {"name": "親の取り消しを数えない",
      "pairs": [["    return max([ts for ts, frm in ev[\"peer_unwraps\"] if frm == parent] + list(sent or []), default=\"\")", "    return \"\""]],
      "expect_fail": ["a wrap the parent called off: its run and its stop do not count", "a wrap the parent called off: check_child does not count the run"],
-     "expect_pass": ["finished: wrap ran after the accept and the child stopped → wrapped"]}
+     "expect_pass": ["finished: wrap ran after the accept and the child stopped → wrapped"]},
+    {"name": "子の背景の作業を照合に入れない",
+     "pairs": [["    if bg:\n        reasons.append(\"子の背景の作業が生きている", "    if False:\n        reasons.append(\"子の背景の作業が生きている"]],
+     "expect_fail": ["a live background watch keeps a wrapped child and names the task to stop"],
+     "expect_pass": ["... without it the same child is ok", "the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"]},
+    {"name": "子の最後の turn の後の親の message を照合に入れない",
+     "pairs": [["    if pend:\n        reasons.append(f\"親が {_local_hm(pend)} に子へ送った", "    if False:\n        reasons.append(f\"親が {_local_hm(pend)} に子へ送った"]],
+     "expect_fail": ["the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"],
+     "expect_pass": ["--wait: a turn end before the parent's last message is not done", "a live background watch keeps a wrapped child and names the task to stop"]},
+    {"name": "届かなかった message (success false) も数える",
+     "pairs": [["                    if SEND_FAILED.search(text):\n", "                    if False:\n"]],
+     "expect_fail": ["a message that was not delivered (success false) does not count"],
+     "expect_pass": ["the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"]},
+    {"name": "--wait が親の後の message を待たない",
+     "pairs": [["        if pend:  # the parent wrote again after that turn end", "        if False:  # the parent wrote again after that turn end"]],
+     "expect_fail": ["--wait: a turn end before the parent's last message is not done"],
+     "expect_pass": ["the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"]}
   ]
 }

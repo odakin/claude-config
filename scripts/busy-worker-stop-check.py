@@ -11,6 +11,10 @@ Why (実測): 見え方や model を直すために、 動いている worker �
     live の registry (全 config dir、 scripts/lib/session_model.py) で status = busy のものだけを対象にする
     (for 文の id の並びも拾う。 終わって idle の worker の片付けは止めない)。
   - mcp `…__stop_session` / `…__archive_session`: tool_input.session_id (`local_…` か transcript id) の status が busy なら対象。
+    ただし archive_session の相手が busy のときは、 止める文が「turn の終わりを待ってから畳む」 (child-wrap-check.py --wait)
+    で、 本人に聞かせず、 本人の発言でも通さない (turn が終われば下の owner の判定に進む)。 archive は turn を止めないので
+    使用料の無駄は起きず、 app も turn の途中の session の archive を断る (実測: 子が turn の途中だったのは親が直前に送った
+    message に答えていたためで、 旧い文は親に本人へ聞かせようとし、 26 秒後の archive は何もせずに通った)。
   - 対象があれば、 その target について「止めた時刻」 を session ごとの state に記録して止める (exit 2、 理由に model と
     動いた時間 = 本人に聞く 1 行の材料)。 止めた時刻より後に本人の発言 (人の入力。 他 session からの message・hook の
     差し戻し・task の通知は数えない) があれば通す = 聞いて答えをもらった後の 2 回目は通る。
@@ -273,6 +277,8 @@ def check(inp: dict) -> tuple[int, str]:
     busy = busy_targets(ids)
     if not busy:
         return owner_check(inp, ids)
+    if (inp.get("tool_name") or "").endswith("__archive_session"):
+        return 2, busy_archive_text(busy, ids[0])
     sid = inp.get("session_id") or ""
     st = load_state(sid)
     h_ts, h_text = last_human(inp.get("transcript_path") or "")
@@ -300,6 +306,22 @@ def check(inp: dict) -> tuple[int, str]:
                "  本人に 1 行で聞く: 何を (上の model と動いた時間)、 なぜ止めたいか、 止めずに済む道。 本人が答えた後なら同じ操作は通る。\n"
                "  本人が直前の発言で止めるよう明示に言っているなら、 Bash の command に `# stop-ok: <その発言の一部を逐語で>` を付けて打ち直す。"
                f" 規約 = {RULE}")
+
+
+def busy_archive_text(busy: list[dict], target: str) -> str:
+    """The stop for archive_session of a session mid-turn. Archiving does not stop the child's turn (the app refuses a
+    mid-turn archive on its own), so no usage is wasted and there is nothing to ask the person: wait for the turn end.
+    Measured: the child was mid-turn only because the parent had just messaged it, and the old text sent the parent to
+    ask the person 26 seconds before the archive went through by itself."""
+    lines = [f"  - {b['sessionId'][:8]}: " + " / ".join(x for x in (b.get("model") or "model 不明", _minutes_since(b),
+                                                                   b.get("name") or "") if x) for b in busy]
+    return ("🛑 busy-worker-stop-check: 畳もうとした session はまだ turn の途中 (app も turn の途中の session の archive は断る)。\n"
+            + "\n".join(lines) + "\n"
+            "  turn の終わりを待ってから畳む = Bash の run_in_background で"
+            f" `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {target}` を出し、 起こされた turn の照合が ✅ なら畳む"
+            " (本人に聞かなくてよい = archive は turn を止めないので、 使用料の無駄は起きない)。"
+            " 待つ間は子に message を送らない (送ると子がまた turn に入る)。"
+            f" 規約 = {CHILD_RULE}")
 
 
 def owner_check(inp: dict, ids: list[str]) -> tuple[int, str]:
@@ -414,6 +436,15 @@ def selftest() -> int:
         ok("stop-ok with words the person did not say → blocked", rc == 2)
         rc, _ = run("mcp__ccd_session_mgmt__stop_session", {"session_id": "local_00000000-0000-4000-8000-000000000000"}, sid="L6")
         ok("desktop stop_session on a busy session → blocked", rc == 2)
+        busy_local = "local_00000000-0000-4000-8000-000000000000"
+        transcript(("2026-01-01T00:00:00.000Z", "閉じて良し"))
+        rc, txt = run("mcp__ccd_session_mgmt__archive_session", {"session_id": busy_local}, sid="LA")
+        ok("archive of a session mid-turn → blocked with 'wait for the turn end', not 'ask the person'",
+           rc == 2 and "turn の終わりを待ってから畳む" in txt and f"--wait {busy_local}" in txt and "本人に 1 行で聞く" not in txt)
+        transcript(("2026-01-01T00:00:00.000Z", "x"), ("2099-01-01T00:00:00.000Z", "閉じていいよ"))
+        rc, _ = run("mcp__ccd_session_mgmt__archive_session", {"session_id": busy_local}, sid="LA")
+        ok("... the person's word after it does not pass a mid-turn archive (the turn end does)", rc == 2)
+        ok("close_consent: 「閉じて良し」 is a fold word (the word in the measured scene)", close_consent("閉じて良し"))
         idle_local, parent_local = "local_00000001-0000-4000-8000-000000000000", "local_0000000f-0000-4000-8000-000000000000"
         rc, _ = run("mcp__ccd_session_mgmt__archive_session", {"session_id": idle_local}, sid="L6")
         ok("archive of an idle session → passes", rc == 0)

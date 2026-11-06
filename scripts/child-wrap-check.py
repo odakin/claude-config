@@ -101,6 +101,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "lib"))
 import desktop_sessions as ds  # noqa: E402
+import session_background_tasks as sbt  # noqa: E402
 import session_model as sm  # noqa: E402
 
 _spec = _ilu.spec_from_file_location("busy_worker_stop_check", os.path.join(HERE, "busy-worker-stop-check.py"))
@@ -122,8 +123,10 @@ CLAIM_RUN = re.compile(r"board\.py['\"]?\s+claim\b")
 # Only a window started with the board's hand-off has a step 0 (its line "This window must run on <model> at <effort>
 # effort"); the first prompt arrives as an sdk prompt, not as the person's, so it is read from the user entries' text.
 STEP0_HANDOFF = re.compile(r"must run on \S+ at \S+ effort")
+BG_TASKS = sbt.list_tasks  # the child's live background work (replaced in the selftest)
 DELIVERY_GRACE_S = 60  # --wait without a recent request: the first seconds wait for the request to land in the child's window
 MAX_COMMITS = 30
+SEND_FAILED = re.compile(r'\\?"success\\?"\s*:\s*false')  # a SendMessage result that says the message was not delivered
 RETRY_TEXTS = {"Try again"}  # the app's retry after an API error (measured on the desktop app)
 # Latin-letter boundaries, not \b: Python counts kana as word characters, so \bwrap\b misses 「wrapして」.
 WRAP_WORD = re.compile(r"(?<![A-Za-z])wrap(?![A-Za-z])", re.I)
@@ -481,6 +484,57 @@ def child_commits(cli: str, since: str) -> list[dict]:
     return out[:MAX_COMMITS]
 
 
+def parent_sends(parent_path: str, child: dict, as_of: str = "") -> list[str]:
+    """Timestamps of the parent's SendMessage calls to this child (its local id, or the uds address of its live process)
+    that were not refused (a result with "success":false = not delivered)."""
+    if not parent_path or not child.get("local"):
+        return []
+    to = {child["local"]}
+    try:
+        to |= {s_["address"] for s_ in sm.live_sessions() if s_.get("sessionId") == child.get("cli") and s_.get("address")}
+    except Exception:
+        pass
+    sent, failed = {}, set()
+    try:
+        fh = open(parent_path, encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    with fh:
+        for line in fh:
+            if "SendMessage" not in line and "success" not in line:
+                continue
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            ts = _ts(e) if isinstance(e, dict) else ""
+            if not isinstance(e, dict) or (as_of and ts[:19] > as_of[:19]):
+                continue
+            for b in (e.get("message") or {}).get("content") or []:
+                if not isinstance(b, dict):
+                    continue
+                if (b.get("type") == "tool_use" and b.get("name") == "SendMessage"
+                        and str((b.get("input") or {}).get("to") or "") in to):
+                    sent[str(b.get("id") or "")] = ts
+                elif b.get("type") == "tool_result" and str(b.get("tool_use_id") or "") in sent:
+                    c = b.get("content")
+                    text = c if isinstance(c, str) else json.dumps(c, ensure_ascii=False)
+                    if SEND_FAILED.search(text):
+                        failed.add(str(b.get("tool_use_id")))
+    return sorted(ts for i, ts in sent.items() if i not in failed and ts)
+
+
+def unanswered_send(c: dict, ev: dict, as_of: str = "") -> str:
+    """The time of the parent's latest message to the child sent after the child's last turn end ('' when none) = the
+    message waits for delivery, or landed and the child's turn has not started yet. The app counts both as live work
+    and refuses the archive (measured: the parent's own 'stop the background work' message put the child mid-turn as
+    the archive arrived)."""
+    ends = [_epoch(s) for s in ev["stops"] if s] + ([c["edge"]] if c.get("edge") else [])
+    last_end = max(ends, default=0.0)
+    late = [ts for ts in parent_sends(c.get("parent_path", ""), c, as_of) if _epoch(ts) > last_end + 1]
+    return max(late, default="")
+
+
 def _ask_text(ask: dict) -> str:
     if ask.get("owner_only"):
         head = (f"本人だけが答えられる問いが残っている ({_local_hm(ask['at'])} に本人待ちで止まり、 その後この子の窓に本人の発言が無い。"
@@ -547,6 +601,18 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
         reasons.append("まだ動いている (turn の途中)")
     if not as_of and c["status"] == "waiting":
         reasons.append(WAITING_TEXT)
+    pend = unanswered_send(c, ev) if not as_of and c["status"] not in ("busy", "waiting") else ""
+    if pend:
+        reasons.append(f"親が {_local_hm(pend)} に子へ送った message が、 子の最後の turn の終わりより後 = 配達待ちか、 届いて子の"
+                       " turn が始まる前 (app は archive を断る) → `--wait` で子がそれに答えて turn を終えるのを待ってから照合し直す"
+                       " (wrap を頼んだ後は、 子の turn が終わるまで子に message を送らない)")
+    try:
+        bg = BG_TASKS(c["cli"]) if not as_of else None
+    except Exception:
+        bg = None  # cannot count = no reason (the app's refusal is the backstop)
+    if bg:
+        reasons.append("子の背景の作業が生きている (app は archive を断る): " + " / ".join(sbt.describe(t) for t in bg)
+                       + " → " + sbt.child_next_step(bg))
     if ask:
         reasons.append(_ask_text(ask))
     if gw:
@@ -565,7 +631,8 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
         reasons.append("push されていない commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}" for x in bad))
     return {"target": target, "found": True, "ok": not reasons, "reasons": reasons, "local": c["local"], "title": c["title"],
             "status": c["status"], "archived": c["archived"], "last_wrap": max(ev["wraps"], default=""),
-            "last_turn_end": max(ev["stops"], default=""), "commits": commits, "open_ask": ask, "go_wait": gw}
+            "last_turn_end": max(ev["stops"], default=""), "commits": commits, "open_ask": ask, "go_wait": gw,
+            "background": bg or [], "unanswered_send": pend}
 
 
 def render(rows: list[dict]) -> str:
@@ -594,8 +661,12 @@ def turn_done_after(target: str, since: float) -> tuple[bool, str]:
         return False, "動いている"
     if c["status"] == "waiting":
         return False, WAITING_TEXT
-    ends = [_epoch(s) for s in scan_child(c["path"])["stops"][-3:] if s]
+    ev = scan_child(c["path"])
+    ends = [_epoch(s) for s in ev["stops"][-3:] if s]
     if (c["edge"] and c["edge"] > since) or any(e > since for e in ends):
+        pend = unanswered_send(c, ev)
+        if pend:  # the parent wrote again after that turn end: the child still has to answer it
+            return False, f"親の {_local_hm(pend)} の message にまだ答えていない"
         return True, "終わった"
     if c["status"] == "(not live)":
         return True, "process が無い (turn は始まっていない)"
@@ -1218,8 +1289,9 @@ def main(argv: list[str]) -> int:
 def selftest() -> int:
     import tempfile
 
-    global ANSWERED_GRACE_MIN
+    global ANSWERED_GRACE_MIN, BG_TASKS
     saved_grace, ANSWERED_GRACE_MIN = ANSWERED_GRACE_MIN, None  # the cases below were written for "keep counting"
+    saved_bg, BG_TASKS = BG_TASKS, (lambda cli: [])  # no live background work unless a case says so
     fails: list[str] = []
 
     def ok(label: str, cond: bool) -> None:
@@ -1336,6 +1408,37 @@ def selftest() -> int:
         r = check_child(ids("nowrap")[0])
         ok("no wrap run → kept", (not r["ok"]) and r["reasons"] == ["wrap の記録が無い"])
         ok("--no-wrap-needed drops that reason", check_child(ids("nowrap")[0], need_wrap=False)["ok"])
+        # the child's live background work, and the parent's message after the child's last turn end: the app refuses
+        # the archive on both while this check said "fold" (measured)
+        ANSWERED_GRACE_MIN = DEFAULT_ANSWERED_GRACE_MIN
+        watch = {"id": "bwatch01", "kind": "bash", "pid": 9, "what": "Watch the board request", "watch": True,
+                 "persistent": False, "expires_in": None, "note": ""}
+        BG_TASKS = lambda cli: [watch] if cli == ids("answered")[1] else []
+        r = check_child(ids("answered")[0])
+        ok("a live background watch keeps a wrapped child and names the task to stop",
+           (not r["ok"]) and any("bwatch01" in x and "TaskStop" in x for x in r["reasons"]))
+        BG_TASKS = lambda cli: []
+        ok("... without it the same child is ok", check_child(ids("answered")[0])["ok"])
+
+        def send(ts: str, to: str, failed: bool = False) -> list[dict]:
+            i = "sm" + ts[11:19].replace(":", "")
+            return [{"type": "assistant", "timestamp": ts, "message": {"content": [
+                        {"type": "tool_use", "id": i, "name": "SendMessage", "input": {"to": to, "message": "ありがとう"}}]}},
+                    {"type": "user", "timestamp": ts, "message": {"content": [
+                        {"type": "tool_result", "tool_use_id": i,
+                         "content": json.dumps({"success": not failed, "message": "queued" if not failed else "not found"})}]}}]
+        transcript(parent_c, notes + send("2026-01-01T01:20:00Z", ids("answered")[0]))
+        r = check_child(ids("answered")[0])
+        ok("the parent's message after the child's last turn end keeps it (delivery or the next turn pending)",
+           (not r["ok"]) and r["unanswered_send"] == "2026-01-01T01:20:00Z")
+        done, why = turn_done_after(ids("answered")[0], since=0)
+        ok("--wait: a turn end before the parent's last message is not done", not done and "まだ答えていない" in why)
+        transcript(parent_c, notes + send("2026-01-01T01:20:00Z", ids("answered")[0], failed=True))
+        ok("a message that was not delivered (success false) does not count", check_child(ids("answered")[0])["ok"])
+        transcript(parent_c, notes + send("2026-01-01T01:00:00Z", ids("answered")[0]))
+        ok("the parent's message before the child's last turn end does not count", check_child(ids("answered")[0])["ok"])
+        transcript(parent_c, notes)
+        ANSWERED_GRACE_MIN = None
         # hand-off step 0: the worker's first turn stops because its model/effort differ and waits for the requester's go;
         # the app tells the parent it waits on the person, and the go is a peer message, not the person's prompt
         gw_l, gw_c = "local_77777777-0000-4000-8000-000000000000", "77777777-cccc-4000-8000-000000000000"
@@ -1769,7 +1872,7 @@ def selftest() -> int:
         for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR", "CHILD_WRAP_REPOS_GLOB",
                   "CHILD_WRAP_INSTANCE", "CHILD_FINISHED_STATE_DIR"):
             os.environ.pop(k, None)
-    ANSWERED_GRACE_MIN = saved_grace
+    ANSWERED_GRACE_MIN, BG_TASKS = saved_grace, saved_bg
     print("selftest:", "PASS" if not fails else f"{len(fails)} FAIL")
     return 1 if fails else 0
 

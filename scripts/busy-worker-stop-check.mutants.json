@@ -24,6 +24,11 @@
     {"name": "打ち消し・問いの形も同意と読む",
      "pairs": [["        if CLOSE_NOT_AFTER.search(tail) or CLOSE_NOT_BEFORE.search(text[max(0, m.start() - 12):m.start()]):", "        if False:"]],
      "expect_fail": ["a negated or asked word (閉じていい？)", "a negated or asked word (don't archive it)"],
-     "expect_pass": ["close_consent: the words that say fold", "passes at the first try"]}
+     "expect_pass": ["close_consent: the words that say fold", "passes at the first try"]},
+    {"name": "turn の途中の子の archive に stop と同じ「本人に聞く」 の文を出す (直す前の判定)",
+     "pairs": [["        return 2, busy_archive_text(busy, ids[0])\n", "        pass\n"]],
+     "expect_fail": ["archive of a session mid-turn → blocked with 'wait for the turn end', not 'ask the person'",
+                     "... the person's word after it does not pass a mid-turn archive (the turn end does)"],
+     "expect_pass": ["desktop stop_session on a busy session → blocked", "close_consent: 「閉じて良し」 is a fold word (the word in the measured scene)"]}
   ]
 }
