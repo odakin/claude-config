@@ -400,6 +400,7 @@
 - **[todo-ledger-split.py](todo-ledger-split.py)** — 1 file の list (`TODO.yaml`) の TODO 台帳を 1 entry 1 file (`todo/<id>.yaml`) に分割する (既定 dry-run)。
 - **[transcript-images.py](transcript-images.py)** — Claude Code の会話記録 (jsonl) から、 user が貼った画像 (画面写真) を file に取り出す
 - **[transcript-line-shapes.py](transcript-line-shapes.py)** — 会話記録 (jsonl) で、 prompt の行がどの形で入っているかを数える (行の種類・isMeta・origin.kind・entrypoint × 本文の種類、 例つき)。 本人の発言と別 session の message を見分ける hook を書く・直す前と、 app の版が上がった後に読み直す道具
+- **[transcript-share.py](transcript-share.py)** — 会話記録の文だけを暗号化して機械の間で共有し、 別の機械の会話も検索できるようにする
 - **[transcript-tool-calls.py](transcript-tool-calls.py)** — 会話記録にある実際の tool の呼び出しと結果を対にして、 PostToolUse の入力と同じ形の JSON で出す。--selftest 内蔵。
 - **[transcript-tool-result.py](transcript-tool-result.py)** — Claude Code の会話記録 (jsonl) から tool の戻り値を file に取り出す
 - **[tune-seal-image.py](tune-seal-image.py)** — Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.

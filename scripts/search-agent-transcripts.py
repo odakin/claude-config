@@ -78,7 +78,8 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
    時刻を突き合わせて、 9 時間ずれていた)。 末尾の Z は付けてもよい。 それ以外の形は error で止める (以前は日時を渡すと
    全件が範囲の外に落ち、 黙って 0 件と出た = 実測。 形と比べ方の正本 = lib/time_bound.py)。
 ⚠️ 射程: 手元のマシンにある記録だけ。 別のマシンで開いた session・消えた記録・claude.ai の会話は見えない
-   (0 件は「このマシンの記録に無い」 であって「言っていない」 ではない)。
+   (0 件は「このマシンの記録に無い」 であって「言っていない」 ではない)。 別のマシンの分は、 そのマシンが書き出した
+   文だけを transcript-share.py search で引ける (conventions/multi-machine-state.md#transcript-share)。
 """
 from __future__ import annotations
 
