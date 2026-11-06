@@ -150,7 +150,7 @@ launchd / cron の定期ジョブは **登録したマシンでだけ走る**。
 4. **機密の作業場の session は丸ごと書かない**。 判定は素の行でなく、 (a) 作業の場所 (cwd) (b) 道具の呼び出しの入力に出る機密の path (c) 本人の発言と agent への指示に出る path・名前 で行う。 注入される規約の文に機密の名前が書いてあると、 素の行の判定ではほぼ全部の session が落ちる。 返事の文と、 path の無い道具の入力 (名前の grep) で判定すると、 除外の仕組みを話しただけの session が落ちる (どちらも実測)。 ⚠️ 限界 = 名前も path も出さずに貼った機密は防げない。
 5. **除外の path を設定 file にそのままの形で書かない** = 設定を書いた session の道具の入力にその path が入り、 その session 自身が除外に当たる (実測)。 path は区切った形で持ち、 呼ぶ側でつなぐ。
 6. **書き出しは session の hook から背景で起こす** (SessionStart と Stop)。 定期 job は同期フォルダに書けない機械がある ([`launchd-cloudstorage-tcc.md`](launchd-cloudstorage-tcc.md))。 変わった記録だけを書き、 前の実行から短い間隔なら何もせず、 並列の session が同時に呼んでも lock で 1 本だけにする。 SessionStart にも配線すると、 別の機械で session を開くだけで、 その機械の過去の分が全部届く (本人に何かを打たせない)。
-7. **届く範囲** = 書き出しが走った後の分だけ。 その機械で session が開かれるまで、 その機械の会話は届かない。 消した記録と、 別のサービス (claude.ai など) の会話も届かない。 この網は検索の backstop で、 本人が書いた話を正本に記録すること ([`closing-sweep.md#reply-knowledge`](closing-sweep.md#reply-knowledge)) の代わりにはならない。
+7. **届く範囲** = 書き出しが走った後の分だけ。 その機械で session が開かれるまで、 その機械の会話は届かない。 消した記録と、 別のサービス (claude.ai など) の会話も届かない。 同期フォルダが別の機械の書いた file をまだ手元に落としていない間は、 読むと 1 本ずつ取り寄せを待って検索が止まる (実測) = 検索はその file を飛ばして本数を出し、 待つかは呼ぶ側が選ぶ ([`dropbox-placeholder-diagnosis.md#file-provider-dataless`](dropbox-placeholder-diagnosis.md#file-provider-dataless))。 この網は検索の backstop で、 本人が書いた話を正本に記録すること ([`closing-sweep.md#reply-knowledge`](closing-sweep.md#reply-knowledge)) の代わりにはならない。
 
 ## 関連
 

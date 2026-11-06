@@ -32,6 +32,10 @@ subcommand:
 暗号: AES-256-GCM (Python の cryptography)。 file = b"TSH1" + nonce 12 byte + 暗号文 (gzip した JSONL)。
   鍵 file = 32 byte の base64 (または hex 64 文字)。 鍵は機械の間で同じものを使う (運び方は呼ぶ側の層が決める)。
   共有フォルダには暗号文しか置かない。 鍵が無い・違う機械では復号に失敗し、 その本数を stderr に出す (黙って 0 件にしない)
+  ⚠️ 同期フォルダ (macOS の CloudStorage 配下の Dropbox) は、 別の機械が書いたばかりの file をまだ手元に落としていないことがある
+  (dataless。 読むと 1 本ずつ取り寄せを待つ = 検索が CPU を使わずに何分も止まる、 実測)。 search は dataless の file を読まずに飛ばし、
+  その本数を stderr に出す (その分は検索していない)。 待って読むなら --include-dataless。 status も本数を出す
+  (見分け方 = conventions/dropbox-placeholder-diagnosis.md#file-provider-dataless)
 
 差分: 状態 file (--state、 既定 ~/.claude/state/transcript-share-export.json) に記録ごとの大きさと mtime を持ち、
   変わったものだけを書き直す。 --min-interval <秒> で前の実行から短いときは何もしない (Stop hook から毎 turn 呼ぶ用)。
@@ -68,6 +72,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 MAGIC = b"TSH1"
 SUFFIX = ".tsh"
+SF_DATALESS = 0x40000000  # macOS の st_flags: 手元に実体の無い (同期フォルダがまだ落としていない) file
 DEFAULT_STATE = "~/.claude/state/transcript-share-export.json"
 
 
@@ -281,6 +286,17 @@ def cmd_export(a) -> int:
     return 0
 
 
+def _is_dataless_stat(st) -> bool:
+    return bool(getattr(st, "st_flags", 0) & SF_DATALESS)
+
+
+def _dataless(f: Path) -> bool:
+    try:
+        return _is_dataless_stat(f.stat())
+    except OSError:
+        return False
+
+
 def _shared_files(share: Path):
     for f in sorted(share.glob(f"*/*/*{SUFFIX}")):
         yield f.relative_to(share).parts[0], f
@@ -291,11 +307,14 @@ def cmd_search(a) -> int:
     share = Path(os.path.expanduser(a.share_dir))
     own = _safe(_machine(a.machine))
     rx = re.compile(a.pattern) if a.regex else None
-    hits, bad = [], 0
+    hits, bad, skipped = [], 0, 0
     for machine, f in _shared_files(share):
         if machine == own and not a.all_machines:
             continue
         if a.only_machine and machine != a.only_machine:
+            continue
+        if not getattr(a, "include_dataless", False) and _dataless(f):
+            skipped += 1  # 読むと取り寄せを待って止まる
             continue
         try:
             lines = decrypt(key, f.read_bytes()).decode("utf-8").splitlines()
@@ -330,22 +349,27 @@ def cmd_search(a) -> int:
         print("(共有された記録には見つからない)", file=sys.stderr)
     if bad:
         print(f"⚠️ 復号できなかった file: {bad} 本 (鍵が違う・壊れた file)", file=sys.stderr)
+    if skipped:
+        print(f"⚠️ 同期フォルダがまだ手元に落としていない file: {skipped} 本 (読まずに飛ばした = その分は検索していない。 "
+              f"待って読むなら --include-dataless、 file ごとに取り寄せを待つので遅い)", file=sys.stderr)
     return 0
 
 
 def cmd_status(a) -> int:
     share = Path(os.path.expanduser(a.share_dir))
-    per = collections.defaultdict(lambda: [0, 0, 0.0])
+    per = collections.defaultdict(lambda: [0, 0, 0.0, 0])
     for machine, f in _shared_files(share):
         st = f.stat()
         p = per[machine]
         p[0] += 1
         p[1] += st.st_size
         p[2] = max(p[2], st.st_mtime)
+        p[3] += _is_dataless_stat(st)
     if not per:
         print(f"(共有された記録が無い: {share})")
-    for machine, (cnt, size, mt) in sorted(per.items()):
-        print(f"{machine}: {cnt} 本 / {size / 1e6:.1f} MB / 最後に書いた {time.strftime('%Y-%m-%d %H:%M', time.localtime(mt))}")
+    for machine, (cnt, size, mt, dl) in sorted(per.items()):
+        tail = f" / まだ手元に無い {dl} 本" if dl else ""
+        print(f"{machine}: {cnt} 本 / {size / 1e6:.1f} MB / 最後に書いた {time.strftime('%Y-%m-%d %H:%M', time.localtime(mt))}{tail}")
     return 0
 
 
@@ -470,6 +494,10 @@ def selftest() -> int:
                                           regex=False, role="any", since=None, until=None, all_machines=False,
                                           only_machine=None, context=20, limit=0))
         check("復号できなかった" in err.getvalue(), "鍵が違えば復号できず、 本数を stderr に出す")
+        import types
+        check(_is_dataless_stat(types.SimpleNamespace(st_flags=SF_DATALESS | 0x20))
+              and not _is_dataless_stat(types.SimpleNamespace(st_flags=0)) and not _is_dataless_stat(object()),
+              "手元に実体の無い file (dataless) を st_flags で見分ける")
     print("selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -503,6 +531,8 @@ def main(argv=None) -> int:
     s.add_argument("--until", type=SAT._bound)
     s.add_argument("--context", type=int, default=120)
     s.add_argument("--limit", type=int, default=200)
+    s.add_argument("--include-dataless", action="store_true",
+                   help="同期フォルダがまだ手元に落としていない file も読む (取り寄せを待つので遅い)")
     t = sub.add_parser("status", help="機械ごとの本数と最後に書いた時刻")
     t.add_argument("--share-dir", required=True)
     k = sub.add_parser("keygen", help="新しい鍵を書く")
