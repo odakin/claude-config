@@ -973,6 +973,10 @@ sections:
     legacy: "8.92"
     level: 3
     title: "8.92 知らせは、 その瞬間を知る側から出す — 起こす側の操作に掛けた仕組みは、 起こす側が手を動かさずに起きる経路を見ない"
+  - id: test-rule-text-on-its-case
+    legacy: "8.93"
+    level: 3
+    title: "8.93 規則の文は、 その規則を生んだ事例に字面のまま当ててから出す — 上限・下限は等しい値を通す"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
