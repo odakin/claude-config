@@ -15,6 +15,7 @@ subcommand:
   dl-get <fileId>... --out-dir DIR [--extract] [--from D] [--to D]                    配布資料を DIR に保存 (--extract = zip を DIR/<zip の stem>/ に展開、 パスワード付きの PDF は暗号化を外した写しを同じ所に。 パスワードはサマリ欄から)
   dl-missing --have DIR [--have DIR] [--folder 語] [--match 正規表現] [--from D] [--to D]  手元に無い配布資料 (名前の鍵 = NFKC・拡張子なし・空白なし で突き合わせ。 無ければ無出力)
   schedule [--from YYYY-MM] [--months N] [--days]                                    自分のスケジュール (時間割のコマと教室)。 既定 = 曜日・時限・科目・教室ごとの回数、 --days = 1 日 1 行 (TSV)
+  bulletin [--genre 語] [--grep 正規表現]                                            掲示板 (お知らせ) の全ジャンルの一覧、 既読も (掲載日時 | 掲示期間 | seqNo | 表題)。 ポータルの Home のお知らせ欄は読めない (別物)
   get <path>                                                                         任意 path を GET (debug 用)
   status                                                                            いま読めるか (GET 1 本、 切れていれば復帰を試す)
   doctor                                                                             配線だけ (cookie を復号できて値が壊れていないか。 network なし、 健全なら無言)
@@ -60,6 +61,7 @@ GRADE_FLOW = "SIW0001000-flow"  # 成績登録 / 履修者名簿ダウンロー�
 DL_FLOW = "SDW0001000-flow"  # ダウンロードセンター (フォルダごとの配布資料の一覧)
 DL_FILE_FLOW = "SDW-filerefer-flow"  # 配布資料 1 本 (&fileId=<N>、 302 → 200 の attachment)
 SCHEDULE_FLOW = "PTW0001200-flow"  # スケジュール管理 (自分の時間割のコマ・休講・補講の月表示。 教室つき)
+BULLETIN_FLOW = "KJW0001100-flow"  # 掲示板 (最初の画面は未読だけ、 既読込みはジャンルごとの一覧)
 PROBE_PATHS = [PORTAL, f"{FLOW}?_flowId={SYLLABUS_FLOW}"]
 
 
@@ -125,6 +127,39 @@ def result_rows(page):
         if cells and ref:
             rows.append({"cells": cells, "refer": ref.groups()})
     return rows
+
+
+# ── 掲示板 (conventions/campussquare.md#bulletin-board) ──
+def flow_path(link):
+    """画面の link (`campussquare.do?…` の相対 / `/campusweb/…` / 絶対 URL) → host を除いた path。"""
+    p = urlparse(link)
+    if p.path.startswith("/"):
+        return p._replace(scheme="", netloc="").geturl()
+    return f"{CTX}/{link.lstrip('./')}"
+
+
+def bulletin_genres(page):
+    """掲示板の画面 → [(ジャンル名, link)]。 keijitype・genrecd の値は導入先ごとに違う = 画面の link から拾う。"""
+    out = []
+    for h, label in re.findall(r'<a[^>]*href="([^"]*_eventId=dispKeijiListGenre[^"]*)"[^>]*>(.*?)</a>', page, re.S):
+        out.append((" ".join(htmllib.unescape(re.sub(r"<[^>]+>", " ", label)).split()), htmllib.unescape(h)))
+    return out
+
+
+def bulletin_rows(page):
+    """ジャンルの一覧の画面 → (全件数 | None, [{genre, title, seq, period, posted}])。 表の列 = ジャンル・表題・返信未読・掲示期間・掲載日時。"""
+    total = re.search(r"全部で\s*(\d+)\s*件", page)
+    body = re.search(r"<tbody>(.*?)</tbody>", page, re.S)
+    rows = []
+    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", body.group(1) if body else "", re.S):
+        tds = re.findall(r"<td[^>]*>(.*?)</td>", tr, re.S)
+        if len(tds) < 5:
+            continue
+        words = [htmllib.unescape(re.sub(r"<[^>]+>", " ", c)).split() for c in tds]
+        seq = re.search(r"seqNo=(\d+)", tds[1])
+        rows.append({"genre": " ".join(words[0]), "title": " ".join(words[1]), "seq": seq.group(1) if seq else "",
+                     "period": "".join(words[3]), "posted": " ".join(words[4])})
+    return (int(total.group(1)) if total else None), rows
 
 
 # ── 自分のスケジュール (conventions/campussquare.md#teacher-schedule) ──
@@ -477,6 +512,25 @@ class CampusSquare(CookieSession):
         """form を POST して次の画面 HTML を返す (Web Flow は POST → 302 → GET で画面を返す)。"""
         return self._follow(self._request("POST", FLOW, data=data))
 
+    def bulletin(self, genre=""):
+        """掲示板の全ジャンル (既読込み) → [(ジャンル名, 全件数 | None, rows)]。 genre = ジャンル名の部分一致で絞る。"""
+        genres = bulletin_genres(self.open_flow(BULLETIN_FLOW))
+        if not genres:
+            raise SystemExit("掲示板の画面にジャンルの link が無い (= 画面構造の変化か未ログイン)")
+        out = []
+        for name, link in genres:
+            if genre and genre not in name:
+                continue
+            # 最初の画面の link (その画面の key) のまま開く。 直前のジャンルの画面の key に差し替えると、
+            # 1 つおきに一覧でない画面が返った (実測)。 一覧が返らなければ flow を開き直して 1 回だけ撃ち直す。
+            total, rows = bulletin_rows(self._follow(self._request("GET", flow_path(link))))
+            if total is None:
+                fresh = dict(bulletin_genres(self.open_flow(BULLETIN_FLOW)))
+                if name in fresh:
+                    total, rows = bulletin_rows(self._follow(self._request("GET", flow_path(fresh[name]))))
+            out.append((name, total, rows))
+        return out
+
     def syllabus_search(self, year, code="", name="", teacher="", word=""):
         page = self.open_flow(SYLLABUS_FLOW)
         f = form_fields(page, "SearchForm")
@@ -774,6 +828,31 @@ def _schedule_selftest_cases():
     ]
 
 
+def _bulletin_selftest_cases():
+    top = ('<a href="campussquare.do?_flowExecutionKey=_cA_k1&amp;_eventId=dispKeijiListGenre&amp;keijitype=1&amp;genrecd=2">'
+           '授業掲示板</a><a href="campussquare.do?_flowExecutionKey=_cA_k1&_eventId=dispKeijiListGenre&keijitype=3&genrecd=1">'
+           '<span>教務課からの\nお知らせ</span></a><a href="campussquare.do?_eventId=other">他</a>')
+    lst = ('<input type="hidden" name="_flowExecutionKey" value="_cA_k2"><b>1件目</b> から <b>2件目</b>の検索結果を表示'
+           'しています（全部で 3件あります）<table><thead><tr><th>ジャンル</th><th>表題</th></tr></thead><tbody>'
+           '<tr><td>\n教務課からのお知らせ</td><td>\n <a href="campussquare.do?_flowExecutionKey=_cA_k2&_eventId=confirm'
+           '&seqNo=901">試験の&amp;お知らせ</a>\n</td><td align="center"> - </td><td>\n 2030/04/01から<br>\n 2030/09/30まで'
+           '</td><td>\n 2030/04/01 09:00:00 </td></tr><tr><td>短い行</td></tr></tbody></table>')
+    genres = bulletin_genres(top)
+    total, rows = bulletin_rows(lst)
+    return [
+        ("bulletin_genres: dispKeijiListGenre の link だけ・名前の空白を畳む・entity を解く", genres == [
+            ("授業掲示板", "campussquare.do?_flowExecutionKey=_cA_k1&_eventId=dispKeijiListGenre&keijitype=1&genrecd=2"),
+            ("教務課からの お知らせ", "campussquare.do?_flowExecutionKey=_cA_k1&_eventId=dispKeijiListGenre&keijitype=3&genrecd=1")]),
+        ("bulletin_rows: 件数の行の無い画面 (一覧でない) は None = 撃ち直しの合図", bulletin_rows("<p>エラー</p>") == (None, [])),
+        ("flow_path: 相対 link は context の下、 絶対 URL は host を除く",
+         flow_path("campussquare.do?x=1") == "/campusweb/campussquare.do?x=1"
+         and flow_path("https://cs.example.ac.jp/campusweb/campussquare.do?x=1") == "/campusweb/campussquare.do?x=1"),
+        ("bulletin_rows: 全件数・5 列の行だけ・seqNo・掲示期間を 1 語に", total == 3 and rows == [
+            {"genre": "教務課からのお知らせ", "title": "試験の&お知らせ", "seq": "901",
+             "period": "2030/04/01から2030/09/30まで", "posted": "2030/04/01 09:00:00"}]),
+    ]
+
+
 def selftest():
     host = "cs.example.ac.jp"
     cases = [
@@ -807,7 +886,7 @@ def selftest():
         ("inside: 別 host・Shibboleth・context 外は外", inside("https://cs.example.ac.jp/campusweb/x.do", host)
          and not inside("https://cs.example.ac.jp/Shibboleth.sso/SAML2/POST", host)
          and not inside("https://idp.example.com/campusweb/", host) and not inside("https://cs.example.ac.jp/", host)),
-    ] + _dl_selftest_cases() + _schedule_selftest_cases()
+    ] + _dl_selftest_cases() + _schedule_selftest_cases() + _bulletin_selftest_cases()
     for name, good in checks:
         ok &= bool(good)
         print("PASS" if good else "FAIL", name)
@@ -854,6 +933,9 @@ def main():
     p.add_argument("--from", dest="start", metavar="YYYY-MM", help="始めの月 (既定 = 今月)")
     p.add_argument("--months", type=int, default=1, help="何か月分 (既定 1)")
     p.add_argument("--days", action="store_true", help="1 日 1 行の TSV (日付 曜日 時限 科目 教室 種別)")
+    p = sub.add_parser("bulletin", help="掲示板 (お知らせ) の全ジャンルの一覧 (既読も)")
+    p.add_argument("--genre", default="", help="ジャンル名の部分一致 (例: 学務課)")
+    p.add_argument("--grep", default="", help="表題への正規表現 (合う行だけ出す。 ジャンルごとの件数は出す)")
     p = sub.add_parser("get"); p.add_argument("path")
     sub.add_parser("status")
     sub.add_parser("doctor")
@@ -989,7 +1071,21 @@ def run(a, cs):
                   + (f"、 中身が違うので別名 {renamed} 本" if renamed else "") + ")")
             for path, _ in done:
                 print(f"  {path}")
-    elif a.cmd == "get":
+    elif a.cmd == "bulletin":
+        pat = re.compile(a.grep) if a.grep else None
+        res = cs.bulletin(a.genre)
+        print(f"# 掲示板: {len(res)} ジャンル (既読込み)" + (f" / 表題の絞り込み = {a.grep}" if pat else ""))
+        hits = 0
+        for name, total, rows in res:
+            shown = [r for r in rows if not pat or pat.search(r["title"])]
+            hits += len(shown)
+            more = "" if total is None or total == len(rows) else f" ⚠️ 画面に出たのは {len(rows)} 件 (次の頁は読まない = 見ていない)"
+            print(f"## {name} | 全 {'?' if total is None else total} 件" + (f" | 合う {len(shown)} 件" if pat else "") + more)
+            for r in shown:
+                print(f"{r['posted']} | {r['period']} | seqNo={r['seq']} | {r['title']}")
+        if pat:
+            print(f"# 表題が合う行: {hits} 件 (見た範囲 = 上のジャンルの一覧。 ポータルの Home のお知らせ欄は含まない)")
+    elif a.cmd == "get":  # 302 を追わない = 生の応答 (flow の画面は open_flow のように Location を追って読む)
         print(cs._request("GET", a.path).text)
     elif a.cmd == "status":
         r = cs._request("GET", PORTAL)
