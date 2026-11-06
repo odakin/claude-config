@@ -274,6 +274,7 @@
 - **[memory-budget-pay.py](memory-budget-pay.py)** — 予算 gate に止められた memory file (CLAUDE.md) の「払い」 を 1 コマンドにする (余裕の表示 / 候補の順位 / 1 行の退避 / entry の graduate)
 - **[migrate-session-shape.py](migrate-session-shape.py)** — SESSION.md の日付つき節を SESSION-archive へ verbatim MOVE し、 「案件ごとの現在地 + 正本への link」 の形へ一括で寄せる (既定 dry-run)
 - **[migrate-tex-to-lualatex.py](migrate-tex-to-lualatex.py)** — Move one pTeX .tex to LuaLaTeX and compare the two builds (pages, paper size, rendered ink, text per page); --apply writes the moved text back, --selftest.
+- **[mofa-anzen-opendata.py](mofa-anzen-opendata.py)** — 外務省の海外安全情報を、 公開データ (国ごとの XML) から読む = 危険レベル・最終変更・領事メールと広域情報の一覧と本文。--selftest 内蔵。
 - **[new-personal-layer.sh](new-personal-layer.sh)** — Create a sibling personal layer from templates; --github publishes only a private repo.
 - **[new-personal-layer.test.sh](new-personal-layer.test.sh)** — Isolated creation, identity, refusal, and private GitHub arguments.
 - **[newer_in_thread.mutants.json](newer_in_thread.mutants.json)** — lib/newer_in_thread.py (返信先より新しい相手の message の判定) の selftest の foil に歯があることを、 判定の部品を 1 つずつ外した mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
