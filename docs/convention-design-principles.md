@@ -94,6 +94,7 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 - 「〜は済んだ?／頼んだ?／どうなってる?」型の **matter-status 質問**には、手近な source document だけで即答せず **その案件の SoT を読んでから**答える。
 - **session 開始時、context window はその案件について空の cache**。会話に流れてきた情報や直前に fetch した 1 store を「知っている＝真実」と扱わない。SoT は disk 上にあり、取りに行くのは option でなく前提。
 - source document を読んで見つからない時の第一仮説は「案件が無い」でなく **「SoT を未読／読む store を間違えた」**。null は世界の事実でなく「探す場所が違う」証拠。
+- <a id="answer-options-from-sot"></a>案件の **選択肢・候補** を問われたとき (「どこが使える?」「候補は?」) も同じ: SoT に候補の一覧があれば、 その一覧で答える。 source document (設備や品目の一覧表・相手のメール) から候補を組み直さない。 SoT の一覧は除外の判断 (使えない理由・本人の裁定) を通した後の形なので、 組み直すと除外したはずの候補が戻ってくる (実測)。 source document で一覧に無い候補を見つけたら、 SoT の答えの後に「一覧に無いもの」 として分けて添える (足すかは持ち主が決める)。
 
 write 側「one fact, one home」（[`personal-layer.md#owner-automation-shared-project`](personal-layer.md#owner-automation-shared-project) の partition / MOVE-not-copy。 ⚠️ 2026-09-02 修正: 旧 ref `§publish-boundary` は実在しない anchor だった = §14.7 の HARD dangling）と対で、read 側は「one matter → read its single SoT」。**二重 SoT を*作らない*のと source document を SoT と*読み違えない*のは同一原則の両面。**
 
