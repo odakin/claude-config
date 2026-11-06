@@ -699,6 +699,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 - **model 保証 + 非 block + fresh context で足りる** → (b) の pinned custom agent、 または (c) の headless CLI で pin。
 - **真の並列 session が要る** (= 人が途中で対話する / user が独立に steer する) → 本人が app の一覧で見る worker は (e) の `start_session` (掲示板の `request --surface desktop`、 起こした後に app の記録で model と effort を確かめて直す = [`#desktop-start-model-cap`](#desktop-start-model-cap))、 本人が見る必要の無い worker は (d) の `claude --bg` (窓は端末の `claude attach <id>`)。 どちらも真の並列と live steer が得られ、 model も揃えられる。
 - <a id="session-focus-declared"></a>**user が session の主題を宣言したら (「この session は X に集中して、 ほかは投げて」)、 X の外の作業 (整備・環境・点検・規約・締めの sweep) はその session で手を動かさず、 background の agent か別 session に渡す** — 戻ってきた結果は 1 行で伝え、 本人の判断が要る件だけを平文で聞く。 宣言はその session の残り全部に効く (締めの sweep も委ねる)。 委ねた先の報告は検証前の主張として、 記録に書く前に裏を取る ([closing-sweep.md#collect-from-delegates](closing-sweep.md#collect-from-delegates))。
+- <a id="side-work-to-handler"></a>**用事を受け持つ session ([`#designated-handler-session`](#designated-handler-session)) が登録されて生きている間は、 ほかの session は主題の宣言が無くても、 自分の仕事の外の用事を処理せず、 user にも並べず、 受け持つ session に渡す** — 用事 = 一覧や見張りの道具が出すメール・台帳の項目・掲示板の依頼・期限・道具の不調。 一覧に出た行は turn 終わりの検査が表示の台帳の上で渡すが、 台帳に載らない用事は渡らない: 検査に求められて手で回した道具の出力、 作業の途中で気づいた用事、 user が作業の途中でこの session に頼んだ、 この session の仕事の外の用事。 これらは受け持つ session に message 1 通で渡す (何か・項目の id・どこで見たか。 複数あれば 1 通にまとめる。 一覧に出た行は重ねて渡さない = 受け持つ session も同じ一覧を見ている)。 message の経路が無い session (別の vendor の agent など) は、 受け持つ session が拾う掲示板の依頼で渡す。 user には「受け持つ session に渡した」 の 1 行だけを書き、 用事の行を並べない (並べると、 user が読んで「渡して」 と言うまで動かず、 その指示を session ごとに繰り返すことになる = 実測)。 「任せる」 を「触らない」 と読まない: 触らないだけでは、 台帳に載らない用事は誰にも渡らない (実測: 受け持ちの用事だと分かっていて「手をつけない」 と user に書き、 渡さなかった)。 宛先は、 登録を読む道具と一覧の受け持ちの行が出す (session ごとに宛先を引かせない)。 **渡さないもの**: その用事がこの session の仕事そのもの (用事を片付けるために起こされた session が頼まれた用事)、 この session の仕事の記録 (自分の project の台帳の現在地・裁定の記録)、 user が「ここで」 と名指した用事、 無人の定期実行の用事。 受け持つ session が居ないときにどうするか (起こすか、 自分で扱うか) は運用の規約が決める。 [`#session-focus-declared`](#session-focus-declared) の、 主題を宣言の代わりに受け持つ session の登録から決める版。
 - <a id="owner-driven-window-no-funnel"></a>**user が直接話して仕事を進めている session (読みながら指摘を出す窓、 対話して書く窓) に、 調整役の session は自分の仕事を流し込まない** — 依頼書に無い仕事 (別の議題の分析、 他の session との調整の役、 窓の役の変更) を message や掲示板で足すと、 user の 1 件ずつの往復がその分だけ待たされる (実測)。 足す仕事は、 別の子を起こすか、 user と話していない既存の worker に回すか、 調整役が自分でやる。 窓に送るのは、 窓が今の仕事に要る事実だけにする (user の指示の写し、 同じ file を他の session が書く予定の知らせ)。 書き手を 1 つにするなどで役の変更が要るなら、 窓ではなく他の側を動かす (窓は user の指示を当てる役のまま)。 主題の宣言が無くても効く = 上の [`#session-focus-declared`](#session-focus-declared) の、 使われ方から主題が決まる版。 見分け方 = 宛先の会話記録で、 user 本人の最後の発言が今の作業の中にある (別 session の message と、 起こした側が渡した最初の prompt は数えない = [hook-authoring.md#transcript-human-vs-peer-message](hook-authoring.md#transcript-human-vs-peer-message))。 機械 = PreToolUse hook [`../hooks/owner-window-notice.sh`](../hooks/owner-window-notice.sh) が、 送り先 (`SendMessage`・掲示板の note / request / handover) の user の最後の発言が 3 時間以内なら送る前に 1 行知らせる (止めない = 送る中身が依頼書に無い仕事か、 user の指示の写しかは機械に分からない。 判定・校正 = [`../scripts/owner-window-notice.py`](../scripts/owner-window-notice.py) の冒頭)。
 - <a id="orchestrator-drifts-into-work"></a>**振り分け役の session (受け持ちの用事を伝えて子に回す役) は、 放っておくと自分で作業を続ける** — 受け持ちの用事と user の問いを、 子に回さず自分で調べ (外の channel の走査)・記録し・手で merge し・道具を直す (実測。 振り分け役を何度起こし直しても同じ型だった)。 押す力は 3 つ: (1) 起こす側の引き継ぎ文が、 個々の用事の処理の手順 (記録の道具・merge の手順) を振り分け役に宛てて書く (2) session 開始の一覧や turn 終わりの検査が「同じ turn で処理する」 を求め、 振り分け役を登録するとその要求が振り分け役に集まる (3) 子に回すには user の承認 (card を押す) が要り、 自分でやる側にはその手間が無い = 費用が非対称。 止め方:
   - **線を役の規則に書く** — 振り分け役が自分でやる = 一覧を読んで伝える・記録にあることから答える・依頼書と request・検収・決定の記録・伝えた用事 1 件の記録。 子に回す = 外の channel の走査が要る問い・まとめての記録・持ち主の居ない未 commit の引き取りと手での merge・道具や規約の直し・文面の起草。 引き継ぎ文には、 用事ごとの処理の手順でなくこの線を指す 1 行を書く
@@ -1009,8 +1010,17 @@ request の単位。 mail の thread・台帳の項目のような「用事」 �
      伝達の claim を付けると、 受け持つ session の一覧でその用事が「伝え済み」 になり、 実際はだれも扱わない (実測)。
    - 代わりに、 この session の一覧に出た用事を、 表示の台帳の上で受け持つ session にも出たことにする (表示回数は増やさない)。
      受け持つ session の次の turn 終わりの検査がそれを問う = 受け持つ session が起動した後に初めて出た用事も落ちない。
-     受け持たない session に「受け持つ session へ message で渡したら完了」 を求める形にしない: その session に turn を使わせ、
+     受け持たない session に、 一覧に出た用事を「受け持つ session へ message で渡したら完了」 と求める形にしない: その session に turn を使わせ、
      受け持つ session が同じ一覧で見ている用事を重ねて渡させ、 渡したかを判定する新しい述語 (会話記録の送信先と中身) も要る。
+     一覧の外の用事の渡し方 = [`#side-work-to-handler`](#side-work-to-handler)。
+   - **道具を手で回させる検査も同じに分ける** (session 開始時の見張りが時間切れで抜けた分の取り直しなど): 受け持つ session が
+     別に生きていれば、 この session には回させず、 抜けたことを受け持つ session に渡し、 受け持つ session が回す。 読む状態が
+     全 session で共通の道具 (台帳と受信箱を読む見張り) なら、 1 回で全 session の分を覆う。 どの session にも回させると、 同じ
+     道具が session の数だけ回り、 同じ用事の行が session の数だけ user の画面に並び、 受け持つ session にも重ねて届く (実測)。
+     session 開始時の見張りが出す「時間切れ → 手で回して」 の案内の行も同じ = 受け持つ session が居れば「受け持つ session が回す」
+     と出す。 受け持つ session の側では、 渡された「抜けた」 を間隔の上限つきで問う (時間切れの続く日に、 受け持つ session が
+     session の数だけ止められないように)。 渡し先が回す経路を持たない見張り (その session の仕事に要る見張り) は、 今までどおり
+     その session に回させる。
    - 一覧の file を全 session が読む 1 つの file にしているなら、 段を session ごとに畳めない (受け持つ session と通知の見張りも
      同じ file を読む)。 頭に「受け持つ session = <id>。 この session がそれでなければ下の段は伝えない」 の 1 行を置き、 読む側が
      自分の id と比べる。 行頭は通知の見張りが拾う印にしない。
@@ -1018,7 +1028,8 @@ request の単位。 mail の thread・台帳の項目のような「用事」 �
      無人の定期実行の分岐はこの判定より先に置く (無人の run の用事は受け持つ session に渡さない)。
    - hook の test は登録の置き場を一時 path に向ける (向けないと、 本物の受け持ちが生きている間は伝達を問う既存の test が黙る)。
    - 残る穴: 渡すのは台帳の上だけで、 受け持つ session を起こさない (受け持つ session が次に turn を終えるまで問われない)。
-     表示の台帳に載らない段 (自分が動く期限の行など) は渡らない。
+     表示の台帳に載らない用事 (自分が動く期限の行、 手で回した道具の出力、 作業の途中で気づいた用事) はこの網では渡らない
+     = 渡し方は [`#side-work-to-handler`](#side-work-to-handler)。
 
 7. <a id="reserve-before-work"></a>**別の機械の session とも重ねないなら、 作業の前に、 全体の順序がある場所へ予約を書く**:
    二度目の書き込みを断る仕組み (claim や受領の二重を断る掲示板など) は記録の重複を防ぐが、 手間の重複は防がない。 断られるのは
