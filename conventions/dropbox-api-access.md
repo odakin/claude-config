@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload)
+when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload) + 共同編集者から「Dropbox の容量がいっぱい」 と言われ、 自分の共有フォルダが相手の容量をどれだけ使っているかを量るとき (#shared-folder-quota)
 category: infra
-summary: Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 共有状態の read recipe = list_folders は cursor 完走まで不在断定しない + get_metadata の sharing_info 直行 + list_folder_members で共同編集者の own-account 検証 + search_v2 は upload 失敗 file に痕跡ゼロ #sharing-read-recipes、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
+summary: Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 共有状態の read recipe = list_folders は cursor 完走まで不在断定しない + get_metadata の sharing_info 直行 + list_folder_members で共同編集者の own-account 検証 + search_v2 は upload 失敗 file に痕跡ゼロ #sharing-read-recipes、 共有フォルダは入っている全員の容量に数えられる・online-only では減らない・大きさは list_folder recursive の size の和・誰が入れたかは sharing_info.modified_by・外す前に他の仕組みが読む file を確かめる #shared-folder-quota、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
 -->
 # Dropbox API 直アクセス (共有リンク・metadata)
 
@@ -58,6 +58,34 @@ file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/�
   - **本文も引ける**: 既定で file の中身も検索し、 結果の `match_type` が `filename`・`file_content`・`filename_and_content` のどれかで返る (実測)。 online-only の file を落とさずに中身で探せるので、 file 名が題名と違う論文の PDF はこれで見つかる。 file 名だけなら `"filename_only": true`
   - **範囲は `options.path` で絞る**: 付けないと全 file が対象になり、 機密のフォルダの file 名まで手元に返る。 探す先のフォルダを指定する
   - **本文の一致は言及も拾う**: 上位の結果にその題を引用しているだけの file が並ぶ = 開いて確かめる。 `max_results` の外は見えない。 文字の層が無い scan が本文で掛かるかは未確認
+
+## <a id="shared-folder-quota"></a>共有フォルダが相手の容量にどう数えられるか・大きさと誰が入れたかの量り方
+
+共同編集者から「Dropbox の容量がいっぱい」 と言われたときに、 自分が共有しているフォルダが相手の容量をどれだけ使っているかを、 同じ最小 scope (`sharing.read` + `files.metadata.read`) で量る手順。 file の中身は読まない。
+
+**数え方** (Dropbox の公式 help。 判断に使う前に、 各頁の今の版を開いて確かめる):
+
+- 共有フォルダの大きさは、 入っている**全員の**容量にまるごと数えられる。 全員が同じ team (Standard・Advanced・Enterprise) か同じ Family plan にいるときは 1 回だけ数える ([shared-folder-count-against-storage](https://help.dropbox.com/storage-space/shared-folder-count-against-storage))
+- 共有リンクで受け取ったものは、 受け取った人の容量に数えられない (自分の Dropbox に保存すれば数えられる) ([storage-space](https://help.dropbox.com/storage-space/storage-space))
+- 共有フォルダから抜けると、 その中身は容量に数えられなくなる。 戻るには持ち主が招待し直す ([leave-shared-folder](https://help.dropbox.com/share/leave-shared-folder))
+- **online-only にしてもアカウントの容量は減らない** (減るのは PC やスマホのディスクだけ) ([make-files-online-only](https://help.dropbox.com/sync/make-files-online-only))。 同じアカウントの中で別のフォルダに動かしても減らない。 減らすのは、 抜ける・Dropbox の外へ出す・消す (消した file と版の履歴は数えられない = [delete-files](https://help.dropbox.com/delete-restore/delete-files) / [version-history-overview](https://help.dropbox.com/delete-restore/version-history-overview))
+- 無料の Basic で容量を超えたままだと、 前もってメールで知らせたうえで、 **その人が持ち主の file** を最後に変えた日の古いものから消すことがある。 他人が持ち主の共有フォルダは、 中身を消さずに外す ([over-quota](https://help.dropbox.com/storage-space/over-quota)) = 急ぐ理由は相手の側の file にある
+- 「容量がいっぱい」 が PC のディスクのことなら話が違う (online-only にすればディスクが空く)。 どちらかを相手に確かめる
+
+**量り方**:
+
+1. **相手が入っている共有フォルダ**: 上の `sharing/list_folders` を cursor の最後まで回し、 各フォルダの `sharing/list_folder_members` の `users[].user.email` (と `invitees[]`) を相手のアドレスと照合する。 ⚠️ **1 人が複数のアカウントで入っていることがある** (個人のアドレスを 2 つ持つなど。 実測) = 相手のアドレスを全部渡し、 アカウントごとに数える (容量はアカウントごと)
+2. **大きさ**: `POST /2/files/list_folder` `{"path": "<フォルダの path>", "recursive": true, "include_mounted_folders": true, "limit": 2000}` → `has_more` が false になるまで `/2/files/list_folder/continue` → `.tag == "file"` の `size` を足す。 online-only の file も元の大きさで返る (= 手元の `du` は placeholder の分しか数えない、 [#path-semantics](#path-semantics))。 入れ子の共有フォルダは親の再帰に入るので、 アカウントごとの合計は同じ path を 1 回だけ数えて足す
+3. **誰が入れたか**: 各 entry の `sharing_info.modified_by` (account id) を、 `list_folder_members` の `users[].user.account_id` と突き合わせて表示名にする。 ⚠️ これは**最後に変えた人**で、 入れた人と別のことがある (名前を変えた人など)
+4. **中身の同じ file**: `content_hash` が同じなら中身が同じ (別の名前・別の場所の重複を、 落とさずに見つけられる)
+5. **増え方**: `server_modified` で期間ごとに足す。 最後に変わった日なので、 古い file に新しい版を保存すると新しく見える
+- ⚠️ **自分の token から見えないもの**: 相手の plan・割り当て・使用量、 相手だけの file、 第三者が相手と共有しているフォルダ、 相手が mount しているか (`sharing/list_mountable_folders` は mount 済みのフォルダも返すので、 未 mount だけの一覧にならない = 実測)。 「空き」 は書けず、 書けるのは「自分の共有フォルダが占める量」 だけ
+
+**減らす案を出すとき**:
+
+- 共有フォルダから人を外す案を出す前に、 そのフォルダに**他の仕組みが読む file** (共有 repo の暗号鍵の写し、 setup の手順が path で指す file) が無いかを確かめる。 外すと相手の新しい機械での setup が止まる (実測)。 その repo の共同編集者の一覧と突き合わせる
+- 持ち主の側から外す (`POST /2/sharing/remove_folder_member`) なら `"leave_a_copy": false` = 写しを残すと、 その写しが相手の容量にそのまま数えられる
+- 相手が入れた file を共有の外へ出す案は、 自分の Dropbox からも消える = 自分が要るものは先に共有していないフォルダへ写す。 自分の file を共有していないフォルダへ動かす分には、 自分の容量は変わらない
 
 ## <a id="shared-folder-editor-invite"></a>共有フォルダにして相手を編集者として招待する (相手も書き込める)
 
