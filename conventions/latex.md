@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -124,6 +124,7 @@ ln -s "$PWD/Figures" "$PWD/ref.bib" "$PWD"/*.bst "$D"/   # 図・bib・bst を�
 | **safe-command を足しても command 単位の変更が無印**（`\hat{e}` の削除、`\Big[`・`\Big\{`、`\phantom{…}`、`\dotsb`、`&{}`: coarse の `%DIFDELCMD` payload。2026-09-13 の実測で 21 件、wrapper 展開・safe-command 済みの状態で残った） | coarse は数式を token 単位で差分し、差し替え token が macro でない command だと着色せずに comment out / 挿入することがある | `--math-markup=whole`（変更のあった式を丸ごと旧 = 削除色・新 = 追加色で出す）にする。副作用の `Multiple \label's` は [`scripts/latexdiff-strip-dup-labels.py`](../scripts/latexdiff-strip-dup-labels.py) で削除側の label を落として消す。engine は既定 whole + この除去（[#latexdiff-move-artifacts](#latexdiff-move-artifacts)） |
 | `Misplaced alignment tab character &` / `Misplaced \cr`（math-markup coarse / whole で、off では通る） | latexdiff は数式 markup を `\\` と `&` でしか分割しないので、行区切りを包む自作マクロ（例: `\nn` = `\nonumber\\`）が `\DIFadd{…}` 内に閉じ込められる | 同じ前処理で `\nn` → `\nonumber\\` も展開（定義行は除外）。これで `--math-markup=coarse` が通り、`off`（削除式が消える）へ落とさずに済む。row-break macro も上の expander が preamble から導出する（本体に `\\` を含む 0 引数 macro） |
 | tikz error の連鎖 | ネストした tikzpicture/feynman 図が壊れる（`PICTUREENV` を足しても入れ子は通らない、 実測） | 図を placeholder へ置換 +（下の）`--config PICTUREENV=…`。 **図を diff PDF に残したいとき**は、 外側の `tikzpicture` を丸ごと中身の hash から作った引数なしの macro 名（例 `\tikzphabcdefgh{}`）に置き換えて両側で diff し、 diff の出力でその macro を元の図の source に戻す。 同じ図は同じ名前になるので、 変わっていない図は無印で残り、 足した図・消した図は図ごと追加・削除として出る |
+| <a id="latexdiff-tabular-colspec"></a>表 (tabular) の列の指定を変えた (列を足した・減らした) 差分で、 組版が表の最初の行の `&` で `Misplaced alignment tab character &` を出し、 nonstopmode のまま CPU を使い続けて終わらない (実測 = 15 分で打ち切った。 列の指定を変えない表の変更と、 caption だけの移動では起きなかった) | 未特定。 latexdiff (1.3.4) は旧の `\begin{tabular}{…}` を `%DIFDELCMD` で comment out し、 新のほうを `\DIFaddbeginFL … \DIFaddendFL` の中に入れていた | 差分の組版は 1 回ごとに時間制限を付けて回す (`perl -e 'alarm shift; exec @ARGV' 300 lualatex …`、 時間切れは終了値 142)。 打ち切ったら表を疑い、 その表の tabular (label を含む table 環境の中の、 最初の `\begin{tabular}` の行頭から最後の `\end{tabular}` まで = 入れ子の tabular を含む) を新版の同じ範囲 (印なし) に差し替えて組む。 caption と本文の印は残る。 表の本体の変更は差分に出ないので報告に言葉で書く。 [#latexdiff-views-check](#latexdiff-views-check) の読み戻しには差し替えた表の分の差が出る |
 | 3 分かかる / output が無限ループ | CFONT の color markup が page builder と干渉 | `--type=UNDERLINE`（色でなく下線/取消線）。**hang の真因は CFONT 単独**で、UNDERLINE なら `twocolumn` のままコンパイルできる（2026-08 実証。旧対処の `onecolumn` 化は不要 = 実紙面レイアウトの diff の方が共著者に優しい） |
 | `Paragraph ended before \align` | latexdiff が変更 align 内に空行（`\par`）を挿入 | 後処理で数式環境内の空行を除去 |
 | natbib citation でハング | citation markup × natbib | `--disable-citation-markup` |
@@ -244,6 +245,12 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - <a id="float-too-large"></a>図を足す・大きくする・caption を伸ばした turn は、 頁より高い float も確かめる: TeX は `LaTeX Warning: Float too large for page by <長さ>` を出して頁に置くだけで、 caption が頁の下端を越えても未定義参照の数にも `Overfull \hbox` の数にも出ない (実測: その 2 つが 0 の確認で通した図の caption が、 頁番号に重なっていた)。 同じ道具が `.log` のこの警告も数え、 あれば exit 1。 直し方 = 図の幅を縮める・panel の並べ方を変える (列を増やして段を減らす)・caption を詰める。
 
 **文献表の位置**: 物理 (特に素粒子) の原稿では 本文 → 謝辞 → 付録 → 文献表 の順が多く、 雛形によっては文献表が付録の前にある。 どちらに置くかは著者の家風と投稿先の指定で決める。 付録の後ろへ移すときは `\bibliographystyle{…}` と `\bibliography{…}` の 2 行を `\end{document}` の直前へ動かす (付録の中の `\cite` も同じ文献表に入る)。 上の道具は source の位置 (付録の前 / 後ろ) も出す。
+
+## <a id="table-caption-position"></a>表の caption を上に置くか下に置くかは、 投稿先の雛形を開いて決める
+
+- **雛形で分かれる** (図の caption はどれも下): Elsevier の `elsarticle-template-num.tex` (TeX Live 2025 の doc) は `\caption` を tabular の後 = 表の下に置き、 APS の REVTeX の見本 `apssamp.tex` は表の上に置く。 「普通はどちらか」 を記憶で答えない (実測: 雛形を開かずに「上が慣例」 と答えて誤った)。 刷り上がりは出版社が組み直すことがあるので、 原稿での位置は雛形と著者の好みで決める。
+- **標準の `article` class の caption の間隔は、 caption を下に置く前提** (`\abovecaptionskip` = 10pt、 `\belowcaptionskip` = 0pt)。 表の上に置くと、 caption の最後の行と表の上の罫線の間が空かない (実測)。 上に置くなら `\usepackage[tableposition=top]{caption}` で間隔を入れ替える (caption package は位置が上の float で 10pt を caption の後ろに回す)。 下に置けば既定のままで空く。
+- 原稿の中の表の caption は、 位置と字の大きさを全部の表でそろえる (1 つの表だけ動かさない)。 表を 1 つ足すと後ろの表の番号が繰り下がるので、 別の文書 (supplement など) が番号を直書きしていれば同じ commit で直す。
 
 ## <a id="align-split-tag-orphan"></a>長い display の式番号が下の行に回るのは amsmath の標準 — 欠陥として報告しない (2026-09-12、 著者裁定)
 
