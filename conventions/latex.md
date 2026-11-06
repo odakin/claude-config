@@ -716,9 +716,10 @@ for y0, y1, s in sorted((b[1], b[3], b[4][:40]) for b in p.get_text("blocks") if
 
 - **置き場所**: 別論文の source は本論文と同じ dir に置く。 preamble の macro・文献・bst・build の設定をそのまま共有でき、 path の glob で原稿の範囲を決める保護の設定 ([`manuscript-claim-ownership.md#mechanism`](manuscript-claim-ownership.md#mechanism)) も新しい file に自動で掛かる。 別の dir に置くと glob の外に出て、 保護が黙って外れる。
 - **名前に中身の範囲を入れない**: file 名と引用 key は、 移す範囲が広がっても変わらない語にする (`companion`、 `theory-paper` など)。 範囲の語で付けると、 範囲が広がった時点で改名と引用の付け替えが要る (実測)。
-- **手順**: (1) 移す前に [`scripts/latex-split-deps.py`](../scripts/latex-split-deps.py) で依存を出す (A = 残る側から移す側の label への参照、 B = 移す側から残る側への参照、 C = 移す側だけが使う引用、 D = 移す側の文で旧い入れ物を指す語)。 (2) 1 つめの commit で逐語に移し、 [`scripts/verify-verbatim-move.py`](../scripts/verify-verbatim-move.py) `--from <本論文> --to <別論文>` で照合する。 (3) 2 つめの commit で A・B・D を付け替える。
+- **手順**: (1) 移す前に [`scripts/latex-split-deps.py`](../scripts/latex-split-deps.py) で依存を出す (A = 残る側から移す側の label への参照、 B = 移す側から残る側への参照、 C = 移す側だけが使う引用、 D = 移す側の文で旧い入れ物を指す語)。 (2) 1 つめの commit で逐語に移し、 [`scripts/verify-verbatim-move.py`](../scripts/verify-verbatim-move.py) `--from <本論文> --to <別論文>` で照合する。 (3) 2 つめの commit で A・B・D を付け替える。 1 つの commit で移して付け替えると、 付け替えた行は道具に「移っていない」 と出て、 その行の逐語は道具で確かめられなくなる (実測)。
 - **本論文側 (A)**: 本文から移した付録への案内は、 別論文の引用に換える。 残る付録が移した付録の式を使っていたら、 まず本論文に残る同じ内容の式を探す (一般の式の特別な場合を、 別の付録や本文が既に書いていることが多い。 実測では 2 件とも見つかった)。 基本の定義を別論文の引用に頼らない。 付録を並べて紹介する文からも外す。
 - **別論文側 (B・D)**: hyperref より前に `\usepackage{xr-hyper}` を読み、 `\externaldocument[I-]{main}` で本論文の label を接頭辞つきで読む (本論文を先に組む)。 本論文への参照は `Sec.~\ref{I-sec:x} of Ref.~\cite{paperI}` の形に書き換える。 接頭辞なしで読ませると、 本論文の番号が別論文の番号のように印字される。 "the main text"・"this appendix"・"Supplemental Material" は、 別論文での呼び方 (Ref.~[I]・this section・the appendices) に換える。 補足を付録として入れるときは、 補足の頭 (counter の reset・S 番号・導入文) を外す。
+- **3 本以上を xr でつなぐとき**: 読む原稿ごとに接頭辞を分ける (`[I-]`・`[B-]` など)。 組む順は xr の読み先が先で、 読み先がさらに別の原稿を読むなら、 その鎖の順に組む。 原稿の一式を隔離した dir で組む道具を使う repo では、 作業ツリーに読み先の `.aux` が無いことがある (実測) = 手で組むときは鎖の順に組み、 最後に全部の原稿の log で undefined references を数える。
 - **相互の引用**: 両論文を `refs.bib` の in preparation の `@misc` で引き合い、 arXiv に出たら差し替える。
 - **共有フォルダへの写し**: push のたびに PDF を写す仕組み ([`repo-history-growth.md`](repo-history-growth.md) の pdf-publish) に別論文を 1 行足す。 写しの仕組みは今ある文書の PDF を写すだけで、 改名前の名前の PDF は共有フォルダに残る。 改名したら古い写しを消す。 共有フォルダは相手も見ているので、 消す前に持ち主に確かめる。
 
