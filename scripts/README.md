@@ -240,6 +240,7 @@
 - **[keynote-iwa-text.py](keynote-iwa-text.py)** — Extract a text inventory from Keynote .key slide IWA archives (layout/order not reconstructed).
 - **[latex-float-placement.py](latex-float-placement.py)** — 本文の図・表が付録の頁に流れていないかと、 頁より高い図・表が無いかを、 組版後の .aux と .log で確かめる。
 - **[latex-pdf-audit.py](latex-pdf-audit.py)** — Audit a LaTeX log and PDF, and optionally render numbered pages for visual review.
+- **[latex-sandbox-cache-probe.py](latex-sandbox-cache-probe.py)** — Compare LuaLaTeX cache layouts in an isolated, synthetic document build.
 - **[latex-split-deps.py](latex-split-deps.py)** — 原稿の一部 (節・\input の file) を別の文書へ移す前に、 移すと切れる参照・引用と、 移した文の中で旧い入れ物を指す語を列挙する (読むだけ)。
 - **[latexdiff-changed-pages.py](latexdiff-changed-pages.py)** — latexdiff の PDF から、 差分の色 (追加・削除) が出ている頁だけを残す: 変わった頁を印でなく差分そのもので選ぶ。
 - **[latexdiff-eqtree.py](latexdiff-eqtree.py)** — latexdiff for the text, a tree comparison for the equations: only the changed symbols are marked.

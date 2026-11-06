@@ -1521,6 +1521,12 @@ editorial typography で「機械改行を許容しない」 のは標準。 mag
 
 LuaLaTeX が sandbox 内で `no writeable cache path` を報告し、その後に大量の `nullfont` / missing-character 警告を出す場合は、まず最初の fontloader エラーを調べる。書込み可能な TeX キャッシュを指定するか、必要なキャッシュへの限定された実行権限で再ビルドする。後続の文字欠落を一文字ずつ原稿側で直さない。失敗時に PDF ファイルが生成されても正常な成果物とは扱わず、再ビルド後に log と PDF を同じ組で検査する。
 
+**絶対 path のキャッシュを指定しても同じエラーになる場合**は、source と必要な `.bib`・`.bst` 等を新しい作業 directory に写し、その中を実行位置にして `TEXMFCACHE=. TEXMFVAR=. latexmk -lualatex -interaction=nonstopmode -halt-on-error paper.tex` を試す。原稿の directory と作業 directory を分け、写しの source の hash が元と一致することを確認する。実測では、別の書込試験が成功する絶対 path の指定でも fontloader が失敗し、作業 directory 内の相対キャッシュで組めた。OS の権限・TeX の path 判定など、原因の切り分けは別に行う。
+
+再現には `python3 scripts/latex-sandbox-cache-probe.py` を使う。合成した短い文書だけを二つの配置で組み、実行位置・command・終了値と log を新しい一時 directory に保存する。環境を診断する道具なので、実行した環境も結果と一緒に記録する。生成した PDF が存在しても、fontloader の失敗や文字欠落が残る run を成功とは扱わない。
+
+BibTeX の `.blg` の末尾にある `warning$ -- 0` は組込み関数の呼出し回数である。単なる `warning` の部分一致で警告と数えず、`Warning--` の診断行や終了時の error summary を見る。正常な `.blg` と警告を含む `.blg` の両方で判定を確かめ、LaTeX の最終 log の未定義引用も別に確認する。
+
 反復する log 集計、PDF 全フォント検査、確認頁のレンダリングには [latex-pdf-audit.py](../scripts/latex-pdf-audit.py) を使う。既存の [印刷 preflight](../scripts/pdf-print-preflight.py) はプリンタ向けの別契約であり、この検査は印刷忠実度を判定しない。
 
 ```sh
