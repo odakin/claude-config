@@ -25,6 +25,7 @@ RUNNER="$(cd "$(dirname "$0")" && pwd)/public-precommit-runner.sh"  # 絶対化:
 PASS=0
 FAIL=0
 FAILED_CASES=""
+unset CLAUDE_CODE_SESSION_ID CLAUDE_CARRYOVER_TRANSCRIPT CLAUDE_CARRYOVER_GUARD
 
 TMPDIR_TEST="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
@@ -424,6 +425,35 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-value-
   printf '\0GITCRYPT\0x' > "$MOCK_LAYER/private/v.md"
   expect_pass "pass-value-index-locked" 'call 090 0000 1234 after the talk'
   rm -rf "$MOCK_LAYER/private" "$MOCK_LAYER/value-index.txt"
+fi
+
+# Tier G (2026-11-05): a pair of numbers that this session read from a private source (a synthetic transcript: a Bash
+# tool output whose command names a path outside any public repo) blocks; numbers the agent wrote first pass; no
+# transcript (a commit outside a Claude session) passes; the tree scan mode does not run it.
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-session-carryover.py" ]; then
+  SC_TX="$TMPDIR_TEST/carryover.jsonl"
+  python3 - "$SC_TX" "$TMPDIR_TEST" <<'PYEOF'
+import json, sys
+tx, d = sys.argv[1], sys.argv[2]
+t = "2026-01-01T00:00:0{}Z"
+recs = [
+    {"type": "assistant", "timestamp": t.format(1), "cwd": d, "message": {"content": [
+        {"type": "text", "text": "synthetic 6,789 / 4,321"},
+        {"type": "tool_use", "id": "u1", "name": "Bash", "input": {"command": "cat " + d + "/outside/notes.md"}}]}},
+    {"type": "user", "timestamp": t.format(2), "cwd": d, "message": {"content": [
+        {"type": "tool_result", "tool_use_id": "u1", "content": "fee 7,350 and 2,950 recorded"}]}},
+]
+with open(tx, "w") as f:
+    for r in recs:
+        f.write(json.dumps(r) + "\n")
+PYEOF
+  export CLAUDE_CARRYOVER_TRANSCRIPT="$SC_TX"
+  expect_block "block-session-carryover-pair" 'EXAMPLE = "fee: 7,350 / 2,950"'
+  expect_pass "pass-session-carryover-own-values" 'EXAMPLE = "fee: 6,789 / 4,321"'
+  expect_pass "pass-session-carryover-single-number" 'EXAMPLE = "fee: 7,350 only"'
+  CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 expect_pass "pass-session-carryover-tree-scan" 'EXAMPLE = "fee: 7,350 / 2,950"'
+  unset CLAUDE_CARRYOVER_TRANSCRIPT
+  expect_pass "pass-session-carryover-no-transcript" 'EXAMPLE = "fee: 7,350 / 2,950"'
 fi
 
 # ====================================================================

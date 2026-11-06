@@ -404,6 +404,25 @@ if [ -z "$HITS" ]; then
         exit 1
       fi
     fi
+    # Tier G (2026-11-05): この session で非公開の source から読んだ値 (額の組・本数・コードの並び) の写し。 A-F は識別子・
+    # 文・活動の語・暗号化した値の索引を見るので、 較正で読んだ本物の値を例やコメントに写した行は通る (実測)。
+    # engine = check-session-carryover.py (源 = この session の会話記録、 env CLAUDE_CODE_SESSION_ID で引く)。 出力は file と
+    # 行番号だけ。 Claude の外の commit (session の env が無い) と tree の棚卸し (CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1 =
+    # session の読んだものではなく tree 全体を見る場) では走らせない。 止めるのは「exit 1 かつ engine の見出し」 のときだけ
+    # (= 故障 〔rc 3〕 で全 commit を止めない)。 escape hatch: CLAUDE_CARRYOVER_GUARD=0。
+    # 規律 = conventions/confidential-repo-boundary.md#session-carryover-gate
+    SC_ENGINE="$(dirname "$0")/check-session-carryover.py"
+    if [ "${CLAUDE_CARRYOVER_GUARD:-1}" != "0" ] && [ -f "$SC_ENGINE" ] \
+        && [ -n "${CLAUDE_CODE_SESSION_ID:-}${CLAUDE_CARRYOVER_TRANSCRIPT:-}" ] \
+        && [ "${CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS:-0}" != "1" ]; then
+      sc_rc=0
+      sc_out="$(python3 "$SC_ENGINE" --staged --repo "$(git rev-parse --show-toplevel)" 2>&1)" || sc_rc=$?
+      [ -n "$sc_out" ] && printf '%s\n' "$sc_out" >&2
+      if [ "$sc_rc" -eq 1 ] && grep -q 'check-session-carryover: BLOCK' <<< "$sc_out"; then
+        echo "[public-precommit-runner] commit rejected by Tier G (session-carryover). bypass once: CLAUDE_CARRYOVER_GUARD=0" >&2
+        exit 1
+      fi
+    fi
   fi
   # ----------------------------------------------------------------------
   # 漏洩の段 (Tier A-F) をここまでで全部通った。 漏洩以外の段 (壊れた text・全角の直前の変数・SESSION の形・

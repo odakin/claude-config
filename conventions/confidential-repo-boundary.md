@@ -258,9 +258,8 @@ tool で読み、 その値を同じ session の中で公開 repo の selftest�
 
 - **捕まえないもの**: 言い換え・計算し直した値 (足した・丸めた)、 1 つだけの短い数、 Codex の commit (会話記録の場所が違う)、
   subagent の中の commit。 規律 ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak)) はそのまま要る。
-- **配線先** = 公開 repo の pre-commit の Tier G (`public-precommit-runner.sh`、 session の env `CLAUDE_CODE_SESSION_ID` が在るときだけ。
-  tree の棚卸しでは走らせない = session が読んだものでなく tree 全体を見る場だから)。 runner は保護の file (`.agent-rule-guard.json`)
-  なので、 当たるまでは commit の前に `check-session-carryover.py --staged` を手で回す。 止まったら file と行と規則の名前だけを出す。
+- **配線** = 公開 repo の pre-commit の Tier G (`public-precommit-runner.sh`、 session の env `CLAUDE_CODE_SESSION_ID` が在るときだけ。
+  tree の棚卸しでは走らせない = session が読んだものでなく tree 全体を見る場だから)。 止まったら file と行と規則の名前だけを出す。
   公開の値がたまたま同じ (公開の料金など) と確かめた場合だけ `CLAUDE_CARRYOVER_GUARD=0` で 1 回通す (本人の指示があるときだけ)。
 
 ---
