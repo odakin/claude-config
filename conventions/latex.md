@@ -250,7 +250,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 
 - **雛形で分かれる** (図の caption はどれも下): Elsevier の `elsarticle-template-num.tex` (TeX Live 2025 の doc) は `\caption` を tabular の後 = 表の下に置き、 APS の REVTeX の見本 `apssamp.tex` は表の上に置く。 「普通はどちらか」 を記憶で答えない (実測: 雛形を開かずに「上が慣例」 と答えて誤った)。 刷り上がりは出版社が組み直すことがあるので、 原稿での位置は雛形と著者の好みで決める。
 - **標準の `article` class の caption の間隔は、 caption を下に置く前提** (`\abovecaptionskip` = 10pt、 `\belowcaptionskip` = 0pt)。 表の上に置くと、 caption の最後の行と表の上の罫線の間が空かない (実測)。 上に置くなら `\usepackage[tableposition=top]{caption}` で間隔を入れ替える (caption package は位置が上の float で 10pt を caption の後ろに回す)。 下に置けば既定のままで空く。
-- **caption の字の大きさは `\caption` の前の `\small` では変わらない** — LaTeX 本体の `\@caption` が中で `\normalsize` に戻してから組む (`latex.ltx` の `\@caption` の定義)。 変えるなら `\usepackage{caption}` と `\captionsetup[table]{font=small}` (図も含めるなら `font=small` を package の option に)。 実測: `\small` を前に置いた caption が本文と同じ 10.91pt のまま出ていて、 この 2 行で表だけ 9.96pt になった (頁数・警告は不変)。
+- **caption の字の大きさは `\caption` の前の `\small` では変わらない** — LaTeX 本体の `\@caption` が中で `\normalsize` に戻してから組む (`latex.ltx` の `\@caption` の定義)。 変えるなら `\usepackage{caption}` と `\captionsetup[table]{font=small}` (図も含めるなら `font=small` を package の option に)。 雑誌の class は図も表も caption を本文より小さく組む (`elsarticle.cls` の `\@makecaption` = `\footnotesize`、 `revtex4-2.cls` = `\small`、 TeX Live 2025)。 本文と同じ大きさなのは標準の `article` class だけ。 実測: `\small` を前に置いた caption が本文と同じ 10.91pt のまま出ていて、 この 2 行で表だけ 9.96pt になった (頁数・警告は不変)。
 - 原稿の中の表の caption は、 位置と字の大きさを全部の表でそろえる (1 つの表だけ動かさない)。 表を 1 つ足すと後ろの表の番号が繰り下がるので、 別の文書 (supplement など) が番号を直書きしていれば同じ commit で直す。
 
 ## <a id="align-split-tag-orphan"></a>長い display の式番号が下の行に回るのは amsmath の標準 — 欠陥として報告しない (2026-09-12、 著者裁定)
