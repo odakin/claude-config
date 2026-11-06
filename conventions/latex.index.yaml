@@ -79,6 +79,9 @@ sections:
   - id: tcolorbox-footnotes-to-page
     level: 2
     title: "tcolorbox の枠の中の脚注を、 本文と同じ番号で頁の下に出す"
+  - id: macro-block-name-clashes
+    level: 2
+    title: "英語の文書の macro の一揃いを和文の文書と tcolorbox の枠に持ち込むときの衝突"
   - id: lua-ul-highlight-emph
     level: 2
     title: "`\\emph` を色の帯 (蛍光ペン) にする — lua-ul の罠と文献表"
