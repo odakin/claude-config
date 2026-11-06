@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: AI が文章を書く・直すとき常時 (論文・研究ノート・報告書・メール・README・chat・code の docstring と図のラベルまで) + 「kernel」 と書きそうになった瞬間 + 文面を「柔らかく」 と頼まれたとき (#softening-without-self-description) + 初学者向けの入門 (教科書の最初の章・講義の初回・入門の解説) を書く・組み直すとき、 手本の本より分かりにくいと言われたとき (#novice-introduction-concrete-first) + 論文・研究ノートの本文を書く・組み直す・圧縮する・共著の原稿に注記を入れるとき (#paper-structure 〜 #japanese-academic-prose) + 日本語の下書きから英語の文を起こすとき (#ga-is-not-but)
 category: paper
-summary: 文章の標語 = 「平易に、論理の流れがスッキリ追えるように、簡潔に」 (AI の文章は放っておくと冗長になる = 書いた文ごとに標語を当てる) + 多義語 kernel を汎称に使わない (重み関数・窓関数・伝播関数・積分核など、その式が表す対象を名指す) + 「柔らかく」 は自分の行為を形容する語 (gently 等) でなく構文で出す + 初学者向けの導入は、 図のある実物と古典の予想を裏切る観察から始め、 新しい数学は既知の現象の類推で要ると分かってから最小の形で出す + 論文の文章の一般則 (構成 = 講演の 3 message を紙に翻訳、 他人の仕事は序論に集め、 要約は「何をしたか / 何を意味するか / 次に何をするか」 / 文と段落 = 言い切り・圧縮の検算・検算の 3 拍・式の項の呼び方・裸の括弧参照を書かない / 引用 = 方向ごとに入口 1 つ・文献ごとに何をしたか / 記号 = 無駄に定義しない・本文で定義・パラメータは定義の式に / 注記は用件だけ・示していない検証を書かない / 日本語の接続詞の糊)
+summary: 文章の標語 = 「平易に、論理の流れがスッキリ追えるように、簡潔に」 (AI の文章は放っておくと冗長になる = 書いた文ごとに標語を当てる) + 多義語 kernel を汎称に使わない (重み関数・窓関数・伝播関数・積分核など、その式が表す対象を名指す) + 「柔らかく」 は自分の行為を形容する語 (gently 等) でなく構文で出す + 初学者向けの導入は、 図のある実物と古典の予想を裏切る観察から始め、 新しい数学は既知の現象の類推で要ると分かってから最小の形で出す + 論文の文章の一般則 (構成 = 講演の 3 message を紙に翻訳、 他人の仕事は序論に集め、 要約は「何をしたか / 何を意味するか / 次に何をするか」 / 文と段落 = 言い切り・圧縮の検算・検算の 3 拍・式の項の呼び方・裸の括弧参照を書かない / 引用 = 方向ごとに入口 1 つ・文献ごとに何をしたか / 記号 = 無駄に定義しない・本文で定義・定義する名前を強調して直後の display で定義し補助の記号は where 節で・パラメータは定義の式に / 注記は用件だけ・示していない検証を書かない / 日本語の接続詞の糊)
 -->
 
 # 文章の規律 (writing discipline)
@@ -131,7 +131,7 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 
 ### <a id="body-defines-its-symbols"></a>本文が使う記号は本文で定義する
 
-- 付録や続編の論文にだけ定義を置かない。 本文の初出に最低限の定義を文中で書く (付録の定義の忠実な写し = 記号と条件を変えない)。 定義域の議論や証明などの詳細は付録に置く。
+- 付録や続編の論文にだけ定義を置かない。 本文の初出の箇所に最低限の定義を書く (付録の定義の忠実な写し = 記号と条件を変えない。 定義の式の形 = [#definition-display](#definition-display))。 定義域の議論や証明などの詳細は付録に置く。
 - 「定義は Appendix X にある」 と送るだけの文にしない。
 - 同じ式を本文と付録に 2 回書かない。 式は本文に置き、 付録は本文の式番号を引く。 本文と付録の両方で使う表も本文の初出に置く。
 - 双子・連作の論文では、 相手の論文にしか定義の無い記号を使っていないかを見る。 相手の式を引くときは「(Part~I, Eq.~(N))」 と出所を書く (素の `\eqref` は自分の式番号に見える)。
@@ -377,6 +377,26 @@ slash は割り算、 中黒は乗算 (\cdot) と紛らわしい。 2 個は「$
 - 前の節で定義した演算子・接続を付録で再定義しない。
 - 数値検証の詳細 (手法・精度・桁数・再現の主張) を本文の脚注に書かない。 付録の末尾の検証の段落に集め、 脚注は本文の流れに要る最小限と付録への pointer にする。
 - 同じ対象は本文から付録まで同じ記法で書き、 定義した略記は定義の後の全部の式で使う = [paper-audit.md#notation-continuity-across-sections](paper-audit.md#notation-continuity-across-sections)。 記号の衝突 = [paper-audit.md#symbol-collision-sweep](paper-audit.md#symbol-collision-sweep)。
+
+### <a id="definition-display"></a>定義する名前は強調して、 その直後の display で定義する — 補助の記号は display の後の where 節で
+
+- 新しく定義する対象 (関係式・空間・量) の名前を `\emph` で書き、 その直後に、 それを定義する display を置く。 名前が display の導入になる。 名前と display の間に別の文を挟まない。
+- 定義の式 (`:=` で新しい記号・集合・量を決める式) は display にする。 文中の式にしない。
+- display の前に、 定義の対象を that 節で言葉で長く説明しない。 言葉の定義と式の定義が並ぶと、 読者はどちらが定義かを探し、 二つが食い違う余地も生まれる。
+- 式を書いた後で、 その式に名前を付ける文 (We call … the … の型) を書かない。 名前は display の直前に 1 回だけ出す。
+- display に出る補助の記号 (関数の空間・定数・範囲) は、 display の直後の where 節で言葉で定義する。 耳慣れない術語は使ったうえで、 同じ where 節の中で that is, を付けて読者の分野の言葉に言い直す ([#gloss-term-at-first-use](#gloss-term-at-first-use))。
+
+(合成例)
+
+```latex
+The steady-state response of the driven oscillator is given by its \emph{transfer function}
+\begin{equation}
+G(\omega) := \bigl(\omega_0^2 - \omega^2 - 2i\gamma\omega\bigr)^{-1},
+\end{equation}
+where $\omega_0$ denotes the undamped angular frequency and $\gamma$ the half-width of the resonance, that is, the inverse of the time in which the free amplitude falls by a factor of $e$.
+```
+
+避ける形 (合成例) = 「We introduce a function that gives the steady-state amplitude at each driving frequency, namely $G(\omega):=(\omega_0^2-\omega^2-2i\gamma\omega)^{-1}$. We call $G$ the transfer function.」 (言葉の長い前置き、 文中の定義の式、 後からの名づけ)。 display の macro・分数の書き方・display の導入の colon は project の家風に従う。
 
 ### <a id="parameter-in-defining-equation"></a>本文が使うパラメータは、 定義の式に入れる
 
