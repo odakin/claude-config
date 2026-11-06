@@ -14,6 +14,7 @@ summary: 撮影写真の一括転記は「前処理 → 帰属確定 → 分担�
 
 - [`media-transcription-ledger.md`](media-transcription-ledger.md) = **定期的に届く画像 stream** を SoT 化する仕組み (transcript home + 読取 ledger + 未読 detector)。 「どの画像を読んだか」 の追跡が主題。 本 doc は **1 回の束を読み切る**ときの作り方が主題で、 継続 stream なら両方を使う。
 - [`chalkboard-close-up-merge.md`](chalkboard-close-up-merge.md) = 板書写真の広域 + close-up を 1 page に合成する個別 recipe。
+- [`exam-grading-return.md`](exam-grading-return.md) = 読み取った**解答用紙の採点と返却** (部分点の決まり・写真への赤入れ・一人ずつのメール・全体への統計)。 本 doc の転記の正本をそのまま採点の正本にする。
 - [`audio-transcription.md`](audio-transcription.md) = **音声**の機械文字起こし。 §quotation-extraction の「転記でなく生成」 が同じ形で効くが、 原本が「見れば分かる」 形で残らないぶん照合が難しい (= 確定できない語は切り出して人に聞く)。
 
 ## <a id="annotation-overlay-scan"></a>他人の書き込みが載った文書を読む — まず「どこに在るか」を機械で列挙する

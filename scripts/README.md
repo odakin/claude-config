@@ -11,6 +11,7 @@
 - **[affix-image-xlsx.py](affix-image-xlsx.py)** — Place an image (seal / signature) into an .xlsx via Excel.app — without destroying the file.
 - **[agent-rule-guard-history.py](agent-rule-guard-history.py)** — replay the rule-document exemption (change_exemption) over a repo's git history: how many committed versions of the rule documents would pass without a ruling, what stops the rest, and which listed terms fire (for tuning the position rules) — read-only.
 - **[agent-rule-guard.py](agent-rule-guard.py)** — Protect agent-governance documents, enforcement configuration and declared gates; compatible approval/scan entry point.
+- **[annotate-scan.py](annotate-scan.py)** — 解答用紙・書類の写真 (前処理済み) の右に余白を足し、 赤で点と直し方を書き、 解答の行に下線・丸・矢印を引く。
 - **[apply-text-pairs.mutants.json](apply-text-pairs.mutants.json)** — apply-text-pairs.py の selftest の foil に歯があることを、 修正の一部を外した mutant 6 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[apply-text-pairs.py](apply-text-pairs.py)** — (old, new) の置換 pair 列を 1 file に当てる前に、 契約 (各 old は正確に 1 回 / 全検査が通るまで書かない) に加えて「再実行で二重に入る」「old が長い別物の先頭」 を拒否し、 必要なら patch 後の写しで test を回してから、 原子的に書く。--selftest 内蔵。
 - **[approval-source-census.py](approval-source-census.py)** — Count user-message leading tags without printing bodies, paths or session identifiers; --selftest.
@@ -341,6 +342,7 @@
 - **[scan-private-vocabulary.py](scan-private-vocabulary.py)** — Audit a public repo for rare vocabulary it shares with your non-public repos (technical words, LaTeX control words, Japanese compounds, decimals): the reading list for paraphrased leaks that the verbatim gate cannot see; terminal output only, not a gate; --selftest
 - **[scan-public-tree.sh](scan-public-tree.sh)** — 公開 repo の現在の tree 全体を pre-commit gate の全 Tier に通す
 - **[scan-public-tree.test.sh](scan-public-tree.test.sh)** — self-tests for the full-tree re-run of the public gate
+- **[score-stats.py](score-stats.py)** — 採点の記録 (YAML / JSON の list) から、 全体に知らせる統計 (人数・平均・中央値・標準偏差・最小最大・問ごとの平均・分布) を出す。
 - **[search-agent-transcripts.py](search-agent-transcripts.py)** — Claude Code と Codex の会話記録を横断して、発言を文字列で探す
 - **[selftest-on-old.py](selftest-on-old.py)** — 新しい版の selftest の関数を、 直す前の版 (git の rev) の module の中で回す = 新しい検査が直す前の実装で赤くなるかを、 file を書き換えずに見る。--selftest 内蔵。
 - **[session-claims-report.py](session-claims-report.py)** — ある session が返事と記録に書いた「根拠の無い検算の主張」 と「先送り」 を会話記録から並べる。--selftest 内蔵。

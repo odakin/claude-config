@@ -25,3 +25,7 @@ yamllint>=1.37
 # 純 Python の連結成分に fallback、 selftest の実測差は 0.2 秒未満)。
 numpy>=1.26
 Pillow>=10.0
+
+# 解答用紙の写真への赤入れ (annotate-scan.py — conventions/exam-grading-return.md#red-annotation)
+# Pillow = 必須 (上の行)。 matplotlib = 注記の $…$ を mathtext で組む (無いと $…$ を含む注記で止まる。 selftest は数式の検査を飛ばす)。
+matplotlib>=3.7

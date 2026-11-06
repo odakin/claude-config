@@ -77,6 +77,7 @@ claude-config/
 │   ├── dropbox-refs.md                     # 共同 PDF を Dropbox に置いてリポから symlink 参照するとき + 論文が引く文献の写しの所在を repo に持たせるとき (#per-reference-copy-table)
 │   ├── email-surface-pattern.md            # 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき + 会員サービスからの情報流出のお詫びが網から落ちたとき (#vendor-breach-notice-class) + 止まっている待ちの項目を棚卸しするとき (#waiting-item-answer-elsewhere)
 │   ├── erad-submission.md                  # e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき
+│   ├── exam-grading-return.md              # 紙で実施した小テスト・試験の解答用紙を写真から採点して返すとき + 部分点の決まり (答えだけ・途中の誤り・誤りの引き継ぎ) を決める・直すとき + 解答用紙の写真に赤で点と直し方を書き込むとき + 一人ずつ点と添付が違う返却メールを送るとき + クラス全体に平均・中央値・標準偏差を知らせるとき
 │   ├── expensive-intermediate-artifacts.md # 5 分以上かかる生成物の出力先を決めるとき + snapshot artifact を命名するとき
 │   ├── flight-search.md                    # 航空券の候補を調べて比べる表を作るとき (内蔵 Browser pane で比較サイト・航空会社サイトを読む) + 出張の申請書に日付・経由地を書く前 + 旅費補助に予約確認を添える段取りを組むとき + 経由地・上空の危険を外務省・EASA・航空会社の運休で読むとき (#route-risk-official-sources)
 │   ├── form-case-pipeline.md               # 同じ様式 (申請書・請求書・届) を人や回ごとに何度も出す作業を仕組みにするとき + 提出した書類を新しい書類の base にしてしまう / 提出済みの file を黙って上書きする事故を止めたいとき + 同じ規則が手順書・案件メモ・README に書き写されて食い違うのを止めたいとき + 様式の一部の頁だけを作り直したいとき
@@ -209,7 +210,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (417 file + formcase/ 26 module + lib/ 81 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (419 file + formcase/ 26 module + lib/ 81 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
