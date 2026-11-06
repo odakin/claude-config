@@ -31,10 +31,18 @@ owner の枠表 (授業の時間割など) と学期の暦の読み方・予定�
 - ⏱ 間に合うか = 場所が学外 (location があり oncampus_re に当たらない) の予定と、 直前・直後の枠の間が tight_min (既定 30) 分
   未満で、 その間に移動の予定が無いもの。 重なりとは別の段 (通知しない)
 - now を渡すと、 今日の組のうち両方とも終わったもの (遅い方の終了 ≤ 今) は出さない
+- ⏳ 時刻の無い担当 (untimed、 窓 = 既定 14 日先まで、 days がそれより長ければ days) = 終日の予定 (複数日を含む) のうち
+  題名が台帳の duty_titles に当たり duty_skip_titles に当たらないもの (duty_skip_calendars のカレンダーは見ない) を、 同じ日に時刻のある予定があれば「重なるかは
+  見ていない」 として 1 予定 1 件で返す (重なりとは言わない = 終日は占有に数えないので、 判定できていないことを言う)。
+  同じ日に題名の頭の語 (title_head) が入った時刻のある予定があれば、 その日は時刻つきで入っているとみなして出さない。
+  台帳に duty_titles が無ければ何も返さない (担当の語は owner の台帳が持つ = コードに焼かない)。 通知はしない
 
 ## 台帳 (YAML、 置き場所は adapter が決める)
 
     ignore_titles: ["^🔔"]           # 時間を取らない予定の題名 (正規表現)。 足すのは時間を取らないと確かめたものだけ
+    duty_titles: ["担当|当番"]        # 時間を取る担当・業務の題名 (正規表現)。 終日で入っていれば ⏳ を出す
+    duty_skip_titles: ["^📝"]         # duty_titles に当たっても出さない題名 (期間の目印・出ない予定の印など)
+    duty_skip_calendars: ["^家族"]    # ⏳ を探さないカレンダーの名前 (家族の共用カレンダーなど、 本人の担当でない予定が混ざるもの)
     ack:
       - date: "YYYY-MM-DD"
         until: "YYYY-MM-DD"          # 省略可 = その日だけ。 毎週の組を意図して重ねるなら期間の終わりを必ず書く
@@ -67,6 +75,7 @@ from pathlib import Path
 from typing import Callable
 
 WINDOW_D = 7
+UNTIMED_WINDOW_D = 14   # 担当の時刻は 1〜2 週間前に届く (実測) = 重なりの 7 日より長く見る
 TIGHT_MIN = 30
 WEEKDAY_JA = "月火水木金土日"
 TRAVEL_RE = re.compile(r"へ移動\s*$")
@@ -122,6 +131,17 @@ def load_ledger(path: Path) -> dict:
             out["ignore"].append(re.compile(str(pat)))
         except re.error:
             out["invalid"].append(f"ignore_titles の正規表現が壊れている: {pat}")
+    # 担当の語 (⏳ 時刻の無い担当)。 宣言した台帳だけが key を持つ = 宣言の無い台帳の形は従来どおり
+    for key, name in (("duty_titles", "duty"), ("duty_skip_titles", "duty_skip"),
+                      ("duty_skip_calendars", "duty_skip_cal")):
+        if key not in data:
+            continue
+        out[name] = []
+        for pat in data.get(key) or []:
+            try:
+                out[name].append(re.compile(str(pat)))
+            except re.error:
+                out["invalid"].append(f"{key} の正規表現が壊れている: {pat}")
     for e in data.get("ack") or []:
         if not isinstance(e, dict):
             continue
@@ -209,6 +229,65 @@ def same_thing(a: dict, b: dict) -> bool:
     return False
 
 
+# 題名の頭の語の前に付く印 (【仮】・[x]・「未確定:」・(参考…)) は頭の語に数えない
+_HEAD_TAGS_RE = re.compile(r"^(?:\s*(?:【[^】]*】|\[[^\]]*\]|未確定\s*[:：]|[(（]参考[^)）]*[)）]))+")
+_HEAD_SPLIT_RE = re.compile(r"[\s(（:：・/／「【〈<,、]")
+
+
+def title_head(title: str) -> str:
+    """題名の頭の語 (印を外した後、 空白・括弧・コロンの前まで)。 同じ担当の終日と時刻つきの予定を結ぶ。"""
+    t = _HEAD_TAGS_RE.sub("", str(title or "")).strip()
+    return _HEAD_SPLIT_RE.split(t, maxsplit=1)[0] if t else ""
+
+
+def untimed_duties(events: list[dict], today: date, days: int | None = None, ledger: dict | None = None,
+                   travel_re=None) -> list[dict]:
+    """⏳ 時刻の無い担当 (docstring の判定の段)。 1 件 = {date, end_date, title, calendar, counts: [(iso, n)]}。
+
+    counts = その予定が掛かる窓の中の日ごとの、 時刻のある予定の数 (同じ担当の時刻つきの予定がある日・0 件の日は入らない)。
+    """
+    ledger = ledger if ledger is not None else empty_ledger()
+    duty, skip = ledger.get("duty") or [], ledger.get("duty_skip") or []
+    if not duty:
+        return []
+    days = UNTIMED_WINDOW_D if days is None else days
+    last = today + timedelta(days=days)
+    out: list[dict] = []
+    seen: set = set()
+    for e in events:
+        if not (e.get("all_day") or mins(e.get("start")) is None or mins(e.get("end")) is None):
+            continue
+        title = str(e.get("title") or "").strip()
+        if not any(r.search(title) for r in duty) or any(r.search(title) for r in skip):
+            continue
+        if any(r.search(title) for r in (ledger.get("ignore") or [])):
+            continue
+        if any(r.search(str(e.get("calendar") or "")) for r in (ledger.get("duty_skip_cal") or [])):
+            continue
+        d0s, d1s = str(e.get("date", ""))[:10], event_last_day(e)
+        try:
+            d0, d1 = date.fromisoformat(d0s), date.fromisoformat(d1s)
+        except ValueError:
+            continue
+        key = (title, d0s, d1s)
+        if key in seen:
+            continue  # 同じ予定が複数のカレンダーにある
+        seen.add(key)
+        head = title_head(title)
+        counts = []
+        d = max(d0, today)
+        while d <= min(d1, last):
+            occ = event_occupancies(events, d, ledger.get("ignore"), travel_re or TRAVEL_RE)
+            if not (head and any(head in o["title"] for o in occ)):
+                if occ:
+                    counts.append((d.isoformat(), len(occ)))
+            d += timedelta(days=1)
+        if counts:
+            out.append({"date": d0s, "end_date": d1s, "title": title, "calendar": str(e.get("calendar") or ""),
+                        "counts": counts})
+    return out
+
+
 def pair_key(iso: str, a: dict, b: dict) -> str:
     sig = sorted(f"{hhmm(x['start'])}-{hhmm(x['end'])} {x['title']}" for x in (a, b))
     return f"{iso}|{sig[0]}|{sig[1]}"
@@ -227,13 +306,17 @@ def ack_for(acks: list[dict], d: date, a: dict, b: dict) -> str | None:
 def detect(events: list[dict], today: date, days: int | None = None, provider: Provider | None = None,
            ledger: dict | None = None, now: datetime | None = None, oncampus_re=None,
            tight_min: int | None = None, travel_re=None) -> dict:
-    """今日から days 日先まで (今日を含む) の重なりと「間に合うか」。 純粋 (入力は引数と provider だけ)。"""
+    """今日から days 日先まで (今日を含む) の重なりと「間に合うか」、 と ⏳ 時刻の無い担当 (窓 = max(days, 14))。
+    純粋 (入力は引数と provider だけ)。"""
     days = WINDOW_D if days is None else days
     tight_min = TIGHT_MIN if tight_min is None else tight_min
     oncampus_re = oncampus_re or ONCAMPUS_RE
     ledger = ledger if ledger is not None else empty_ledger()
     acks = ledger.get("ack") or []
-    res: dict = {"conflicts": [], "tight": [], "notes": [], "days": days, "tight_min": tight_min}
+    untimed_days = max(days, UNTIMED_WINDOW_D)
+    res: dict = {"conflicts": [], "tight": [], "notes": [], "days": days, "tight_min": tight_min,
+                 "untimed": untimed_duties(events, today, untimed_days, ledger, travel_re),
+                 "untimed_days": untimed_days}
     now_min = now.hour * 60 + now.minute if now is not None else None
     now_d = now.date() if now is not None else None
     seen_notes: set = set()
@@ -303,6 +386,20 @@ def occ_label(o: dict, cal: bool = True, limit: int = 32) -> str:
     return f"{o.get('span') or hhmm(o['start']) + '-' + hhmm(o['end'])} {t}{tail}"
 
 
+def untimed_label(u: dict, today: date, limit: int = 24) -> str:
+    """⏳ の 1 件の本文 (行頭の印と字下げは呼び元)。"""
+    t = u["title"] if len(u["title"]) <= limit else u["title"][:limit] + "…"
+    d1 = date.fromisoformat(u["end_date"])
+    when = day_label(u["date"], today) if u["end_date"] == u["date"] else (
+        f"{day_label(u['date'], today)}〜{d1.month}/{d1.day}({WEEKDAY_JA[d1.weekday()]})")
+    cs = u["counts"]
+    if len(cs) == 1 and u["end_date"] == u["date"]:
+        what = f"同じ日の時刻のある予定 {cs[0][1]} 件"
+    else:
+        what = "時刻のある予定 (" + "・".join(f"{_md_label(iso)} {n} 件" for iso, n in cs) + ")"
+    return f"{when} {t} は終日で入っている = {what}と重なるかは見ていない"
+
+
 def visible(item: dict, today: date) -> bool:
     """承知済みは当日だけ出す。"""
     return not item.get("ack") or item["date"] == today.isoformat()
@@ -354,6 +451,8 @@ def digest_rows(res: dict, today: date) -> list[str]:
                     f" → {occ_label(t['second'], cal=False, limit=24)} (間 {t['gap']} 分・移動の予定なし)")
     for n in res.get("notes", []):
         rows.append(f"  ⚠️ 予定の重なりは未チェック: {n}")
+    for u in res.get("untimed", []):
+        rows.append(f"  ⏳ {untimed_label(u, today)} (時刻が分かれば時刻つきで入れる)")
     return rows
 
 
@@ -361,12 +460,15 @@ def list_lines(res: dict, today: date, source: str, invalid: list[str] | None = 
     """--list の出力 (承知済みも、 今日の終わった組も含む全部)。"""
     out = [f"予定の重なり: {today} から {res.get('days', WINDOW_D)} 日先まで ({source}。 今日の終わった組も含む)",
            f"  重なり {len(res['conflicts'])} 組 (うち承知済み {sum(1 for c in res['conflicts'] if c.get('ack'))})"
-           f" / 間に合うか {len(res['tight'])} 件"]
+           f" / 間に合うか {len(res['tight'])} 件"
+           f" / 時刻の無い担当 {len(res.get('untimed', []))} 件 ({res.get('untimed_days', UNTIMED_WINDOW_D)} 日先まで)"]
     for c in res["conflicts"]:
         ack = f"  (承知済み: {c['ack']})" if c.get("ack") else ""
         out.append(f"  ⚠️ {day_label(c['date'], today)} {occ_label(c['a'])} × {occ_label(c['b'])}{ack}")
     for t in res["tight"]:
         out.append(f"  ⏱ {day_label(t['date'], today)} {occ_label(t['first'])} → {occ_label(t['second'])} = 間 {t['gap']} 分")
+    for u in res.get("untimed", []):
+        out.append(f"  ⏳ {untimed_label(u, today, limit=40)} [{u['calendar']}]")
     for n in list(res["notes"]) + list(invalid or []):
         out.append(f"  ⚠️ {n}")
     return out
@@ -662,6 +764,59 @@ def _selftest() -> int:
     keys = lambda r: sorted(c["key"] for c in r["conflicts"])  # noqa: E731
     check(keys(same) == keys(res) and keys(bad_end) == keys(res), "T25 1 日の予定の結果は end_date の有無・読めない値で変わらない")
 
+    # ⏳ 時刻の無い担当 (終日の担当 × 同じ日の時刻のある予定)
+    A = lambda d, t, cal="カレンダー甲", **k: dict(date=d, all_day=True, title=t, calendar=cal, **k)  # noqa: E731
+    duty_led = dict(ledger, duty=[re.compile("担当|当番|受付")], duty_skip=[re.compile("^📝")],
+                    duty_skip_cal=[re.compile("^家族")])
+    u_events = [
+        A("2030-09-25", "【仮】行事 1 日目 (受付の可能性)"),
+        E("2030-09-25", "11:00", "12:00", "毎週の打合せ"),
+        A("2030-09-26", "催し: 受付担当"),
+        E("2030-09-26", "14:00", "15:30", "催し 受付 (時刻つき)"),
+        E("2030-09-26", "16:00", "17:00", "別の会議"),
+        A("2030-09-27", "📝 期間の目印 (当番)"),
+        E("2030-09-27", "09:00", "10:00", "朝の会議"),
+        A("2030-09-28", "当番の担当 (予定なしの日)"),
+        A("2030-09-29", "未確定: 長い担当 (受付)", end_date="2030-10-01"),
+        A("2030-09-29", "未確定: 長い担当 (受付)", cal="カレンダー乙", end_date="2030-10-01"),
+        E("2030-09-29", "10:00", "11:00", "日曜の用事"),
+        E("2030-10-01", "10:00", "11:00", "火曜の用事"),
+        E("2030-10-01", "13:00", "14:00", "火曜の別の用事"),
+        A("2030-10-10", "遠い先の担当 (当番)"),
+        A("2030-09-25", "家族の出勤 (受付)", cal="家族の共用"),
+        E("2030-10-10", "10:00", "11:00", "遠い先の会議"),
+    ]
+    ud = untimed_duties(u_events, today, 14, duty_led)
+    by_t = {u["title"]: u for u in ud}
+    check(by_t.get("【仮】行事 1 日目 (受付の可能性)", {}).get("counts") == [("2030-09-25", 1)],
+          "U1 終日の担当と同じ日の時刻のある予定 = 1 件 (日ごとの数)")
+    check("催し: 受付担当" not in by_t, "U2 同じ日に頭の語 (催し) の入った時刻つきの予定がある日は出さない")
+    check("📝 期間の目印 (当番)" not in by_t, "U3 duty_skip_titles に当たる題名は出さない")
+    check("当番の担当 (予定なしの日)" not in by_t, "U4 その日に時刻のある予定が無ければ出さない")
+    long_ = by_t.get("未確定: 長い担当 (受付)", {})
+    check(long_.get("counts") == [("2030-09-29", 1), ("2030-10-01", 2)] and len([u for u in ud if u["title"] == long_.get("title")]) == 1,
+          "U5 複数日の担当は予定のある日だけ数え、 複数のカレンダーにあっても 1 件")
+    check("遠い先の担当 (当番)" not in by_t, "U6 窓 (14 日) の外は出さない")
+    check("家族の出勤 (受付)" not in by_t, "U6 duty_skip_calendars に当たるカレンダーの予定は出さない")
+    check("遠い先の担当 (当番)" in {u["title"] for u in untimed_duties(u_events, today, 30, duty_led)}, "U6 窓を広げれば出る")
+    check(untimed_duties(u_events, today, 14, ledger) == [] and detect(u_events, today, ledger=ledger)["untimed"] == [],
+          "U7 台帳に duty_titles が無ければ何も返さない")
+    res_u = detect(u_events, today, days=3, ledger=duty_led)
+    check(res_u["untimed_days"] == 14 and len(res_u["untimed"]) == len(ud), "U8 detect の窓は max(days, 14)")
+    check(detect(u_events, today, days=30, ledger=duty_led)["untimed_days"] == 30, "U8 days が長ければ days")
+    check(not any(c["a"]["title"].startswith("【仮】") or c["b"]["title"].startswith("【仮】") for c in res_u["conflicts"]),
+          "U9 終日の担当は重なりの組には入らない (従来どおり)")
+    rows_u = [r for r in digest_rows(res_u, today) if r.startswith("  ⏳ ")]
+    check(len(rows_u) == 2 and all("見ていない" in r and "時刻つきで入れる" in r for r in rows_u)
+          and any("9/29(日)〜10/1(火)" in r and "9/29 1 件・10/1 2 件" in r for r in rows_u),
+          "U10 digest の ⏳ 行 (複数日は期間と日ごとの数)")
+    check(not any(r.startswith("  🚨") or r.startswith("  ⚠️") for r in rows_u), "U10 ⏳ 行は 🚨 / ⚠️ で始めない")
+    check(all(k[1] in res_u["conflicts"] for k in notify_targets(res_u, today, {})), "U11 ⏳ は通知しない (通知は重なりだけ)")
+    check(any(ln.startswith("  ⏳ ") for ln in list_lines(res_u, today, "fixture"))
+          and "時刻の無い担当 2 件 (14 日先まで)" in list_lines(res_u, today, "fixture")[1], "U12 --list に ⏳ と件数")
+    check(title_head("【仮】大きな行事 1日目 (担当)") == "大きな行事" and title_head("未確定: 長い担当 (受付)") == "長い担当"
+          and title_head("催し: 受付担当") == "催し" and title_head("") == "", "U13 題名の頭の語 (印・コロン・括弧で切る)")
+
     # 台帳の読み方
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "ack.yaml"
@@ -677,6 +832,14 @@ def _selftest() -> int:
         check(len(led["ignore"]) == 1 and led["ignore"][0].search("🔔 x") and any("壊れている" in x for x in led["invalid"]),
               "T21 ignore_titles を正規表現で読み、 壊れた正規表現は invalid")
         check(load_ledger(Path(td) / "none.yaml") == empty_ledger(), "T21 台帳が無ければ空")
+        check("duty" not in led and "duty_skip" not in led, "U14 duty_titles の無い台帳は key を持たない (従来の形)")
+        p2 = Path(td) / "duty.yaml"
+        p2.write_text('duty_titles:\n  - "担当|当番"\n  - "(壊れた"\nduty_skip_titles:\n  - "^📝"\n'
+                      'duty_skip_calendars:\n  - "^家族"\n', encoding="utf-8")
+        led2 = load_ledger(p2)
+        check(len(led2["duty"]) == 1 and len(led2["duty_skip"]) == 1 and len(led2["duty_skip_cal"]) == 1
+              and any("duty_titles" in x for x in led2["invalid"]),
+              "U14 duty_titles / duty_skip_titles を正規表現で読み、 壊れた正規表現は invalid")
 
         # 通知の投稿と記録 (偽の notifier = 引数を file に書く sh)
         log = Path(td) / "posted.txt"

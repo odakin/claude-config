@@ -6,7 +6,7 @@ summary: カレンダーだけを見る検出器は、 カレンダーに入っ�
 # 予定の重なりを先に警告する
 
 「授業と別の予定が重なっていたのに、 直前まで誰も気づかなかった」 型の事故を機械で先に拾う仕組みの一般則。
-engine = [`scripts/calendar_conflicts.py`](../scripts/calendar_conflicts.py) (判定・「間に合うか」・台帳の読み方・通知の段と記録・表示・合成の selftest)。 枠表と学期の暦の読み方・予定の読み込み・台帳の置き場所は engine に入れず、 adapter が「日付 → 占有の list」 を返す provider と引数で渡す ([`script-layer-placement.md#engine-instance-seam`](script-layer-placement.md#engine-instance-seam))。 adapter の例 (個人層) = `odakin-prefs/scripts/calendar_conflicts.py` (時間割と学年暦の provider)。
+engine = [`scripts/calendar_conflicts.py`](../scripts/calendar_conflicts.py) (判定・「間に合うか」・時刻の無い担当・台帳の読み方・通知の段と記録・表示・合成の selftest)。 枠表と学期の暦の読み方・予定の読み込み・台帳の置き場所は engine に入れず、 adapter が「日付 → 占有の list」 を返す provider と引数で渡す ([`script-layer-placement.md#engine-instance-seam`](script-layer-placement.md#engine-instance-seam))。 adapter の例 (個人層) = `odakin-prefs/scripts/calendar_conflicts.py` (時間割と学年暦の provider)。
 
 ## <a id="occupancy-outside-calendar"></a>1. カレンダーに入っていない占有を作る
 
@@ -24,6 +24,8 @@ engine = [`scripts/calendar_conflicts.py`](../scripts/calendar_conflicts.py) (�
 ## <a id="what-counts"></a>3. 何を占有に数えるか
 
 - 数えない: 終日の予定 / 1 日の予定で開始 = 終了のもの (目印) / 確認用のリマインダー (時刻に置いただけで時間を取らない)。 リマインダーの見分けは**台帳の題名の正規表現**で持ち、 コードに焼かない (足すのは「時間を取らない」 と確かめたものだけ = 足した予定は計算から黙って消える)。
+- <a id="timed-entry-for-duties"></a>**時間を取る担当・業務は、 時刻が一部でも分かった時点で、 分かった部分を時刻つきの予定で入れる** (上の規則の書く側。 終日の予定は重なりの判定に入らない = 終日のまま置いた担当は、 同じ日の会議と重なっていても警告されない。 全部の時刻が揃うのを待って終日のままにしない)。 入れたら、 その日の全カレンダーの予定を並べ、 重なるものを本人に 1 行ずつ見せる ([#proposing-candidate-dates](#proposing-candidate-dates) の並べ方)。 時刻は、 確定の知らせに添えられた時間割・時程表を記録の turn に開いて読む (本文に時刻が無いことを「時刻は未定」 と読まない。 実測)。 確定の知らせを記録した turn には、 その台帳の項目にある条件つきの確認 (「時程が決まったら両立を判断する」 型) も読み直す (条件が満ちた知らせが必ず通る場所は記録の turn = 別の発火の面を作らずにそこで読む)。 予定表を直すことを台帳の「次の一手」 に書いて turn を終えない。 書けない理由 (その窓では予定表への書き込みが止められる、 など) があれば、 理由と書ける窓を台帳に書く。 題の書き方 = [`actor-attribution.md#title-shows-decision-state`](actor-attribution.md#title-shows-decision-state)。
+  - 機械の網 (engine の ⏳ 時刻の無い担当): 台帳の担当の語 (`duty_titles`) に当たる終日の予定で、 同じ日に時刻のある予定があるものを、 14 日先まで「重なるかは見ていない」 と出す (重なりと言わずに、 判定できていないことを言う。 通知はしない)。 同じ担当の時刻つきの予定がある日 (題名の頭の語が同じ) と、 台帳の `duty_skip_titles` (期間の目印・出ない予定の印) と `duty_skip_calendars` (本人の担当でない予定が混ざる家族の共用カレンダーなど) に当たるものは出さない。 担当の語は owner の台帳に持ち、 コードに焼かない。
 - <a id="multi-day-events"></a>**日をまたぐ時刻つきの予定は、 期間に入る日すべての占有に数える** (日への割り方と、 予定の写しに最後の日を持たせる理由 = [`google-api-direct-access.md#calendar-read-timezone-and-span`](google-api-direct-access.md#calendar-read-timezone-and-span))。 目印 (開始 = 終了) の判定は 1 日の予定だけに当てる = 開始と終了の時刻が同じでも、 日が違えば占有。 写しが最後の日を持たないと、 2 日目以降の重なりは黙って落ちる (実測: 会期の時刻つきの予定と、 その間の授業・会議の重なりが出ていなかった)。 期間で数えるように直すと、 目印の判定で偶然外れていた予定 (開始と終了が同じ時刻の複数日の予定で、 出ないもの) が重なりに現れる = 直す前と後の重なりを実データで比べて 1 件ずつ読み、 出ない予定は印 (題名の絵文字など) で台帳から外す (実測)。
 - 同じ日時・同じ題名の予定が複数のカレンダーにあるときは 1 つに数える (購読・共有で重複する)。
 - **移動の予定 (乗換案内から入る「〜へ移動」) も占有に数える**。 移動が行き先の予定と重なるなら、 それは「着くのが遅れる」 という本物の警告。
