@@ -5,7 +5,7 @@
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
-- **動画の納品前確認** — 共通の規格確認・全編デコード・静止画抽出を [`scripts/inspect-video.py`](scripts/inspect-video.py) にまとめた。合成動画と実ファイルの照合を確認し、通常利用へ移る段階。次に動画を扱うときはこの入口を使い、目視記録は動画のハッシュに結び付けて別に保つ。
+- **動画の制作と納品前確認** — 描画の手順は [短い動画の制作](conventions/matplotlib-figure-qa.md#short-video-from-frames)、規格確認・全編デコード・静止画抽出は [`scripts/inspect-video.py`](scripts/inspect-video.py)。描画と検証記録の整理を終え、通常利用へ移る段階。次の制作では同じ入口から始め、納品版の検査と目視の記録を参照する。
 - **Remote Control の中身の報告と無人の起こし直し** — 設計 = [DESIGN.md#rc-detail-and-unattended-refresh](DESIGN.md#rc-detail-and-unattended-refresh)、 診断の手順 = [`remote-control-server.md#ts-session-no-reply`](conventions/remote-control-server.md#ts-session-no-reply)。 読む道具 = [`scripts/leveldb-grep.py`](scripts/leveldb-grep.py)。 起こし直しの実動は未確認 = 失敗すれば reader の 🟠 が出続ける。
 - **TeX の印字される部分だけを探す道具** — [`scripts/tex-printed-grep.py`](scripts/tex-printed-grep.py)、 規則 = [`latex.md#commented-out-not-present`](conventions/latex.md#commented-out-not-present)。 zsh の `echo` の壊れ方 = [`shell-env.md#zsh-echo-backslash`](conventions/shell-env.md#zsh-echo-backslash) と `hooks/known-errors.json` の 1 件。
 
