@@ -16,7 +16,9 @@
      実測: この道具で番号を渡して取得した session で 0 件と出た)
   2. 手元の PDF — (a) Read の file_path、 (b) Bash の curl -o / wget -O の書き先、 (c) Bash の command に現れる取り込み口
      (DROP_DIRS = ~/Desktop・~/Downloads) の下の `….pdf`、 (d) arXiv 以外の URL で WebFetch が保存した PDF (結果の「also saved to」 の path)、
-     (e) メールの添付を保存した PDF (名前が `download_attachment` で終わる MCP の道具。 結果の「Saved to:」 の path、 無ければ入力の savePath と filename)。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
+     (e) メールの添付を保存した PDF (名前が `download_attachment` で終わる MCP の道具。 結果の「Saved to:」 の path、 無ければ入力の savePath と filename)、
+     (f) PDF の文字を読む道具 (PDF_READER_RE = PyMuPDF の fitz.open・pdfplumber・pypdf・pdftotext など) を呼ぶ Bash の command に現れる `….pdf`
+     (取り込み口の外でも。 実測: 原典を `python3 -c` の fitz.open に path で渡して読んだ session で 0 件と出た)。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
      隣に同じ名前の .tex がある PDF (組版の生成物) は数えない。 path の変数は同じ command で先に代入したものだけ展開し、
      展開できない path と glob は数えない (loop の取得は 1 の番号で拾う)
 
@@ -60,6 +62,10 @@ ARXIV_ID_RE = re.compile(
     r"|(?:hep-th|hep-ph|hep-ex|hep-lat|gr-qc|astro-ph|cond-mat|quant-ph|math-ph|nucl-th|nucl-ex|physics|math)"
     r"(?:\.[A-Z]{2})?/\d{7})(v\d+)?(?![\w])")
 PDF_TOKEN_RE = re.compile(r"(['\"]?)((?:~|/|\$\{?\w+\}?/)[^\s'\";|&<>()]*?\.pdf)\1(?=[\s'\";|&<>)]|$)", re.I)
+# PDF の文字を読む道具 (Python の library を -c や heredoc で呼ぶ形と、 command line の道具)。 この印がある command の PDF は
+# 取り込み口の外でも数える (実測: 原典を fitz.open に path で渡して読み、 判定の根拠にした session で 0 件と出た)
+PDF_READER_RE = re.compile(r"\b(?:fitz|pymupdf)\.open\s*\(|\bpdfplumber\.open\s*\(|\bPdfReader\s*\(|\bpypdf\b"
+                           r"|(?:^|[\s;&|(])(?:pdftotext|pdfinfo|pdftoppm|pdfimages|mutool)\s")
 # WebFetch は PDF を要約に渡せず、 取得物を tool-results の下に保存して結果の末尾にその path を書く
 WEBFETCH_SAVED_RE = re.compile(r"also saved to (\S+?\.pdf)\b", re.I)
 OUTPUT_RE = re.compile(r"\b(?:curl|wget)\b[^\n;|&]*?\s(?:-o|--output|-O|--output-document)\s+(['\"]?)([^\s'\";|&<>]+)\1")
@@ -150,10 +156,13 @@ def collect(calls, drop_dirs=DROP_DIRS):
             add_arxiv(cmd, ts, cmd.strip().splitlines()[0][:120])
         for m in OUTPUT_RE.finditer(cmd):
             add_local(_expand_at(cmd, m.start(2), m.group(2), cwd), "URL から取得 (curl / wget の書き先)", ts)
+        reader = bool(PDF_READER_RE.search(cmd))
         for m in PDF_TOKEN_RE.finditer(cmd):
             p = _expand_at(cmd, m.start(2), m.group(2), cwd)
             if p and any(os.path.realpath(p).startswith(d + os.sep) for d in drops):
                 add_local(p, "取り込み口の file (" + os.path.dirname(p) + ")", ts)
+            elif p and reader:
+                add_local(p, "PDF を読む道具に渡した (fitz.open・pdftotext など)", ts)
     for lp, (ts, head) in list_files.items():
         try:
             add_arxiv(Path(lp).read_text(encoding="utf-8", errors="replace"), ts, head + " (一覧 " + os.path.basename(lp) + ")")
@@ -355,6 +364,13 @@ def selftest():
         Path(scratch, "att.pdf").write_bytes(b"%PDF-1.4 mail attachment")
         call(24, "mcp__gmail-x__download_attachment", {"messageId": "m", "attachmentId": "a", "savePath": scratch},
              "Attachment downloaded successfully:\nFile: att.pdf\nSaved to: " + os.path.join(scratch, "att.pdf"))
+        # 取り込み口の外の PDF: 読む道具 (fitz.open) に渡したものは数え、 command に出ただけ (ls) のものは数えない
+        lib = os.path.join(t, "papers")
+        os.makedirs(lib)
+        Path(lib, "orig.pdf").write_bytes(b"%PDF-1.4 original read by a library")
+        Path(lib, "mention.pdf").write_bytes(b"%PDF-1.4 only mentioned")
+        call(25, "Bash", {"command": "cd /tmp && python3 -c \"import fitz\nd = fitz.open('" + os.path.join(lib, "orig.pdf") + "')\nprint(len(d))\""})
+        call(26, "Bash", {"command": "ls -la " + os.path.join(lib, "mention.pdf")})
         Path(proj, sid + ".jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
 
         calls = ssr.read_calls(Path(proj, sid + ".jsonl"))
@@ -381,15 +397,19 @@ def selftest():
         att = rows.get(os.path.join(scratch, "att.pdf"))
         check(att is not None and att["mark"] == "⚠️" and "メールの添付" in att["note"],
               "メールの添付を保存した PDF (download_attachment の結果の Saved to:) も数える")
+        rd = rows.get(os.path.join(lib, "orig.pdf"))
+        check(rd is not None and rd["mark"] == "⚠️" and "読む道具" in rd["note"],
+              "PDF を読む道具 (fitz.open) に渡した PDF は取り込み口の外でも数える")
+        check(os.path.join(lib, "mention.pdf") not in rows, "読む道具の無い command に出ただけの取り込み口の外の PDF は数えない")
         copy = [r for k, r in rows.items() if k.startswith(os.path.join(t, "scan", "paper.pdf"))]
         check(len(copy) == 1 and copy[0]["mark"] == "✅" and "写し" in copy[0]["what"],
               "消えた写しは cp の元で照合する (❌ にしない)")
         res = []
         _capture(lambda: res.append(report(sid[:8], [Path(t, "projects")], root, True, False, drop_dirs=(drop,))))
-        check(res == [(0, 15)], "保存なし・もう無い = 15 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・"
-              "取得の道具の 5 件・other・vanished・dl・WebFetch の PDF・メールの添付)")
+        check(res == [(0, 16)], "保存なし・もう無い = 16 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・"
+              "取得の道具の 5 件・other・vanished・dl・WebFetch の PDF・メールの添付・読む道具に渡した PDF)")
         out = json.loads(_capture(lambda: report(sid[:8], [Path(t, "projects")], root, True, True, drop_dirs=(drop,))))
-        check(out["unsaved"] == 15 and out["repos"] == 1, "json も同じ数")
+        check(out["unsaved"] == 16 and out["repos"] == 1, "json も同じ数")
     print("selftest: " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
 
