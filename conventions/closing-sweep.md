@@ -23,7 +23,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 - <a id="delegated-sweep"></a>**ある session の締めを別の worker に渡す** (元の session が止まった・context が大きい・別 vendor に任せる) ときは、 依頼の spec に 3 つ書く:
   (1) 対象の session の完全な id と記録の種類 (Claude Code か Codex)。 worker にとって上の「この session」 は対象の session で、 その種類の道具で読む = Claude の session なら 0.3・0.5 の道具を対象の id で回し、 0.95 の inventory (Codex の session 用) は使わない
   (2) 既に済んだ拾い出し (考え方・研究の中身の回収など) の結果の file。 それを入力にして拾い直させない
-  (3) 触らせない file (提出前の原稿など) は本人に聞くこと、 保護された file は B に当たらない変更を本人に聞くこと ([#protected-files-need-ruling](#protected-files-need-ruling))。
+  (3) 触らせない file (提出前の原稿など) と、 保護された file のうち B に当たらない変更は本人に聞くこと ([#protected-files-need-ruling](#protected-files-need-ruling))。
   元の session が掲示板の依頼の依頼元なら、 検収は依頼元か本人の番で、 締めを受けた worker は状態を記録するだけ (実測: この 3 つを書いた spec で、 別 vendor の worker が Claude Code の session の締めを最後まで回した)。
   <a id="delegated-reply-knowledge-check"></a>[#reply-knowledge](#reply-knowledge) の処分の file は worker が書いて `--check` を通し、 依頼元も自分の締めの turn で同じ `--check` の 1 行を回す = 締めの turn を確かめる Stop hook は、 その session の会話記録の中の `--check` しか見ない (worker の窓で通しても依頼元の turn には数えない)。 worker は結果の file と提出に、 依頼元がそのまま回せる 1 行を書く (実測: worker が書いた処分の file を、 依頼元が自分の窓で回して通した)。
   worker は道具に `--delegated` を付けて回す = 最後の圧縮の後の、 問いでない依頼への返事も P として並ぶ (既定では出ない = 依頼元の context にはあるが、 worker の context には無い。 実測: 付ける前は worker が会話記録を手で抜き出して読んだ)。 依頼元に渡す 1 行にも同じく付ける。
