@@ -1726,9 +1726,11 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
             if not exempt["ok"]:
                 # 表示の案内 (依頼がすでに含むなら聞き直さない) は文書本体だけ。 正本の参照の行は従来どおり
                 add(k, kind, (PROSE_DETAIL if k == "authority:file" else "") + exempt["reason"])
-                # 止めた追記の記録 (denied-log) 用。 断った件の網なら締めた文 (言い直しの文も) = 承認の前に返事で見せる文
-                shown = " ".join(_tightened_texts(exempt)) if exempt.get("refusal") else ""
-                changes[-1]["inserted"] = collapse_ws(shown or exempt.get("inserted") or "")[:200]
+                # 止めた追記の記録 (denied-log) 用。 断った件の網なら締めた文 (言い直しの文も) = 承認の前に返事で見せる文。
+                # 締めた文の単位 (規則の側が分けた箇条・文) は改行で区切って残す (空白でつなぐと句点の無い箇条が 1 文に戻り、
+                # 片方だけの候補の承認で印が外れた = 照合の実測)
+                shown = "\n".join(collapse_ws(t) for t in _tightened_texts(exempt)) if exempt.get("refusal") else ""
+                changes[-1]["inserted"] = (shown or collapse_ws(exempt.get("inserted") or ""))[:200]
                 if exempt.get("refusal"):
                     changes[-1]["refusal"] = True  # 断った件の網で止めた = 承認は止めた後の本人の発言だけ (approve が確かめる)
                     changes[-1]["refusal_repo"] = str(repo) if repo else ""  # 止めた印を repo ごとに分ける (同じ名の file)
@@ -2779,18 +2781,70 @@ def _norm_shown(text: str) -> str:
     return _SHOWN_DROP.sub("", text or "")
 
 
+_UNIT_STOP = re.compile(r"(?<=[。．｡!！?？])|(?<=\.)(?=\s|$)")  # 文の終わり (ASCII の点は後ろが空白か行末のときだけ)
+_UNIT_BULLET = re.compile(r"^\s*(?:[-*+•・]\s*|\d{1,3}[.)．）](?=\s)\s*|[（(]\d{1,3}[)）]\s*)")  # 行頭の箇条の印
+_UNIT_COMMA = re.compile(r"(?<=[、，,])")
+
+
+def _split_topics(sentence: str) -> list[str]:
+    """読点でつないだ 1 文を、 両側がそれぞれ禁止の形と名詞を持つところで分ける (「A は置かず、 B も録画しない」 = 2 つの
+    話題)。 片側にしか禁止の形の無い読点 (「確認の後に、 X を書かない」) と、 片側に名詞の無い読点 (「X は残さず、 使わない」)
+    では分けない (名詞の無い片は外せない印と、 返事の別の所の同じ字で見せた扱いになる鍵を作った = 照合の実測)。"""
+    pieces = _UNIT_COMMA.split(sentence)
+    if len(pieces) < 2:
+        return [sentence]
+    out: list[str] = []
+    cur = ""
+    for i, p in enumerate(pieces):
+        cur += p
+        rest = "".join(pieces[i + 1:])
+        if rest and _prohibits(cur) and _prohibits(rest) and _refusal_nouns(cur) and _refusal_nouns(rest):
+            out.append(cur)
+            cur = ""
+    out.append(cur)
+    return out
+
+
+def _units(text: str) -> list[str]:
+    """止めた文・締めた文を文の単位に分ける。 印の照合・承認の候補が運ぶかの照合・見せたかの鍵がこの 1 つを使う (片方の道の
+    分け方だけを広げると、 対の道に後退ができた = 照合の実測)。 改行 (行頭の箇条の印 「-」「・」「1.」 は落とす)・句点
+    (全角ピリオド、 ASCII の文末の点を含む) で分け、 読点でつないだ 2 つの話題も分ける (_split_topics)。 空の単位は落とす。
+    名詞の無い単位 (「- 使わない」 の行・「e.g.」 や「9a.」 で割れた片・記録の 200 字の切れ目に残った字) は話題を持たない
+    ので、 前の単位 (先頭なら次の単位) につなぐ。"""
+    raw: list[str] = []
+    for line in (text or "").split("\n"):
+        line = _UNIT_BULLET.sub("", line, count=1)
+        for s in _UNIT_STOP.split(line):
+            raw.extend(u.strip() for u in _split_topics(s) if _norm_shown(u))
+    out: list[str] = []
+    carry = ""
+    for u in raw:
+        if not _refusal_nouns(u):
+            if out:
+                out[-1] = out[-1] + " " + u
+            else:
+                carry = (carry + " " + u).strip()
+            continue
+        out.append((carry + " " + u).strip() if carry else u)
+        carry = ""
+    if carry:
+        out.append(carry)
+    return out
+
+
 def _sentences(texts: list[str]) -> list[str]:
-    """文に分けた止めた文・締めた文 (空でないもの)。"""
-    return [s.strip() for x in texts for s in re.split(r"(?<=[。.!！?？\n])", x or "") if _norm_shown(s)]
+    """文に分けた止めた文・締めた文 (空でないもの、 分け方 = _units)。"""
+    return [u for x in texts for u in _units(x or "")]
 
 
 def _shown_keys(texts: list[str], min_len: int = SHOWN_MIN_LEN) -> list[tuple[str, ...]]:
     """見せたかの鍵 = 文ごとに、 短い文はその全体、 長い文は頭 SHOWN_KEY_LEN 字と末尾 SHOWN_TAIL_LEN 字 (比べる形)。 文ごとに
-    作る = 止めた文が 2 文のとき鍵が 2 文をまたいで、 箇条で見せた形を断った (照合の実測)。 min_len より短い文は鍵にしない
+    作る = 止めた文が 2 文のとき鍵が 2 文をまたいで、 箇条で見せた形を断った (照合の実測)。 文の分け方は _units (印の照合と
+    同じ)。 min_len より短い文は鍵にしない
     (止めた文がそのまま候補に在るかを見る鍵は既定の SHOWN_MIN_LEN、 候補が書く締めの文から作る見せたかの鍵は 1 = 下限なし)。"""
     keys: list[tuple[str, ...]] = []
     for x in texts:
-        for s in re.split(r"[。.!！?？\n]", x or ""):
+        for s in _units(x or ""):
             n = _norm_shown(s)
             if len(n) < max(1, min_len):
                 continue
@@ -5509,6 +5563,66 @@ def refusal_tightening_selftests(check) -> None:
                                     "lifts_block": at6(1).isoformat(timespec="seconds")}, ensure_ascii=False) + "\n")
             check("回帰: 前の版の承認の記録 (lifts_block が 1 つの文字列) も読んで印を外す",
                   not open_marks(("claude", "sess-r10"), "CLAUDE.md", str(repo)))
+            # 句点で区切れていない止めた文 (句点の無い箇条・全角ピリオド・読点でつないだ 2 つの話題) も文に分ける (照合の実測 =
+            # 1 文と数えて、 片方だけの候補の承認で印が外れ、 もう片方の締めも通った)
+            check("文の分け方: 句点の無い箇条・番号の箇条・全角ピリオド・読点でつないだ 2 つの話題は 2 文、 片側にしか禁止の"
+                  "形の無い読点と語の中の点では分けない",
+                  _units("- 写真は外部の共有に置かない\n- 会議は録画しない") == ["写真は外部の共有に置かない", "会議は録画しない"]
+                  and _units("1. 写真は外部の共有に置かない\n2. 会議は録画しない") == ["写真は外部の共有に置かない",
+                                                                                         "会議は録画しない"]
+                  and _units("写真は外部の共有に置かない．会議は録画しない．") == ["写真は外部の共有に置かない．", "会議は録画しない．"]
+                  and _units("写真は外部の共有に置かず、 会議も録画しない。") == ["写真は外部の共有に置かず、", "会議も録画しない。"]
+                  and _units("確認の後に、 写真を外部の共有に置かない。") == ["確認の後に、 写真を外部の共有に置かない。"]
+                  and _units("notes.md に写真を置かない。") == ["notes.md に写真を置かない。"])
+            mark6("sess-r13s", 1, "写真は外部の共有に置かない。")
+            chs13 = [c for c in protected_changes("CLAUDE.md", cur5, cur5 + "- 写真は外部の共有に置かない\n- 会議は録画しない\n",
+                                                  repo, session=("claude", "sess-r13s"), refusal_live=False)
+                     if c.get("refusal")]
+            check("止めた文の記録は締めた文の単位を改行で区切って残す (空白でつなぐと句点の無い箇条が 1 文に戻った = 照合の実測)",
+                  bool(chs13) and _units(chs13[0].get("inserted", "")) == ["写真は外部の共有に置かない", "会議は録画しない"])
+            for sid13, text13 in (("sess-r13b", "- 写真は外部の共有に置かない\n- 会議は録画しない"),
+                                  ("sess-r13p", "写真は外部の共有に置かない．会議は録画しない．"),
+                                  ("sess-r13c", "写真は外部の共有に置かず、 会議も録画しない。")):
+                mark6(sid13, 1, text13)
+                rc13 = approve6(sid13, [("assistant", iso6(2), "差分です: 会議は録画しない"), ("user", iso6(3), "当てて")],
+                                "会議は録画しない。\n")
+                check(f"回帰 ({sid13}): 句点で区切れていない 2 つの話題の印は、 片方だけの候補の承認では外れず、 もう片方の"
+                      "締めは止め続ける",
+                      rc13 == 0 and len(open_marks(("claude", sid13), "CLAUDE.md", str(repo))) == 1
+                      and stops6(sid13, "写真を外部の共有に置かない。\n"))
+                rc13b = approve6(sid13, [("assistant", iso6(4), "差分です:\n+ 写真を外部の共有に置かない\n+ 会議は録画しない"),
+                                         ("user", iso6(5), "当てて")], "写真を外部の共有に置かない。\n会議は録画しない。\n")
+                check(f"回帰 ({sid13}): 両方の話題を運ぶ候補の承認なら印を外す",
+                      rc13b == 0 and not open_marks(("claude", sid13), "CLAUDE.md", str(repo)))
+            mark6("sess-r13n", 1, "確認の後に、 写真を外部の共有に置かない。")
+            check("回帰: 片側にしか禁止の形の無い読点の文は 1 文のまま = その文を運ぶ候補の承認で印を外す (分けすぎない)",
+                  approve6("sess-r13n", [("assistant", iso6(2), "差分です: 確認の後に、 写真を外部の共有に置かない"),
+                                         ("user", iso6(3), "当てて")], "確認の後に、 写真を外部の共有に置かない。\n") == 0
+                  and not open_marks(("claude", "sess-r13n"), "CLAUDE.md", str(repo)))
+            check("文の分け方: 名詞の無い片 (読点の後の「使わない」・箇条の「- 使わない」・「9a.」) は話題を持たないので前後の"
+                  "単位につなぐ (外せない印と、 別の所の同じ字で見せた扱いになる鍵を作った = 照合の実測)",
+                  _units("写真は外部に残さず、 使わない。") == ["写真は外部に残さず、 使わない。"]
+                  and _units("- 写真は外部の共有に置かない\n- 使わない") == ["写真は外部の共有に置かない 使わない"]
+                  and _units("9a. 写真は外部の共有に置かない") == ["9a. 写真は外部の共有に置かない"])
+            mark6("sess-r13u", 1, "写真は外部に残さず、 使わない。")
+            check("回帰: 名詞の無い片を含む止めた文の印も、 その文を見せた後の承認で外れる (外せない印を作らない)",
+                  approve6("sess-r13u", [("assistant", iso6(2), "差分です: 写真は外部に残さず、 使わない"),
+                                         ("user", iso6(3), "当てて")], "写真は外部に残さず、 使わない。\n") == 0
+                  and not open_marks(("claude", "sess-r13u"), "CLAUDE.md", str(repo)))
+            mark6("sess-r13e", 1, "写真は外部に残さず、 使わない。")
+            check("回帰: 名詞の無い片だけが返事の別の所に出ても、 見せた扱いにしない (照合の実測)",
+                  approve6("sess-r13e", [("assistant", iso6(2), "写真は外部に残さず (ほかの道具は使わない。)"),
+                                         ("user", iso6(3), "当てて")], "写真は外部に残さず、 使わない。\n") == 5)
+            mark6("sess-r13k", 1, "1. 写真は外部の共有に置かない\n2. 会議は録画しない")
+            check("回帰: 番号の箇条の締めは、 番号を落として見せた返事への発言でも記録して印を外す (見せたかの鍵も同じ分け方)",
+                  approve6("sess-r13k", [("assistant", iso6(2), "差分です: 写真は外部の共有に置かない / 会議は録画しない"),
+                                         ("user", iso6(3), "当てて")], "1. 写真は外部の共有に置かない\n2. 会議は録画しない\n") == 0
+                  and not open_marks(("claude", "sess-r13k"), "CLAUDE.md", str(repo)))
+            long13 = "写真は研究室の外部の共有フォルダにも個人の端末にも置かず、 会議は研究室の会議でも外部の会議でも録画しない。"
+            mark6("sess-r13l", 1, long13)
+            check("回帰: 2 つの話題の長い締めで、 1 つめの頭と 2 つめの末尾だけを見せた返事への発言は記録しない (鍵は話題ごと)",
+                  approve6("sess-r13l", [("assistant", iso6(2), "差分です: 写真は研究室の外部の共有フォルダにも個人 … 外部の会議でも録画しない"),
+                                         ("user", iso6(3), "当てて")], long13 + "\n") == 5)
             cx = root / "codex-shown.jsonl"
             cx.write_text("".join(json.dumps(o, ensure_ascii=False) + "\n" for o in (
                 {"type": "response_item", "timestamp": iso6(2), "payload": {"type": "message", "role": "assistant",
