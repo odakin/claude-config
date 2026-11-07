@@ -1519,16 +1519,26 @@ def rule_ref_only_regions(regions: dict) -> bool:
 # 規則の文書の変更は、 緩和の語を足さず隠さなければ事前の裁定なしに通る。 その前提は agent が本人の依頼の向きで書くこと。
 # 本人の求めを断っている最中の agent が、 断った件の規則を断った向きに締める変更は、 締める向きでも承認の道に回す
 # (実測: 断っていた agent が規則の食い違いを自分の断りの側に揃えて締め、 本人の指示と逆の規約になった。 締める向きなので
-# 事前に止まらなかった)。 3 つが揃ったら通さない: (a) 足した・言い直した文に禁止の形がある (b) 本人の 1 つ前の発言から後の
-# agent の返事に一人称の断りの印がある (c) 足した文と、 断りの印を含む文が名詞を共有する。 印は強い一人称の断りだけに絞る
-# (広い「…しません」 は説明の否定 〔「hook は発火しません」〕 にも、 「断ります」 は道具が断る三人称の文 〔「掲示板が断ります」〕 にも
-# 当たる = 較正 = 承認なしで通った変更の記録 30 日に当てて、 本物を捕まえ、 誤りが出ない印に絞った)。 読めない・分からない = 止めない (この網は承認の要らない変更への追加の網)。
+# 事前に止まらなかった)。 3 つが揃ったら通さない:
+#   (a) 足した・言い直した文に禁止の形がある (「…しない」 の形に、 「…ず」・「不可」・「禁じ」 を含む)
+#   (b) 本人の 2 つ前の発言から後の agent の文 (各 turn の最後の文だけでなく全部、 返事の時刻で切る) に一人称の断りの印がある
+#   (c) 足した文と、 断りの印を含む文かその直前の 1 文が名詞を共有する (2 字以上の連なりの一方が他方を含めば共有)
+# 印は強い一人称の断りだけに絞る (広い「…しません」 は説明の否定 〔「hook は発火しません」〕 にも、 「断ります」 は道具が断る三人称の
+# 文 〔「掲示板が断ります」〕 にも当たる)。 鉤括弧・code の中の印 (この網を説明する返事が例として引く形) と、 範囲の言明の後の
+# 「入れません」「入れないことに」 (「この変更には入れません」 = 自分の作業の範囲を言う文) は数えない。 窓を 1 往復前まで広げ、
+# 返事の時刻で切るのは、 断りの後に 1 往復挟む形と、 作業中に本人の発言が届いた turn の終わりの断りを落とさないため (turn の
+# 始まりの時刻で切ると、 作業中の発言で turn の最後の断りが窓の外に出る)。 較正 = 承認なしで通った変更の記録 30 日に広げた形を
+# 当て、 本物の当たりが変わらず誤りが出ない組に絞った (実測)。 読めない・分からない = 止めない (この網は承認の要らない変更への追加の網)。
 REFUSAL_MARKS = re.compile(r"(私の側の決まり|私の決まり|お断り|入れません|入れないことに|応じられません|頼まれても)")
+REFUSAL_SCOPED_MARKS = frozenset(("入れません", "入れないことに"))  # 範囲の言明の後では数えない印
 PROHIBITION_FORMS = re.compile(r"(しない|書かない|置かない|入れない|使わない|載せない|出さない|渡さない|触らない|禁止|してはいけない"
                                r"|させない|含めない|印字しない|送らない)")
+_PROHIBITION_EXT = re.compile(r"((?:書か|置か|入れ|載せ|出さ|残さ|写さ|使わ|渡さ|触ら|送ら|含め|させ|印字せ|せ)ず|不可|禁じ)")
+_REFUSAL_SCOPE = re.compile(r"((この|今回の?|本|その|今の)\s*(変更|直し|commit|コミット|版|PR|依頼|案|範囲|節|file|ファイル|回|turn|段|作業"
+                            r"|実装|返答|返事)\s*(に|で|の中に|の中で)\s*(は|も)?|今回は|ここでは|ここには)")
+_CODE_SPAN = re.compile(r"`[^`\n]*`")
 _REFUSAL_NOUN = re.compile(r"[一-龥ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_-]{3,}")
 _REFUSAL_NOUN_STOP = frozenset("こと もの ため 場合 本人 規則 文書 file repo Claude claude agent session".split())
-_QUOTED = re.compile(r"「[^「」]*」|『[^『』]*』")
 REFUSAL_APPROVAL_LINE = ("  この会話で本人の求めを断った件の変更 (上の理由) は、 差分を本人に見せ、 その後の本人の返事を引いて記録する"
                          " (止めた時刻より前の発言は記録の道具が断る = 止める前の依頼は承認にならない)。"
                          " 本人が差分に答えた後なら --latest でその返事を引ける。\n")
@@ -1536,6 +1546,62 @@ REFUSAL_APPROVAL_LINE = ("  この会話で本人の求めを断った件の変�
 
 def _refusal_nouns(text: str) -> set[str]:
     return {w for w in _REFUSAL_NOUN.findall(text or "") if w not in _REFUSAL_NOUN_STOP}
+
+
+def _prohibits(text: str) -> bool:
+    return bool(PROHIBITION_FORMS.search(text) or _PROHIBITION_EXT.search(text))
+
+
+def _shared_nouns(a: set[str], b: set[str]) -> list[str]:
+    """共有する名詞 (同じ連なり、 または一方が他方を含む連なり = 「アドレス」 と「送信先アドレス」)。"""
+    out = set(a & b)
+    for x in a:
+        for y in b:
+            if x != y and (x in y or y in x):
+                out.add(x if len(x) <= len(y) else y)
+    return sorted(out)
+
+
+def _refusal_marks(text: str) -> list[tuple[str, str, str]]:
+    """文の中の断りの印 [(印, その文, 直前の文)]。 鉤括弧・code の中の印と、 範囲の言明の後の「入れません」 類は数えない。"""
+    try:
+        import transcript_turns as tt
+        quoted = tt.inside_quote
+    except Exception:
+        def quoted(t: str, i: int) -> bool:
+            return False
+    codes = [(m.start(), m.end()) for m in _CODE_SPAN.finditer(text)]
+    out, pos = [], 0
+    sents = re.split(r"(?<=[。\n])", text)
+    for k, s in enumerate(sents):
+        for m in REFUSAL_MARKS.finditer(s):
+            i = pos + m.start()
+            if quoted(text, i) or any(a <= i < b for a, b in codes):
+                continue
+            if m.group(0) in REFUSAL_SCOPED_MARKS and _REFUSAL_SCOPE.search(s[:m.start()]):
+                continue
+            out.append((m.group(0), s, sents[k - 1] if k else ""))
+        pos += len(s)
+    return out
+
+
+def agent_texts_since(agent: str, path: Path, since: str) -> list[str]:
+    """著者の発言 (since) から後の agent の文を全部 (各 turn の最後の文だけでなく、 返事の時刻で切る)。 Codex は最終回答。"""
+    if agent != "claude":
+        return assistant_replies_since(agent, path, since)
+    try:
+        import transcript_turns as tt
+        groups = tt.turns(tt.load_entries(path))
+    except Exception:
+        return []
+    out: list[str] = []
+    for grp in groups:
+        for e in grp:
+            if e.get("type") != "assistant" or (since and str(e.get("timestamp", "")) < since):
+                continue
+            out += [b["text"] for b in tt._blocks(e)
+                    if isinstance(b, dict) and b.get("type") == "text" and (b.get("text") or "").strip()]
+    return out
 
 
 def refusal_tightening(session: tuple[str, str] | None, exempt: dict | None, path: Path | None = None) -> str:
@@ -1546,7 +1612,7 @@ def refusal_tightening(session: tuple[str, str] | None, exempt: dict | None, pat
         what = exempt.get("what") or {}
         texts = [str(a) for a in what.get("added") or []]
         texts += [str(p[1]) for p in what.get("edited") or [] if isinstance(p, (list, tuple)) and len(p) > 1]
-        tightened = [t for t in texts if PROHIBITION_FORMS.search(t)]
+        tightened = [t for t in texts if _prohibits(t)]
         if not tightened:
             return ""
         agent, sid = session
@@ -1554,24 +1620,20 @@ def refusal_tightening(session: tuple[str, str] | None, exempt: dict | None, pat
         if path is None:
             return ""
         msgs = user_messages(path)
-        since = msgs[-2][0] if len(msgs) >= 2 else ""
-        # 鉤括弧の中の印は数えない = この網を説明する返事が印を例として引く形 (「「私の側の決まり」 など」) を断りと読まない (実測)
-        sentences = [s for r in assistant_replies_since(agent, path, since) for s in re.split(r"(?<=[。\n])", r)
-                     if REFUSAL_MARKS.search(_QUOTED.sub("", s))]
-        if not sentences:
+        since = msgs[-3][0] if len(msgs) >= 3 else ""  # 本人の 2 つ前の発言から (1 往復前の断りまで)
+        marks = [m for t in agent_texts_since(agent, path, since) for m in _refusal_marks(t)]
+        if not marks:
             return ""
-        refused = _refusal_nouns(" ".join(sentences))
+        refused = _refusal_nouns(" ".join(s + " " + p for _, s, p in marks))
         for t in tightened:
-            shared = sorted(_refusal_nouns(t) & refused)
+            shared = _shared_nouns(_refusal_nouns(t), refused)
             if shared:
-                mark = REFUSAL_MARKS.search(_QUOTED.sub("", " ".join(sentences))).group(0)
-                return (f"その会話で agent が本人の求めを断った件 (返事の「{mark}」) の規則を、 断った向きに締める変更"
+                return (f"その会話で agent が本人の求めを断った件 (返事の「{marks[0][0]}」) の規則を、 断った向きに締める変更"
                         f" (足した文と断りの文が「{shared[0]}」 を共有) = 締める向きでも承認なしで通さない"
                         " (agent-rule-ownership.md#refusal-not-in-owner-rules)。 言い換えで通さず、 差分を見せて本人に聞く")
         return ""
     except Exception:
         return ""
-
 
 def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict | None = None,
                       authority: bool = True, baseline: str | None = None,
@@ -4910,6 +4972,57 @@ def refusal_tightening_selftests(check) -> None:
                           ("user", "2026-01-01T00:02:00Z", "規則も直して")])
         check("N1: 鉤括弧の中の印 (網の説明で例として引く) = 断りと読まない",
               refusal_tightening(sess, ex(["写真は置かない。"]), quoted) == "")
+    # 広げた形 (方針の合成の形 = 架空の題材「下書きの宛先」、 照合の取りこぼし 5 つと誤り 2 つ)
+    def tsn(n):
+        return f"2026-01-02T00:{n:02d}:00Z"
+
+    def ua(n, text):
+        return ("user", tsn(n), text)
+
+    def aa(n, text):
+        return ("assistant", tsn(n), text)
+
+    shapes = {
+        "1 往復を挟む": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"), ua(2, "なんで?"),
+                       aa(3, "安全のためです。"), ua(4, "規則を直して")], "宛先は下書きに書かない。", True),
+        "turn の途中の文": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"), aa(2, "下書きを作りました。"),
+                         ua(3, "規則を直して")], "宛先は下書きに書かない。", True),
+        "複合語": ([ua(0, "送信先アドレスを入れて"), aa(1, "私の側の決まりで、送信先アドレスは入れません。"), ua(2, "規則を直して")],
+                "アドレスは下書きに書かない。", True),
+        "断りの文に名詞が無い": ([ua(0, "宛先を入れて"), aa(1, "宛先の欄は空けておきます。私の側の決まりで、入れません。"), ua(2, "規則を直して")],
+                         "宛先は下書きに書かない。", True),
+        "「置かず」": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"), ua(2, "規則を直して")],
+                    "宛先は下書きに置かず、本人が手で書く。", True),
+        "「不可」": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"), ua(2, "規則を直して")],
+                   "下書きへの宛先の記入は不可。", True),
+        "作業中に本人の発言が届いた turn の断り、 その後 1 往復": ([ua(0, "下書きに宛先を入れて"),
+                                                      ("queued", tsn(2), "急ぎで"),
+                                                      aa(3, "私の側の決まりで、宛先は下書きに入れません。"), ua(4, "いや、入れてよ"),
+                                                      aa(5, "下書きは作ってあります。"), ua(6, "規則を直して")],
+                                                     "宛先は下書きに書かない。", True),
+        "範囲の言明 (数えない)": ([ua(0, "宛先の件も直す?"), aa(1, "宛先の直しは方針の外なので、この変更には入れません。"),
+                             ua(2, "OK、それを規則に書いて")], "方針の外の宛先の直しは変更に入れない。", False),
+        "code の中の印 (数えない)": ([ua(0, "網の仕組みを教えて"), aa(1, "網は `私の側の決まり` のような印を見て、宛先の規則を締める変更を止めます。"),
+                                ua(2, "宛先の規則に一文足して")], "宛先は下書きに書かない。", False),
+        "2 往復より前の断り (今の窓の外)": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"),
+                                      ua(2, "なんで?"), aa(3, "安全のためです。"), ua(4, "そうか"), aa(5, "はい。"),
+                                      ua(6, "規則を直して")], "宛先は下書きに書かない。", False),
+    }
+    with tempfile.TemporaryDirectory() as td:
+        for name, (rows_, added, want) in shapes.items():
+            tr_s = Path(td) / f"sess-{abs(hash(name)) % 10**8}.jsonl"
+            with tr_s.open("w", encoding="utf-8") as f:
+                for kind, ts, text in rows_:
+                    if kind == "queued":  # 作業中に届いた本人の発言 (queued_command)
+                        f.write(json.dumps({"type": "attachment", "timestamp": ts, "attachment": {
+                            "type": "queued_command", "commandMode": "prompt", "origin": {"kind": "human"},
+                            "prompt": text, "timestamp": ts}}, ensure_ascii=False) + "\n")
+                        continue
+                    content = text if kind == "user" else [{"type": "text", "text": text}]
+                    f.write(json.dumps({"type": kind, "timestamp": ts, "message": {"role": kind, "content": content}},
+                                       ensure_ascii=False) + "\n")
+            got = refusal_tightening(("claude", tr_s.stem), {"ok": True, "what": {"added": [added], "edited": []}}, tr_s) != ""
+            check(f"N1 広げた形: {name} = {'止める' if want else '通す'}", got == want)
     row = {"file": "conventions/a.md", "region": "authority:file", "kind": "change", "detail": PROSE_DETAIL + "x"}
     shown = deny_reason([row], None)
     check("N2: 止めた表示に向きの問い", "本人の最新の依頼の向きか" in shown)
