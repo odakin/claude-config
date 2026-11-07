@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee) + 編集者が再審を許したあと、 referee に転送される返答書と編集者だけへの文を書くとき (#reconsideration-reply) + preprint を読んだ人への返信で約束した本文の修正を、 改訂・投稿の前に原稿と照合するとき (#promised-edits-check) + 読み手が引いた式・文献の番号を版ごとに正確に出すとき (#exact-numbers-per-version) + 返答書の答えを中身を変えずに縮める・簡潔に書き直すとき (#condensing-a-reply)
+when: referee report への point-by-point 返信を書くとき + 不採択の直後に編集者へ第 2 referee を頼む返信を書くとき (#ask-editor-second-referee) + 編集者が再審を許したあと、 referee に転送される返答書と編集者だけへの文を書くとき (#reconsideration-reply) + preprint を読んだ人への返信で約束した本文の修正を、 改訂・投稿の前に原稿と照合するとき (#promised-edits-check) + 読み手が引いた式・文献の番号を版ごとに正確に出すとき (#exact-numbers-per-version) + 返答書の答えを中身を変えずに縮める・簡潔に書き直すとき (#condensing-a-reply) + 共著者が書いた返答書に修正案を出すとき・出した案を一部だけ取り下げるとき (#stepwise-edit-proposals)
 category: paper
 summary: referee report への point-by-point 返信 (= author response) 作成 6 reflex (= 回答は本文 grep 照合・起源でない文献は see e.g.・referee 誤記は静かに正す・自己否定語回避・全 comment フル引用・旧式番号は submission 版基準)、 paper-audit.md と相補。 不採択の直後の 1 通 (専任の編集者に確かめられる事実 1 つ・誤読を言い切る 1 文・report の限定まで引いて答える) = #ask-editor-second-referee
 -->
@@ -12,6 +12,8 @@ paper revision で referee report に point-by-point 回答する rebuttal lette
 **書く前**: 返答書 (と、 それへの共同研究者のコメントに答える案) を著者の代わりに起草するときは、 英文の下書きの前に方針 (答える論点と骨子・referee や共同研究者の主張の採否と拠り所・原稿の変更の要否・著者に決めてもらうこと) を出して著者の確認を取る。 下請けに起草を渡すなら依頼を方針の段と起草の段に分ける = [`concise-output.md#policy-before-draft`](concise-output.md#policy-before-draft)。
 
 **書き終えたら**: 出す前に、 別の agent に段落ごとに答えになっているかを判定させる。 共著者の文を残して間に文を足したときは、 報告に「変えていない」 と書かない = [#answer-fit-check](#answer-fit-check)。
+
+**共著者が書いた返答書に直しを出すとき**: 全部の答えの直しを一度に出さず、 答えの段ごとに 1 段ずつ出して、 収束してから次の段へ = [#stepwise-edit-proposals](#stepwise-edit-proposals)。
 
 ## 構造
 
@@ -211,6 +213,15 @@ referee の段落を 1 文ずつ引いて直後に答える形 (一問一答を�
 2. **噛み合わない段落を直し、 直した段落をもう一度判定させてから出す** — 段落が共著者の書いた文なら、 書き手は変えず、 判定と理由をその文を書いた人に知らせる ([#per-sentence-reply](#per-sentence-reply) の 3 と同じ)。 段落・要旨・判定の一覧は検収に添える (直した前後を突き合わせられる)。
    <a id="critic-sandbox-copy"></a>**批判役に渡す写しは、 作業の場所の外に 2 file だけ置く** — 返答書の tex から comment を剥がした写し (ai-collaboration の `scripts/strip-tex-comments.py`、 剥がした後に `scripts/check-review-target.py` で comment 0) と referee の報告を、 作業ルートの外の空の dir に置く (作業ルートの中に置くと、 祖先の CLAUDE.md や隣の方針の file が批判役に届く = [`cold-eyes-isolation.md`](../../ai-collaboration/conventions/cold-eyes-isolation.md))。 剥がした写しを組んで、 本文の字が元と同じかを 1 回比べる (`pdftotext` の差 0)。 依頼の指示には、 読む file としてその 2 つを名指しし、 ほかの file・repo・履歴を開かないと書く。 掲示板で頼むなら `--review-target <写し>` を付ける (要約が査読に読める依頼は、 写しが無いと投稿されない)。 判定の表は検収の記録にそのまま載せ、 書き手の見立てが違う所は別の表に書く (混ぜると、 方針を知らない目の判定がどれだったか分からなくなる)。 批判役は原稿を持たないので、 物理・数値・番号の正しさは見ない = 書き手の確かめは別に残す。 直して判定し直させるときは、 写しを差し替え、 同じ批判役に直した答えだけを判定させ、 1 回目の表は変えずに 2 回目を足させる (書き手は 1 回目の部分が変わっていないことを確かめる)。 実測: 方針を知らない批判役が、 書き手の見落とした段落どうしの食い違い (最後の一覧で「関係ない」 と呼んだ節を答えの根拠に使う、 下の [#unrelated-changes](#unrelated-changes) の 1) と、 書き手が足した文と冒頭の 1 文の食い違いを見つけた。
 3. <a id="do-not-say-unchanged"></a>**他人の文を変えずに間へ文を入れると文意が変わりうる。 報告で「変えていない」 は使わない** — 共著者の文を一字一句残して置き直したとき・文と文の間に文を足したときは、 送り状や報告に「文は変えず、 〜と〜の間に〜を足した」 と、 足した文と場所を書く。 [#per-sentence-reply](#per-sentence-reply) の 2 の照らしが示すのは字面が同じことだけで、 文意が同じことではない。 間に入った文で前を受ける語 (同 6) や結論の文の受け先が変わると、 書いた人は自分の文が変えられたと読む (実測)。
+
+## <a id="stepwise-edit-proposals"></a>共著者が書いた返答書に修正案を出す: 答えの段ごとに 1 段ずつ、 収束してから次へ
+
+主筆の共著者が書いた返答書に、 照合で見つけた直しをまとめて出さない。 複数の答えにまたがる直し・組み方の変更・最後の一覧の整理を 1 つの差分にすると、 受け取った側は 1 回で全部を確かめきれず、 全体を差し戻す (実測)。
+
+1. **段を決めて 1 段ずつ出す** — 段は答え (A1〜An) の単位で、 順番は主筆が決める。 1 つの段で出すのは、 その段の答えの直しだけを当てた版からの差分と、 その段についての問いだけ。 次の段の直しは、 前の段の案が収束した (主筆が採った・直した) 版の上に作る。 先の段の問いを前倒しで出さない。
+2. **組み方の変更と、 段をまたぐ直しは、 それを扱う段まで出さない** — 段をまたぐ直し = 冒頭の番号の 1 文、 最後の一覧 ([#unrelated-changes](#unrelated-changes))、 複数の答えの語を揃える直し。 組み方を変える案 ([#per-sentence-reply](#per-sentence-reply)) も、 中身の段が収束してから出す。
+3. **出した直しの一部だけを残すときは、 残す直しが取り下げる直しに依っていないかを 1 件ずつ見る** — 答えの中の場所にある直しでも、 別の直しに合わせて入れたものがある。 例 (架空): 答えの中で末尾の一覧を指す句を消す直しは、 一覧を削る直しに合わせたもの。 一覧を元に戻すなら、 その句を消す直しも外す (残すと、 一覧は残るのに答えから一覧を指す句だけが消える)。 段ごとの版は、 直しの一覧を 1 か所 (直しを当てる script の表) に持ち、 そこから選んで作る = 直しの文を段ごとに写さない (写すと段ごとの版で同じ直しの文が食い違う)。
+4. **主筆の依頼で進め方を変えたら、 その project の規則の文書に主筆の言葉のまま書く** — 次の session が同じ形で一度に出さないため。 1 段を出すたびに [#answer-fit-check](#answer-fit-check) の判定を当てる (前の判定を受けた文と同じ段落は、 判定の表を引けばよい)。
 
 ## <a id="unrelated-changes"></a>referee の指摘と関係ない変更: 返答書での扱いと、 入れる時期
 
