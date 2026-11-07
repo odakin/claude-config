@@ -34,7 +34,8 @@ owner の枠表 (授業の時間割など) と学期の暦の読み方・予定�
 - ⏳ 時刻の無い担当 (untimed、 窓 = 既定 14 日先まで、 days がそれより長ければ days) = 終日の予定 (複数日を含む) のうち
   題名が台帳の duty_titles に当たり duty_skip_titles に当たらないもの (duty_skip_calendars のカレンダーは見ない) を、 同じ日に時刻のある予定があれば「重なるかは
   見ていない」 として 1 予定 1 件で返す (重なりとは言わない = 終日は占有に数えないので、 判定できていないことを言う)。
-  同じ日に題名の頭の語 (title_head) が入った時刻のある予定があれば、 その日は時刻つきで入っているとみなして出さない。
+  同じ日に題名の頭の語 (title_head) が同じ時刻のある予定があれば、 その日は時刻つきで入っているとみなして出さない
+  (頭の語の一致。 部分一致にすると「催し」 の終日に同じ日の「催し委員会 (別件)」 が当たって黙る)。
   台帳に duty_titles が無ければ何も返さない (担当の語は owner の台帳が持つ = コードに焼かない)。 通知はしない
 
 ## 台帳 (YAML、 置き場所は adapter が決める)
@@ -278,7 +279,7 @@ def untimed_duties(events: list[dict], today: date, days: int | None = None, led
         d = max(d0, today)
         while d <= min(d1, last):
             occ = event_occupancies(events, d, ledger.get("ignore"), travel_re or TRAVEL_RE)
-            if not (head and any(head in o["title"] for o in occ)):
+            if not (head and any(title_head(o["title"]) == head for o in occ)):
                 if occ:
                     counts.append((d.isoformat(), len(occ)))
             d += timedelta(days=1)
@@ -774,6 +775,8 @@ def _selftest() -> int:
         A("2030-09-26", "催し: 受付担当"),
         E("2030-09-26", "14:00", "15:30", "催し 受付 (時刻つき)"),
         E("2030-09-26", "16:00", "17:00", "別の会議"),
+        A("2030-10-03", "行事: 当番"),
+        E("2030-10-03", "10:00", "11:00", "行事委員会 (別件)"),
         A("2030-09-27", "📝 期間の目印 (当番)"),
         E("2030-09-27", "09:00", "10:00", "朝の会議"),
         A("2030-09-28", "当番の担当 (予定なしの日)"),
@@ -793,6 +796,8 @@ def _selftest() -> int:
     check("催し: 受付担当" not in by_t, "U2 同じ日に頭の語 (催し) の入った時刻つきの予定がある日は出さない")
     check("📝 期間の目印 (当番)" not in by_t, "U3 duty_skip_titles に当たる題名は出さない")
     check("当番の担当 (予定なしの日)" not in by_t, "U4 その日に時刻のある予定が無ければ出さない")
+    check(by_t.get("行事: 当番", {}).get("counts") == [("2030-10-03", 1)],
+          "U2 頭の語が違う (行事 ≠ 行事委員会) 時刻つきの予定では黙らない (部分一致にしない)")
     long_ = by_t.get("未確定: 長い担当 (受付)", {})
     check(long_.get("counts") == [("2030-09-29", 1), ("2030-10-01", 2)] and len([u for u in ud if u["title"] == long_.get("title")]) == 1,
           "U5 複数日の担当は予定のある日だけ数え、 複数のカレンダーにあっても 1 件")
@@ -807,13 +812,13 @@ def _selftest() -> int:
     check(not any(c["a"]["title"].startswith("【仮】") or c["b"]["title"].startswith("【仮】") for c in res_u["conflicts"]),
           "U9 終日の担当は重なりの組には入らない (従来どおり)")
     rows_u = [r for r in digest_rows(res_u, today) if r.startswith("  ⏳ ")]
-    check(len(rows_u) == 2 and all("見ていない" in r and "時刻つきで入れる" in r for r in rows_u)
+    check(len(rows_u) == 3 and all("見ていない" in r and "時刻つきで入れる" in r for r in rows_u)
           and any("9/29(日)〜10/1(火)" in r and "9/29 1 件・10/1 2 件" in r for r in rows_u),
           "U10 digest の ⏳ 行 (複数日は期間と日ごとの数)")
     check(not any(r.startswith("  🚨") or r.startswith("  ⚠️") for r in rows_u), "U10 ⏳ 行は 🚨 / ⚠️ で始めない")
     check(all(k[1] in res_u["conflicts"] for k in notify_targets(res_u, today, {})), "U11 ⏳ は通知しない (通知は重なりだけ)")
     check(any(ln.startswith("  ⏳ ") for ln in list_lines(res_u, today, "fixture"))
-          and "時刻の無い担当 2 件 (14 日先まで)" in list_lines(res_u, today, "fixture")[1], "U12 --list に ⏳ と件数")
+          and "時刻の無い担当 3 件 (14 日先まで)" in list_lines(res_u, today, "fixture")[1], "U12 --list に ⏳ と件数")
     check(title_head("【仮】大きな行事 1日目 (担当)") == "大きな行事" and title_head("未確定: 長い担当 (受付)") == "長い担当"
           and title_head("催し: 受付担当") == "催し" and title_head("") == "", "U13 題名の頭の語 (印・コロン・括弧で切る)")
 
