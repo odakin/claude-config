@@ -1533,14 +1533,15 @@ REFUSAL_MARKS = re.compile(r"(私の側の決まり|私の決まり|お断り|�
 REFUSAL_SCOPED_MARKS = frozenset(("入れません", "入れないことに"))  # 範囲の言明の後では数えない印
 PROHIBITION_FORMS = re.compile(r"(しない|書かない|置かない|入れない|使わない|載せない|出さない|渡さない|触らない|禁止|してはいけない"
                                r"|させない|含めない|印字しない|送らない)")
-_PROHIBITION_EXT = re.compile(r"((?:書か|置か|入れ|載せ|出さ|残さ|写さ|使わ|渡さ|触ら|送ら|含め|させ|印字せ|せ)ず|不可(?![欠能避])|禁じ)")
+_PROHIBITION_EXT = re.compile(r"((?:書か|置か|入れ|載せ|出さ|残さ|写さ|使わ|渡さ|触ら|送ら|含め|させ|印字せ|せ)ず|不可(?![欠能避視逆解分])|禁じ)")
 _REFUSAL_SCOPE = re.compile(r"((この|今回の?|本|その|今の)\s*(変更|直し|commit|コミット|版|PR|依頼|案|範囲|節|file|ファイル|回|turn|段|作業"
                             r"|実装|返答|返事)\s*(に|で|の中に|の中で)\s*(は|も)?|今回は|ここでは|ここには)")
 _CODE_SPAN = re.compile(r"`[^`\n]*`")
 _REFUSAL_NOUN = re.compile(r"[一-龥ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_-]{3,}")
 _REFUSAL_NOUN_STOP = frozenset("こと もの ため 場合 本人 規則 文書 file repo Claude claude agent session".split())
-REFUSAL_APPROVAL_LINE = ("  この会話で本人の求めを断った件の変更 (上の理由) は、 差分を本人に見せ、 その後の本人の返事を引いて記録する"
-                         " (止めた時刻より前の発言は記録の道具が断る = 止める前の依頼は承認にならない)。"
+REFUSAL_APPROVAL_LINE = ("  この会話で本人の求めを断った件の変更 (上の理由) は、 止めた文をそのまま返事に引いて差分を本人に見せ、"
+                         " その後の本人の返事を引いて記録する (止めた時刻より前の発言と、 止めた文を見せていない返事への発言は"
+                         " 記録の道具が断る = 止める前の依頼も答えでない発言も承認にならない)。"
                          " 本人が差分に答えた後なら --latest でその返事を引ける。\n")
 
 
@@ -1564,12 +1565,23 @@ def _shared_nouns(a: set[str], b: set[str]) -> list[str]:
 
 def _refusal_marks(text: str) -> list[tuple[str, str, str]]:
     """文の中の断りの印 [(印, その文, 直前の文)]。 鉤括弧・code の中の印と、 範囲の言明の後の「入れません」 類は数えない。
-    鉤括弧は印の後に閉じがあるときだけ引用と読む (閉じていない「 の後の断りは数える)。"""
+    鉤括弧は印を囲む括弧が後ろで閉じているときだけ引用と読む (閉じていない「 の後の断りは、 後ろに別の閉じた「」 があっても
+    数える = 照合の実測)。"""
     try:
         import transcript_turns as tt
 
         def quoted(t: str, i: int) -> bool:
-            return tt.inside_quote(t, i) and any(ch in tt.CLOSE_Q for ch in t[i:])
+            if not tt.inside_quote(t, i):
+                return False
+            depth = 1  # 印を囲むいちばん内側の括弧から数える
+            for ch in t[i:]:
+                if ch in tt.OPEN_Q:
+                    depth += 1
+                elif ch in tt.CLOSE_Q:
+                    depth -= 1
+                    if depth == 0:
+                        return True
+            return False
     except Exception:
         def quoted(t: str, i: int) -> bool:
             return False
@@ -1616,12 +1628,14 @@ def _tightened_texts(exempt: dict | None) -> list[str]:
 
 
 def _approved_after(session: tuple[str, str], rel: str, repo: str, at: _dt.datetime) -> bool:
-    """その session でその file に、 時刻 at より後の本人の発言を引いた承認が記録されているか。"""
+    """その session でその file に、 時刻 at の印を外す承認 (止めた後の本人の発言を引き、 止めた文を含む候補 = approve が
+    `lifts_block` に印の時刻を書いたもの) が記録されているか。"""
     for a in load_approvals(*session):
         if a.get("repo") != repo or str(a.get("file", "")).replace("\\", "/") != rel.replace("\\", "/"):
             continue
         t = _utc(str(a.get("quote_time") or ""))
-        if t is not None and t > at:
+        lifted = _utc(str(a.get("lifts_block") or ""))
+        if t is not None and t > at and lifted is not None and lifted >= at.replace(microsecond=0):
             return True
     return False
 
@@ -1697,9 +1711,13 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
             rp = str(repo) if repo else ""
             blocked = refusal_block_time(session, rel, rp)
             if blocked is not None and not _approved_after(session, rel, rp, blocked):
-                why = (f"この会話でこの file を断った件の網で止めた ({blocked.isoformat(timespec='seconds')}) = 止めた後の本人の承認が"
-                       "記録されるまで、 禁止の形の変更は網の窓に依らず承認なしで通さない"
-                       " (agent-rule-ownership.md#refusal-not-in-owner-rules)。 差分を見せて本人に聞く")
+                # 止めた文と名詞を共有する禁止の形だけを止める (同じ file の別の話題の禁止まで止めた = 照合の実測)。 止めた文が
+                # 記録に無い印は今までどおり止める
+                bt = _block_texts(session, rel, rp, blocked)
+                if not bt or _shared_nouns(_refusal_nouns(" ".join(_tightened_texts(exempt))), _refusal_nouns(" ".join(bt))):
+                    why = (f"この会話でこの file を断った件の網で止めた ({blocked.isoformat(timespec='seconds')}) = 止めた文を含む候補の"
+                           "承認が記録されるまで、 止めた文と同じ対象の禁止の形の変更は網の窓に依らず承認なしで通さない"
+                           " (agent-rule-ownership.md#refusal-not-in-owner-rules)。 止めた文を見せて本人に聞く")
         if why:
             exempt = {**exempt, "ok": False, "reason": why, "refusal": True}
     if exempt is not None and exempt["ok"]:
@@ -1717,7 +1735,9 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
             if not exempt["ok"]:
                 # 表示の案内 (依頼がすでに含むなら聞き直さない) は文書本体だけ。 正本の参照の行は従来どおり
                 add(k, kind, (PROSE_DETAIL if k == "authority:file" else "") + exempt["reason"])
-                changes[-1]["inserted"] = collapse_ws(exempt.get("inserted") or "")[:200]  # 止めた追記の記録 (denied-log) 用
+                # 止めた追記の記録 (denied-log) 用。 断った件の網なら締めた文 (言い直しの文も) = 承認の前に返事で見せる文
+                shown = " ".join(_tightened_texts(exempt)) if exempt.get("refusal") else ""
+                changes[-1]["inserted"] = collapse_ws(shown or exempt.get("inserted") or "")[:200]
                 if exempt.get("refusal"):
                     changes[-1]["refusal"] = True  # 断った件の網で止めた = 承認は止めた後の本人の発言だけ (approve が確かめる)
                     changes[-1]["refusal_repo"] = str(repo) if repo else ""  # 止めた印を repo ごとに分ける (同じ名の file)
@@ -2669,6 +2689,71 @@ def refusal_block_time(session: tuple[str, str] | None, rel: str, repo: str = ""
             if t is not None and (last is None or t > last):
                 last = t
     return last
+
+
+SHOWN_KEY_LEN, SHOWN_MIN_LEN = 20, 6  # 止めた文の頭の何字を返事に探すか / それより短い文は探さない
+
+
+def _norm_shown(text: str) -> str:
+    """止めた文と返事を比べる形: 行頭の箇条の印・空白・markdown の記号・引用符を落とす。"""
+    t = re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", text or "")
+    return re.sub(r"[\s`*>「」『』\"'“”]", "", t)
+
+
+def _shown_keys(texts: list[str]) -> list[str]:
+    """止めた文の頭 SHOWN_KEY_LEN 字 (比べる形)。 SHOWN_MIN_LEN より短い文は鍵にしない。"""
+    return [k[:SHOWN_KEY_LEN] for k in (_norm_shown(x) for x in texts) if len(k) >= SHOWN_MIN_LEN]
+
+
+def _block_texts(session: tuple[str, str] | None, rel: str, repo: str, at: _dt.datetime | None) -> list[str]:
+    """時刻 at に止めた印の行に残る、 止めた文 (denied-log の text)。"""
+    sess = f"{session[0]}:{session[1]}" if session else ""
+    out: list[str] = []
+    for e in load_denied_log():
+        if (e.get("refusal") and e.get("session") == sess and e.get("file") == rel
+                and not (repo and e.get("repo") and e.get("repo") != repo) and _utc(str(e.get("at", ""))) == at
+                and str(e.get("text") or "").strip()):
+            out.append(str(e["text"]))
+    return out
+
+
+def _shown_after_block(agent: str, path: Path, blocked_at: _dt.datetime, said_at: _dt.datetime, texts: list[str]) -> bool | None:
+    """止めた時刻と本人の発言の間の agent の文に、 止めた文 (頭 SHOWN_KEY_LEN 字) が出ているか。 止めた文が記録に無い・
+    会話記録が読めない = None (見ない)。 照合の実測: 止めた後の答えでない発言 (「それで」) を --latest が承認として記録した。"""
+    keys = _shown_keys(texts)
+    if not keys:
+        return None
+    try:
+        handle = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    with handle:
+        for line in handle:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(e, dict):
+                continue
+            t = _utc(str(e.get("timestamp", "")))
+            if t is None or not (blocked_at < t < said_at):
+                continue
+            if agent == "claude":
+                if e.get("type") != "assistant":
+                    continue
+                c = (e.get("message") or {}).get("content")
+                text = c if isinstance(c, str) else " ".join(
+                    b.get("text", "") for b in c or [] if isinstance(b, dict) and b.get("type") == "text")
+            else:
+                p = e.get("payload")
+                if not (isinstance(p, dict) and e.get("type") == "response_item" and p.get("type") == "message"
+                        and p.get("role") == "assistant"):
+                    continue
+                text = "".join(b.get("text", "") for b in p.get("content") or [] if isinstance(b, dict))
+            reply = _norm_shown(text)
+            if reply and any(k in reply for k in keys):
+                return True
+    return False
 
 
 def log_denials(left: list[dict], session: tuple[str, str] | None, mode: str) -> None:
@@ -3694,6 +3779,8 @@ def approve_mode(args: argparse.Namespace) -> int:
               file=sys.stderr)
         return 5
     blocked_at = refusal_block_time(session, rel, str(repo) if repo else "")
+    block_texts: list[str] = []
+    proposed: str | None = None
     if blocked_at is not None:
         said_at = _utc(str(hit[0] or ""))
         if said_at is None or said_at <= blocked_at:
@@ -3702,6 +3789,7 @@ def approve_mode(args: argparse.Namespace) -> int:
                   " その後の本人の返事を引く (止める前の依頼は承認にならない = agent-rule-ownership.md#refusal-not-in-owner-rules)。"
                   " 記録しない。", file=sys.stderr)
             return 5
+        block_texts += _block_texts(session, rel, str(repo) if repo else "", blocked_at)
     entry = {
         "v": 1, "repo": str(repo) if repo else "", "file": rel, "regions": args.region,
         "change": collapse_ws(args.change), "quote": collapse_ws(quote)[:2000],
@@ -3722,6 +3810,22 @@ def approve_mode(args: argparse.Namespace) -> int:
             print("approve: deleted-file candidate must be empty", file=sys.stderr)
             return 2
         entry["v"] = 3
+    if blocked_at is not None:
+        keys = _shown_keys(block_texts)
+        carries = bool(keys) and (proposed is None or any(k in _norm_shown(proposed) for k in keys))
+        # 止めた文を含む候補の承認は、 止めた時刻からこの発言までの agent の返事に止めた文が出ていることを要る (止めた後の
+        # 答えでない発言 (「それで」) を --latest が承認として記録した = 照合の実測)。 止めた文を含まない候補 (同じ file の
+        # 別の変更) の承認は見ない
+        if carries and _shown_after_block(session[0], transcript, blocked_at, said_at, block_texts) is False:
+            head = collapse_ws(block_texts[0])[:40]
+            print(f"approve: この file は断った件の網で止めた ({blocked_at.isoformat(timespec='seconds')})。 止めた時刻からこの発言"
+                  f" ({hit[0] or '時刻不明'} 「{said}」) までの agent の返事に、 止めた文 (「{head}」) が無い = 差分への答えと読めない"
+                  " (答えでない発言を承認にしない)。 記録しない。\n"
+                  "  止めた文をそのまま返事に引いて差分を本人に見せ、 その後の本人の返事を引いて打ち直す。", file=sys.stderr)
+            return 5
+        # 止めた印を外すのは、 止めた文を含む候補の承認だけ (その file の別の変更の承認で、 止めた締めが承認なしで通った = 照合の
+        # 実測)。 止めた文が記録に無い印は、 止めた後の承認なら外す (今までどおり)
+        entry["lifts_block"] = blocked_at.isoformat(timespec="seconds") if (carries or not keys) else ""
     ap = approvals_path(*session)
     ap.parent.mkdir(parents=True, exist_ok=True)
     with open(ap, "a", encoding="utf-8") as fh:
@@ -5033,6 +5137,11 @@ def refusal_tightening_selftests(check) -> None:
                                 "下書きの宛先の確認は不可欠。", False),
         "閉じていない「 の後の断り": ([ua(0, "下書きに宛先を入れて"), aa(1, "「下書きの件です。私の側の決まりで、宛先は下書きに入れません。"),
                                ua(2, "規則を直して")], "宛先は下書きに書かない。", True),
+        "閉じていない「 の後の断り、 後ろに別の閉じた「」": ([ua(0, "下書きに宛先を入れて"),
+                                              aa(1, "「下書きの件です。私の側の決まりで、宛先は下書きに入れません。「例」 も同じです。"),
+                                              ua(2, "規則を直して")], "宛先は下書きに書かない。", True),
+        "「不可視」 (禁止の形でない)": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"), ua(2, "規則を直して")],
+                                "下書きの宛先の欄は不可視。", False),
         "作業中に本人の発言が届いた turn の断り、 その後 1 往復": ([ua(0, "下書きに宛先を入れて"),
                                                       ("queued", tsn(2), "急ぎで"),
                                                       aa(3, "私の側の決まりで、宛先は下書きに入れません。"), ua(4, "いや、入れてよ"),
@@ -5123,9 +5232,17 @@ def refusal_tightening_selftests(check) -> None:
             rc2 = run_apply()
             check("apply: 止めた後も止める前の発言では書かない (approve が断る)", rc2 == 5 and doc.read_text(encoding="utf-8") == body)
             later = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            write_tr(trp, refused + [("assistant", later, "差分はこれです。 写真は入れないことにしています。"), ("user", later, "当てて")])
+            mid = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(seconds=30)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            write_tr(trp, refused + [("assistant", mid, "はい、 見ます。"), ("user", later, "それで")])
+            rc_na = run_apply()
+            check("apply: 止めた後でも、 止めた文を見せていない返事への発言 (答えでない発言) では書かない (照合の実測)",
+                  rc_na == 5 and doc.read_text(encoding="utf-8") == body)
+            check("止めた文が denied-log に残る (承認の前に返事で見せる文)",
+                  any("写真は外部の共有に置かない" in x
+                      for x in _block_texts(sb, "CLAUDE.md", str(repo), refusal_block_time(sb, "CLAUDE.md", str(repo)))))
+            write_tr(trp, refused + [("assistant", mid, "差分はこれです:\n- `写真は外部の共有に置かない。` を足す"), ("user", later, "当てて")])
             rc3 = run_apply()
-            check("apply: 差分を見せた後の本人の返事なら記録して書く", rc3 == 0 and doc.read_text(encoding="utf-8") == new)
+            check("apply: 止めた文を見せた後の本人の返事なら記録して書く", rc3 == 0 and doc.read_text(encoding="utf-8") == new)
             # 止めた印は網の窓に依らない (照合の実測: 止めた後に本人の答えでない発言が入ると、 断りが窓の外に出て同じ変更が通った)
             cur = doc.read_text(encoding="utf-8")
             more = cur + "写真は外部の共有にも置かない。\n"
@@ -5146,12 +5263,38 @@ def refusal_tightening_selftests(check) -> None:
             check("止めた印は repo ごと: 別の repo の同じ名の file の印は見ない",
                   refusal_block_time(sb2, "CLAUDE.md", str(repo)) is not None
                   and refusal_block_time(sb2, "CLAUDE.md", "/elsewhere/repo") is None)
+            check("止めた印: 止めた文と名詞を共有しない禁止の形 (同じ file の別の話題) は止めない (照合の実測)",
+                  not any(c.get("refusal") for c in protected_changes("CLAUDE.md", cur, cur + "会議は録画しない。\n", repo,
+                                                                      session=sb2)))
+            mark = refusal_block_time(sb2, "CLAUDE.md", str(repo))
+            other = root / "cand-other.md"
+            other.write_text(cur + "写真の例外は本人が決めてよい。\n", encoding="utf-8")
+            more_cand = root / "cand-more.md"
+            more_cand.write_text(more, encoding="utf-8")
+
+            def approve_latest(cand_path):
+                ns = argparse.Namespace(file=str(doc), region=["authority:file"], change="z", quote=None, latest=True,
+                                        session=f"claude:{sid2}", transcript=None, candidate=str(cand_path), target_mode=None)
+                with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                    return approve_mode(ns)
+            check("止めた文を含む候補の承認: 止めた文を見せていない返事への発言 (「それで?」) では記録しない",
+                  approve_latest(more_cand) == 5)
+            check("止めた文を含まない候補 (同じ file の別の変更) の承認: 止めた文を見せていなくても記録し、 印は外さない",
+                  approve_latest(other) == 0 and not _approved_after(sb2, "CLAUDE.md", str(repo), mark)
+                  and any(c.get("refusal") for c in protected_changes("CLAUDE.md", cur, more, repo, session=sb2)))
             ap2 = approvals_path(*sb2)
             ap2.parent.mkdir(parents=True, exist_ok=True)
+            with ap2.open("a", encoding="utf-8") as f:  # 止めた文を含まない候補の承認 (別の変更) = 印は外れない
+                f.write(json.dumps({"v": 1, "repo": str(repo), "file": "CLAUDE.md", "regions": ["authority:file"], "change": "y",
+                                    "quote": "それは当てて", "quote_time": t4, "session": f"claude:{sid2}", "lifts_block": ""},
+                                   ensure_ascii=False) + "\n")
+            check("止めた印: 止めた文を含まない候補の承認 (別の変更) の後も、 止めた締めは止める (照合の実測)",
+                  any(c.get("refusal") for c in protected_changes("CLAUDE.md", cur, more, repo, session=sb2)))
             with ap2.open("a", encoding="utf-8") as f:
                 f.write(json.dumps({"v": 1, "repo": str(repo), "file": "CLAUDE.md", "regions": ["authority:file"], "change": "x",
-                                    "quote": "当てて", "quote_time": t4, "session": f"claude:{sid2}"}, ensure_ascii=False) + "\n")
-            check("止めた印: 止めた後の本人の発言を引いた承認の後は、 印で止めない",
+                                    "quote": "当てて", "quote_time": t4, "session": f"claude:{sid2}",
+                                    "lifts_block": mark.isoformat(timespec="seconds")}, ensure_ascii=False) + "\n")
+            check("止めた印: 止めた文を含む候補の承認 (止めた後の本人の発言を引いた) の後は、 印で止めない",
                   not any(c.get("refusal") for c in protected_changes("CLAUDE.md", cur, more, repo, session=sb2)))
             # commit の検査は止めた印のある file だけ (前の turn に通った追記を後の断りで止めない = 照合の実測)
             sb3 = ("claude", "sess-rc")
