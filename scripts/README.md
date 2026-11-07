@@ -50,6 +50,7 @@
 - **[check-abbreviations.py](check-abbreviations.py)** — Abbreviation hygiene for LaTeX manuscripts: each abbreviation is defined once, at the FIRST body
 - **[check-activity-facts.py](check-activity-facts.py)** — Keep the owner's non-public activity facts (what was applied for, when, how many, what the office said, which deadline passed) out of public repos: pre-commit / commit-msg check on added lines, --scan-tree inventory with an ack list, --replay calibration, --selftest.
 - **[check-american-spelling.py](check-american-spelling.py)** — Reject curated British spellings in live LaTeX prose and figure text.
+- **[check-attributed-quotes.py](check-attributed-quotes.py)** — 共著者・編集者・referee に出す文の下書きで、 他人 (referee・共著者・文献) に帰して鉤括弧・引用符で引いた文が原文の部分文字列かを数え、 違うものを行で出す (空白・改行・引用符は寄せて比べる。 engine = scripts/lib/attributed_quotes.py、 --selftest)。
 - **[check-calendar-app-sync.py](check-calendar-app-sync.py)** — Mac の Calendar.app が各アカウントと同期できているかを **この機械で** 見る。
 - **[check-ci-red.py](check-ci-red.py)** — GitHub Actions の red 検出器（repo 横断で「default branch の最新 completed run が失敗中の workflow」 を列挙し、 連続失敗 run 数・継続時間・最後の success を印字、 長期 red を 🚨 で強調。 取得失敗は「検査不能」 行で明示 = 黙って緑にしない、 finding 0 件 silent、 --as-of で過去時点を再現、 --selftest 内蔵。 対象 = --repo / --owner / 個人層の repo 一覧 (--from-repos-md、 未 clone・remote 未設定も検査不能行に)、 呼び出し側 = 個人層 dashboard / session 開始 hook）
 - **[check-codex-integration.py](check-codex-integration.py)** — Codex SoT, session drift, Hook, and trigger-wiring gate.
@@ -467,6 +468,7 @@
 - **[lib/agents-entrypoint-warn.test.sh](lib/agents-entrypoint-warn.test.sh)** — CLAUDE.md だけの repo で鳴り、 AGENTS.md を stage / track すると・opt-out で・CLAUDE.md が無いと鳴らない
 - **[lib/artifact-presentation.mjs](lib/artifact-presentation.mjs)** — Shared @oai/artifact-tool presentation builder: editable primitives, notes, finalization, and page renders.
 - **[lib/artifact-presentation.test.mjs](lib/artifact-presentation.test.mjs)** — Hermetic self-test for artifact-presentation.mjs; uses a fake slide API and needs no Office app.
+- **[lib/attributed_quotes.py](lib/attributed_quotes.py)** — 外に出す文の中で他人 (referee・共著者・文献) に帰して引いた文が、 原文の部分文字列かを数える engine (CLI = scripts/check-attributed-quotes.py、 送信の道具 discord-post.py と送信の CLI が import する)。
 - **[lib/browser_tab.py](lib/browser_tab.py)** — 起動中の Chromium 系 browser に裏で tab を 1 枚開かせ、 行き先を見て、 自分が開いた tab だけを閉じる (macOS)。 SSO 保護サイトの login 切れからの復帰用
 - **[lib/chat_file_refs.py](lib/chat_file_refs.py)** — chat の最終発話にある file 参照 (markdown link の href と、 path に見える inline code) を、 Claude Code desktop app の右パネルと同じ基準で解決し、 開けないものに正しい path を添えて返す共通部品 (Stop hook chat-file-ref-enforce.sh と校正が共用)
 - **[lib/class_meetings.py](lib/class_meetings.py)** — 授業の「第何回か」 をクラスのカレンダーから数え、 撮影時刻を時限に振り分ける helper (python3 class_meetings.py で selftest)

@@ -65,6 +65,19 @@ fetching one member by id does not. Only 404 / code 10007 (Unknown Member) count
 absent; the bot itself is probed in every guild as a control, and a guild where the
 control is not "present" makes the run exit 4 (its "absent" cannot be trusted)
 (conventions/discord-bot.md #third-party-bot-breach-triage).
+
+--quote-source FILE (repeatable) checks, before the dry run and before --send, that every
+quotation the text attributes to someone else (a referee, a coauthor; the text inside
+「…」 / “…” / "…" or a "> " block, attributed by a word such as "referee" in the same
+sentence) is a substring of the original FILE, with whitespace, line breaks and quote
+characters normalised. A quotation that is not in the original is listed; --send then
+refuses with exit 5 until the text quotes the original's words, or until
+--allow-unmatched-quote '<reason>' is given (engine = scripts/lib/attributed_quotes.py,
+CLI = scripts/check-attributed-quotes.py). Without --quote-source the script only notes how
+many attributed quotations the text has (one line, never blocks). Why: a paraphrase put
+inside quotation marks reaches a coauthor as the referee's words (実測), and the writer
+reads it back with the original's meaning (conventions/rebuttal-letter.md
+#pre-send-verification-sheet).
 """
 import argparse
 import json
@@ -486,6 +499,31 @@ def _explain(code, body):
     return "\n".join(msgs)
 
 
+def _quote_gate(body, sources, allow_reason):
+    """(lines to print, block --send?) for the attributed-quotation check (--quote-source)."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
+    try:
+        import attributed_quotes as aq
+    except ImportError as e:
+        if sources:  # the check was asked for and cannot run = do not send
+            return [f"quote check: cannot load scripts/lib/attributed_quotes.py ({e})"], True
+        return [], False
+    if not sources:
+        n = len(aq.attributed(body))
+        if not n:
+            return [], False
+        return [f"note: {n} quotation(s) attributed to someone else; to check them against the "
+                f"original add --quote-source <file> (conventions/rebuttal-letter.md"
+                f"#pre-send-verification-sheet)"], False
+    texts = [open(p, encoding="utf-8", errors="replace").read() for p in sources]
+    quotes = aq.check_text(body, texts)
+    lines = ["quote check (--quote-source):"] + ["  " + s for s in aq.format_report(quotes, "message")]
+    if aq.failures(quotes) and allow_reason:
+        lines.append(f"  sending anyway: --allow-unmatched-quote {allow_reason!r}")
+        return lines, False
+    return lines, bool(aq.failures(quotes))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--token-file")
@@ -521,6 +559,12 @@ def main(argv=None):
     p.add_argument("--save-attachments", metavar="DIR",
                    help="with --message: download its attachments into DIR (a new or empty "
                         "directory; scan them before importing)")
+    p.add_argument("--quote-source", action="append", default=[], metavar="FILE",
+                   help="original text (e.g. the referee report as txt); quotations the message "
+                        "attributes to someone else must be substrings of it, or --send refuses "
+                        "(exit 5). Repeat for several originals")
+    p.add_argument("--allow-unmatched-quote", metavar="REASON",
+                   help="send although an attributed quotation is not in --quote-source (say why)")
     p.add_argument("--selftest", action="store_true")
     a = p.parse_args(argv)
 
@@ -630,6 +674,16 @@ def main(argv=None):
     if len(body) > 2000:
         print(f"message too long for Discord ({len(body)} > 2000 chars)", file=sys.stderr)
         return 2
+    for path in a.quote_source:
+        if not os.path.isfile(path):
+            print(f"quote source not found: {path}", file=sys.stderr); return 2
+    quote_lines, quote_block = _quote_gate(body, a.quote_source, a.allow_unmatched_quote)
+    for line in quote_lines:
+        print(line, file=sys.stderr if quote_block else sys.stdout)
+    if quote_block and a.send:
+        print("not sent: a quotation attributed to someone else is not in --quote-source "
+              "(quote the original's words, or --allow-unmatched-quote '<reason>')", file=sys.stderr)
+        return 5
     # attachment existence + size soft-warn (API returns 40005 for the hard limit)
     for path in a.attach:
         if not os.path.isfile(path):
@@ -648,6 +702,9 @@ def main(argv=None):
                 extra += f"\n  attach: {path} ({os.path.getsize(path)} B)"
         print(f"[dry run] would post {len(body)} chars to {target}{extra}; "
               f"re-run with --send after the draft is approved")
+        if quote_block:
+            print("note: --send will refuse (exit 5) until the quotations above match "
+                  "--quote-source or --allow-unmatched-quote '<reason>' is given")
         if _wants_mass_mention(body):
             if a.channel:
                 # read-only GETs; nothing is posted in a dry run
@@ -803,6 +860,24 @@ def selftest():
     import inspect
     src = inspect.getsource(main)
     check("send gated behind --send", "if not a.send:" in src)
+    # --quote-source: an attributed quotation not in the original blocks --send, before the POST
+    check("quote gate runs before the dry run / send branch",
+          src.index("_quote_gate(body") < src.index("if not a.send:"))
+    with tempfile.TemporaryDirectory() as td:
+        orig = os.path.join(td, "orig.txt")
+        with open(orig, "w", encoding="utf-8") as fh:
+            fh.write("The bias appears when the sample is restricted to the northern stations.\n")
+        lines, block = _quote_gate('The referee says "the bias is small everywhere".', [orig], None)
+        check("quote gate: invented attributed quotation blocks", block and any("✗" in s for s in lines))
+        lines, block = _quote_gate('The referee writes "restricted to the northern stations".', [orig], None)
+        check("quote gate: verbatim quotation passes", not block)
+        lines, block = _quote_gate('The referee says "the bias is small everywhere".', [orig], "checked by hand")
+        check("quote gate: --allow-unmatched-quote passes with the reason shown",
+              not block and any("checked by hand" in s for s in lines))
+        lines, block = _quote_gate('The referee says "the bias is small everywhere".', [], None)
+        check("quote gate: no source -> one note, never blocks", not block and len(lines) == 1)
+        lines, block = _quote_gate("hello all", [], None)
+        check("quote gate: no quotation -> silent", not block and not lines)
     # mass-mention pre-check: Discord permission order on synthetic ids (G = @everyone role)
     G, BOT, R = "g1", "u-bot", "r-bot"
     ME, ADM = MENTION_EVERYONE, ADMINISTRATOR

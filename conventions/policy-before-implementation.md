@@ -40,7 +40,7 @@ summary: 実装に入る前に方針を短く出して本人のフィードバ�
 
 ## <a id="drafting"></a>文の起草の場合 (返信・返答書・共同研究者や編集者への文)
 
-本人の名で出す文の起草も実装の 1 つで、 いきなり下書きを書かず、 先に方針を出して本人の確認を取り、 確認の後に起草する。 方針の 4 要素: (1) 答える論点と骨子 (何を主張し、 何を主張しないか) (2) 相手の主張の、 そのまま採る・言い直す・採らないの別と拠り所 (原典の頁・式、 文書の節。 確かめられなかったものは未確認と書く) (3) 返答の文の外で変えるもの (原稿・書類・予定) があるか (4) 本人に決めてもらうこと (1 項目 1 問いと推す答え)。 方針は短く書き、 答える先の元の文を同じ返事に見せる ([`concise-output.md#show-the-source-being-answered`](concise-output.md#show-the-source-being-answered))。 長い下書きを先に出すと、 本人は下書きを読み通してから方針の誤りに気づき、 下書きは方針ごと書き直しになる (実測: 下書きへの直しの多くが方針の段の誤りだった)。 範囲 = 中身に判断を含む文 (相手の主張に答える・採否を決める・頼む・断る・約束する・事情を説明する)。 頼まれた中身と記録の事実だけで文が決まる短い返信 (受領の礼・日程の承諾・頼まれた書類の送付・記録にある事実の回答) は、 方針と下書きがほぼ同じ文になるので、 全文を見せる段から始める。 確認の後に起草した文は、 これまでどおり全文を見せて送る OK をもらう。 返答書を段落ごとに照合する事例 = [`rebuttal-letter.md`](rebuttal-letter.md)。
+本人の名で出す文の起草も実装の 1 つで、 いきなり下書きを書かず、 先に方針を出して本人の確認を取り、 確認の後に起草する。 方針の 4 要素: (1) 答える論点と骨子 (何を主張し、 何を主張しないか) (2) 相手の主張の、 そのまま採る・言い直す・採らないの別と拠り所 (原典の頁・式、 文書の節。 確かめられなかったものは未確認と書く) (3) 返答の文の外で変えるもの (原稿・書類・予定) があるか (4) 本人に決めてもらうこと (1 項目 1 問いと推す答え)。 方針は短く書き、 答える先の元の文を同じ返事に見せる ([`concise-output.md#show-the-source-being-answered`](concise-output.md#show-the-source-being-answered))。 長い下書きを先に出すと、 本人は下書きを読み通してから方針の誤りに気づき、 下書きは方針ごと書き直しになる (実測: 下書きへの直しの多くが方針の段の誤りだった)。 範囲 = 中身に判断を含む文 (相手の主張に答える・採否を決める・頼む・断る・約束する・事情を説明する)。 頼まれた中身と記録の事実だけで文が決まる短い返信 (受領の礼・日程の承諾・頼まれた書類の送付・記録にある事実の回答) は、 方針と下書きがほぼ同じ文になるので、 全文を見せる段から始める。 確認の後に起草した文は、 これまでどおり全文を見せて送る OK をもらう。 共著者・編集者・referee に出す文で、 直しの案か他人の文についての言明を含むものは、 全文と一緒に照合票を見せる ([`rebuttal-letter.md#pre-send-verification-sheet`](rebuttal-letter.md#pre-send-verification-sheet))。 返答書を段落ごとに照合する事例 = [`rebuttal-letter.md`](rebuttal-letter.md)。
 
 ## <a id="delegating"></a>下請けに渡すとき
 
@@ -51,7 +51,7 @@ summary: 実装に入る前に方針を短く出して本人のフィードバ�
 
 ## <a id="post-implementation-check"></a>実装の後の照合
 
-成果物の各部分が、 依頼の問いと確認済みの方針に答えているかを、 書いた者でない目 (別の session・subagent) で照合してから見せる。 方針が正しくても、 実装が依頼に答えているかは別に崩れる。 照合させる側は、 依頼と確認済みの方針と成果物を渡し、 結論は渡さない (渡すと照合が結論の確認になる)。 やり方の正本 = [`multi-session-coordination.md#delegate-output-inspection`](multi-session-coordination.md#delegate-output-inspection) / [`#review-handoff`](multi-session-coordination.md#review-handoff)、 見せる直した文を当てた形で検査に通すこと = [`concise-output.md#check-the-proposal-before-showing`](concise-output.md#check-the-proposal-before-showing)。 返答書を段落ごとに照合する形は [`rebuttal-letter.md`](rebuttal-letter.md) の事例で、 この節はその一般則。
+成果物の各部分が、 依頼の問いと確認済みの方針に答えているかを、 書いた者でない目 (別の session・subagent) で照合してから見せる。 方針が正しくても、 実装が依頼に答えているかは別に崩れる。 照合させる側は、 依頼と確認済みの方針と成果物を渡し、 結論は渡さない (渡すと照合が結論の確認になる)。 やり方の正本 = [`multi-session-coordination.md#delegate-output-inspection`](multi-session-coordination.md#delegate-output-inspection) / [`#review-handoff`](multi-session-coordination.md#review-handoff)、 見せる直した文を当てた形で検査に通すこと = [`concise-output.md#check-the-proposal-before-showing`](concise-output.md#check-the-proposal-before-showing)。 返答書を段落ごとに照合する形と、 共著者・編集者・referee に出す文 (直しの案か他人の文についての言明を含むもの) を送る前の照合票 (原文・こちらの文・出した者・照らしたこと・照らしていないこと を送る文面と一緒に本人に見せる) は [`rebuttal-letter.md`](rebuttal-letter.md) の事例 (照合票 = [`#pre-send-verification-sheet`](rebuttal-letter.md#pre-send-verification-sheet)) で、 この節はその一般則。 照合する目が下請けなら、 その下請けが他人の文について出した読みも、 原文と照らすまで仮説 ([`multi-session-coordination.md#delegate-output-inspection`](multi-session-coordination.md#delegate-output-inspection) の 3)。
 
 ## <a id="reporting"></a>実装の報告
 

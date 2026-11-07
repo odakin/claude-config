@@ -37,7 +37,7 @@ failure form (実測、 genericized):
 
 規律 (帰属 5 規律への追加 4 本):
 
-6. <a id="named-claim-verify"></a>**名指し × {誤り・訂正・批判・優先権・反駁} 語彙の文を書いた瞬間 = 一次記録との突合 gate。** 検証は安価 (repo grep 1 発 / 文献 DB 1 引き): 名指しの姓が対象論文の著者 list に実在するか・自分側の記録にその人の誤りを発見した record が実在するかを見る。 実測の誤 gloss (「X ら = arXiv:NNNN」) は当該 arXiv の著者 list と 1 手で矛盾していた。
+6. <a id="named-claim-verify"></a>**名指し × {誤り・訂正・批判・優先権・反駁} 語彙の文を書いた瞬間 = 一次記録との突合 gate。** 検証は安価 (repo grep 1 発 / 文献 DB 1 引き): 名指しの姓が対象論文の著者 list に実在するか・自分側の記録にその人の誤りを発見した record が実在するかを見る。 実測の誤 gloss (「X ら = arXiv:NNNN」) は当該 arXiv の著者 list と 1 手で矛盾していた。 **他人の言明の要約・引用 (「X は … と言っている」「X は … と言うだけ」) も、 誤り・訂正の語が無くても同じ突合に入る** = 発火の語に当たらない言い換えが、 原文の主節を落としたまま鉤括弧つきで対外の便に出た (実測)。 原文と並べて照らし、 鉤括弧で括るのは原文の部分文字列だけ (形と機械の検査 = [`rebuttal-letter.md#pre-send-verification-sheet`](rebuttal-letter.md#pre-send-verification-sheet) の 2)。
 7. **内部略称は対外文書に出る前に正式名へ解決してから書く** (グループの中立識別子規約があればそれに従う)。 略称のまま生成に渡すと衝突展開の入力になる。
 8. **検証できない名指しは削る** — 多くの場合、 真実 (自著の誤りを機械検証で検出・訂正した等) の方が主張として強い (instance rule = [kakenhi-proposal.md #mock-review-and-claims](kakenhi-proposal.md#mock-review-and-claims))。
 9. **derived 文書間の帰属不一致を見つけたら、 解決方向は「互いに合わせる」 でなく「SoT に対して検証」。** 具体度が高い方を真とみなす specificity bias に注意 — 実測の増幅 mode では、 整合性 sweep が匿名で正しい記録を名指しの誤りに「特定」 して**裏付け文書を製造**した (= 整合性軸は内部無矛盾しか見えず、 coherent な誤りを捕まえられない)。

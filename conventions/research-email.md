@@ -350,6 +350,8 @@ origin: 大手出版社の commissioning 部門から分野違いの低 tier OA 
 
 **Why**: 相手に履歴 UI を開かせるのは受け手の作業を増やす。 添付 1 枚なら返信の障壁が下がる。
 
+**直しの案や、 他人の文 (referee・共著者・文献) についての言明を含む便は、 送る前に照合票を作って送る文面と一緒に見せる** (返答書のほかの便も = [`rebuttal-letter.md#pre-send-verification-sheet`](rebuttal-letter.md#pre-send-verification-sheet))。 他人に帰した引用が原文の部分文字列かは `scripts/check-attributed-quotes.py` か送信の道具の `--quote-source` で数える。
+
 **続報の diff の base** (2026-09-14): 前便でも diff を送っていたなら、 次の diff の base は**前便の diff の新しい側の commit** (= 相手の手元にある版) にする。 それより古い版を base にすると、 相手は既に見た変更と新しい変更を区別できない。 投稿の報告でも同じ (投稿した版 vs 前便で送った版、 [`paper-submission.md#arxiv-coauthor-notice`](paper-submission.md#arxiv-coauthor-notice))。
 
 ## <a id="no-unreadable-paths"></a>共著者への便で、 相手が読めない場所 (非公開の repo の path・手元の file) を指さない
