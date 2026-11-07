@@ -37,6 +37,7 @@ PHPSESSID 等のセッションは不要。response は Shift_JIS の CSV。
 
 - **地点一覧**: `POST /risk/obsdl/top/station` に `pd=<都道府県番号>&format=json` → **JSON**。 `pd=00` が都道府県の表 (`prefTable` の `type: "pref"` の `prid`・`name`)、 `pd=<prid>` がその都道府県の地図の marker の list (`markers`)。 marker の `kind: "station"` の要素が地点で、 `stid` (官署 `s47xxx` / アメダス `a` + 4 桁)・`stname`・`kansoku`・`ended` (観測終了)・`title` (カナ・北緯・東経・標高・「YYYY年MM月DD日に観測終了」) を持つ。 同じ地点の大小 2 つの marker が並ぶので `stid` で 1 つにまとめる。 都道府県番号は観測所番号の上 2 桁と同じ並び (富山=55, 長野=48, 岐阜=52, 三重=53) だが、 沖縄は `pd=91` 1 つにまとまる
 - **`kansoku` は bitmask ではなく 6 文字の文字列**: 位置 i の文字が `"1"` か `"2"` なら画面はその観測種目のアイコンを出す (= 観測あり)。 位置の意味は JS の配列で、 0 = 降水量、 1 = 風、 2 = 気温、 3 = 日照時間、 4 = 積雪・降雪、 5 = その他。 `"2"` の意味は JS に書かれていない (アメダスの四要素地点の日照の位置に出る)。 ⚠️ 官署はどれも全位置が観測ありの同じ値で、 **時別値があるか・いつからかは分からない** (= 期間はデータ本体で確かめる)
+  - 実測: 官署の中にも、 時別の降水量の品質情報がほぼ全期間 `0` (観測・統計項目ではない) の地点がある。 行数はそろうので行数の検算では分からない = 選んだ地点が値を持つかは品質符号の分布で確かめる ([#long-record-qc](#long-record-qc) の 2)
 - **要素番号**: 要素の一覧は AJAX でなく bundle の中の静的な配列にある (例: 時別値の `value: "101"` = 降水量 (前 1 時間)、 `"201"` = 気温)。 bundle を日本語の要素名で検索して番号を読む
 - 呼び方の一次資料 = `web/dist/whatsnewHistory.js` (`top.bundle.js` が import する module。 地点 AJAX の関数と観測種目の配列がここにある)。 読み方は [#protocol-from-page-js](#protocol-from-page-js)
 
