@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
 category: infra
-summary: 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる)、 element/地点 ID の動的発見 (#element-station-discovery、 地点一覧は JSON・kansoku は 6 文字の文字列・要素表は bundle の中)、 「地域気象観測所一覧」 と obsdl の地点の対応 (#station-master-mapping = 官署 ID は s + 国際地点番号で観測所番号と別・観測開始年月日は今の観測所番号での開始・航空気象観測所は a の ID・cp932)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness)、 CSV の位相 (24 時 = 翌日 0 時)・エンコーディング・ブロック境界の gotcha (#csv-format-gotchas)、 現象なし情報/品質情報/均質番号の一次資料の意味 (#quality-columns)、 長期系列を使う前の QC 点検 4 点 = 行数の暦検算・品質符号の分布・痕跡時間 (実測 15%)・記録分解能の年代 (#long-record-qc)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js、 minify された bundle は endpoint の文字列と import をたどる)、 取得物は既知データと突合してから使う (#validate-before-use)
+summary: 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる・旧 optionNumList は今 option・成功の判定は Content-Disposition: attachment・field の集合は取得のたびに bundle で照合)、 element/地点 ID の動的発見 (#element-station-discovery、 地点一覧は JSON・kansoku は 6 文字の文字列・要素表は bundle の中)、 「地域気象観測所一覧」 と obsdl の地点の対応 (#station-master-mapping = 官署 ID は s + 国際地点番号で観測所番号と別・観測開始年月日は今の観測所番号での開始・航空気象観測所は a の ID・cp932)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness、 所要時間は応答で決まり期間で大きく違う = 試しの 1 地点で測ってから見積もる #response-time-estimate)、 CSV の位相 (24 時 = 翌日 0 時)・エンコーディング・ブロック境界の gotcha (#csv-format-gotchas)、 現象なし情報/品質情報/均質番号の一次資料の意味 (#quality-columns)、 長期系列を使う前の QC 点検 4 点 = 行数の暦検算・品質符号の分布・痕跡時間 (実測 15%)・記録分解能の年代 (#long-record-qc)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js、 minify された bundle は endpoint の文字列と import をたどる・関数名でなく呼び出しから関数をたどる)、 取得物は既知データと突合してから使う (#validate-before-use)
 -->
 # 気象庁 obsdl の機械取得 (過去の気象データ・ダウンロード)
 
@@ -23,9 +23,13 @@ summary: 気象庁「過去の気象データ・ダウンロード」(obsdl) の
 | `downloadFlag` | `true` (false なら HTML 表示用) |
 | `csvFlag` `rmkFlag` `disconnectFlag` `ymdLiteral` | `1` |
 | `kijiFlag` `youbiFlag` `fukenFlag` `jikantaiFlag` | `0` |
-| `jikantaiList` | `'[]'` (時別で時間帯指定なし)、`optionNumList` = `'[]'` |
+| `jikantaiList` | `'[]'` (時別で時間帯指定なし) |
+| `option` | `'{"list":["obs"],"nyear":0}'` (平年値などの付加を選ばないとき)。 ⚠️ **画面の作り直しで、 旧 recipe の `optionNumList` の代わりにこの field が送られるようになった** (実測) |
 
 PHPSESSID 等のセッションは不要。response は Shift_JIS の CSV。
+
+- **field の集合は取得のたびにページの bundle で確かめる**: [#protocol-from-page-js](#protocol-from-page-js) の手で `show/table` の body を組む関数をたどり、 その関数が返す object の key を上の表と照らす。 違えば取得に入らない (protocol が黙って変わったまま叩き続けない)
+- **成功の判定** = HTTP 200 かつ応答の `Content-Disposition` が `attachment` (ページの JS と同じ判定)。 そうでないときは、 JSON の `error.message` か HTML の `id="download-error-message"` の要素に理由の文が入る
 
 ## <a id="element-station-discovery"></a>要素番号・地点 ID の動的発見
 
@@ -49,7 +53,9 @@ PHPSESSID 等のセッションは不要。response は Shift_JIS の CSV。
 ## <a id="volume-limit-politeness"></a>データ量制限と politeness 設計
 
 - 1 リクエストの上限 ≈ **44,000 値** (ページ JS の `seigen` 変数)。時別 1 要素 1 地点なら **4 年ブロック (≤35,065 値) が安全マージン付きの最大単位** — 例: 4 地点 × 50 年 = 52 リクエストで済む
+  - ⚠️ `seigen` は作り直す前のページ JS の名前で、 今の bundle にはこの名前が無い (実測)。 上限の値そのものは確かめ直していない
 - リクエスト間隔は数秒以上あける。失敗時はより長く待って再試行。冪等設計 (取得済み file は skip) にして再実行を安全にする
+- <a id="response-time-estimate"></a>**所要時間はサーバーの応答で決まる**: 間隔を前の応答の終わりから数えると、 1 リクエストの時間 = 間隔 + 応答で、 応答は期間で大きく違う (実測: 時別 1 地点 4 年のブロックで、 2007 年までのブロックは平均数秒、 2008 年以降のブロックは平均 20 秒あまり)。 間隔とリクエスト数だけで見積もると 2 倍以上外れる = 本取得の前に 1 地点の全ブロックを試しに取って応答を測り、 それから見積もる。 応答が極端に長いリクエスト (例 120 秒超) が続いたら止める (相手の負荷の印)
 - 取得は一括 1 回で済ませてローカルに保存し、再解析で再取得しない (politeness の本体はリクエスト総数の最小化)
 
 ## <a id="csv-format-gotchas"></a>CSV の gotcha
@@ -93,9 +99,9 @@ PHPSESSID 等のセッションは不要。response は Shift_JIS の CSV。
 
 ## <a id="protocol-from-page-js"></a>protocol はページ自身の JS から読む (一般技法)
 
-form POST が 400 で拒否されたら、**ネット上の recipe を変えて再試行する前に、ページが読み込む JS の ajax 呼び出し部を読む**。field 名・既定値・制限値 (`seigen`) は全部そこに書いてあり、protocol 改版 (例: `interAnnualFlag`→`interAnnualType`) にも追従できる。UI を in-app browser で操作して network capture から学ぶのは第二の経路 (こちらは UI の状態機械が絡んで遠回りになりがち)。
+form POST が 400 で拒否されたら、**ネット上の recipe を変えて再試行する前に、ページが読み込む JS の ajax 呼び出し部を読む**。field 名・既定値 (と、 ページが持っていれば制限値) はそこに書いてあり、protocol 改版 (例: `interAnnualFlag`→`interAnnualType`) にも追従できる。UI を in-app browser で操作して network capture から学ぶのは第二の経路 (こちらは UI の状態機械が絡んで遠回りになりがち)。
 
-- **ページが minify された bundle のとき** (obsdl は `index.php` が `web/dist/top.bundle.js` を読む形): (1) index の script タグの src から bundle を取る (2) endpoint の path の文字列 (`show/table`、 `top/station`) で検索する (3) 見つからなければ、 呼んでいる関数名を bundle 冒頭の `import{… as by …}from"./<module>.js"` で別 module に追い、 その module を取って同じ検索をする。 `show/table` の field は bundle の中で組まれる (obsdl では関数 `Vy` が `stationNumList` … を組む)
+- **ページが minify された bundle のとき** (obsdl は `index.php` が `web/dist/top.bundle.js` を読む形): (1) index の script タグの src から bundle を取る (2) endpoint の path の文字列 (`show/table`、 `top/station`) で検索する (3) 見つからなければ、 呼んでいる関数名を bundle 冒頭の `import{… as by …}from"./<module>.js"` で別 module に追い、 その module を取って同じ検索をする。 `show/table` の field は bundle の中で組まれる (obsdl では `fetch(…"show/table"…)` の `body:new URLSearchParams(<関数>(…))` の関数が `stationNumList` … を返す)。 ⚠️ minify の関数名は作り直しのたびに変わる (実測) = 名前で探さず、 この呼び出しから関数をたどり、 返す object の key の集合で照合する
 - 取得は静的 file の GET が数回で済む。 照合を再実行できる道具に入れるなら、 読んだ呼び方 (関数の文字列・配列) が JS にまだあるかを毎回確かめ、 違えば止める (= protocol が黙って変わったまま叩き続けない)
 
 ## <a id="validate-before-use"></a>取得物は既知データと突合してから使う
