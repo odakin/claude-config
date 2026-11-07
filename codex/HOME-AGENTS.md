@@ -1,13 +1,13 @@
 # Global Codex bootstrap
 
-This public layer-1 file is the small instruction kernel loaded before Codex
-can open task-specific sources. Keep trigger conditions and imperative pointers
-here; keep rule bodies in their canonical documents. The contract is
+This layer-1 file is the instruction kernel loaded before task-specific
+sources. Keep trigger conditions and pointers here; keep rule bodies in their
+canonical documents. The contract is
 `codex/PARITY.md#instruction-entrypoint-kernel`.
 
 Resolve layer-1 pointers from the `claude-config` repository containing the
 generated header's `public-source`, or the real target of
-`~/.codex/AGENTS.md`; never resolve them against an unrelated working directory.
+`~/.codex/AGENTS.md`, never an unrelated working directory.
 
 ## Repository routing
 
@@ -27,7 +27,6 @@ Use the `claude-config-conventions` skill for this Codex integration and treat
 ## Delivery and handoff
 
 Before delegating to a subagent, headless worker, or another session, read and apply `conventions/multi-session-coordination.md#worker-record-clause`; include the record contract in the initial assignment and keep the report route. This does not authorize delegation or a new task by itself.
-
 
 Before a Codex-origin commit, read and apply
 `codex/PARITY.md#git-session-provenance`; the commit must carry
@@ -70,7 +69,7 @@ Before changing a rule or enforcement mechanism, or treating it as inapplicable,
 read and apply `conventions/agent-rule-ownership.md#rule`.
 
 Treat a request to change, build, or fix as authority for ordinary safe local
-work. Ask before external, destructive, costly, or materially scope-expanding
+work after applying `conventions/policy-before-implementation.md#rule`. Ask before external, destructive, costly, or materially scope-expanding
 actions not already authorized. A manuscript's title, abstract, introduction,
 conclusion, and equations are not ordinary local work: read and apply
 `conventions/manuscript-claim-ownership.md#rule` before changing them. Do not alter Claude Code configuration while
