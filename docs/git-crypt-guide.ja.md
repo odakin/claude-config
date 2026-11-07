@@ -261,6 +261,21 @@ Step 5b は以下の両方が揃った場合のみ実行される：
 
 どちらか一方でも欠けていればサイレントスキップされる。
 
+### <a id="blame-reads-ciphertext"></a>暗号化した file で `git blame` が暗号文を読む (行がいつ入ったかを引くとき)
+
+git-crypt で暗号化した file に `git blame -L <行>,<行>` を当てると、 blob の暗号文を行に割って読む = 行番号も中身も平文と合わない (`file … has only N lines` で止まる、 または文字化けした行が出る)。 `--textconv` を付けても同じ (実測)。
+
+行がいつ入ったか・最後にいつ変わったかは pickaxe で引く:
+
+```bash
+git log -S'<その行の特徴的な部分>' --format='%h %ad' --date=short -- <file> 2>/dev/null
+```
+
+- textconv (git-crypt の diff driver = 平文に戻す) は既定で効く = 平文の文字列で探せる。 `--no-textconv` を付けると暗号文を探して 0 件になる = 「その文は履歴に無い」 と読まない (実測)。
+- 暗号化を入れる前の平文の古い版があると、 版ごとに `git-crypt: Warning: file not encrypted` が stderr に出て結果が埋もれる = `2>/dev/null` を付ける。
+- `-S` は文字列の出現回数が変わった commit を新しい順に並べる = 最後の行がその文の入った commit。 回数の変わらない移動は見えない。
+- `git show <rev>:<path>` が暗号文を返すのと同じ根 (下の節の corollary)。
+
 ### `git diff --stat` が encrypted file を「Bin N -> 0 bytes」 と誤解させる表示
 
 git-crypt 暗号化対象 file (= `.gitattributes` で filter=git-crypt 指定) が working tree clean 状態でも `git diff --stat` で「`Bin 22 -> 0 bytes`」 等の差分があるように表示されることがある (= 特に `.gitkeep` 等の空 plain content を持つ file)。

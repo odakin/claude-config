@@ -185,3 +185,18 @@ Step 5b only runs when both conditions are met:
 - `~/.secrets/git-crypt.key` exists
 
 If either is missing, the step is silently skipped.
+
+### <a id="blame-reads-ciphertext"></a>`git blame` reads ciphertext on an encrypted file (finding when a line was added)
+
+On a git-crypt encrypted file, `git blame -L <n>,<n>` splits the encrypted blob into lines, so line numbers and content do not match the plaintext (it stops with `file … has only N lines`, or prints garbled lines). Adding `--textconv` does not help (observed).
+
+Find when a line was added or last changed with the pickaxe instead:
+
+```bash
+git log -S'<a distinctive part of the line>' --format='%h %ad' --date=short -- <file> 2>/dev/null
+```
+
+- The textconv (git-crypt's diff driver, which decrypts) is on by default, so the plaintext string is searchable. With `--no-textconv` git searches the ciphertext and returns nothing; do not read that as "the text is not in the history" (observed).
+- Plaintext versions from before encryption print `git-crypt: Warning: file not encrypted` to stderr for each version and bury the result; add `2>/dev/null`.
+- `-S` lists, newest first, the commits where the number of occurrences changed; the last line is the commit that introduced the text. Moves that keep the count are invisible.
+- Same root cause as `git show <rev>:<path>` returning ciphertext.
