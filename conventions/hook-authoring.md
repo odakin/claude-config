@@ -212,6 +212,7 @@ hook や installer が「この file は exec できるか」 を見る必要が
 - 症状の形: hook 単体を手で叩くと期待どおりなのに、 test だけが落ちる / 「無効化した時は通す」 の 1 件だけが 141 で落ちる / stderr は空。
 - **`stdout` と `exit code` で症状が分かれる**: stdout を取る helper (`$(...)`) は書き手の死が出力に出ないので通り、 exit code を取る helper だけが落ちる = 「同じ入力で片方の test だけ落ちる」 の指紋。
 - **直し方**: 書き手を pipeline の外に出す。 `bash hook.sh < <(payload)` (process substitution) なら `printf` は pipeline の要素ではないので、 その死は pipeline の rc に混ざらない。 payload を 1 度だけ file に書いて `< "$f"` で渡すのも同じ効果 (bash 3.2 でも動く)。
+- **毎回は落ちない形と、 141 でない rc**: 書き手が hook の exit より先に書き終えれば通るので、 競合で時々だけ落ちる (実測: 同じ test を続けて回して数回に 1 回)。 書き手が `python3 -c 'print(…)'` なら rc は 141 でなく 120 (閉じた pipe への flush の `BrokenPipeError`)。 「早期 return の経路の 1 件だけがときどき落ちる」 はこの節を疑う。 確かめ方 = 書き手の前に `sleep 0.3` を入れた写しで毎回落とし、 直した版がその写しでも通るのを見る (CI でだけ赤になる前に)。
 - hook を**書く側**の対処 = 早期 return の前に stdin を捨てる (`cat >/dev/null 2>&1 || true`) 手もあるが、 無効化の経路まで入力を読むのは本末転倒 (= 止めたい処理の手前で読む)。 **呼ぶ側を直すのが既定**。
 - 一般則としては [§0 補足 2](#substitution-fallback-stdout-mixing) の「見かけの exit code を信用しない」 族の第 3 形: 補足 2 = fallback chain が前段の stdout を混ぜる / 同節の兄弟形 = `cmd | sed` が **後段**の rc を見る / 本節 = `writer | hook` が **前段**の rc を見る。 pipeline を挟んだら「その rc は誰のものか」 を毎回問う。
 - **逆向きの形 = hook が stdin を読み切るのに、 test が stdin を渡さずに呼ぶ**: 書き手の EPIPE を避けるために入力を最後まで読む hook (SessionStart 等) を、 test の helper が stdin を指定せずに呼ぶと、 呼び元の stdin を継ぐ。 それが閉じない non-tty (agent の shell の socket 等) だと hook は入力待ちで止まり、 test 全体が timeout まで返らない (手元の terminal は tty なので、 `isatty` で読みを飛ばす実装では再現しない)。 **直し方**: helper で必ず `</dev/null` か payload を渡す。 hook 側で読むのをやめるのは上の EPIPE 対策を壊すので既定にしない。
@@ -583,6 +584,8 @@ origin: hook を 1 本消した時に、 各マシンの `settings.json` に com
 3. 承認の発言を最新の発言として引き、 1 file ずつ当てる (配線の json・installer は全文の候補を一時 dir に作ってから)。 候補を置いてから時間が経ったら、 全文の候補は当てる直前に今の file から作り直す (実測: 写しの後に層1 に入った別の hook の entry が抜けていて、 そのまま当てるとその配線が消える形だった)。 校正も当てる直前に直近の commit まで回し直す (実測: 承認を待つ間に、 同じ型の再発と候補の判定の誤検出が出た)。 commit は live の checkout で打つ: 承認の記録は repo の絶対 path に結びつくので、 使い捨ての worktree ([`commit-from-origin-worktree.py`](../scripts/commit-from-origin-worktree.py)) の commit の gate は照合できずに止まる (実測)。 live が別の session の未 commit で pull できない間は、 片付いてから当てる。
 4. 新しい file を `git add` してから索引を作り直し、 **変わった `hooks/README.md` も候補として 1 件当てる**。 忘れると commit の gate で止まり、 同じ commit に入れた他の file も止まる (実測)。 既にある hook に検査を足すときも、 hook や test の説明の 1 行目を直せば索引の行が変わる = 同じく候補の束に入れる (生成器の `extract_header_desc` で候補の 1 行目から行を作り、 索引の候補と一致するかを当てる前に確かめる)。 engine の docstring の 1 行目を直したときは `scripts/README.md` も変わる (保護の外 = 当てた後に `--write`)。
 5. 写しは消す (層1 と二重にしない。 経緯は plan に 1 段落)。 配線の後に、 配線した command の path で hook を直接呼んで発火を確かめる ([§9.1](#new-hook-session-snapshot) = 同じ session で harness からの発火は build 依存)。
+   当てて commit した機械では pull の後の段 (post-merge の同期) が走らない = 配線した path はまだ無い。 `scripts/sync-hook-settings.sh --check` で足りないものを見てから `scripts/sync-hook-settings.sh` を回す (他の機械は pull の後の段が当てる)。
+   述語が session の記録や作業ツリーの状態に依る hook は、 live の作業ツリーで打った確かめが述語の射程の外の形に当たって黙ることがある (実測: 前に path を渡した file・path を指定した commit の触っていない file)。 「出る形」 は試験と同じ fixture を一時 dir に作り、 engine の env の上書きなしで配線した path を呼んで確かめる (symlink から engine を見つける経路も同時に確かめる)。
 
 ---
 
