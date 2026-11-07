@@ -23,7 +23,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 - <a id="delegated-sweep"></a>**ある session の締めを別の worker に渡す** (元の session が止まった・context が大きい・別 vendor に任せる) ときは、 依頼の spec に 3 つ書く:
   (1) 対象の session の完全な id と記録の種類 (Claude Code か Codex)。 worker にとって上の「この session」 は対象の session で、 その種類の道具で読む = Claude の session なら 0.3・0.5 の道具を対象の id で回し、 0.95 の inventory (Codex の session 用) は使わない
   (2) 既に済んだ拾い出し (考え方・研究の中身の回収など) の結果の file。 それを入力にして拾い直させない
-  (3) 触らせない file (提出前の原稿など) と、 保護された file は本人に聞くこと ([#protected-files-need-ruling](#protected-files-need-ruling))。
+  (3) 触らせない file (提出前の原稿など) は本人に聞くこと、 保護された file は guard が止めた変更を本人に聞くこと ([#protected-files-need-ruling](#protected-files-need-ruling))。
   元の session が掲示板の依頼の依頼元なら、 検収は依頼元か本人の番で、 締めを受けた worker は状態を記録するだけ (実測: この 3 つを書いた spec で、 別 vendor の worker が Claude Code の session の締めを最後まで回した)。
   <a id="delegated-reply-knowledge-check"></a>[#reply-knowledge](#reply-knowledge) の処分の file は worker が書いて `--check` を通し、 依頼元も自分の締めの turn で同じ `--check` の 1 行を回す = 締めの turn を確かめる Stop hook は、 その session の会話記録の中の `--check` しか見ない (worker の窓で通しても依頼元の turn には数えない)。 worker は結果の file と提出に、 依頼元がそのまま回せる 1 行を書く (実測: worker が書いた処分の file を、 依頼元が自分の窓で回して通した)。
   worker は道具に `--delegated` を付けて回す = 最後の圧縮の後の、 問いでない依頼への返事も P として並ぶ (既定では出ない = 依頼元の context にはあるが、 worker の context には無い。 実測: 付ける前は worker が会話記録を手で抜き出して読んだ)。 依頼元に渡す 1 行にも同じく付ける。
@@ -146,8 +146,8 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 
 - **「なるべく上層に」 = 1 件を分けて置く** — 仕組み・壊れ方・方法の一般形を上げられる一番上の層へ、 固有の事例 (名前・数値・日付) は下の層に残して一般形を指す。
   丸ごと 1 層に置かない (上へ丸ごとは漏洩、 下へ丸ごとは埋没)。 下の ⚠️ の「迷ったら書かない」 は事例の側にかかる。 一般形は境界を通る形に書いて上げる。
-- <a id="protected-files-need-ruling"></a>**規則・検査・hook・設定の保護された file は、 締めの中でも本人の項目ごとの裁定が要る** — 直す前に候補の全文を一時 dir に作り、 diff を本人に見せ、 承認の発言を記録してから当てる (記録と適用の道具・判定の正本 = [`agent-rule-ownership.md`](agent-rule-ownership.md))。 候補の全文を repo に置いて別の窓に渡すときは、 規則の文書と同じ形の path (`conventions/` という名の dir の下の `.md`) を使わず、 拡張子 `.txt` の file にする = その形のままだと、 候補そのものが規則の文書の新設として commit の門で止まり、 当てる先の場所に合わせた相対 link も今の場所では切れて link の検査に当たる (実測)。 新しい規約の file を足すことも、 中身に緩和の語が無くても commit の門は本人の承認を求める (書く時の hook は通る)。
-  先に書いてから commit すると commit の gate で止まり、 同じ commit に入れた別の file も止まる (実測)。 下の [#upstream-pr](#upstream-pr) の「1 件ごとに聞かない」 はこの file には掛からない。
+- <a id="protected-files-need-ruling"></a>**規則・検査・hook・設定の保護された file の変更は、 締めの中でも締めの外と同じ線で裁定の要否が決まる** (線の正本 = [`agent-rule-ownership.md#additive-and-free-zones`](agent-rule-ownership.md#additive-and-free-zones))。 guard が止めた変更は、 直す前に候補の全文を一時 dir に作り、 diff を本人に見せ、 承認の発言を記録してから当てる (記録と適用の道具・判定の正本 = [`agent-rule-ownership.md`](agent-rule-ownership.md))。 規則の文書への変更で guard が止めないもの (緩和の語を足さず既存の文を隠さないもの) は、 その場で当て、 入れた turn の返事に何を変えたかを書く。 候補の全文を repo に置いて別の窓に渡すときは、 規則の文書と同じ形の path (`conventions/` という名の dir の下の `.md`) を使わず、 拡張子 `.txt` の file にする = その形のままだと、 候補そのものが規則の文書の新設として commit の門で止まり、 当てる先の場所に合わせた相対 link も今の場所では切れて link の検査に当たる (実測)。 新しい規約の file を足すことも、 中身に緩和の語が無くても commit の門は本人の承認を求める (書く時の hook は通る)。
+  guard が止める変更を先に書いてから commit すると commit の gate で止まり、 同じ commit に入れた別の file も止まる (実測)。 下の [#upstream-pr](#upstream-pr) の「1 件ごとに聞かない」 は guard が止めた変更には掛からない。
 - **2 回目なら仕組みにするかを決める** — 同じ壊れ方・同じ訂正がこの session で 2 回目なら、 文を足して終えず、
   検出器・hook・script にするかを決める。 その場で作らないなら、 理由と一緒に plan か TODO に積む。
 
@@ -268,7 +268,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 ## <a id="upstream-pr"></a>claude-config への改善案は PR で出す
 
 1 の表で層1 (claude-config) に置くと決めたもの (誰にでも効く手順・道具の壊れ方・規約の穴・雛形の不足) は、 手元 (個人層・作業 repo) だけに置かず claude-config に入れる。
-claude-config に push できない人は fork から PR を出す。 誰でも使える `/wrap` はこれを既定にしている = 1 件ごとに user に可否を聞かない (止めるのは user が止めたとき)。 保護された file (規則・検査・hook・設定) は、 [#protected-files-need-ruling](#protected-files-need-ruling) のとおり本人の裁定を先に取る。
+claude-config に push できない人は fork から PR を出す。 誰でも使える `/wrap` はこれを既定にしている = 1 件ごとに user に可否を聞かない (止めるのは user が止めたとき)。 保護された file (規則・検査・hook・設定) は、 guard が止めた変更について [#protected-files-need-ruling](#protected-files-need-ruling) のとおり本人の裁定を先に取る。
 
 1. **一般形にする** — 1 の ⚠️ の境界 (識別子・本人や第三者の活動の事実・未公開の中身・個人の path) を 1 文ずつ当てる。 PR の本文・diff・commit message・branch 名・commit の author は公開される。 author は GitHub の noreply (`git config user.email` が `@users.noreply.github.com` か確かめる)。 なぜ気づいたか (個人の事例) は自分の個人層・作業 repo の記録に残す
 2. **1 PR = 1 つの改善** — 本文 = 何が困ったか (一般形)・何を変えたか・どう確かめたか
