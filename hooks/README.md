@@ -37,6 +37,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[first-reply-stamp.test.sh](first-reply-stamp.test.sh)** — 自己同定 stamp の UserPromptSubmit / Stop 入口 test
 - **[first-turn-stamp-check.py](first-turn-stamp-check.py)** — Stop: 最初の turn のどの返信の 1 行目にも自己同定 stamp が無ければ記録 (observe) / 1 回だけ差し戻す (block)
 - **[fix-snapshot-path-patch.sh](fix-snapshot-path-patch.sh)** — PATH スナップショット自動パッチ（REQUIRED_PATHS 方式、launchd WatchPaths から呼ばれる）
+- **[foreign-hunk-commit-nudge.py](foreign-hunk-commit-nudge.py)** — PreToolUse(Bash): git commit に、 この session が書いた文に無い変更の塊 (並列の session の未 commit の hunk かもしれない) が入るとき、 file と行を名指して知らせる入口 (止めない)。 述語・本体・--selftest = scripts/foreign-hunk-check.py
+- **[foreign-hunk-commit-nudge.test.sh](foreign-hunk-commit-nudge.test.sh)** — engine の selftest + hook 入出力 (相手の hunk → 知らせ / 自分の hunk だけ → 無音 / deny・off / 壊れた入力・engine 不在は無音)
 - **[git-state-nudge.sh](git-state-nudge.sh)** — PostToolUse(Bash): 直近 commit の未 push 検出 + first-sighting で fetch+stale 検出
 - **[git-state-nudge.test.sh](git-state-nudge.test.sh)** — git-state-nudge.sh の self-test (決定的 mock git repo ベース)
 - **[gmail-read-email-cc-nudge.sh](gmail-read-email-cc-nudge.sh)** — Gmail MCP の read_email の出力のヘッダに Cc 行が無いとき、 「Cc 行が無い ≠ Cc が空」 とヘッダの読み方を 1 行添える (PostToolUse、 layer 1)

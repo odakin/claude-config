@@ -193,6 +193,16 @@
       "hooks": [
         {
           "type": "command",
+          "command": "~/.claude/hooks/foreign-hunk-commit-nudge.py",
+          "timeout": 10
+        }
+      ]
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
           "command": "~/.claude/hooks/guard-cli-form-guard.py"
         }
       ]
