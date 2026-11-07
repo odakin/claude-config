@@ -11,30 +11,41 @@
   こちらは送る文と他人の文 (メールの txt・報告) を、 空白・改行・引用符を寄せて照らし、 帰属の有無で分ける。
 
 何を引用と数えるか:
-  「…」 『…』 “…” "…" ``…'' と、 行頭が "> " の引用の塊 (Discord・markdown。 ">>> " は以降すべて)。
+  「…」 『…』 “…” ‘…’ "…" ＂…＂ ``…'' と、 行頭が "> " の引用の塊 (Discord・markdown。 ">>> " は以降すべて)。
   段落 (空行) をまたがない。 ``` で囲んだ code block の中は見ない。
   LaTeX の引用の塊 (返答書の referee の文は塊で引くことが多い): \\begin{quote}…\\end{quote} と quotation は常に数え、
   帰属は塊の前後の文の語で見る (塊は原稿の改訂の文を引くことにも使うため)。 文書が定義した引用の macro (\\Q{…} など)
   と環境 (referee など) は呼び手が名前を渡し (quote_macros / quote_envs)、 その中身は形で帰属あり ("> " の塊と同じ)。
   塊の中身は TeX の comment・\\color{…}・字体の切り替え・波括弧を外して照らす。 塊の中の ``…'' は塊と別に数えない。
   \\begin{document} があれば、 塊はその後だけを探す (preamble の macro の定義を引用と数えない)。
-  引用の中の省略 (... / … / \\ldots / \\dots / [...]) は片の区切り = 各片が原文に順に現れるかで照らす。
-  寄せた後の文字数が min_chars 未満の片は照らさない (照らしていない印として数えて返す)。
+  引用の中の省略 (... / … / \\ldots / \\dots / [...]) は片の区切り。 片が 2 つ以上の引用は、 全部の片が原文の同じ段落
+  (空行で区切る) に順に現れるかで照らす (層1 rebuttal-letter.md#inline-quotes-under-block の 3 と同じ線。 原文の file の
+  どこからでも拾うと、 離れた 2 句をつないだ引用が一致に見える)。 片が 2 つ以上なら短い片 (not・no など) も照らす
+  (英数字だけの短い片は語の境で。 黙って捨てると、 間に否定を挟んで意味を逆にした引用が一致に見える)。
+  片が 1 つで寄せた後の文字数が min_chars 未満の引用は照らさない (照らしていない印として数えて返す)。
 
 比べ方 (送る文と原文の両方を同じに寄せる):
   NFKC、 引用符の文字を消す、 ~ を空白に、 空白・改行を 1 つの空白に、 CJK の文字どうしの間の空白は消す。
   原文の行末のハイフンでの分割 (「imagi-」 + 改行 + 「nary」) は、 つないだ形でも照らす。
-  大文字小文字だけの違いは一致に数え、 印 (ok-case) を付ける。
+  大文字小文字だけの違いは一致に数え、 印 (ok-case) を付ける。 引く側が足した [sic] は外して照らす。
 
 帰属:
   引用を含む文 (。！？ / 「. 」 / 空行で区切る。 引用の前が空か「:」 で終わるなら、 その前の文も) に、
   帰属の語 (ATTRIB_EN / ATTRIB_JA と、 呼び手が渡す語 = 人名など) があれば「他人に帰した引用」。
+  「さん」「くん」「先生」 は呼びかけ (直後が 、 , ！ 改行・空白) のときは数えない (「A さん、「…」 の方針で」 は自分の語)。
+  自分の文を引くのによく使う語 (the authors・wrote・と書・の文) は帰属の語に入れない (実測: 自分の直しや原稿の文を
+  括った引用が送信を止めた)。
   "> " の塊は形で帰属あり。 all_quotes=True なら全部の引用を帰属ありとして扱う。
   帰属ありで原文に無い = failure。 帰属の語の無い引用で原文に無いものは、 failure にせず別の印 (unattributed) で返す
   (照らしたが帰属は判定していない = 照合票の「照らしていないこと」 に書く分)。
 
 限界 (= この検査が見ないこと。 照合票の「照らしていないこと」 に書く):
   - 括らずに書いた言い換え (「referee は X とだけ言う」 を鉤括弧なしで書いた文) は見ない。
+  - 数えない形: ASCII の一重引用符 '…' (英語の apostrophe と見分けられない)、 名前を渡していない LaTeX の環境・macro
+    (quote・quotation のほか)、 添付の file の中身 (送信の道具の検査は本文だけ)。 「引用 0 件」 は「照らした引用 0 件」 で、
+    「他人の文を引いていない」 ではない。
+  - 原文の file の中の話し手を見ない: 編集者の手紙と referee の報告が 1 つの file なら、 編集者の文を referee に帰しても
+    一致に出る。 話し手を分けて照らすなら、 その人の部分だけを source に渡す。
   - 帰属は語の有無だけ。 自分の文を引いた引用に帰属の語が同じ文にあると failure に出る (読んで外す)。
   - 原文の訳 (英文の原文を日本語で括ったもの) は原文に無いと出る = 規約どおり (訳は括らず、 原文の語で引く)。
   - 部分文字列なら一致とする = 文脈から切り離した引用 (主節を落として従属節だけ引く) は通る。 意味の照合は人が読む。
@@ -48,10 +59,14 @@ from dataclasses import dataclass, field
 QUOTE_CHARS = set("「」『』“”‘’\"'`«»„‟〝〞＂＇")
 PARA = r"(?:(?!\n[ \t]*\n).)"  # 空行をまたがない 1 文字
 PAIRS = [
-    ("「", "」"), ("『", "』"), ("“", "”"), ("``", "''"),
+    ("「", "」"), ("『", "』"), ("“", "”"), ("‘", "’"), ("``", "''"),
 ]
 SPAN_RES = [re.compile(re.escape(o) + "(" + PARA + "+?)" + re.escape(c), re.S) for o, c in PAIRS]
 ASCII_DQ = re.compile('"(' + r'(?:(?!\n[ \t]*\n)[^"])' + '+?)"', re.S)
+FULL_DQ = re.compile('＂(' + r'(?:(?!\n[ \t]*\n)[^＂])' + '+?)＂', re.S)
+PARA_SPLIT = re.compile(r"\n[ \t]*\n")
+SIC = re.compile(r"\[\s*sic\s*\]", re.I)
+VOCATIVE = ("さん", "くん", "先生")
 FENCE = re.compile(r"```.*?```", re.S)
 ELLIPSIS = re.compile(r"\\l?dots(?:\{\})?|\[\s*(?:\.\.\.|…)\s*\]|\.\.\.|…")
 TEX_BLOCK_ENVS = ("quote", "quotation")
@@ -64,15 +79,15 @@ BOUNDARY = re.compile(r"[。！？!?]|\.(?=\s)|\n[ \t]*\n")
 
 ATTRIB_EN = (
     "referee", "referees", "reviewer", "reviewers", "report", "editor", "editors",
-    "coauthor", "coauthors", "co-author", "co-authors", "author", "authors",
-    "says", "said", "states", "stated", "writes", "wrote", "argues", "argued",
+    "coauthor", "coauthors", "co-author", "co-authors",
+    "says", "said", "states", "stated", "writes", "argues", "argued",
     "claims", "claimed", "notes", "noted", "asks", "asked", "suggests", "suggested",
-    "comments", "commented", "remarks", "remarked", "according to",
+    "comment", "comments", "commented", "remarks", "remarked", "reads", "according to",
 )
 ATTRIB_JA = (
     "レフェリー", "査読者", "査読", "審査員", "審査者", "編集者", "編集部", "共著者", "著者", "筆頭",
     "原文", "報告書", "レポート", "コメント", "指摘", "さん", "氏", "先生", "くん",
-    "と言", "って言", "と書", "と述", "と主張", "と問", "によれば", "によると", "曰く", "いわく", "の文",
+    "と言", "って言", "と述", "と主張", "と問", "によれば", "によると", "曰く", "いわく",
 )
 
 
@@ -84,6 +99,7 @@ class Quote:
     attrib: str | None        # 帰属の語 (None = 帰属の語なし)
     status: str = ""          # "ok" | "ok-case" | "missing" | "order" | "short"
     missing: list[str] = field(default_factory=list)  # 原文に無かった片 (寄せた形)
+    pieces: int = 1           # 照らした片の数 (2 以上 = 原文の同じ段落に順に)
 
     @property
     def failure(self) -> bool:
@@ -107,24 +123,38 @@ def _corpora(sources: list[str]) -> list[str]:
     return out
 
 
+def _paragraphs(sources: list[str]) -> list[str]:
+    """原文の段落 (空行で区切る) を寄せた形で。 行末のハイフンの分割をつないだ形も足す。"""
+    out = []
+    for raw in sources:
+        for variant in {raw, re.sub(r"(\w)-[ \t]*\n[ \t]*(\w)", r"\1\2", raw)}:
+            out.extend(p for p in (norm(x) for x in PARA_SPLIT.split(variant)) if p)
+    return out
+
+
 def _fragments(span: str, min_chars: int) -> tuple[list[str], int]:
-    """(照らす片, 短くて外した片の数)。"""
-    frags, short = [], 0
-    for part in ELLIPSIS.split(span):
-        p = norm(part).strip(" .,;:")
-        if not p:
-            continue
-        if len(p) < min_chars:
-            short += 1
-        else:
-            frags.append(p)
-    return frags, short
+    """(照らす片, 短くて外した片の数)。 片が 2 つ以上なら短い片も照らす片に入れる (黙って捨てない)。"""
+    span = SIC.sub(" ", span)  # 引く側が足した [sic] は原文に無い
+    parts = [p for p in (norm(x).strip(" .,;:") for x in ELLIPSIS.split(span)) if p]
+    if len(parts) >= 2:
+        return parts, 0
+    if parts and len(parts[0]) >= min_chars:
+        return parts, 0
+    return [], len(parts)
+
+
+def _find_one(f: str, corpus: str, pos: int) -> int:
+    """corpus[pos:] の中の片 f の位置 (無ければ -1)。 英数字だけの短い片は語の境で探す (not が knot に当たらない)。"""
+    if len(f) < 5 and re.fullmatch(r"[0-9A-Za-z]+", f):
+        m = re.compile(r"(?<![0-9A-Za-z])" + re.escape(f) + r"(?![0-9A-Za-z])").search(corpus, pos)
+        return m.start() if m else -1
+    return corpus.find(f, pos)
 
 
 def _find_ordered(frags: list[str], corpus: str) -> bool:
     pos = 0
     for f in frags:
-        i = corpus.find(f, pos)
+        i = _find_one(f, corpus, pos)
         if i < 0:
             return False
         pos = i + len(f)
@@ -137,7 +167,13 @@ def _attrib_word(context: str, extra: tuple[str, ...]) -> str | None:
         if re.search(r"(?<![a-z])" + re.escape(w) + r"(?![a-z])", low):
             return w
     for w in ATTRIB_JA + tuple(extra):
-        if w and w.lower() in low:
+        if not w:
+            continue
+        if w in VOCATIVE:
+            if re.search(re.escape(w) + r"(?![、,，！!\s])", context):
+                return w
+            continue
+        if w.lower() in low:
             return w
     return None
 
@@ -146,8 +182,8 @@ def _sentence_context(text: str, start: int, end: int) -> str:
     before = [m.end() for m in BOUNDARY.finditer(text, 0, start)]
     b = before[-1] if before else 0
     head = text[b:start]
-    if (not head.strip() or head.rstrip().endswith((":", "："))) and len(before) >= 2:
-        b = before[-2]
+    if before and (not head.strip() or head.rstrip().endswith((":", "："))):
+        b = before[-2] if len(before) >= 2 else 0  # 帰属の文が送る文の 1 文目なら先頭から読む
         head = text[b:start]
     m = BOUNDARY.search(text, end)
     tail = text[end:m.start() if m else len(text)]
@@ -211,7 +247,7 @@ def find_quotes(text: str, extra_attrib: tuple[str, ...] = (), all_quotes: bool 
     blocks = _tex_blocks(work, tuple(quote_macros), tuple(quote_envs))
     inside = lambda s, e: any(bs <= s and e <= be for bs, be, _b, _f in blocks)
     spans: list[tuple[int, int, str]] = []  # (start, end, inner)
-    for rx in SPAN_RES + [ASCII_DQ]:
+    for rx in SPAN_RES + [ASCII_DQ, FULL_DQ]:
         for m in rx.finditer(work):
             if not inside(m.start(), m.end()):
                 spans.append((m.start(), m.end(), m.group(1)))
@@ -256,17 +292,22 @@ def check_text(text: str, sources: list[str], extra_attrib: tuple[str, ...] = ()
     """送る文の引用それぞれに status を付けて返す。 sources = 原文の中身 (file の文字列) の list。"""
     corpora = _corpora(sources)
     folded = [c.casefold() for c in corpora]
+    paras = _paragraphs(sources)
+    folded_paras = [p.casefold() for p in paras]
     out = []
     for q in find_quotes(text, extra_attrib, all_quotes, quote_macros, quote_envs):
         frags, _short = _fragments(q.text, min_chars)
+        q.pieces = len(frags)
+        # 片が 1 つなら原文の全体、 2 つ以上なら原文の同じ段落の中で順に
+        exact, folded_in = (corpora, folded) if len(frags) == 1 else (paras, folded_paras)
         if not frags:
             q.status = "short"
-        elif any(_find_ordered(frags, c) for c in corpora):
+        elif any(_find_ordered(frags, c) for c in exact):
             q.status = "ok"
-        elif any(_find_ordered([f.casefold() for f in frags], c) for c in folded):
+        elif any(_find_ordered([f.casefold() for f in frags], c) for c in folded_in):
             q.status = "ok-case"
         else:
-            q.missing = [f for f in frags if not any(f.casefold() in c for c in folded)]
+            q.missing = [f for f in frags if not any(_find_one(f.casefold(), c, 0) >= 0 for c in folded)]
             q.status = "missing" if q.missing else "order"
         out.append(q)
     return out
@@ -293,16 +334,17 @@ def format_report(quotes: list[Quote], label: str = "送る文") -> list[str]:
     for q in quotes:
         where = f"{label}:{q.line}"
         if q.failure:
-            why = "片の順が原文と違う" if q.status == "order" else "原文に無い"
+            why = ("片が原文の 1 つの段落に順に並ばない (短い片を含む)" if q.status == "order" else "原文に無い")
             lines.append(f"✗ {where} 「{_clip(q.text)}」 = {why} (帰属: {q.attrib})")
             for f in q.missing:
                 lines.append(f"    無い片: {_clip(f)!r}")
         elif q.status in ("missing", "order"):
             lines.append(f"△ {where} 「{_clip(q.text)}」 = 原文に無い。 帰属の語なし = 他人の文として照らしていない")
-        elif q.status == "ok-case":
-            lines.append(f"✓ {where} 「{_clip(q.text, 50)}」 = 原文の部分文字列 (大文字小文字だけ違う)")
-        elif q.status == "ok":
-            lines.append(f"✓ {where} 「{_clip(q.text, 50)}」 = 原文の部分文字列")
+        elif q.status in ("ok", "ok-case"):
+            what = ("原文の部分文字列" if q.pieces < 2
+                    else f"片 {q.pieces} つが原文の同じ段落に順にある (片の間は照らしていない)")
+            case = " (大文字小文字だけ違う)" if q.status == "ok-case" else ""
+            lines.append(f"✓ {where} 「{_clip(q.text, 50)}」 = {what}{case}")
     n = len(quotes)
     nf = len(failures(quotes))
     nu = sum(1 for q in quotes if not q.failure and q.status in ("missing", "order"))
@@ -317,7 +359,8 @@ def selftest() -> int:
     src = ("The bias appears when the sample is restricted to the northern stations, as\n"
            "\"noted\" in Section 2. A second line wraps here and con-\n"
            "tinues to the end.\n"
-           "観測点を北に\n限ると偏りが出る。\n")
+           "観測点を北に\n限ると偏りが出る。\n"
+           "\nIn a separate paragraph the effect is completely irrelevant for the main result.\n")
     ok = True
 
     def expect(label: str, cond: bool) -> None:
@@ -409,6 +452,37 @@ def selftest() -> int:
     qs = check_text("% \\Q{an invented sentence in a comment}\n\\begin{document}\n% \\Q{another invented sentence}\n"
                     "\\end{document}\n", [src], quote_macros=("Q",))
     expect("a macro inside a TeX comment is not a quote", qs == [])
+    # 照合の指摘 (書いた者でない目) から足した場合
+    q = one('The referee writes "the sample is restricted ... not ... the northern stations".')
+    expect("a short piece (not) between two true pieces is checked, so the reversed quote fails",
+           q.failure and "not" in q.missing)
+    q = one('The referee writes "the bias appears when ... the effect is completely irrelevant".')
+    expect("pieces taken from two different paragraphs fail", q.failure)
+    q = one('The referee writes "the sample is restricted to ... northern stations".')
+    expect("pieces in the same paragraph pass and the report says they are pieces",
+           q.status == "ok" and q.pieces == 2
+           and "同じ段落" in format_report([q])[0])
+    q = one("referee は次のように書いています。\n「the sample is restricted」")
+    expect("an attribution in the first sentence of the draft reaches a quote on the next line",
+           q.attrib == "referee" and q.status == "ok")
+    q = one("referee は次のように書いています。\n「北の観測点だけで偏る」")
+    expect("... and blocks when that quote is a paraphrase", q.failure)
+    q = one("Aさん、「段ごとに一つずつ出す」 方針で進めます。")
+    expect("a vocative さん、 is not an attribution word", q.attrib is None and not q.failure)
+    q = one("Aさんは「段ごとに一つずつ出す」 と言いました。")
+    expect("Aさんは … is an attribution", q.failure)
+    q = one("こちらの文「段落を一つ足した」 は残します。")
+    expect("「こちらの文」 is not an attribution", q.attrib is None)
+    q = one('In our reply we wrote "the bias is small everywhere".')
+    expect("'we wrote' (our own text) is not an attribution", q.attrib is None)
+    q = one("referee は＂the sample is restricted＂と書いた。")
+    expect("full-width ＂…＂ quotes are checked", q.status == "ok")
+    q = one("The referee says ‘the bias is small everywhere’.")
+    expect("curly single quotes are checked", q.failure)
+    expect("ASCII single quotes are not counted (documented limit)",
+           check_text("The referee says 'the bias is small everywhere'.", [src]) == [])
+    q = one('The referee writes "the sample [sic] is restricted to"')
+    expect("an added [sic] is removed before matching", q.status == "ok")
     print("selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
