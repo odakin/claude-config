@@ -27,6 +27,8 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
   元の session が掲示板の依頼の依頼元なら、 検収は依頼元か本人の番で、 締めを受けた worker は状態を記録するだけ (実測: この 3 つを書いた spec で、 別 vendor の worker が Claude Code の session の締めを最後まで回した)。
   <a id="delegated-reply-knowledge-check"></a>[#reply-knowledge](#reply-knowledge) の処分の file は worker が書いて `--check` を通し、 依頼元も自分の締めの turn で同じ `--check` の 1 行を回す = 締めの turn を確かめる Stop hook は、 その session の会話記録の中の `--check` しか見ない (worker の窓で通しても依頼元の turn には数えない)。 worker は結果の file と提出に、 依頼元がそのまま回せる 1 行を書く (実測: worker が書いた処分の file を、 依頼元が自分の窓で回して通した)。
   worker は道具に `--delegated` を付けて回す = 最後の圧縮の後の、 問いでない依頼への返事も P として並ぶ (既定では出ない = 依頼元の context にはあるが、 worker の context には無い。 実測: 付ける前は worker が会話記録を手で抜き出して読んだ)。 依頼元に渡す 1 行にも同じく付ける。
+  処分の file は、 何を移したかを書く md の末尾に置かず、 独立の file (`.txt`) にして md から指す = 道具は `#` で始まらない行を全部処分として読み、 根拠は 1 語だけを取る (注記は `#` の後。 md の文の行は候補に無い id として並ぶ)。
+  <a id="delegated-replies-are-claims"></a>締めを受けた worker にとって、 対象の session の返事は委ねた先の報告と同じく検証前の主張 ([#collect-from-delegates](#collect-from-delegates) の「報告は検証前の主張」) = 正本へ移す前に、 返事が指す code・台帳・頁で 1 回裏を取り、 食い違えば一次の側で書いて食い違いを添える (実測: 返事の図の説明の 1 点が code と違い、 別の 1 点は返事そのものが事実と逆で、 依頼元の検収で直った)。
   同じ session の 2 回目の締めで前の締めの処分の file を写すときは、 候補の番号でなく時刻と問いの文で突き合わせる = 道具が直ると番号は振り直される (実測: 1 回目の後の直しで前の範囲に候補が増え、 番号がずれた)。
 
 ## <a id="collect-from-transcript"></a>0.3 会話の全体から集める (文脈圧縮の前も)
