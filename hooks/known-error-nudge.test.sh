@@ -54,5 +54,13 @@ if [ $rc -eq 1 ] && printf '%s' "$res" | grep -q '本文に無い' && printf '%s
    && printf '%s' "$res" | grep -q 'doc が無い'; then ok "T10 --check が 3 種の誤りを止める"
 else ng "T10 rc=$rc $res"; fi
 
+ARCH='{"session_id":"s8","hook_event_name":"PostToolUse","tool_name":"mcp__ccd_session_mgmt__archive_session","tool_input":{"session_id":"local_x"},"tool_response":[{"type":"text","text":"Session local_x (\"t\") was not archived: it still has live work (an agent run, a Remote Control client, a queued message or a background task). Wait or ask the user; they can also archive it from the sidebar."}]}'
+out="$(run "$ARCH")"
+if printf '%s' "$out" | grep -q 'multi-session-coordination.md#tidy-after-child-turn-ends'; then ok "T11 archive_session の「live work」 の断り (MCP の content) で鳴る"
+else ng "T11: ${out:-silent}"; fi
+
+out="$(run "${ARCH/archive_session/stop_session}")"
+if [ -z "$out" ]; then ok "T12 見ていない MCP の tool (stop_session) では黙る"; else ng "T12 鳴った: $out"; fi
+
 echo "==== RESULT: PASS=$pass FAIL=$fail ===="
 [ "$fail" -eq 0 ]

@@ -1,5 +1,5 @@
 {
-  "_comment": "既知の壊れ方のエラー文 → その壊れ方を書いた規約の節。 hooks/known-error-nudge.py が Bash の出力・エラー文と突き合わせる。 規約に壊れ方を書いたら、 そのエラー文の変わらない部分を 1 件足す (match は部分一致、 \"regex\": true で正規表現)。 doc は本 repo からの path + #anchor (anchor の無い doc は path だけ)。 match の文字列は doc の本文にも書く = --check が doc・anchor の実在と、 match が doc にあることを確かめる。 hint は 1 文 (原因と最初の一手)",
+  "_comment": "既知の壊れ方のエラー文 → その壊れ方を書いた規約の節。 hooks/known-error-nudge.py が Bash の出力・エラー文と archive_session の結果の文と突き合わせる。 規約に壊れ方を書いたら、 そのエラー文の変わらない部分を 1 件足す (match は部分一致、 \"regex\": true で正規表現)。 doc は本 repo からの path + #anchor (anchor の無い doc は path だけ)。 match の文字列は doc の本文にも書く = --check が doc・anchor の実在と、 match が doc にあることを確かめる。 hint は 1 文 (原因と最初の一手)",
   "entries": [
     {
       "match": "Text line contains an invalid character",
@@ -178,6 +178,11 @@
       "match": "no writeable cache path",
       "doc": "conventions/latex.md#latex-pdf-audit",
       "hint": "LuaLaTeX のキャッシュを確認する。source と依存ファイルを新しい作業 directory に写し、その中で相対キャッシュを指定して再ビルドする。診断は scripts/latex-sandbox-cache-probe.py。"
+    },
+    {
+      "match": "still has live work",
+      "doc": "conventions/multi-session-coordination.md#tidy-after-child-turn-ends",
+      "hint": "archive が相手の背景の作業 (見張り・Monitor・計算) か配達待ちの message で断られた疑い。 同じ turn に打ち直さず、 `child-wrap-check.py <相手>` が名指したものに合わせて動く (その節の (7))"
     }
   ]
 }

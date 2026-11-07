@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""known-error-nudge.py — PostToolUse / PostToolUseFailure(Bash): 出力・エラー文に既知の壊れ方のエラー文が出たら、 その壊れ方を書いた規約の節を Claude に知らせる (台帳 = hooks/known-errors.json)
+"""known-error-nudge.py — PostToolUse / PostToolUseFailure(Bash・archive_session): 出力・エラー文に既知の壊れ方のエラー文が出たら、 その壊れ方を書いた規約の節を Claude に知らせる (台帳 = hooks/known-errors.json)
 
 なぜ:
   壊れ方を規約に書いても、 次にそのエラーに当たった session がその規約を引くとは限らない。 エラー文は原因と
@@ -12,6 +12,8 @@
 動作 (非 block):
   - PostToolUse は tool_response の stdout / stderr、 PostToolUseFailure は error の文字列を見る
     (Bash が終了値 0 以外で終わると PostToolUse は呼ばれず PostToolUseFailure が呼ばれる)。
+  - desktop app の archive_session も見る (結果の content の文。 断りの文がどの原因かを言わない = 台帳の行が読み方の
+    節を出す。 matcher = hooks/settings-entries.json の `Bash|mcp__.*__archive_session`)。
   - 台帳の各 entry の match が出たら (部分一致、 "regex": true なら正規表現)、 additionalContext に
     「既知の壊れ方: 〈match〉 → 〈doc〉 (〈hint〉)」 を返す。 原因を推測する前にその節を読むよう促す。
   - 同じ entry は 1 session に 1 回だけ (状態 = ~/.claude/state/known-error-nudge/<session>.json、 14 日で掃除)。
@@ -63,9 +65,16 @@ def tool_text(payload):
     resp = payload.get("tool_response")
     if resp is None:
         resp = payload.get("tool_result")
-    if isinstance(resp, dict):
+    if isinstance(resp, dict) and ("stdout" in resp or "stderr" in resp):
         return "{}\n{}".format(resp.get("stdout") or "", resp.get("stderr") or "")
+    if isinstance(resp, (dict, list)):  # an MCP tool's result (content blocks): the text is inside
+        return json.dumps(resp, ensure_ascii=False)
     return str(resp or "")
+
+
+def watched_tool(name):
+    """Bash, and the desktop app's archive_session (its refusal text names no cause = the ledger points to the reading)."""
+    return name == "Bash" or (name.startswith("mcp__") and name.endswith("__archive_session"))
 
 
 def clip(text):
@@ -118,7 +127,7 @@ def run_hook():
         payload = json.loads(sys.stdin.read() or "{}")
     except Exception:
         return 0
-    if payload.get("tool_name") != "Bash":
+    if not watched_tool(str(payload.get("tool_name") or "")):
         return 0
     event = payload.get("hook_event_name") or "PostToolUse"
     if event not in ("PostToolUse", "PostToolUseFailure"):

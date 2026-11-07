@@ -482,7 +482,7 @@
       ]
     },
     {
-      "matcher": "Bash",
+      "matcher": "Bash|mcp__.*__archive_session",
       "hooks": [
         {
           "type": "command",
@@ -512,7 +512,7 @@
   ],
   "PostToolUseFailure": [
     {
-      "matcher": "Bash",
+      "matcher": "Bash|mcp__.*__archive_session",
       "hooks": [
         {
           "type": "command",

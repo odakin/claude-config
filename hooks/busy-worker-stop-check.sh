@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# busy-worker-stop-check.sh — PreToolUse(Bash / stop_session / archive_session): 動いている worker session を止める操作を、 本人が発言する前の 1 回目は止める (聞いて答えをもらった後の同じ操作は通す)
+# busy-worker-stop-check.sh — PreToolUse(Bash / stop_session / archive_session): 動いている worker session を止める操作を、 本人が発言する前の 1 回目は止める (聞いて答えをもらった後の同じ操作は通す。 turn の途中の相手への archive_session は turn が終わるまで止め、 待ち方を出す)
 #
 # 正本: claude-config/hooks/busy-worker-stop-check.sh (setup.sh が ~/.claude/hooks/ に symlink、 hooks/settings-entries.json で
 #       PreToolUse[Bash|mcp__.*__(stop_session|archive_session)] に登録)

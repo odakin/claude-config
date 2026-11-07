@@ -8,7 +8,7 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 
 - **[bash-search-zero-result-nudge.sh](bash-search-zero-result-nudge.sh)** — PostToolUse(Bash): ローカル discovery 検索の null (tree 検索空振り / glob 不成立) + truncate-before-grep pipeline + 素の grep が binary 扱いで飛ばす file を検出し「部分 scope の null で不在断定するな」 の scope 宣言 template を inject
 - **[bash-search-zero-result-nudge.test.sh](bash-search-zero-result-nudge.test.sh)** — logic + incident-reproduction selftest
-- **[busy-worker-stop-check.sh](busy-worker-stop-check.sh)** — PreToolUse(Bash / stop_session / archive_session): 動いている worker session を止める操作を、 本人が発言する前の 1 回目は止める (聞いて答えをもらった後の同じ操作は通す)
+- **[busy-worker-stop-check.sh](busy-worker-stop-check.sh)** — PreToolUse(Bash / stop_session / archive_session): 動いている worker session を止める操作を、 本人が発言する前の 1 回目は止める (聞いて答えをもらった後の同じ操作は通す。 turn の途中の相手への archive_session は turn が終わるまで止め、 待ち方を出す)
 - **[cd-git-write-guard.py](cd-git-write-guard.py)** — PreToolUse(Bash): 別の dir への cd と git commit / push を 1 つの command に入れた形 (と git -C … commit / push) を止め、 cd を単独の 1 回に分けて打ち直させる (conventions/claude-code-permissions.md#cd-with-git-goes-to-classifier)。
 - **[cd-git-write-guard.test.sh](cd-git-write-guard.test.sh)** — 述語の selftest + hook 入出力 (deny の JSON / cd なしは無音 / opt-out / Bash 以外は無音)
 - **[chat-file-ref-enforce.sh](chat-file-ref-enforce.sh)** — Stop: 最終メッセージの file 参照 (link / path に見える inline code) が desktop の右パネルで開けない形なら、 正しい path を添えて 1 回だけ書き直させる
@@ -49,7 +49,7 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[guard-cli-form-guard.test.sh](guard-cli-form-guard.test.sh)** — guard-cli-form-guard.py の self-test (配信対象外)
 - **[headless-record-clause-nudge.py](headless-record-clause-nudge.py)** — Claude Bash の記録条項注入の入口。共通実装と検査は scripts/lib/headless_record_clause.py。--selftest。
 - **[headless-record-clause-nudge.test.sh](headless-record-clause-nudge.test.sh)** — 自動検査から headless 起動の注入・誤爆・stdin 保持の selftest を実行する
-- **[known-error-nudge.py](known-error-nudge.py)** — PostToolUse / PostToolUseFailure(Bash): 出力・エラー文に既知の壊れ方のエラー文が出たら、 その壊れ方を書いた規約の節を Claude に知らせる (台帳 = hooks/known-errors.json)
+- **[known-error-nudge.py](known-error-nudge.py)** — PostToolUse / PostToolUseFailure(Bash・archive_session): 出力・エラー文に既知の壊れ方のエラー文が出たら、 その壊れ方を書いた規約の節を Claude に知らせる (台帳 = hooks/known-errors.json)
 - **[known-error-nudge.test.sh](known-error-nudge.test.sh)** — known-error-nudge.py の検査 (鳴る / 黙る / 1 session 1 回 / 台帳の点検)
 - **[known-errors.json](known-errors.json)** — 既知の壊れ方のエラー文 → その壊れ方を書いた規約の節。
 - **[live-engine-edit-guard.py](live-engine-edit-guard.py)** — PreToolUse(Edit): hook や git の hook が作業 tree から直接読む file を、 その session で初めて Edit するとき止め、 写しで直すか 1 回で済ませるかを決めさせる
