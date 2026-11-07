@@ -178,7 +178,9 @@ def wrap_kind(text: str) -> str:
 # An ask only the person can answer: an approval that counts only in the window it is given in (a protected file's change,
 # an operation the permission check holds) or a send to the outside. The parent's message does not answer it. A question of
 # judgment that uses these words also stays the person's (keeping a child costs less than folding it past the person).
+# 当てますか・当ててよいか = 規則の文書・道具の当ての承認 (承認と当ては worker の窓で本人から取る。 親の message は答えにならない)
 OWNER_ONLY_ASK = re.compile(r"承認|裁定|許可|同意|送信|送って|送る|投稿|公開|返信|approv|permission|consent|publish"
+                            r"|当て(?:ますか|てよい|て良い|てもよい|てもいい|ていい|る)"
                             r"|(?<![A-Za-z])(?:send|post)(?![A-Za-z])", re.I)
 ID8 = re.compile(r"^([0-9a-f]{8})\b")
 # Minutes after the child answered the person's last prompt in its window (and left no question) from which that prompt
@@ -372,10 +374,28 @@ def parent_wait_notes(parent_path: str, local: str, as_of: str = "") -> list[str
     return out
 
 
-def _wait_points(ev: dict, notes: list[str]) -> list[tuple[str, str]]:
-    points = list(ev["asks"])
-    for n in notes:  # a note arrives after the child's turn end; date it at the child's last reply before it
-        points.append((max((s for s in ev["replies"] if s <= n), default=n), ""))
+def _wait_points(ev: dict, notes: list[str]) -> list[tuple[str, str, str]]:
+    """[(when the child stopped waiting on the person, the ask text or '', when the note about it landed or '')].
+    A note lands after the child's turn end, but the app may hold it until the person's next prompt in the parent's window;
+    meanwhile the person may have answered in the child's window and the child gone on. When the child's turn was still
+    running at the note (it replied after the note and before its next turn end), the note reports the turn that ended
+    before it = date it there. Otherwise at the child's last reply before the note (measured: dated at the landing, an ask
+    the person had already answered looked open and kept a finished child)."""
+    points = [(t, a, "") for t, a in ev["asks"]]
+    stops = sorted(ev["stops"])
+    prompts = sorted(list(ev["human"]) + [t for t, _ in ev["peers"]])
+    for n in notes:
+        # running = the child's first reply after the note comes before its next turn end and before any new prompt
+        # (a reply after a new prompt belongs to a turn that started after the note)
+        nxt = min((s for s in stops if s > n), default="")
+        r1 = min((r for r in ev["replies"] if r > n), default="")
+        p1 = min((t for t in prompts if t > n), default="")
+        at = ""
+        if r1 and (not nxt or r1 <= nxt) and (not p1 or r1 < p1):
+            s0 = max((t for t in prompts if t <= n), default="")  # the prompt that started the running turn
+            if s0:  # the turn that ended before it (its turn-end record, else its last reply)
+                at = max((s for s in stops if s <= s0), default="") or max((r for r in ev["replies"] if r < s0), default="")
+        points.append((at or max((r for r in ev["replies"] if r <= n), default=n), "", n))
     return points
 
 
@@ -413,7 +433,7 @@ def open_ask(ev: dict, notes: list[str], parent: str = "") -> dict | None:
     points = [p for p in _wait_points(ev, notes) if not step0_turn(ev, p[0])]
     if not points:
         return None
-    at, text = max(points, key=lambda p: p[0])
+    at, text, noted = max(points, key=lambda p: p[0])
     if any(h > at for h in ev["human"]):
         return None
     if not text:
@@ -421,7 +441,7 @@ def open_ask(ev: dict, notes: list[str], parent: str = "") -> dict | None:
     owner_only = bool(OWNER_ONLY_ASK.search(text))
     if parent and not owner_only and any(ts > at for ts, frm in ev["peers"] if frm == parent):
         return None
-    return {"at": at, "ask": text, "owner_only": owner_only}
+    return {"at": at, "ask": text, "owner_only": owner_only, "noted": noted}
 
 
 def owner_after_parent(ev: dict, parent: str, now: float | None = None) -> dict | None:
@@ -538,12 +558,18 @@ def unanswered_send(c: dict, ev: dict, as_of: str = "") -> str:
     return max(late, default="")
 
 
+def _stopped_at(ask: dict) -> str:
+    """「HH:MM に本人待ちで止まり」 (知らせが遅れて着いたなら着いた時刻も = 読む側が着いた時刻を子の turn と取り違えない)。"""
+    at, noted = _local_hm(ask["at"]), _local_hm(ask.get("noted") or "")
+    return f"{at} に本人待ちで止まり" + (f" (その知らせが親の窓に着いたのは {noted})" if ask.get("noted") and noted != at else "")
+
+
 def _ask_text(ask: dict) -> str:
     if ask.get("owner_only"):
-        head = (f"本人だけが答えられる問いが残っている ({_local_hm(ask['at'])} に本人待ちで止まり、 その後この子の窓に本人の発言が無い。"
+        head = (f"本人だけが答えられる問いが残っている ({_stopped_at(ask)}、 その後この子の窓に本人の発言が無い。"
                 " 承認・外部への発信の問いは親の message では答えにならない)")
     else:
-        head = (f"本人待ちの問いが残っている ({_local_hm(ask['at'])} に本人待ちで止まり、 その後この子の窓に本人の発言も親の message も"
+        head = (f"本人待ちの問いが残っている ({_stopped_at(ask)}、 その後この子の窓に本人の発言も親の message も"
                 " 無い。 判断の問いなら親が子に答えを送ればよい)")
     return head + (f": {ask['ask'][:160]}" if ask["ask"] else "")
 
@@ -957,6 +983,10 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
         if talking and talking.get("answered_at") and not ask:
             row["state"], row["answered_at"] = "answered", talking["answered_at"]
             row["answered_min"] = round((now - _epoch(talking["answered_at"])) / 60)
+        elif ask and not ask["owner_only"] and not talking:
+            # 判断の問いだけが残る = 規則 9 で親が答える番 (見張りに回すと、 見張りはその問いが消えるのを待ち、 親は見張りが
+            # 起きるのを待つ = 互いの待ち、 実測)。 本人だけの問い・本人が子と話している途中は従来どおり残して見張る
+            row["state"], row["wait_since"] = "judge", ask["at"]
         else:
             row["state"] = "owner"
             row["wait_since"] = (ask or talking or {}).get("at", "")
@@ -997,7 +1027,7 @@ def finished(parent: str, roots: list[str], as_of: str = "", instance: str | Non
     return [finished_state(c, prec["local_id"], ppath, events, instance or instance_name(), as_of) for c in kids]
 
 
-DONE_STATES = ("due", "wrapped", "archived", "no-board")
+DONE_STATES = ("due", "wrapped", "archived", "no-board", "judge")  # judge = 親が子の問いに答える番 (--wait-due はすぐ返す)
 
 
 def _settled(r: dict) -> bool:
@@ -1066,7 +1096,7 @@ def all_parents() -> list[str]:
 
 
 STATE_WORDS = {"due": "規則 10 の番 (wrap を頼んでいない)", "wrapped": "wrap は終わっている = 照合して畳む",
-               "wrapping": "wrap の途中", "owner": "本人待ち = 残す", "answered": "本人の発言に子が答え終えている (裁定待ち = 今は残す)",
+               "wrapping": "wrap の途中", "owner": "本人待ち = 残す", "judge": "判断の問いが残っている = 親が答える番 (規則 9)", "answered": "本人の発言に子が答え終えている (裁定待ち = 今は残す)",
                "open": "開いている依頼がある", "busy": "動いている", "no-board": "掲示板に依頼が無い", "archived": "archive 済み"}
 
 
@@ -1097,6 +1127,10 @@ def _accept_line(r: dict, rule: str, extra: str = "") -> str:
                 " = 規則 10 では残し、 本人に 1 行で伝える。 本人が子の窓で答えて子が終えたときに起こされるよう、 同じ turn に"
                 f" Bash の run_in_background で `{_wait_due_cmd([r['local']])}` を出す (ほかの子が動いていると、 app は子の"
                 " turn の終わりでこの session を起こさない)。" + tail)
+    if r["state"] == "judge":
+        return (f"🧺 {who} の依頼を受け取った。 子は判断の問いを残している ({'; '.join(r['reasons'])[:300]})"
+                " = 規則 9 で親が答える番: 子に答えを SendMessage で送る (本人の判断が要るなら本人に 1 行で聞く)。"
+                " 見張りでは待たない (答えを送れば子が続け、 終えたら照合し直す)。" + tail)
     if r["state"] == "answered" and ANSWERED_GRACE_MIN is not None:
         return (f"🧺 {who} の依頼を受け取った。 本人がこの子の窓で話した後、 子は答え終えて問いを残していない"
                 f" ({'; '.join(r['reasons'])[:300]})。 本人がその窓で {ANSWERED_GRACE_MIN:g} 分話さなければ畳む番になる ="
@@ -1152,7 +1186,7 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
     if not me:
         return ""
     rows = finished(me["local_id"], roots)
-    due = [r for r in rows if r["state"] in ("due", "wrapped", "answered", "owner") and not _watch_running(r["local"])]
+    due = [r for r in rows if r["state"] in ("due", "wrapped", "answered", "owner", "judge") and not _watch_running(r["local"])]
     if not due:
         return ""
     path = _state_file(me["local_id"])
@@ -1190,7 +1224,8 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
     fold = [r for r in new if r["state"] in ("due", "wrapped")]
     ask = [r for r in new if r["state"] == "answered" and ANSWERED_GRACE_MIN is None
            and r.get("answered_min", 0) >= ASK_AFTER_MIN]
-    watch = [r for r in new if r not in fold and r not in ask]
+    judge = [r for r in new if r["state"] == "judge"]
+    watch = [r for r in new if r not in fold and r not in ask and r not in judge]
     lines = []
     if fold:
         lines.append(f"🧺 規則 10 の番の子が {len(fold)} つ、 畳まれないまま残っている (掲示板の依頼は全部受け取り済みで、 子は動いておらず本人も待っていない):")
@@ -1214,6 +1249,11 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
         lines.append("本人に 1 行で伝え (まだなら)、 本人が子の窓で答えて子が終えたときに起こされるよう、 Bash の run_in_background で"
                      f" `{_wait_due_cmd([r['local'] for r in watch])}` を出す (ほかの子が動いていると、 app は子の turn の終わりで"
                      " この session を起こさない)。")
+    if judge:
+        lines.append(f"🧺 依頼は全部受け取り済みで、 判断の問いを残している子が {len(judge)} つ (規則 9 = 親が答える番、 見張りでは待たない):")
+        for r in judge:
+            lines.append(f"- {r['title'] or r['local']} ({r['local']}) — " + "; ".join(r["reasons"])[:200])
+        lines.append("子に答えを SendMessage で送る (本人の判断が要るなら本人に 1 行で聞く)。")
     lines.append("この知らせは子ごとに 1 回だけ。")
     if rule:
         lines.append(f"規則 = {rule}")
@@ -1523,6 +1563,29 @@ def selftest() -> int:
         r = check_child(gw_l, need_wrap=False)
         ok("control: no board hand-off in the window, the model check and an ask in its first turn → the person's ask stays",
            bool(r["open_ask"]) and not r["go_wait"])
+        # A late note: the child stopped on the person, the person answered in the child's window and the child went on, and the
+        # note about the first stop landed in the parent's window during that later turn (measured: read at its landing, the
+        # answered ask looked open and kept a finished child)
+        ev_late = {"asks": [("2026-01-01T01:08:00Z", "どちらにしますか")], "first": "2026-01-01T00:59:00Z",
+                   "replies": ["2026-01-01T01:00:00Z", "2026-01-01T01:08:00Z", "2026-01-01T01:23:00Z", "2026-01-01T01:32:00Z",
+                               "2026-01-01T01:35:00Z"],
+                   "stops": ["2026-01-01T01:08:30Z", "2026-01-01T01:40:00Z"], "human": ["2026-01-01T01:22:00Z"], "peers": [],
+                   "step0_handoff": False, "model_checks": [], "claims": []}
+        late = ["2026-01-01T01:32:30Z"]
+        ok("a late note (the child's next turn was running) is dated at the turn it reported",
+           ("2026-01-01T01:08:30Z", "", "2026-01-01T01:32:30Z") in _wait_points(ev_late, late))
+        ok("a late note: the person's answer after that turn closes the ask", open_ask(ev_late, late, parent_l) is None)
+        ev_on = dict(ev_late, replies=ev_late["replies"][:2], stops=ev_late["stops"][:1], human=[])
+        a_on = open_ask(ev_on, ["2026-01-01T01:09:00Z"], parent_l)
+        ok("a note that landed right after the turn end is dated at the last reply before it (as before)",
+           bool(a_on) and a_on["at"] == "2026-01-01T01:08:00Z")
+        ev_held = dict(ev_late, asks=[("2026-01-01T01:08:00Z", "この候補を当てますか")], human=[],
+                       peers=[("2026-01-01T01:22:00Z", parent_l)])
+        a_held = open_ask(ev_held, late, parent_l)
+        ok("当てますか is the person's to answer: the parent's message does not close it",
+           bool(a_held) and a_held["owner_only"])
+        ok("the reason names both times when the note landed late (the stop and the landing)",
+           "その知らせが親の窓に着いたのは" in _ask_text(a_held) and _local_hm("2026-01-01T01:08:30Z") in _ask_text(a_held))
         # The requester answers the child's questions of judgment (CONTRACT.md#worker-questions-to-requester): its message in
         # the child's window after the ask closes it; an approval or a send to the outside stays the person's.
 
@@ -1744,10 +1807,12 @@ def selftest() -> int:
             return local, cli
 
         base = [u("2026-01-02T00:00:00Z", "依頼", origin={"kind": "human"}), reply("2026-01-02T01:00:00Z"), stop("2026-01-02T01:00:01Z")]
-        R = {k: f"20260102T000000Z-claude-{i:06x}" for i, k in enumerate(["due", "open", "reuse", "owner", "retry", "said", "far", "wrapd"])}
+        R = {k: f"20260102T000000Z-claude-{i:06x}" for i, k in enumerate(["due", "open", "reuse", "owner", "retry", "said", "far", "wrapd",
+                                                                        "judge"])}
         cases = {}
         for k, n in [("due", "c1000001"), ("open", "c1000002"), ("reuse", "c1000003"), ("owner", "c1000004"),
-                     ("retry", "c1000005"), ("said", "c1000006"), ("far", "c1000007"), ("wrapd", "c1000008")]:
+                     ("retry", "c1000005"), ("said", "c1000006"), ("far", "c1000007"), ("wrapd", "c1000008"),
+                     ("judge", "c100000b")]:
             role = f"role-proj-{k}"
             event("request", R[k], "2026-01-02T00:00:00", task="parent", sid=bp_c, assignee={"agent": "claude", "session_id": role})
             event("claim", R[k], "2026-01-02T00:01:00", task=f"{n} (opus)", sid=role,
@@ -1759,6 +1824,8 @@ def selftest() -> int:
             rows_ = list(base)
             if k == "owner":
                 rows_ = base[:1] + [reply("2026-01-02T01:00:00Z", ask="送ってよいですか?"), stop("2026-01-02T01:00:01Z")]
+            if k == "judge":
+                rows_ = base[:1] + [reply("2026-01-02T01:00:00Z", ask="どちらの案にしますか?"), stop("2026-01-02T01:00:01Z")]
             if k in ("retry", "said"):
                 rows_ = base[:1] + [peer("2026-01-02T00:30:00Z", "続けて", bp_l)]
                 if k == "retry":
@@ -1787,6 +1854,7 @@ def selftest() -> int:
         ok("finished: a claimed request not accepted → open", st["open"] == "open")
         ok("finished: a new request posted to the child's role (reuse) → open", st["reuse"] == "open")
         ok("finished: the child asked the person and no answer → owner", st["owner"] == "owner")
+        ok("finished: only a question of judgment left → judge (the parent's turn, rule 9)", st["judge"] == "judge")
         ok("finished: only the app's 'Try again' after the parent's message → due", st["retry"] == "due")
         ok("finished: the person spoke and the child answered → answered (kept, owner's call)", st["said"] == "answered")
         ok("finished: claimed on another machine → no-board", st["far"] == "no-board")
@@ -1812,6 +1880,9 @@ def selftest() -> int:
            cases["said"][0] in d.get("reason", "") and "本人に 1 行で聞く" in d.get("reason", "")
            and d["reason"].index(cases["said"][0]) > d["reason"].index("話している間"))
         ok("hook-stop: a child still wrapping is not named", rl not in d.get("reason", ""))
+        ok("hook-stop: the judge child → 'answer it (rule 9)', not the --wait-due watch",
+           cases["judge"][0] in why and why.index(cases["judge"][0]) > why.index("判断の問いを残している子")
+           and "--wait-due " + cases["judge"][0] not in why)
         ok("hook-stop: the second Stop for the same children → silent", hook_stop(stop_in, [board], "R", "block") == "")
         os.remove(_state_file(bp_l))
         ok("hook-stop: observe mode → silent (and logged)", hook_stop(stop_in, [board], "R", "observe") == ""
@@ -1826,6 +1897,8 @@ def selftest() -> int:
         ok("hook-accept: the child waits on the person → 'keep, tell the person' + the --wait-due watch with the board root",
            "残し" in line and "--wait-due " + cases["owner"][0] in line and f"--board-root '{board}'" in line)
         ok("wait-due: a child due now → returns at once", wait_due([cases["due"][0]], [board], 0.001, 0) == 0)
+        ok("wait-due: a child left with only a question of judgment → returns at once (the parent's turn)",
+           wait_due([cases["judge"][0]], [board], 0.001, 0) == 0)
         ok("wait-due: a child still waiting on the person → times out", wait_due([cases["owner"][0]], [board], 0.0001, 0) == 3)
         ok("wait-due: one child due, one waiting → ends at once (the rest re-watched)",
            wait_due([cases["owner"][0], cases["due"][0]], [board], 0.0001, 0) == 0)
