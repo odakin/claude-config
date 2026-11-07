@@ -981,6 +981,10 @@ sections:
     legacy: "8.94"
     level: 3
     title: "8.94 1 つの事柄を止める・運ぶ・外す・承認する道は同じ照合を使う — 片方を直すたびに対の道に後退ができる。 壊す側の試しは回帰の試験に移し、 往復には止めどきを置く"
+  - id: role-from-the-work
+    legacy: "8.95"
+    level: 3
+    title: "8.95 session の役は、 本人の語や session が読む規則の文でなく、 session がしている仕事から機械が決める — 語に結ぶと、 仕事の名前だけで開いた session に効かない"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
