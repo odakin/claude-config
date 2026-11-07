@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload) + 共同編集者から「Dropbox の容量がいっぱい」 と言われ、 自分の共有フォルダが相手の容量をどれだけ使っているかを量るとき (#shared-folder-quota)
+when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload) + 共同編集者から「Dropbox の容量がいっぱい」 と言われ、 自分の共有フォルダが相手の容量をどれだけ使っているかを量るとき + 共有フォルダに大きいデータを足す前 (#shared-folder-quota)
 category: infra
 summary: Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 共有状態の read recipe = list_folders は cursor 完走まで不在断定しない + get_metadata の sharing_info 直行 + list_folder_members で共同編集者の own-account 検証 + search_v2 は upload 失敗 file に痕跡ゼロ #sharing-read-recipes、 共有フォルダは入っている全員の容量に数えられる・online-only では減らない・大きさは list_folder recursive の size の和・誰が入れたかは sharing_info.modified_by・外す前に他の仕組みが読む file を確かめる #shared-folder-quota、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
 -->
@@ -80,6 +80,11 @@ file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/�
 4. **中身の同じ file**: `content_hash` が同じなら中身が同じ (別の名前・別の場所の重複を、 落とさずに見つけられる)
 5. **増え方**: `server_modified` で期間ごとに足す。 最後に変わった日なので、 古い file に新しい版を保存すると新しく見える
 - ⚠️ **自分の token から見えないもの**: 相手の plan・割り当て・使用量、 相手だけの file、 第三者が相手と共有しているフォルダ、 相手が mount しているか (`sharing/list_mountable_folders` は mount 済みのフォルダも返すので、 未 mount だけの一覧にならない = 実測)。 「空き」 は書けず、 書けるのは「自分の共有フォルダが占める量」 だけ
+
+**大きいデータを足す前に** (取得したデータ・生成物を共有フォルダに置く前):
+
+- 相手の空きは自分の token から見えない (上の ⚠️) = 足す量を相手に伝え、 相手の画面で確かめてもらう
+- データは先に手元 (共有フォルダの外) に置き、 検査 (行数・既知のデータとの照合) を通してから共有フォルダに置く = 検査で落ちたデータが相手の解析に流れず、 置き直しで相手の容量と同期を二度使わない
 
 **減らす案を出すとき**:
 
