@@ -555,6 +555,12 @@ PAIRING_CANDIDATES = 24
 PAIRING_BUDGET_S = 1.5
 # A heading that files the lines under it as history or reference demotes them without touching a word.
 _HISTORICISING_HEAD = re.compile(r"旧|参考|過去|以前|歴史|廃止|非推奨|deprecated|legacy|(?<![A-Za-z])old(?![A-Za-z])|obsolete|superseded", re.I)
+def _grams4(s: str) -> set[str]:
+    """文の 4 字の並び (分けた文の候補を絞る)。"""
+    t = re.sub(r"\s+", "", s)
+    return {t[i:i + 4] for i in range(len(t) - 3)}
+
+
 def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
     """(ok, reason, what) for a change to a rule document, judged by what it adds, not by its form.
 
@@ -599,6 +605,7 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
             by_word.setdefault(t, set()).add(k)
         by_head.setdefault(a[:8], set()).add(k)
     deadline = time.monotonic() + PAIRING_BUDGET_S
+    unmatched: list[str] = []  # 主の照合で相手の無い消えた文 (下の 2 つめの照合へ)
     for r in removed:
         # an edit = an added sentence that keeps at least EDIT_KEEPS of the removed one's characters, in order. Several
         # removed sentences may merge into one added sentence, and one removed sentence may split into several (a
@@ -606,7 +613,7 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
         # terms r already carried are not new in any of them.
         best, keep = -1, 0.0
         if time.monotonic() > deadline:
-            what["removed"].append(r)
+            unmatched.append(r)
             continue
         s, w = _tokens(r)
         score: dict[int, int] = {}
@@ -639,26 +646,41 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
             if r not in sources.get(best, []):
                 sources.setdefault(best, []).append(r)
         else:
-            # 伸ばして途中に句点を入れ、 2 つ以上の文に分かれた文 = 言い直し (どの片も 6 割を残さないので「消した」 に数えていた、
-            # 実測)。 相手が見つからないときだけ、 まだ使われていない追記の文のうち r の片 (その文の 6 割以上が r から) を集め、
-            # 片が r の 6 割以上を覆えば言い直しと数える。 緩和の語の判定は sources と追記の全部で見るので、 検出は弱まらない
-            ks, cover = [], 0
-            if time.monotonic() <= deadline:
-                for k, a in enumerate(added):
-                    if k in used:
-                        continue
-                    sm = difflib.SequenceMatcher(None, r, a, autojunk=False)
-                    if sm.quick_ratio() * (len(r) + len(a)) < 2 * EDIT_KEEPS * len(a):  # upper bound on the share of a
-                        continue
-                    m_a = sum(b.size for b in sm.get_matching_blocks())
-                    if m_a / max(len(a), 1) >= EDIT_KEEPS:
-                        ks.append(k)
-                        cover += m_a
-            if ks and cover >= EDIT_KEEPS * len(r):
-                used.update(ks)
-                what["edited"].append((r, " ".join(added[k] for k in ks)))
-            else:
-                what["removed"].append(r)
+            unmatched.append(r)
+    # 2 つめの照合 = 伸ばして途中に句点を入れ、 2 つ以上の文に分かれた文 = 言い直し (どの片も 6 割を残さないので主の照合では相手が
+    # 無く、 「消した」 に数えていた、 実測)。 主の照合を全部の消えた文で先に済ませ、 相手の無い文だけを残りの時間で見る (主の照合の
+    # 中で全部の追記の文と総当たりすると、 大きな書き換えで時間の枠を使い切り、 後ろの文が「消した」 に落ちて、 元から緩和の語を持つ
+    # 文の言い直しが止まった = 照合の実測)。 候補 = まだ使われていない追記の文のうち、 4 字の並びの半分以上が r に在るもの。
+    # 片 (その文の 6 割以上が r から) が r の 6 割以上を覆えば言い直しと数える。 緩和の語の判定は sources と追記の全部で見るので、
+    # 検出は弱まらない
+    grams: dict[int, set[str]] = {}
+    for r in unmatched:
+        ks, cover = [], 0
+        if time.monotonic() <= deadline:
+            rg = _grams4(r)
+            for k, a in enumerate(added):
+                if k in used:
+                    continue
+                if time.monotonic() > deadline:
+                    ks = []
+                    break
+                ag = grams.get(k)
+                if ag is None:
+                    ag = grams[k] = _grams4(a)
+                if not ag or len(ag & rg) * 2 < len(ag):
+                    continue
+                sm = difflib.SequenceMatcher(None, r, a, autojunk=False)
+                if sm.quick_ratio() * (len(r) + len(a)) < 2 * EDIT_KEEPS * len(a):  # upper bound on the share of a
+                    continue
+                m_a = sum(b.size for b in sm.get_matching_blocks())
+                if m_a / max(len(a), 1) >= EDIT_KEEPS:
+                    ks.append(k)
+                    cover += m_a
+        if ks and cover >= EDIT_KEEPS * len(r):
+            used.update(ks)
+            what["edited"].append((r, " ".join(added[k] for k in ks)))
+        else:
+            what["removed"].append(r)
     what["added"] = [a for k, a in enumerate(added) if k not in used]
     for k, a in enumerate(added):
         # the same rules as for a new sentence, minus the terms the sentences it grew out of already carried
@@ -1290,6 +1312,16 @@ def selftest() -> int:
     ok_split, _r_split, what = judge_change(split_old, split_new)
     check("a sentence lengthened and split by a new full stop is an edit, not a removal",
           ok_split and not what["removed"] and len(what["edited"]) == 1)
+    # a big rewrite (300 sentences deleted, 300 new, 40 edited sentences that already said ただし) stays inside the
+    # budget: the split pairing runs after the main pairing, so the edited ones are paired before the time goes
+    big_old = ("# R\n\n" + "\n".join(f"古い注記 {i} の欄は前の版の表から写したもので、 次の改訂では参照しない。" for i in range(300))
+               + "\n" + "\n".join(f"項目 {i} の欄は表に書く、 ただし空欄 {i} は残して先に進む。" for i in range(40)) + "\n")
+    big_new = ("# R\n\n" + "\n".join(f"項目 {i} の欄は別表に書く、 ただし空欄 {i} は残して先に進む。" for i in range(40))
+               + "\n" + "\n".join(f"新しい注記 {i} を足して、 表の見出しの並びを今の版に合わせる。" for i in range(300)) + "\n")
+    t0 = time.monotonic()
+    ok_big = judge_change(big_old, big_new)[0]
+    check("a big rewrite keeps inside the time budget and does not stop edits that kept their ただし",
+          ok_big and time.monotonic() - t0 < PAIRING_BUDGET_S)
     what = judge_change(doc, rewritten["a sentence moved to another section"])[2]
     check("the record says which sentence moved", what["moved"] == ["送信は本人の OK の後。"] and not what["added"] and not what["removed"])
     check("a heading reworded moves the lines under it, in the record", "レビューを経てから deploy する。" in judge_change(doc, rewritten["a heading reworded"])[2]["moved"])
