@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch)
+when: bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch) + 直しの前後の CPU・速さを比べて効果を示すとき (= #side-by-side-before-after)
 category: infra
 summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 (= 受け入れ diff の前に noise floor を測る / 旧版は同じ dir に別名で置いて並走) + 決定的並列化 + #run-scoped-cache = 鮮度が価値の検出器 fleet の cache は TTL でなく run に閉じる 〔TTL は新着を silent に隠す〕 (§15)、 機能の回復は調査終了の条件でない = 症状が「余剰」 型だと retry で直った瞬間に原因が再発源に残る + origin 不明の残骸は恒常 noise 化して調査 trigger を失う (§16)、 復旧は起動命令の反復でなく事前状態別 dispatch = healthy は reuse / 接続異常は reconnect / stopped だけ launch / context 不一致は explicit switch / unknown は fail-loud (#recovery-state-dispatch)、 CI の red streak は起点から遡る = 着手前に最新 run を再照会 / 最後の green → 最初の red (run は push 単位) + pickaxe で導入 commit / 使い捨て clone × native・GNU userland × 空 HOME の行列で再現 / 無言の assertion を自己申告型に / 常時 red は情報を運ばない / #flaky-is-a-symptom = 「flaky」 は診断名ではない 〔再実行で緑でも原因を見るまで閉じない。 疑う順 = 値の中身・順序/時刻・環境差・資源。 `--log-failed` は抜粋なので完全ログを取る〕 (§17、 scripts/ci-red-streak.py・scripts/ci-local-repro.sh)
 -->
@@ -564,7 +564,12 @@ origin: 2026-07-04 「最近の項目に routine session が数十件」 調査�
 
    実例 2026-09-10: ~65 本の検査を subprocess で並列実行する dashboard で、 複数の検出器が同じ inbox × 30 日窓を各自 fetch していた。 run-scoped 化 + 逐次 get の batch 化で mail lane の実行秒合計 188s → 128s / 壁時計 平均 108s → 81s、 出力 diff は時刻表示のみ。 ⚠️ **同 turn の 4 軸 sweep で (d) 違反を自分の実装から発見している** (= 本文つき fetch まで cache しており、 消費者ゼロなのに temp に本文が落ちていた)。
 
-reflex: 性能修復に入る瞬間に「実測したか (per-unit timer → profiler)」、 fix を宣言する瞬間に「何と何の出力が等価だと **どの操作で** 確認したか」 + 「その diff の noise floor を測ったか」、 **数値を報告に載せる瞬間に「この数字は誰が測ったか / どの構成で測ったか」**。
+8. <a id="side-by-side-before-after"></a>**直しの前後の CPU・速さは、 直す前の版を凍結して後の版と同時に並べて測る** — 外の条件 (機械の負荷・外部の更新の頻度) は時間で変わるので、 前と後を別の時間に測ると条件の差が効果に混ざる。 直す前の版を `git archive <base> <dir> | tar -x -C <写しの dir>` で写しとして凍結し (作業ツリーは直していける)、 後の版と**同時に**、 同じ入力・同じ時間で走らせる。
+   - **比べる区間を決める**: 起動直後の一回きりの重い処理 (初回の読み込みなど) を除いた定常の区間で、 累計 CPU の増え方を比べる。 一定間隔で `ps -o time= -p <pid>` を記録しておけば、 区間を後から選べる。 子プロセス (git・ssh など) の CPU は ps の time に入らない = 合計は `/usr/bin/time -p` で取る
+   - **期限で終わる道具は期限を長めに**: 初回の処理が長いと、 比べたい区間にほとんど入らないまま期限で終わる (実測: 1 回目は直した後の版が初回の読み込みで待たされて定常の周回を測れず、 期限を延ばして推移の記録で区間を選び、 測り直した)。 重い処理のたびに 1 行を出す印を環境変数で出せるようにしておくと、 区間の境目と回数が分かる
+   - 動いている道具を直すときは作業ツリーで途中の形を作らず、 写しで直して試してから入れる ([`hook-authoring.md#live-hook-edit-runs-elsewhere`](hook-authoring.md#live-hook-edit-runs-elsewhere))
+
+reflex: 性能修復に入る瞬間に「実測したか (per-unit timer → profiler)」、 fix を宣言する瞬間に「何と何の出力が等価だと **どの操作で** 確認したか」 + 「その diff の noise floor を測ったか」、 前後を比べる瞬間に「同時に並べたか・比べた区間はどこか」、 **数値を報告に載せる瞬間に「この数字は誰が測ったか / どの構成で測ったか」**。
 
 origin: 2026-06-03 Gmail 逐次 fetch の batch 化 (= 540s timeout RCA、 「逐次版と出力一致」 要件で landed) + 2026-07-24 dashboard 検査 fleet の並列 stage runner 化 (= 数分 → ~1 分、 cProfile が直感と違う最大犯人を特定、 byte 一致 + section 完全性で受け入れ)。 いずれも owner の personal layer に実装・設計史 (= 機構の正本は各 script docstring)。
 
