@@ -1,0 +1,29 @@
+{
+  "_comment": "lib/session_background_tasks.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant で確かめる spec (check-foil-teeth.py が読む)。",
+  "target": "lib/session_background_tasks.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "NG: ",
+  "pass_marker": "ok: ",
+  "mutants": [
+    {"name": "Monitor を ps の書き方に戻さずに生の文字列で比べる (直す前の照合)",
+     "pairs": [["                    and (r[\"command\"].strip() == text or vis(r[\"command\"]).strip() == body.strip())]", "                    and r[\"command\"].strip() == body.strip()]"]],
+     "expect_fail": ["the multi-line Monitor is matched in the ps (vis) form", "... and in the UTF-8 locale's form (Japanese not escaped)"],
+     "expect_pass": ["the board watch is a watch", "a subagent's background task is counted and says who started it"]},
+    {"name": "turn の途中なら記録の無い shell を全部落とす (直す前の判定)",
+     "pairs": [["        if rec is None and tid and busy:\n", "        if rec is None and busy:\n"]],
+     "expect_fail": ["a busy session's shell with no file and no record is counted (a Monitor the match missed is not dropped)"],
+     "expect_pass": ["a busy session's foreground command is not counted", "a busy session's background tasks are still counted"]},
+    {"name": "subagent の会話記録を読まない",
+     "pairs": [["    for source, p in transcripts(path):\n", "    for source, p in transcripts(path)[:1]:\n"]],
+     "expect_fail": ["a subagent's background task is counted and says who started it"],
+     "expect_pass": ["the board watch is a watch"]},
+    {"name": "引用符の中の語も見張りの形と読む",
+     "pairs": [["    masked = QUOTED.sub(\" \", command or \"\")\n", "    masked = command or \"\"\n"]],
+     "expect_fail": ["'watch' inside a quoted summary is not a watch"],
+     "expect_pass": ["the board watch is a watch"]},
+    {"name": "状態つきでない知らせ (Monitor の途中の event) でも終わったと読む",
+     "pairs": [["                    if NOTE_END.search(blk):\n", "                    if True:\n"]],
+     "expect_fail": ["an event-only notification does not end the monitor"],
+     "expect_pass": ["a notification with a status ends the task"]}
+  ]
+}

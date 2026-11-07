@@ -209,11 +209,17 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 
 - 最後の commit の後に 1 回、 error を見つけるつもりで横断を見る (変えた関数の他の呼び元、 消した語の残り、 壊れた link)。
   壊れた link は手書きの検査を書かず道具で見る: `python3 scripts/fix-md-links.py --base <作業ルート> --files <変えた md> --list` (0 件なら `missing target: 0`)。
-- <a id="stop-own-watches"></a>**最終 message の前に、 この session の背景の作業を道具で数え、 見張りを止める**:
-  `python3 scripts/lib/session_background_tasks.py self` が、 生きている背景の作業 (Bash の背景・前景から背景へ移った command・Monitor) を並べ、
-  見張りか (掲示板の `watch`・`touching --wait`、 照合の `--wait` / `--wait-due`、 起動の確かめの `--wait-first-turn`、 Monitor) と Monitor の残り秒を付ける。
-  見張りは `TaskStop <id>` で止め、 もう一度回して見張りが残っていないのを見てから終える。 見張りでない作業 (計算・長い検査) は止めずに、
-  最終 message と依頼元への報告に名前を書く (動いている間は畳めない)。 締めの中で新しい Monitor を仕掛けない
+- <a id="stop-own-watches"></a>**最終 message の前に、 この session の背景の作業を道具で数え、 要らなくなった見張りを止める**:
+  `python3 scripts/lib/session_background_tasks.py self` が、 生きている背景の作業 (Bash の背景・前景から背景へ移った command・Monitor。
+  subagent が仕掛けたものは誰のかを添える) を並べ、 見張りか (掲示板の `watch`・`touching --wait`、 照合の `--wait` / `--wait-due`、
+  起動の確かめの `--wait-first-turn`、 Monitor) と Monitor の残り秒を付ける。
+  - **締めの後に畳まれる session** (依頼元が archive する子・worker) は、 見張りを全部 `TaskStop <id>` で止め、 もう一度回して残っていないのを見てから終える。
+    掲示板の worker はこれを submit の後に回す (submit の出力は見張りの 1 行を出すが、 依頼元が同じ機械で生きている session なら見張らずに message で知らせる =
+    依頼元の受け取り・差し戻しは依頼元からの message で届く)
+  - **締めの後も続く session** (子を待つ親、 message を送れない相手 〔Codex・別の機械〕 と掲示板でやりとり中の session) は、 まだ答えを待っている見張り
+    (動いている子への `--wait` / `--wait-due`、 その相手への `watch` = [掲示板の契約](../../ai-collaboration/board/CONTRACT.md#codex-reach) で唯一の経路) を残し、
+    待ち終えた見張り (閉じた依頼・終わった子・用の済んだ Monitor) だけを止める。 残した見張りは名前を最終 message に書く (動いている間はこの session も畳めない)
+  - 見張りでない作業 (計算・長い検査) は止めずに、 最終 message と依頼元への報告に名前を書く (動いている間は畳めない)。 締めの中で新しい Monitor を仕掛けない
   (1 回だけ待つなら、 待つ相手が終われば必ず終わる背景の Bash = [`shell-env.md#background-done-notice-before-exit`](shell-env.md#background-done-notice-before-exit))。
   道具が数えられない (exit 2) ときは「数えられなかった」 と書き、 「無い」 と書かない。
   なぜ: desktop app は session の背景の作業が生きている間はその session の archive を断り、 断りの文はどの作業かを言わない。
@@ -234,7 +240,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   - 今回は上げずに queue したもの (理由と置き場所)
   - 公開層に上げなかったもの (理由 = 1 の ⚠️ の境界のどれに当たるか)
   - 他の締めに譲った・待った file (1.5 の 🔴) と、 その中身を誰に渡したか
-  - 背景の作業: 止めた見張りの task id と、 止めずに残した背景の作業の名前 ([#stop-own-watches](#stop-own-watches))
+  - 背景の作業: 止めた見張りの task id と、 止めずに残した見張り・背景の作業の名前 ([#stop-own-watches](#stop-own-watches))
   - 規則の文書を変えたことを記録する検査が書くよう求めた行があれば、 そのまま ([`agent-rule-ownership.md#additive-and-free-zones`](agent-rule-ownership.md#additive-and-free-zones))
 - ⚠️ <a id="leftovers-check"></a>**「残り」 に入れる前に、 その件がもう会話で決まっていないかを確かめる** — 「残り」 は今の状態 (済んでいない・送っていない) から組みがちで、
   そうすると会話の中で扱いが出ていた件まで未決として戻り、 「残りもぜんぶやって」 で実行に回る (実測 = agent が「しなくてよい」 と勧めた件を残りに入れ、 実行しかけた)。 1 件ずつ:

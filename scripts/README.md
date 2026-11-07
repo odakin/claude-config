@@ -358,6 +358,7 @@
 - **[session-open-questions-report.py](session-open-questions-report.py)** — ある session が turn 終わりの箱で問うて、 本人の答えが無いままの問いを会話記録から並べる。--selftest 内蔵。
 - **[session-reply-knowledge-report.py](session-reply-knowledge-report.py)** — 締めで「返事にしか無い知見」 を拾うための一覧を会話記録から作り、 1 件ずつの処分を照合する。--selftest 内蔵。
 - **[session-scripts-report.py](session-scripts-report.py)** — ある session がその場で書いた script を会話記録から全部並べ、 file として残っているか (commit 済みか) を出す。--selftest 内蔵。
+- **[session_background_tasks.mutants.json](session_background_tasks.mutants.json)** — lib/session_background_tasks.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant で確かめる spec (check-foil-teeth.py が読む)。
 - **[session_provenance_cache.py](session_provenance_cache.py)** — Own shared Codex model/effort resolution and the hook metadata cache.
 - **[set-file-associations.py](set-file-associations.py)** — Apply or verify declared macOS filename-extension handlers with duti; fail loud on unverifiable state. --selftest included.
 - **[setup-codex-board-rule.py](setup-codex-board-rule.py)** — Install or audit the Codex rule that lets a board worker run the agent board's engine outside the sandbox.

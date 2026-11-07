@@ -13,7 +13,7 @@ Why (実測): 見え方や model を直すために、 動いている worker �
   - mcp `…__stop_session` / `…__archive_session`: tool_input.session_id (`local_…` か transcript id) の status が busy なら対象。
     ただし archive_session の相手が busy のときは、 止める文が「turn の終わりを待ってから畳む」 (child-wrap-check.py --wait)
     で、 本人に聞かせず、 本人の発言でも通さない (turn が終われば下の owner の判定に進む)。 archive は turn を止めないので
-    使用料の無駄は起きず、 app も turn の途中の session の archive を断る (実測: 子が turn の途中だったのは親が直前に送った
+    使用料の無駄は起きず、 app も turn の途中の session の archive を断る (app の code を読んだ範囲。 実測: 子が turn の途中だったのは親が直前に送った
     message に答えていたためで、 旧い文は親に本人へ聞かせようとし、 26 秒後の archive は何もせずに通った)。
   - 対象があれば、 その target について「止めた時刻」 を session ごとの state に記録して止める (exit 2、 理由に model と
     動いた時間 = 本人に聞く 1 行の材料)。 止めた時刻より後に本人の発言 (人の入力。 他 session からの message・hook の
@@ -315,7 +315,7 @@ def busy_archive_text(busy: list[dict], target: str) -> str:
     ask the person 26 seconds before the archive went through by itself."""
     lines = [f"  - {b['sessionId'][:8]}: " + " / ".join(x for x in (b.get("model") or "model 不明", _minutes_since(b),
                                                                    b.get("name") or "") if x) for b in busy]
-    return ("🛑 busy-worker-stop-check: 畳もうとした session はまだ turn の途中 (app も turn の途中の session の archive は断る)。\n"
+    return ("🛑 busy-worker-stop-check: 畳もうとした session はまだ turn の途中 (app の code でも、 turn の途中の session の archive は断る形)。\n"
             + "\n".join(lines) + "\n"
             "  turn の終わりを待ってから畳む = Bash の run_in_background で"
             f" `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {target}` を出し、 起こされた turn の照合が ✅ なら畳む"

@@ -15,13 +15,18 @@ How:
     <status> (completed / failed / killed / stopped) と TaskStop の「Successfully stopped task: <id>」。
   - shell と作業の対応: shell の fd 1 が `tasks/<id>.output` (背景の Bash は生きている間開いている。 前景の command も
     同じ形で開く = 会話記録に背景の記録が無ければ前景)。 Monitor の file は終わるまで作られない = shell の
-    `eval '<command>'` を Monitor の command と照合する。
+    `eval '<command>'` を Monitor の command と照合する。 `ps` は command を vis(3) の形で出す (tab・改行 = `\\011`・
+    `\\012`、 backslash = `\\\\`、 日本語の byte = `M-f`・`M^W`、 実測) ので、 記録の command を同じ形にしてから比べる
+    (生の文字列で比べると、 複数行の Monitor が一致しない = 実測)。
+  - subagent の Bash・Monitor も session の engine の直下に並び、 記録は subagent の会話記録
+    (`<session>/subagents/agent-<id>.jsonl`) にある = 両方を読み、 どれが仕掛けたかを `by` に出す。 `self` は
+    subagent から回しても親の session を指す (env の session id が親の)。
   - 見張り = Monitor と、 command の形が WATCH_FORMS (掲示板の watch・touching --wait、 照合の --wait / --wait-due、
     起動の確かめの --wait-first-turn) のもの (引用符の中の語は見ない)。 ほかは計算などとして「止めない」 側に出す。
-  - session が turn の途中 (registry の status が busy / waiting) なら、 会話記録に背景の記録の無い shell (= 前景の
-    command) は数えない。
-読めないとき (ps・lsof が無い、 registry に pid が無い) は None = 「無い」 と言わない。 見ないもの: subagent の背景・
-workflow・cron の予約・Remote Control (app は数えるが engine 直下の shell にならない or 形を確かめていない)。
+  - session が turn の途中 (registry の status が busy / waiting) なら、 出力の file を持つのに会話記録に背景の記録の
+    無い shell (= 前景の command) は数えない。 file を持たず照合できない shell は数える (照合し損ねた Monitor を落とさない)。
+読めないとき (ps・lsof が無い、 registry に pid が無い) は None = 「無い」 と言わない。 見ないもの: workflow・cron の
+予約・Remote Control・keep awake (app は数えるが engine 直下の shell にならない or 形を確かめていない)。
 Usage:
   session_background_tasks.py <self|local_…|transcript id> [--json]
       exit 0 = 生きている背景の作業なし / 1 = ある (見張りには TaskStop の 1 行が付く) / 2 = 数えられない
@@ -30,6 +35,7 @@ Usage:
 from __future__ import annotations
 
 import calendar
+import glob
 import json
 import os
 import re
@@ -50,7 +56,7 @@ NOTE_ID = re.compile(r"<task-id>(\w+)</task-id>")
 NOTE_END = re.compile(r"<status>(completed|failed|killed|stopped)</status>")
 STOPPED = re.compile(r"Successfully stopped task: (\w+)")
 SHELL = re.compile(r"^(?:\S*/)?(?:zsh|bash|sh)\s+-c\s+.*shell-snapshots/snapshot-", re.S)
-EVAL_BODY = re.compile(r"\beval '((?:[^']|'\\'')*)'")
+EVAL_BODY = re.compile(r"\beval '((?:[^']|'\\\\?'')*)'")
 QUOTED = re.compile(r"\"(?:\\.|[^\"\\])*\"|'[^']*'")
 # The watches this layer's tools start (the same command segment; quoted strings are blanked first, so a summary that
 # says "watch" is not one). A Monitor is always a watch.
@@ -201,9 +207,63 @@ def _ancestors(procs: dict[int, dict], pid: int) -> set[int]:
     return out
 
 
+def vis(text: str) -> str:
+    """The command as macOS `ps` prints it (vis(3)): backslash = `\\\\`, tab / newline / other control bytes = `\\ooo`,
+    a byte >= 0x80 = `M-c` or `M^c` (measured: `\\011`, `\\012`, `M-fM^WM-%` for a Japanese character). Comparing in this
+    form matches a multi-line Monitor command, which the raw text never equals (measured)."""
+    out = []
+    for b in (text or "").encode("utf-8", "replace"):
+        if b == 0x5C:
+            out.append("\\\\")
+        elif b < 0x20 or b == 0x7F:
+            out.append(f"\\{b:03o}")
+        elif b >= 0x80:
+            c = b & 0x7F
+            out.append("M^" + chr(c ^ 0x40) if c < 0x20 or c == 0x7F else "M-" + chr(c))
+        else:
+            out.append(chr(b))
+    return "".join(out)
+
+
+VIS_TOKEN = re.compile(r"\\\\|\\[0-7]{3}|M-.|M\^.", re.S)
+
+
+def unvis(text: str) -> str:
+    """vis(3) back to the text. `ps` writes control bytes as `\\ooo` and backslash as `\\\\` in any locale, and bytes
+    >= 0x80 as `M-c` / `M^c` only when the locale is not UTF-8 (measured: the Bash tool's shell, no LANG, printed
+    `M-gM-5…`; a Python child, whose locale Python coerces to UTF-8, printed the Japanese as is). Both forms come back."""
+    out = bytearray()
+    pos = 0
+    for m in VIS_TOKEN.finditer(text or ""):
+        out += text[pos:m.start()].encode("utf-8", "replace")
+        t = m.group(0)
+        if t == "\\\\":
+            out.append(0x5C)
+        elif t[0] == "\\":
+            out.append(int(t[1:], 8) & 0xFF)
+        elif t[1] == "-":
+            out.append((ord(t[2]) | 0x80) & 0xFF)
+        else:
+            out.append(((ord(t[2]) ^ 0x40) | 0x80) & 0xFF)
+        pos = m.end()
+    out += (text or "")[pos:].encode("utf-8", "replace")
+    return out.decode("utf-8", "replace")
+
+
 def eval_body(command: str) -> str:
+    """The eval'd command of a Bash-tool shell as `ps` shows it (vis form, the shell's `'\\''` quoting undone)."""
     m = EVAL_BODY.search(command or "")
-    return m.group(1).replace("'\\''", "'") if m else ""
+    return m.group(1).replace("'\\\\''", "'").replace("'\\''", "'") if m else ""
+
+
+def transcripts(path: str) -> list[tuple[str, str]]:
+    """(source, path): the session's transcript and its subagents' (`<session>/subagents/agent-<id>.jsonl`): a subagent's
+    Bash and Monitor run under the session's engine, but are recorded in the subagent's own transcript (measured)."""
+    out = [("", path)] if path else []
+    if path and path.endswith(".jsonl"):
+        for p in sorted(glob.glob(os.path.join(path[:-len(".jsonl")], "subagents", "agent-*.jsonl"))):
+            out.append(("subagent " + os.path.basename(p)[len("agent-"):-len(".jsonl")][:8], p))
+    return out
 
 
 def is_watch(kind: str, command: str) -> bool:
@@ -238,7 +298,10 @@ def list_tasks(target: str = "", *, row: dict | None = None, path: str | None = 
         return None
     now = time.time() if now is None else now
     path = path if path is not None else (row.get("path") or sm.transcript_path(row["sessionId"]) or "")
-    recorded = scan_transcript(path)
+    recorded: dict[str, dict] = {}
+    for source, p in transcripts(path):
+        for tid, rec in scan_transcript(p).items():
+            recorded.setdefault(tid, dict(rec, by=source))
     mine = _ancestors(procs, os.getpid() if me is None else me)
     shells = [p for p, d in procs.items() if d["ppid"] == row["pid"] and p not in mine and SHELL.match(d["command"])]
     files = _stdout_files(shells) if files is None else files
@@ -249,18 +312,19 @@ def list_tasks(target: str = "", *, row: dict | None = None, path: str | None = 
         f = files.get(p, "")
         tid = os.path.basename(f)[:-len(".output")] if f.endswith(".output") and os.path.basename(os.path.dirname(f)) == "tasks" else ""
         rec = recorded.get(tid) if tid else None
-        if rec is None and not tid:
-            hits = [(k, r) for k, r in recorded.items() if r["command"].strip() and r["command"].strip() == body.strip()
-                    and not r["ended"]]
-            hits.sort(key=lambda kr: (kr[1]["kind"] != "monitor", kr[1]["started"]), reverse=False)
+        if rec is None and not tid:  # no output file = a Monitor (or a background Bash not yet matched): match by command
+            text = unvis(body).strip()
+            hits = [(k, r) for k, r in recorded.items() if r["command"].strip() and not r["ended"]
+                    and (r["command"].strip() == text or vis(r["command"]).strip() == body.strip())]
+            hits.sort(key=lambda kr: (kr[1]["kind"] == "monitor", kr[1]["started"]))  # a Monitor first, then the latest
             if hits:
                 tid, rec = hits[-1]
-        if rec is None and busy:
-            continue  # a shell with no background record while the session is mid-turn = its foreground command
+        if rec is None and tid and busy:
+            continue  # an output file with no background record while the session is mid-turn = its foreground command
         kind = rec["kind"] if rec else "bash"
-        cmd = rec["command"] if rec else body
+        cmd = rec["command"] if rec else unvis(body)
         exp = rec.get("expires_at") if rec else None
-        out.append({"id": tid or f"pid {p}", "kind": kind, "pid": p,
+        out.append({"id": tid or f"pid {p}", "kind": kind, "pid": p, "by": (rec or {}).get("by", ""),
                     "what": (rec.get("description") if rec else "") or " ".join(cmd.split())[:90],
                     "watch": is_watch(kind, cmd), "persistent": bool(rec and rec.get("persistent")),
                     "expires_in": max(0, int(exp - now)) if exp else None,
@@ -271,7 +335,7 @@ def list_tasks(target: str = "", *, row: dict | None = None, path: str | None = 
 
 def describe(t: dict) -> str:
     kind = "Monitor" if t["kind"] == "monitor" else "Bash"
-    bits = [f"{t['id']}  {kind}「{t['what']}」"]
+    bits = [f"{t['id']}  {kind}「{t['what']}」" + (f" ({t['by']} が仕掛けた)" if t.get("by") else "")]
     if t["watch"]:
         left = ("期限なし (TaskStop まで)" if t["persistent"] else f"あと {t['expires_in']} 秒で期限切れ"
                 if t["expires_in"] is not None else "")
@@ -350,7 +414,7 @@ def selftest() -> int:
 
     watch_cmd = "python3 ~/b/board.py watch --root /r --agent claude --session s --request R1"
     calc_cmd = "python3 long_calc.py --n 9"
-    mon_cmd = "until test -f /tmp/x; do sleep 5; done; echo done"
+    mon_cmd = "until test -f /tmp/x; do\n\tsleep 5\ndone; echo 完了"  # multi-line, a tab, a Japanese word (measured form)
     lines = [
         use("u1", "Bash", {"command": watch_cmd, "description": "Watch the board request", "run_in_background": True}, "2026-01-01T00:00:00.000Z"),
         res("u1", "Command running in background with ID: bwatch01. Output is being written to: /t/tasks/bwatch01.output", "2026-01-01T00:00:01.000Z"),
@@ -375,6 +439,11 @@ def selftest() -> int:
         tr = os.path.join(td, "s.jsonl")
         with open(tr, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lines) + "\n")
+        os.makedirs(os.path.join(td, "s", "subagents"))
+        with open(os.path.join(td, "s", "subagents", "agent-abcdef1234567890.jsonl"), "w", encoding="utf-8") as fh:
+            fh.write(use("v1", "Bash", {"command": "sleep 300", "description": "subagent's wait", "run_in_background": True},
+                         "2026-01-01T00:06:40.000Z") + "\n"
+                     + res("v1", "Command running in background with ID: bsub0009.", "2026-01-01T00:06:41.000Z") + "\n")
         rec = scan_transcript(tr)
         ok("background Bash, moved-to-background Bash and Monitors are recorded", set(rec) >= {"bwatch01", "bcalc002", "bmon0003", "bmon0004", "bstop005"})
         ok("a Monitor's expiry is its start + 'expires in 5m'", rec["bmon0003"]["expires_at"] == _epoch("2026-01-01T00:03:00") + 300)
@@ -384,9 +453,13 @@ def selftest() -> int:
         ok("durations: '4m 30s' / 'timeout 15000ms' / persistent", _duration("expires in 4m 30s unless") == (270.0, False)
            and _duration("timeout 15000ms") == (15.0, False) and _duration("persistent — runs until TaskStop") == (None, True))
 
-        def sh(body: str) -> str:
-            return ("/bin/zsh -c source /h/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval '"
-                    + body.replace("'", "'\\''") + "' < /dev/null && pwd -P >| /tmp/claude-1-cwd")
+        def sh(body: str) -> str:  # as `ps` prints a Bash-tool shell: the shell's quoting, then vis(3)
+            return vis("/bin/zsh -c source /h/.claude/shell-snapshots/snapshot-zsh-1-x.sh 2>/dev/null || true && eval '"
+                       + body.replace("'", "'\\''") + "' < /dev/null && pwd -P >| /tmp/claude-1-cwd")
+        ok("vis matches the measured ps form (tab, newline, backslash, a Japanese character)",
+           vis('echo "a\tb \\ 日"\nsleep 1') == 'echo "a\\011b \\\\ M-fM^WM-%"\\012sleep 1')
+        ok("unvis brings back both ps forms (meta notation, and the UTF-8 locale's raw Japanese)",
+           unvis('echo "a\\011b \\\\ M-fM^WM-%"\\012x') == 'echo "a\tb \\ 日"\nx' == unvis('echo "a\\011b \\\\ 日"\\012x'))
         procs = {
             100: {"ppid": 1, "command": "claude --output-format stream-json"},
             201: {"ppid": 100, "command": sh(watch_cmd)},
@@ -398,9 +471,13 @@ def selftest() -> int:
             207: {"ppid": 206, "command": "python3 me.py"},
             208: {"ppid": 100, "command": sh("python3 board.py note --summary 'we watch it later'")},
             209: {"ppid": 100, "command": sh("sleep 20; echo ok")},
+            210: {"ppid": 100, "command": sh("sleep 300")},                                # the subagent's background Bash
+            211: {"ppid": 100, "command": sh("tail -f /y | grep --line-buffered Z")},     # no file, no record
         }
+        utf8 = dict(procs)  # the same shells as a UTF-8 locale's ps prints them: control bytes octal, Japanese as is
+        utf8[203] = {"ppid": 100, "command": sh(mon_cmd).replace(vis("完了"), "完了")}
         files = {201: "/t/tasks/bwatch01.output", 202: "/t/tasks/bcalc002.output", 205: "/t/tasks/bfg00005.output",
-                 206: "/t/tasks/bme00006.output", 208: "/t/tasks/bnote007.output"}
+                 206: "/t/tasks/bme00006.output", 208: "/t/tasks/bnote007.output", 210: "/t/tasks/bsub0009.output"}
         now = _epoch("2026-01-01T00:07:00")
         idle = {"sessionId": "s", "pid": 100, "status": "idle"}
         got = list_tasks(row=idle, path=tr, procs=procs, files=files, now=now, me=207)
@@ -417,6 +494,14 @@ def selftest() -> int:
         got_b = list_tasks(row=busy, path=tr, procs=procs, files=files, now=now, me=207)
         ok("a busy session's foreground command is not counted", not any(t["pid"] == 205 for t in got_b or []))
         ok("a busy session's background tasks are still counted", {"bwatch01", "bcalc002", "bmon0003"} <= {t["id"] for t in got_b or []})
+        ok("a busy session's shell with no file and no record is counted (a Monitor the match missed is not dropped)",
+           any(t["pid"] == 211 for t in got_b or []))
+        ok("the multi-line Monitor is matched in the ps (vis) form", by.get("bmon0003", {}).get("pid") == 203)
+        got_u = list_tasks(row=busy, path=tr, procs=utf8, files=files, now=now, me=207)
+        ok("... and in the UTF-8 locale's form (Japanese not escaped)",
+           any(t["id"] == "bmon0003" and t["pid"] == 203 for t in got_u or []))
+        ok("a subagent's background task is counted and says who started it",
+           by.get("bsub0009", {}).get("by") == "subagent abcdef12" and "subagent abcdef12" in describe(by["bsub0009"]))
         ok("no registry pid = cannot count (None), not 'none'", list_tasks(row={"sessionId": "s", "status": "idle"}, path=tr, procs=procs, files=files) is None)
         step = child_next_step([by["bwatch01"], by["bcalc002"]])
         ok("next step names the watch to stop and says to wait for the calculation", "bwatch01" in step and "TaskStop" in step

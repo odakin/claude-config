@@ -126,7 +126,9 @@ STEP0_HANDOFF = re.compile(r"must run on \S+ at \S+ effort")
 BG_TASKS = sbt.list_tasks  # the child's live background work (replaced in the selftest)
 DELIVERY_GRACE_S = 60  # --wait without a recent request: the first seconds wait for the request to land in the child's window
 MAX_COMMITS = 30
-SEND_FAILED = re.compile(r'\\?"success\\?"\s*:\s*false')  # a SendMessage result that says the message was not delivered
+# a send's result that says the message was not delivered (SendMessage: "success":false; both tools end with
+# "(delivery: undelivered; …)" when it did not go, measured)
+SEND_FAILED = re.compile(r'\\?"success\\?"\s*:\s*false|delivery: undelivered')
 RETRY_TEXTS = {"Try again"}  # the app's retry after an API error (measured on the desktop app)
 # Latin-letter boundaries, not \b: Python counts kana as word characters, so \bwrap\b misses 「wrapして」.
 WRAP_WORD = re.compile(r"(?<![A-Za-z])wrap(?![A-Za-z])", re.I)
@@ -485,8 +487,8 @@ def child_commits(cli: str, since: str) -> list[dict]:
 
 
 def parent_sends(parent_path: str, child: dict, as_of: str = "") -> list[str]:
-    """Timestamps of the parent's SendMessage calls to this child (its local id, or the uds address of its live process)
-    that were not refused (a result with "success":false = not delivered)."""
+    """Timestamps of the parent's sends to this child (SendMessage to its local id or the uds address of its live
+    process, and the app's older send_message to its session id) that were not refused (SEND_FAILED)."""
     if not parent_path or not child.get("local"):
         return []
     to = {child["local"]}
@@ -501,7 +503,7 @@ def parent_sends(parent_path: str, child: dict, as_of: str = "") -> list[str]:
         return []
     with fh:
         for line in fh:
-            if "SendMessage" not in line and "success" not in line:
+            if "SendMessage" not in line and "send_message" not in line and "success" not in line and "delivery" not in line:
                 continue
             try:
                 e = json.loads(line)
@@ -513,8 +515,9 @@ def parent_sends(parent_path: str, child: dict, as_of: str = "") -> list[str]:
             for b in (e.get("message") or {}).get("content") or []:
                 if not isinstance(b, dict):
                     continue
-                if (b.get("type") == "tool_use" and b.get("name") == "SendMessage"
-                        and str((b.get("input") or {}).get("to") or "") in to):
+                name, inp = str(b.get("name") or ""), b.get("input") or {}
+                if b.get("type") == "tool_use" and ((name == "SendMessage" and str(inp.get("to") or "") in to)
+                                                    or (name.endswith("__send_message") and str(inp.get("session_id") or "") in to)):
                     sent[str(b.get("id") or "")] = ts
                 elif b.get("type") == "tool_result" and str(b.get("tool_use_id") or "") in sent:
                     c = b.get("content")
@@ -632,7 +635,7 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     return {"target": target, "found": True, "ok": not reasons, "reasons": reasons, "local": c["local"], "title": c["title"],
             "status": c["status"], "archived": c["archived"], "last_wrap": max(ev["wraps"], default=""),
             "last_turn_end": max(ev["stops"], default=""), "commits": commits, "open_ask": ask, "go_wait": gw,
-            "background": bg or [], "unanswered_send": pend}
+            "background": bg, "unanswered_send": pend, "as_of": as_of}
 
 
 def render(rows: list[dict]) -> str:
@@ -648,6 +651,8 @@ def render(rows: list[dict]) -> str:
         if r["commits"]:
             lines.append("    commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}{'' if x['pushed'] else ' (未 push)'}"
                                                  for x in r["commits"][:8]) + (" ほか" if len(r["commits"]) > 8 else ""))
+        if r.get("background") is None and not r.get("as_of"):
+            lines.append("    (子の背景の作業は数えられなかった = ✅ でも app が断ることがある。 断られたら子に自分の背景の作業を並べてもらう)")
         for why in r["reasons"]:
             lines.append("    → " + why)
     return "\n".join(lines)
@@ -665,8 +670,10 @@ def turn_done_after(target: str, since: float) -> tuple[bool, str]:
     ends = [_epoch(s) for s in ev["stops"][-3:] if s]
     if (c["edge"] and c["edge"] > since) or any(e > since for e in ends):
         pend = unanswered_send(c, ev)
-        if pend:  # the parent wrote again after that turn end: the child still has to answer it
+        if pend and c["status"] != "(not live)":  # the parent wrote again after that turn end: the child still has to answer it
             return False, f"親の {_local_hm(pend)} の message にまだ答えていない"
+        if pend:  # no process to answer it: waiting would only run into the time-out; the check names the message
+            return True, f"終わった (process が無い = 親の {_local_hm(pend)} の message は届いていない)"
         return True, "終わった"
     if c["status"] == "(not live)":
         return True, "process が無い (turn は始まっていない)"
@@ -1433,10 +1440,29 @@ def selftest() -> int:
            (not r["ok"]) and r["unanswered_send"] == "2026-01-01T01:20:00Z")
         done, why = turn_done_after(ids("answered")[0], since=0)
         ok("--wait: a turn end before the parent's last message is not done", not done and "まだ答えていない" in why)
+        os.remove(os.path.join(sdir, f"{list(kids).index('answered')}.json"))  # the child's process is gone
+        done, why = turn_done_after(ids("answered")[0], since=0)
+        ok("--wait: with no process to answer the parent's message, the wait ends (the check names the message)",
+           done and "届いていない" in why)
+        live(list(kids).index("answered"), ids("answered")[1], ids("answered")[0], "idle")
         transcript(parent_c, notes + send("2026-01-01T01:20:00Z", ids("answered")[0], failed=True))
         ok("a message that was not delivered (success false) does not count", check_child(ids("answered")[0])["ok"])
         transcript(parent_c, notes + send("2026-01-01T01:00:00Z", ids("answered")[0]))
         ok("the parent's message before the child's last turn end does not count", check_child(ids("answered")[0])["ok"])
+        legacy = [{"type": "assistant", "timestamp": "2026-01-01T01:20:00Z", "message": {"content": [
+                      {"type": "tool_use", "id": "lg", "name": "mcp__ccd_session_mgmt__send_message",
+                       "input": {"session_id": ids("answered")[0], "message": "ありがとう"}}]}},
+                  {"type": "user", "timestamp": "2026-01-01T01:20:01Z", "message": {"content": [
+                      {"type": "tool_result", "tool_use_id": "lg", "content": "queued (delivery: queued; message_id: x)"}]}}]
+        transcript(parent_c, notes + legacy)
+        ok("the app's older send_message to the child counts too", check_child(ids("answered")[0])["unanswered_send"] != "")
+        legacy[1]["message"]["content"][0]["content"] = "not found (delivery: undelivered; message_id: x)"
+        transcript(parent_c, notes + legacy)
+        ok("... unless it says it was not delivered", check_child(ids("answered")[0])["ok"])
+        BG_TASKS = lambda cli: None
+        ok("background work that could not be counted is said, without keeping the child",
+           check_child(ids("answered")[0])["ok"] and "数えられなかった" in render([check_child(ids("answered")[0])]))
+        BG_TASKS = lambda cli: []
         transcript(parent_c, notes)
         ANSWERED_GRACE_MIN = None
         # hand-off step 0: the worker's first turn stops because its model/effort differ and waits for the requester's go;

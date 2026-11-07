@@ -70,8 +70,16 @@
      "expect_fail": ["a message that was not delivered (success false) does not count"],
      "expect_pass": ["the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"]},
     {"name": "--wait が親の後の message を待たない",
-     "pairs": [["        if pend:  # the parent wrote again after that turn end", "        if False:  # the parent wrote again after that turn end"]],
+     "pairs": [["        if pend and c[\"status\"] != \"(not live)\":  # the parent wrote again after that turn end", "        if False:  # the parent wrote again after that turn end"]],
      "expect_fail": ["--wait: a turn end before the parent's last message is not done"],
+     "expect_pass": ["the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"]},
+    {"name": "process の無い子でも親の後の message を待ち続ける",
+     "pairs": [["        if pend and c[\"status\"] != \"(not live)\":", "        if pend:"]],
+     "expect_fail": ["--wait: with no process to answer the parent's message, the wait ends (the check names the message)"],
+     "expect_pass": ["--wait: a turn end before the parent's last message is not done"]},
+    {"name": "app の古い send_message を数えない",
+     "pairs": [["                                                    or (name.endswith(\"__send_message\") and str(inp.get(\"session_id\") or \"\") in to)):", "                                                    ):"]],
+     "expect_fail": ["the app's older send_message to the child counts too"],
      "expect_pass": ["the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"]}
   ]
 }
