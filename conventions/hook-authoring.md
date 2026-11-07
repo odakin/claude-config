@@ -1288,6 +1288,8 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 - **macOS の framework python は名前が大文字**: `python3` で起こしても ps には `…/Python.framework/…/Python.app/Contents/MacOS/Python /path/board.py watch …` と出る = `python[0-9.]*` だけの anchor は本物を取りこぼす (実測)。 `[Pp]ython` で書き、 本物の process に 1 回当てて確かめる
 - **形** = 行頭の interpreter (`^\S*[Pp]ython[0-9.]*\s+`、 その option を飛ばす) → 起こした file の path (`\S*board\.py\s+`) → subcommand の位置 (`watch\s`)、 引数の一致は値の後ろの境界まで (`--request\s+<id>(\s|$)`)
 - **selftest に 3 つ置く**: 本物の形 (macOS の `Python` を含む) が数えられる / shell が引用した形が数えられない / id の前方一致 (`<id>x`) が数えられない
+- <a id="ps-vis-command-line"></a>**ps は command 行を vis(3) の形で出し、 その形は呼び手の locale で変わる** (macOS、 実測): 制御 byte (tab・改行) = `\011`・`\012`、 backslash = `\\`、 0x80 以上の byte = locale が UTF-8 でなければ `M-f`・`M^W` の形、 UTF-8 ならそのまま。 locale の無い shell から打てば `M-` の形、 そこから起こした Python の子 process は Python が locale を UTF-8 に寄せるので、 同じ process の日本語がそのまま出る。 command 行を会話記録や設定の文字列と比べるなら、 両方の形を元の文字列に戻してから比べる (生の文字列で比べると、 複数行・日本語入りの command が一致しない = 実測)。 実装例 = [`../scripts/lib/session_background_tasks.py`](../scripts/lib/session_background_tasks.py) の `vis` / `unvis`
+- **session の背景の作業の shell は、 その session の engine (live の registry の pid) の直下に並ぶ** (Bash の背景・前景から移った command・Monitor、 subagent が仕掛けた分も)。 背景の Bash も前景の command も fd 1 が `tasks/<id>.output` を開き、 Monitor は終わるまで file を持たない (実測) = file だけで数えると、 前景を背景と読み、 Monitor を無いと読む。 背景と前景は会話記録の背景の記録 (「Command running in background with ID」 など) で分ける (同じ実装例)
 
 実装例 = `ai-collaboration` の `board/board-post-reach-check.py` の `WATCH_PROC` と `watching()`。
 

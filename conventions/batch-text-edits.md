@@ -66,6 +66,8 @@ open(path, "w", encoding="utf-8").write(txt)
 
 <a id="tool-arg-escape-reverse"></a>**逆向きの罠 — 同じ編集の引数に `\uXXXX` の表記があると、 日本語が `\uXXXX` で書かれることがある** (実測 1 回): Edit の old と new の両方に正規表現の文字 class (`[\u3040-\u30ff…]`) を含めた編集で、 new に書いた日本語の docstring とコメントが `\u5148\u982d…` の escape 表記で file に入った (Python の docstring は実行時の値が同じなので試験は通り、 source だけが読めなくなった。 別 context の検品が見つけた)。 同じ session の、 その表記を含まない編集の日本語は正しく入っていた。 **escape 表記の行と日本語を 1 つの編集に混ぜない** — escape の行は元の file の行を script で残し (置換の境目を escape の手前に置く)、 日本語は別の編集で書く。 書いた後に、 足した行の escape を数える: `git diff | grep -n '^+.*\\u[0-9a-f]\{4\}'` (元からある escape の行だけが出れば正しい)。
 
+<a id="edit-new-trailing-space-dropped"></a>**編集 tool の置換後の末尾の空白は落ちることがある** (実測 1 回): `old_string` と `new_string` がどちらも空白で終わる組 (「…(X): 」 → 「…(X・Y): 」) で、 置換後の file から new の末尾の空白が消え、 「…(X・Y):出力」 になった。 置換の境目は空白でない文字で終える (空白の次の文字まで含めて取る) か、 当てた後の行を読み直す。
+
 <a id="edit-empty-new-eats-newline"></a>**編集 tool で置換後を空にすると、 直後の改行も消えることがある** (実測): Edit の `new_string` を空にし、 `old_string` が行の途中から行末までだったとき、 次の行が前の行につながった。 行の一部を消すときは、 前後の文字を `old_string` に含めて空でない `new_string` で置き換え、 置換後の file を期待した全文と `cmp` で照合する。 規則保護の gate は、 Edit のこの削除の扱いを再現して結果を判定する (実物と同じ結果を承認済みの候補と照らす)。 commit 時の gate も、 候補と末尾の改行 1 つでもずれた staged を止める (selftest で実測)。
 
 <a id="write-overwrites-unread-file"></a>**新しい file のつもりで Write した path に、 読んでいない既存の file があっても止まらないことがある** (実測): 道具の説明は「読んでいない既存の file への上書きは失敗する」 と言うが、 隣の file の名前から「まだ無い」 と思い込んで書いた先の既存の file (検査の定義) が、 そのまま全文で置き換わった。 結果の文が手がかり = 新しい file なら `File created successfully`、 既存の file なら `has been updated successfully` と出る。 新しい file を書く前に `git ls-files <path>` か `ls <path>` で在るかを見る。 書いた後なら結果の文を読み、 「updated」 なら `git diff -- <path>` で消えた中身を見て `git show HEAD:<path>` から戻し、 足す分を合わせ直す。
