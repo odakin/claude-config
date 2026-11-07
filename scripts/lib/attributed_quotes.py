@@ -13,7 +13,12 @@
 何を引用と数えるか:
   「…」 『…』 “…” "…" ``…'' と、 行頭が "> " の引用の塊 (Discord・markdown。 ">>> " は以降すべて)。
   段落 (空行) をまたがない。 ``` で囲んだ code block の中は見ない。
-  引用の中の省略 (... / … / \\ldots / [...]) は片の区切り = 各片が原文に順に現れるかで照らす。
+  LaTeX の引用の塊 (返答書の referee の文は塊で引くことが多い): \\begin{quote}…\\end{quote} と quotation は常に数え、
+  帰属は塊の前後の文の語で見る (塊は原稿の改訂の文を引くことにも使うため)。 文書が定義した引用の macro (\\Q{…} など)
+  と環境 (referee など) は呼び手が名前を渡し (quote_macros / quote_envs)、 その中身は形で帰属あり ("> " の塊と同じ)。
+  塊の中身は TeX の comment・\\color{…}・字体の切り替え・波括弧を外して照らす。 塊の中の ``…'' は塊と別に数えない。
+  \\begin{document} があれば、 塊はその後だけを探す (preamble の macro の定義を引用と数えない)。
+  引用の中の省略 (... / … / \\ldots / \\dots / [...]) は片の区切り = 各片が原文に順に現れるかで照らす。
   寄せた後の文字数が min_chars 未満の片は照らさない (照らしていない印として数えて返す)。
 
 比べ方 (送る文と原文の両方を同じに寄せる):
@@ -48,7 +53,12 @@ PAIRS = [
 SPAN_RES = [re.compile(re.escape(o) + "(" + PARA + "+?)" + re.escape(c), re.S) for o, c in PAIRS]
 ASCII_DQ = re.compile('"(' + r'(?:(?!\n[ \t]*\n)[^"])' + '+?)"', re.S)
 FENCE = re.compile(r"```.*?```", re.S)
-ELLIPSIS = re.compile(r"\\ldots(?:\{\})?|\[\s*(?:\.\.\.|…)\s*\]|\.\.\.|…")
+ELLIPSIS = re.compile(r"\\l?dots(?:\{\})?|\[\s*(?:\.\.\.|…)\s*\]|\.\.\.|…")
+TEX_BLOCK_ENVS = ("quote", "quotation")
+TEX_COMMENT = re.compile(r"(?<!\\)%[^\n]*")
+TEX_STYLE = re.compile(r"\\color\{[^{}]*\}|\\(?:itshape|em|upshape|slshape|small|footnotesize|normalsize|"
+                       r"large|bfseries|mdseries|rmfamily|sffamily|ttfamily)(?![A-Za-z])\s*")
+TEX_SPACE = re.compile(r"\\\\|\\[,;: ]")
 CJK = "\u3000-\u303f\u3040-\u30ff\u3400-\u9fff\uff00-\uffef"
 BOUNDARY = re.compile(r"[。！？!?]|\.(?=\s)|\n[ \t]*\n")
 
@@ -148,14 +158,72 @@ def _blank(m: re.Match) -> str:
     return "".join("\n" if ch == "\n" else " " for ch in m.group(0))
 
 
-def find_quotes(text: str, extra_attrib: tuple[str, ...] = (), all_quotes: bool = False) -> list[Quote]:
-    """送る文の引用を順に返す (status は未設定)。"""
+def _tex_clean(body: str) -> str:
+    """LaTeX の塊の中身を照らす形に: comment・\\color{…}・字体の切り替え・改行の命令・波括弧を外す。"""
+    body = TEX_COMMENT.sub("", body)
+    body = TEX_STYLE.sub("", body)
+    body = TEX_SPACE.sub(" ", body)
+    return re.sub(r"[{}]", "", body)
+
+
+def _tex_brace_arg(text: str, i: int) -> tuple[str, int] | None:
+    """text[i] == '{' の対の '}' までの中身と、 その後の位置 (\\{ \\} は数えない)。 閉じなければ None。"""
+    depth = 0
+    j = i
+    while j < len(text):
+        ch = text[j]
+        if ch == "\\":
+            j += 2
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[i + 1:j], j + 1
+        j += 1
+    return None
+
+
+def _tex_blocks(work: str, quote_macros: tuple[str, ...], quote_envs: tuple[str, ...]) -> list[tuple[int, int, str, bool]]:
+    """LaTeX の引用の塊 (start, end, 中身, 形で帰属ありか)。 \\begin{document} の後だけ、 comment の中は見ない。"""
+    start = work.find("\\begin{document}")
+    head = 0 if start < 0 else start
+    scan = " " * head + TEX_COMMENT.sub(lambda m: " " * len(m.group(0)), work[head:])  # 位置はそのまま
+    out = []
+    for name in TEX_BLOCK_ENVS + tuple(quote_envs):
+        rx = re.compile(r"\\begin\{" + re.escape(name) + r"\}(.*?)\\end\{" + re.escape(name) + r"\}", re.S)
+        for m in rx.finditer(scan, head):
+            out.append((m.start(), m.end(), work[m.start(1):m.end(1)], name in quote_envs))
+    for name in quote_macros:
+        for m in re.finditer(r"\\" + re.escape(name) + r"(?![A-Za-z@])\s*(?=\{)", scan[head:]):
+            k = head + m.end()
+            got = _tex_brace_arg(scan, k)
+            if got:
+                out.append((head + m.start(), got[1], work[k + 1:got[1] - 1], True))
+    return out
+
+
+def find_quotes(text: str, extra_attrib: tuple[str, ...] = (), all_quotes: bool = False,
+                quote_macros: tuple[str, ...] = (), quote_envs: tuple[str, ...] = ()) -> list[Quote]:
+    """送る文の引用を順に返す (status は未設定)。 quote_macros / quote_envs = 文書が定義した LaTeX の引用の名前。"""
     work = FENCE.sub(_blank, text)
+    blocks = _tex_blocks(work, tuple(quote_macros), tuple(quote_envs))
+    inside = lambda s, e: any(bs <= s and e <= be for bs, be, _b, _f in blocks)
     spans: list[tuple[int, int, str]] = []  # (start, end, inner)
     for rx in SPAN_RES + [ASCII_DQ]:
         for m in rx.finditer(work):
-            spans.append((m.start(), m.end(), m.group(1)))
+            if not inside(m.start(), m.end()):
+                spans.append((m.start(), m.end(), m.group(1)))
     quotes = []
+    for bs, be, body, by_form in blocks:
+        if all_quotes:
+            attrib = "(all)"
+        elif by_form:
+            attrib = "(LaTeX の引用の macro・環境)"
+        else:
+            attrib = _attrib_word(_sentence_context(work, bs, be), extra_attrib)
+        quotes.append(Quote(line=work.count("\n", 0, bs) + 1, text=_tex_clean(body), form="block", attrib=attrib))
     for s, e, inner in sorted(spans):
         ctx = _sentence_context(work, s, e)
         attrib = "(all)" if all_quotes else _attrib_word(ctx, extra_attrib)
@@ -183,12 +251,13 @@ def find_quotes(text: str, extra_attrib: tuple[str, ...] = (), all_quotes: bool 
 
 
 def check_text(text: str, sources: list[str], extra_attrib: tuple[str, ...] = (),
-               all_quotes: bool = False, min_chars: int = 5) -> list[Quote]:
+               all_quotes: bool = False, min_chars: int = 5,
+               quote_macros: tuple[str, ...] = (), quote_envs: tuple[str, ...] = ()) -> list[Quote]:
     """送る文の引用それぞれに status を付けて返す。 sources = 原文の中身 (file の文字列) の list。"""
     corpora = _corpora(sources)
     folded = [c.casefold() for c in corpora]
     out = []
-    for q in find_quotes(text, extra_attrib, all_quotes):
+    for q in find_quotes(text, extra_attrib, all_quotes, quote_macros, quote_envs):
         frags, _short = _fragments(q.text, min_chars)
         if not frags:
             q.status = "short"
@@ -203,9 +272,10 @@ def check_text(text: str, sources: list[str], extra_attrib: tuple[str, ...] = ()
     return out
 
 
-def attributed(text: str, extra_attrib: tuple[str, ...] = (), min_chars: int = 5) -> list[Quote]:
+def attributed(text: str, extra_attrib: tuple[str, ...] = (), min_chars: int = 5,
+               quote_macros: tuple[str, ...] = (), quote_envs: tuple[str, ...] = ()) -> list[Quote]:
     """原文を渡されていないときの数え: 帰属の語のある、 照らせる長さの引用。"""
-    return [q for q in find_quotes(text, extra_attrib)
+    return [q for q in find_quotes(text, extra_attrib, False, quote_macros, quote_envs)
             if q.attrib and _fragments(q.text, min_chars)[0]]
 
 
@@ -305,6 +375,40 @@ def selftest() -> int:
            len(attributed("referee は「北の観測点だけだと偏る」と言う。 私は「段落を足した」 だけ。")) == 1)
     rep = format_report(check_text("referee は「北の観測点だけだと偏る」と言う。", [src]))
     expect("report names the failure and the summary line", rep[0].startswith("✗") and "原文に無い 1" in rep[-1])
+    # LaTeX の引用の塊 (返答書)
+    q = one("The referee writes:\n\\begin{quote}\nthe sample is restricted to the northern stations\n\\end{quote}\n")
+    expect("a quote environment after 'The referee writes:' is attributed and matches",
+           q.form == "block" and q.attrib == "referee" and q.status == "ok")
+    q = one("We have revised the text to read:\n\\begin{quote}\nThe sample now covers all stations.\n\\end{quote}\n")
+    expect("a quote environment without an attribution word is checked but not a failure",
+           q.attrib is None and q.status == "missing" and not q.failure)
+    macro = ("\\Q{The bias appears when the sample is restricted to the northern stations, as ``noted'' in Section 2.}\n"
+             "We agree.\n\n\\Q{The bias vanishes entirely at every station.}\nWe disagree.\n")
+    qs = check_text(macro, [src], quote_macros=("Q",))
+    expect("a declared quote macro is attributed by form: a verbatim one passes, an invented one fails, "
+           "and the ``…'' inside is not counted again",
+           len(qs) == 2 and qs[0].status == "ok" and not qs[0].failure and qs[1].failure)
+    expect("without the macro name the macro bodies are not quotes (only the ``…'' inside is seen)",
+           [q.text for q in check_text(macro, [src])] == ["noted"])
+    q = one("\\Q{the sample is {restricted} to the northern \\dots{} stations}", quote_macros=("Q",))
+    expect("braces inside a macro body and \\dots as an ellipsis", q.status == "ok")
+    q = one("The referee writes:\n\\begin{quote}% our note\n\\color{teal}\\itshape the sample is restricted to\n"
+            "the northern stations\n\\end{quote}\n")
+    expect("a TeX comment, \\color{…} and a font switch inside the block are removed", q.status == "ok")
+    q = one("\\begin{referee}The bias vanishes entirely.\\end{referee}", quote_envs=("referee",))
+    expect("a declared quote environment is attributed by form", q.failure and q.form == "block")
+    qs = check_text("\\newcommand\\Q[1]{\\begin{quote}#1\\end{quote}}\n\\begin{document}\nThe referee writes:\n"
+                    "\\begin{quote}the sample is restricted to the northern stations\\end{quote}\n\\end{document}\n",
+                    [src], quote_macros=("Q",))
+    expect("the preamble (a macro definition) is not searched for blocks",
+           len(qs) == 1 and qs[0].status == "ok" and qs[0].line == 4)
+    qs = check_text("We believe that the statement\n\\begin{quote}\n``the sample was restricted to stations''\n"
+                    "\\end{quote}\ndiffers from the report.\n", [src])
+    expect("a quote environment holding a ``…'' quote is one quote, attributed by the sentence around it",
+           len(qs) == 1 and qs[0].failure and qs[0].attrib == "report")
+    qs = check_text("% \\Q{an invented sentence in a comment}\n\\begin{document}\n% \\Q{another invented sentence}\n"
+                    "\\end{document}\n", [src], quote_macros=("Q",))
+    expect("a macro inside a TeX comment is not a quote", qs == [])
     print("selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

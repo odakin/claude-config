@@ -13,9 +13,13 @@ conventions/rebuttal-letter.md#pre-send-verification-sheet (送る前の照合�
 使い方:
   python3 check-attributed-quotes.py --draft msg.txt --source decision.txt [--source other.txt]
                                      [--attrib <名前> ...] [--all] [--min-chars 5] [--json]
+  python3 check-attributed-quotes.py --draft reply.tex --source decision.txt --quote-macro Q [--quote-env referee]
   python3 check-attributed-quotes.py --selftest
   --attrib = 帰属の語に足す語 (人名など。 規約の側に名前を書かず、 呼び手が渡す)
   --all    = 帰属の語に依らず、 全部の引用を他人に帰した引用として照らす
+  --quote-macro / --quote-env = LaTeX の返答書が referee の文を引くのに定義した macro (\\Q{…} なら Q) と環境の名前。
+             その中身は形で帰属ありとして照らす。 \\begin{quote} と quotation は渡さなくても数える (帰属は前後の文の語)。
+             渡さないと、 macro で引いた referee の文は 1 件も照らされない (中の ``…'' だけが数えられる)。
 終了値: 0 = 他人に帰した引用はどれも原文にある / 1 = 原文に無い (か片の順が違う) ものがある / 2 = 使い方の誤り。
 """
 from __future__ import annotations
@@ -35,6 +39,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--source", type=Path, action="append", default=[], help="原文の file (複数可)")
     ap.add_argument("--attrib", action="append", default=[], help="帰属の語に足す語 (人名など)")
     ap.add_argument("--all", action="store_true", help="全部の引用を他人に帰した引用として照らす")
+    ap.add_argument("--quote-macro", action="append", default=[],
+                    help="LaTeX の文書が定義した引用の macro の名前 (\\Q{…} なら Q、 複数可)")
+    ap.add_argument("--quote-env", action="append", default=[],
+                    help="LaTeX の文書が定義した引用の環境の名前 (複数可。 quote と quotation は常に数える)")
     ap.add_argument("--min-chars", type=int, default=5)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
@@ -48,7 +56,8 @@ def main(argv: list[str] | None = None) -> int:
             ap.error(f"file が無い: {p}")
     read = lambda p: p.read_text(encoding="utf-8", errors="replace")
     quotes = aq.check_text(read(a.draft), [read(p) for p in a.source], tuple(a.attrib),
-                           all_quotes=a.all, min_chars=a.min_chars)
+                           all_quotes=a.all, min_chars=a.min_chars,
+                           quote_macros=tuple(a.quote_macro), quote_envs=tuple(a.quote_env))
     if a.json:
         print(json.dumps([dict(line=q.line, text=q.text, form=q.form, attrib=q.attrib,
                                status=q.status, missing=q.missing, failure=q.failure)
