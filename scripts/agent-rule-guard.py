@@ -577,11 +577,15 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
     what: dict = {"added": [], "edited": [], "removed": [], "moved": []}
     if co and not cn:  # erasing a document is not an edit of it (a file deleted or emptied stays a ruling)
         return False, "文書の中身を全部消した", what
-    # a kept sentence now inside a fence or a comment (the fence delimiters themselves are not sentences)
+    # a kept sentence now inside a fence or a comment (the fence delimiters themselves are not sentences) = one more
+    # hidden copy and one fewer visible copy than before. A new copy written inside a fence (a second example that
+    # repeats a line of the first) hides nothing, and a visible duplicate deleted moves nothing in: counting both
+    # sides tells them from a move. A visible copy deleted while a new hidden copy is added elsewhere counts as a move
+    # (the count cannot tell them apart, and the stricter side stops).
     ho = Counter(u for u, i in ou if u != "\n" and (oc[i][1] or oc[i][2]) and not _FENCE_RE.match(u))
     hn = Counter(u for u, i in nu if u != "\n" and (nc[i][1] or nc[i][2]) and not _FENCE_RE.match(u))
     for u in cn:
-        if u in co and hn[u] > ho[u]:
+        if u in co and hn[u] > ho[u] and cn[u] - hn[u] < co[u] - ho[u]:
             return False, "既存の文を code / comment の中に入れた: 「" + u[:30] + "」", what
     used: set[int] = set()
     sources: dict[int, list[str]] = {}  # added index -> the removed sentences it grew out of (an edit, a merge or a split)
@@ -1342,6 +1346,28 @@ def selftest() -> int:
     check("relax_terms lists every term of a sentence, in a relaxing position only",
           {"ただし", "してよい"} <= set(relax_terms("ただし急ぐ時は deploy してよい。")) and relax_terms("様式が改訂されても同じ。") == []
           and relax_terms("<!-- x") == ["<!--"])
+    # A line repeated inside a new fence is not a sentence hidden (measured: a second example whose fence repeated the
+    # first example's opening line was stopped as a rule moved into code). Judged by count on both sides: a hidden copy
+    # more and a visible copy fewer is a move; a hidden copy more alone is a new copy; a visible copy fewer alone is a
+    # deletion (it passes and is shown).
+    fenced_doc = "# F\n\n## A\n\n- Write X.\n\n```latex\n\\begin{equation}\na=b\n\\end{equation}\n```\n"
+    twice_doc = fenced_doc.replace("\n- Write X.\n", "\n- Write X.\n- Write X.\n")
+    fence_cases = {
+        "a new section whose fence repeats a line of an earlier fence":
+            (fenced_doc, fenced_doc + "\n## B\n\n- Write Y.\n\n```latex\n\\begin{equation}\nc=d\n\\end{equation}\n```\n", True),
+        "a fence that repeats a visible sentence, which stays visible":
+            (fenced_doc, fenced_doc + "\n```\n- Write X.\n```\n", True),
+        "one of two visible copies of a sentence deleted":
+            (twice_doc, fenced_doc, True),
+        "a visible sentence wrapped in a fence":
+            (fenced_doc, fenced_doc.replace("\n- Write X.\n", "\n```\n- Write X.\n```\n"), False),
+        "one of two visible copies moved into a fence":
+            (twice_doc, twice_doc.replace("\n- Write X.\n- Write X.\n", "\n- Write X.\n\n```\n- Write X.\n```\n"), False),
+    }
+    for name, (old_text, new_text, want) in fence_cases.items():
+        r = change_exemption("conventions/deploy.md", old_text, new_text)
+        check("a fence judged by count: " + name, r is not None and r["ok"] is want
+              and (want or "code / comment" in r["reason"]))
     check("everyday use of a listed term passes: without a thing", exempt("conventions/deploy.md", doc, doc + "\nThe check works without a network.\n") is True)
 
     zoned = ("# P\n\n規則の文。\n\n<!-- agent-free:begin id=status -->\n- a: 進行中\n<!-- agent-free:end id=status -->\n"
