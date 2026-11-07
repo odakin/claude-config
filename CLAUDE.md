@@ -42,7 +42,7 @@ claude-config/
 ├── conventions/          # ドメイン固有規約 (各行の説明 = doc-meta の when 〔いつ読むか〕。 詳細 summary + カテゴリ index = conventions/README.md)
 │   ├── academic-program-verification.md    # 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき + 手動審査で不承認になり問い合わせるとき (#after-decline)
 │   ├── actor-attribution.md                # 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time) + owner の名義で出す文面に予定・約束を書く瞬間 (#plan-not-owner-promise)
-│   ├── agent-rule-ownership.md             # agent が規則・禁止・必須手順を適用外と判断する前、規則や検査の配線・例外を変更する前、規則との衝突を理由に別経路を選ぶ前
+│   ├── agent-rule-ownership.md             # agent が規則・禁止・必須手順を適用外と判断する前、規則や検査の配線・例外を変更する前、規則との衝突を理由に別経路を選ぶ前、本人の求めを断る前と作業を本人に戻す前 (#refusal-not-in-owner-rules / #check-the-rule-fits-before-refusing)
 │   ├── android-chromium-remote-debug.md    # Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
 │   ├── ask-user-question.md                # AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
 │   ├── audio-transcription.md              # 会議・インタビュー・収録の録音を機械 (whisper 等) で文字起こしして、その結果を引用・記録に使うとき + 転写した語が聞き取れない・機械が割れるとき + 長い録音を配信・共有用に分割するとき + 長い録音の転写で同じ 1 文が延々と続く区間が出たとき (#loop-runs-in-speech)

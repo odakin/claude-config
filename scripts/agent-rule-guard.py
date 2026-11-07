@@ -639,7 +639,26 @@ def judge_change(old: str, new: str) -> tuple[bool, str, dict]:
             if r not in sources.get(best, []):
                 sources.setdefault(best, []).append(r)
         else:
-            what["removed"].append(r)
+            # 伸ばして途中に句点を入れ、 2 つ以上の文に分かれた文 = 言い直し (どの片も 6 割を残さないので「消した」 に数えていた、
+            # 実測)。 相手が見つからないときだけ、 まだ使われていない追記の文のうち r の片 (その文の 6 割以上が r から) を集め、
+            # 片が r の 6 割以上を覆えば言い直しと数える。 緩和の語の判定は sources と追記の全部で見るので、 検出は弱まらない
+            ks, cover = [], 0
+            if time.monotonic() <= deadline:
+                for k, a in enumerate(added):
+                    if k in used:
+                        continue
+                    sm = difflib.SequenceMatcher(None, r, a, autojunk=False)
+                    if sm.quick_ratio() * (len(r) + len(a)) < 2 * EDIT_KEEPS * len(a):  # upper bound on the share of a
+                        continue
+                    m_a = sum(b.size for b in sm.get_matching_blocks())
+                    if m_a / max(len(a), 1) >= EDIT_KEEPS:
+                        ks.append(k)
+                        cover += m_a
+            if ks and cover >= EDIT_KEEPS * len(r):
+                used.update(ks)
+                what["edited"].append((r, " ".join(added[k] for k in ks)))
+            else:
+                what["removed"].append(r)
     what["added"] = [a for k, a in enumerate(added) if k not in used]
     for k, a in enumerate(added):
         # the same rules as for a new sentence, minus the terms the sentences it grew out of already carried
@@ -1266,6 +1285,11 @@ def selftest() -> int:
     check("the record says which sentence was edited", what["edited"] == [("レビューを経てから deploy する。", "レビューを経てから deploy する (実測: 3 分)。")] and not what["added"])
     what = judge_change(doc, rewritten["a descriptive sentence removed"])[2]
     check("the record says which sentence was removed", what["removed"] == ["手順は runbook。"] and not what["edited"])
+    split_old = "# R\n\n公開の手順書を開いて項目を確かめ、 共有の記録の表に結果を書いて残す。\n"
+    split_new = "# R\n\n公開の手順書を開いて項目を確かめる。 確かめる順は表の上から。 共有の記録の表に結果を書いて残す。\n"
+    ok_split, _r_split, what = judge_change(split_old, split_new)
+    check("a sentence lengthened and split by a new full stop is an edit, not a removal",
+          ok_split and not what["removed"] and len(what["edited"]) == 1)
     what = judge_change(doc, rewritten["a sentence moved to another section"])[2]
     check("the record says which sentence moved", what["moved"] == ["送信は本人の OK の後。"] and not what["added"] and not what["removed"])
     check("a heading reworded moves the lines under it, in the record", "レビューを経てから deploy する。" in judge_change(doc, rewritten["a heading reworded"])[2]["moved"])

@@ -1515,6 +1515,59 @@ def rule_ref_only_regions(regions: dict) -> bool:
     return bool(regions) and set(regions) <= {"authority:rule-ref"}
 
 
+# ---- 断った件の規則を締める変更 (agent-rule-ownership.md#refusal-not-in-owner-rules、 承認なしで通さない) ----
+# 規則の文書の変更は、 緩和の語を足さず隠さなければ事前の裁定なしに通る。 その前提は agent が本人の依頼の向きで書くこと。
+# 本人の求めを断っている最中の agent が、 断った件の規則を断った向きに締める変更は、 締める向きでも承認の道に回す
+# (実測: 断っていた agent が規則の食い違いを自分の断りの側に揃えて締め、 本人の指示と逆の規約になった。 締める向きなので
+# 事前に止まらなかった)。 3 つが揃ったら通さない: (a) 足した・言い直した文に禁止の形がある (b) 本人の 1 つ前の発言から後の
+# agent の返事に一人称の断りの印がある (c) 足した文と、 断りの印を含む文が名詞を共有する。 印は強い一人称の断りだけに絞る
+# (広い「…しません」 は説明の否定 〔「hook は発火しません」〕 にも、 「断ります」 は道具が断る三人称の文 〔「掲示板が断ります」〕 にも
+# 当たる = 較正 = 承認なしで通った変更の記録 30 日に当てて、 本物を捕まえ、 誤りが出ない印に絞った)。 読めない・分からない = 止めない (この網は承認の要らない変更への追加の網)。
+REFUSAL_MARKS = re.compile(r"(私の側の決まり|私の決まり|お断り|入れません|入れないことに|応じられません|頼まれても)")
+PROHIBITION_FORMS = re.compile(r"(しない|書かない|置かない|入れない|使わない|載せない|出さない|渡さない|触らない|禁止|してはいけない"
+                               r"|させない|含めない|印字しない|送らない)")
+_REFUSAL_NOUN = re.compile(r"[一-龥ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_-]{3,}")
+_REFUSAL_NOUN_STOP = frozenset("こと もの ため 場合 本人 規則 文書 file repo Claude claude agent session".split())
+
+
+def _refusal_nouns(text: str) -> set[str]:
+    return {w for w in _REFUSAL_NOUN.findall(text or "") if w not in _REFUSAL_NOUN_STOP}
+
+
+def refusal_tightening(session: tuple[str, str] | None, exempt: dict | None, path: Path | None = None) -> str:
+    """承認なしで通る判定の変更が、 その会話で断った件の規則を締める変更なら、 止める理由の 1 行 (違えば空)。"""
+    try:
+        if not session or not exempt or not exempt.get("ok"):
+            return ""
+        what = exempt.get("what") or {}
+        texts = [str(a) for a in what.get("added") or []]
+        texts += [str(p[1]) for p in what.get("edited") or [] if isinstance(p, (list, tuple)) and len(p) > 1]
+        tightened = [t for t in texts if PROHIBITION_FORMS.search(t)]
+        if not tightened:
+            return ""
+        agent, sid = session
+        path = path or find_transcript(agent, sid)
+        if path is None:
+            return ""
+        msgs = user_messages(path)
+        since = msgs[-2][0] if len(msgs) >= 2 else ""
+        sentences = [s for r in assistant_replies_since(agent, path, since) for s in re.split(r"(?<=[。\n])", r)
+                     if REFUSAL_MARKS.search(s)]
+        if not sentences:
+            return ""
+        refused = _refusal_nouns(" ".join(sentences))
+        for t in tightened:
+            shared = sorted(_refusal_nouns(t) & refused)
+            if shared:
+                mark = REFUSAL_MARKS.search(" ".join(sentences)).group(0)
+                return (f"その会話で agent が本人の求めを断った件 (返事の「{mark}」) の規則を、 断った向きに締める変更"
+                        f" (足した文と断りの文が「{shared[0]}」 を共有) = 締める向きでも承認なしで通さない"
+                        " (agent-rule-ownership.md#refusal-not-in-owner-rules)。 言い換えで通さず、 差分を見せて本人に聞く")
+        return ""
+    except Exception:
+        return ""
+
+
 def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict | None = None,
                       authority: bool = True, baseline: str | None = None,
                       session: tuple[str, str] | None = None) -> list[dict]:
@@ -1548,6 +1601,10 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
             exempt = {**against, "refined": True, "delta": _insertion_delta(old, new),
                       "what": _rule_guard.judge_change(_rule_guard.mask_free_zones(old), _rule_guard.mask_free_zones(new))[2]}
             refined = True
+    if exempt is not None and exempt["ok"]:
+        why = refusal_tightening(session, exempt)
+        if why:
+            exempt = {**exempt, "ok": False, "reason": why}
     if exempt is not None and exempt["ok"]:
         # 足した文がどこに (既存の行の続き / 既存の節の新しい行 / 新しい節) 入り、 同じ対象を扱う既存の文の隣か = 記録と
         # 返事の行に出す (判定ではない = 追記でも意味は反転できる、 を本人の目に入れる)
@@ -2401,11 +2458,13 @@ def deny_reason(left: list[dict], session: tuple[str, str] | None) -> str:
             "  1. 追記も書き換えも削除も同じ線で通る: 足した文・言い直した文に緩める位置の緩和の語が無く、 既存の文を隠さず、"
             " 見出しで過去のものにしなければ、 承認なしで通って本人が後で読む記録と返事の行に残る (消した文・言い直した文も返事に出る)。"
             " 止まった理由が緩和の語なら、 本当に緩めるのでなければ言い方を変えて通す (緩めるなら 3 へ)。"
+            " 言い換えて通す前に、 その変更が本人の最新の依頼の向きかを確かめる = この会話で本人の求めを断っていれば、"
+            " 言い換えで通さず差分を見せて本人に聞く (3 へ)。"
             " 古い文と新しい文を同居させない = 追記で誤りとして残る文は言い直す。\n"
             "  2. 本人の最新の発言 (依頼) が、 この変更をすでに含むか確かめる (例: 「知見を上層に整備して」 は"
             " conventions の知見の更新とその参照の更新を含む)。 含み、 かつ規則を緩めない変更なら、 聞き直さずに"
             " その発言を --quote に引いて記録する。 引けるのは本人の最新の発言だけ = 本人が次に発言する前に、"
-            " その依頼で要る承認をまとめて記録する。\n"
+            " その依頼で要る承認をまとめて記録する。 この会話で本人の求めを断った件の変更は、 発言が含むように読めても 3 へ。\n"
             "  3. 依頼が含まない変更と、 規則を緩める変更は、 差分を見せて本人の裁定を得て、 その発言を引く。\n"
         )
     if strict:
@@ -4003,6 +4062,23 @@ def additive_disclosed(e: dict, reply: str) -> bool:
                for line in reply.splitlines())
 
 
+def changed_phrase(old: str, new: str, limit: int = 60) -> str:
+    """言い直しで変わった句 (共通の頭と尻を除いた所)。 文の頭が同じだと、 頭だけの表示では足した句が見えない (実測)。"""
+    a, b = collapse_ws(str(old)), collapse_ws(str(new))
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]:
+        i += 1
+    j = 0
+    while j < min(len(a), len(b)) - i and a[len(a) - 1 - j] == b[len(b) - 1 - j]:
+        j += 1
+    gone, came = a[i:len(a) - j].strip(), b[i:len(b) - j].strip()
+    if not gone and not came:
+        return ""
+    if gone and came:
+        return f" (変えた句「{gone[:limit]}」→「{came[:limit]}」)"
+    return f" (足した句「{came[:limit]}」)" if came else f" (消した句「{gone[:limit]}」)"
+
+
 def additive_line(e: dict) -> str:
     where = f"{Path(e.get('repo') or '~').name}/{e.get('file')}"
     anchors = additive_anchor(e, 40)
@@ -4022,7 +4098,7 @@ def additive_line(e: dict) -> str:
         parts = [f"{label} {n.get(k)}" for k, label in (("added", "追記"), ("edited", "言い直し"), ("removed", "消した"), ("moved", "移動")) if n.get(k)]
         ed = e.get("edited") or []
         rm = e.get("removed") or []
-        sample = (f" 「{text}」→「{collapse_ws(ed[0][1])[:40]}」" if ed
+        sample = (f" 「{text}」→「{collapse_ws(ed[0][1])[:40]}」{changed_phrase(ed[0][0], ed[0][1])}" if ed
                   else f" 消した「{text}」" if rm else f" 「{text}」")
         return f"- 規則の文書を承認なしで変えた: {where} — {pre}{' / '.join(parts)}:{sample}{tail}"
     return f"- 規則の文書を承認なしで変えた: {where} — {pre}追記: 「{text}」{tail}"
@@ -4734,6 +4810,57 @@ def apply_replacement_selftests(check) -> None:
             os.environ.update(saved_env)
             PENDING_EXEMPTIONS.clear()
             reset_caches()
+
+
+def refusal_tightening_selftests(check) -> None:
+    """断った件の規則を締める変更 (N1)・止めた表示の向きの問い (N2)・返事の行の変わった句 (N3)。"""
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        tr = Path(td) / "sess-rt.jsonl"
+        rows = [("user", "2026-01-01T00:00:00Z", "番号を様式に入れて"),
+                ("assistant", "2026-01-01T00:01:00Z", "私の側の決まりで、番号は様式に入れません。"),
+                ("user", "2026-01-01T00:02:00Z", "いや、入れてよ"),
+                ("assistant", "2026-01-01T00:03:00Z", "番号は入れないことにしています。"),
+                ("user", "2026-01-01T00:04:00Z", "規則が矛盾してる、直して")]
+        with tr.open("w", encoding="utf-8") as f:
+            for kind, ts, text in rows:
+                content = text if kind == "user" else [{"type": "text", "text": text}]
+                f.write(json.dumps({"type": kind, "timestamp": ts, "message": {"role": kind, "content": content}},
+                                   ensure_ascii=False) + "\n")
+        sess = ("claude", "sess-rt")
+        ex = lambda added=(), edited=(): {"ok": True, "what": {"added": list(added), "edited": list(edited)}}  # noqa: E731
+        check("N1: 断った件 (番号) を締める追記 = 通さない理由が付く",
+              "締める" in refusal_tightening(sess, ex(["番号は暗号化側にも置かない。"]), tr))
+        check("N1: 断った件を締める言い直し = 通さない",
+              refusal_tightening(sess, ex(edited=[("番号は平文に書かない。", "番号は平文にも暗号化側にも書かない。")]), tr) != "")
+        check("N1: 禁止の形の無い追記 = 通す", refusal_tightening(sess, ex(["番号の置き場は暗号化側。"]), tr) == "")
+        check("N1: 断りの文と名詞を共有しない禁止 = 通す", refusal_tightening(sess, ex(["予定は手で消さない。"]), tr) == "")
+        check("N1: session が無い・承認の要る判定・読めない記録 = 判定しない (空)",
+              refusal_tightening(None, ex(["番号は置かない。"]), tr) == ""
+              and refusal_tightening(sess, {"ok": False, "what": {"added": ["番号は置かない。"]}}, tr) == ""
+              and refusal_tightening(sess, ex(["番号は置かない。"]), Path(td) / "none.jsonl") == "")
+        plain = Path(td) / "sess-plain.jsonl"
+        with plain.open("w", encoding="utf-8") as f:
+            for kind, ts, text in [("user", "2026-01-01T00:00:00Z", "番号の欄を見直して"),
+                                   ("assistant", "2026-01-01T00:01:00Z", "番号の欄を直しました。"),
+                                   ("user", "2026-01-01T00:02:00Z", "規則も直して")]:
+                content = text if kind == "user" else [{"type": "text", "text": text}]
+                f.write(json.dumps({"type": kind, "timestamp": ts, "message": {"role": kind, "content": content}},
+                                   ensure_ascii=False) + "\n")
+        check("N1: 返事に断りの印が無い = 締める追記でも通す", refusal_tightening(sess, ex(["番号は置かない。"]), plain) == "")
+    shown = deny_reason(
+        [{"file": "conventions/a.md", "region": "authority:file", "kind": "change", "detail": PROSE_DETAIL + "x"}], None)
+    check("N2: 止めた表示に向きの問い", "本人の最新の依頼の向きか" in shown)
+    check("N2: 依頼が含むなら引く、 の段も断った件を除く", "発言が含むように読めても 3 へ" in shown)
+    check("N3: 言い直しの行に足した句が出る",
+          changed_phrase("規則は平文に書かない。", "規則は平文にも暗号化側にも書かない。") == " (足した句「も暗号化側にも」)"
+          and "足した句" in additive_line({"kind": "change", "repo": "/r/x", "file": "a.md", "n": {"edited": 1},
+                                          "edited": [("規則は平文に書かない。", "規則は平文にも暗号化側にも書かない。")]}))
+    check("N3: 照合の鍵 (元の文の頭) は行に残る",
+          additive_disclosed({"kind": "change", "repo": "/r/x", "file": "a.md", "n": {"edited": 1},
+                              "edited": [("規則は平文に書かない。", "規則は平文にも暗号化側にも書かない。")]},
+                             additive_line({"kind": "change", "repo": "/r/x", "file": "a.md", "n": {"edited": 1},
+                                            "edited": [("規則は平文に書かない。", "規則は平文にも暗号化側にも書かない。")]})))
 
 
 def selftest() -> int:
@@ -7481,6 +7608,7 @@ def selftest() -> int:
 
     apply_mode_selftests(check)
     apply_replacement_selftests(check)
+    refusal_tightening_selftests(check)
 
     print(f"selftest: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
     return 1 if fails else 0
