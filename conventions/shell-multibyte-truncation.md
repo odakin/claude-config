@@ -19,6 +19,7 @@ UTF-8 では日本語 1 文字 = 3 バイト、絵文字 = 4 バイト。**byte 
 | `head -c N` / `dd bs=1 count=N` | 定義上 byte 単位 | 同上 (文字単位 truncate) |
 | `${var:0:N}` (bash 部分文字列) | locale が C/POSIX (= `LANG` 空) や bash 3.2 だと byte 単位 | python / perl、または `LC_ALL` を `*.UTF-8` に確実に設定 |
 | `awk 'substr(...)'` | BSD awk は多バイト非対応のことが多い | `python3` / `perl -CSD` |
+| `wc -m` (字数を数える) | locale が C/POSIX だと **byte を数える** (日本語は 1 字 3 byte = 約 3 倍に出る)。 Claude Code の Bash tool も `LANG`・`LC_ALL` が空 (下の節)。 実測: 投稿先の字数の上限に合わせて文面を削ったが、 数えていたのは byte で、 実際は上限の半分ほどだった = 削らなくてよい文を削った | `python3 -c 'import sys;print(len(open(sys.argv[1],encoding="utf-8").read()))' <file>` |
 
 ⚠️ **launchd / cron から走る script は `LANG` が空 (= C locale) になりがち** (= user の shell profile を読まないため)。bash の `${var:0:N}` 等が byte 単位に落ちるので、daemon 系 script では特に文字単位の truncate を明示する。
 
