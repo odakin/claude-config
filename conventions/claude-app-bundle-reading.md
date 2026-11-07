@@ -19,7 +19,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 
 道具 = [`scripts/claude-app-bundle.py`](../scripts/claude-app-bundle.py)。 読んだ結論には **`version` の出力 (app と engine の版) を添える** — 挙動は版で変わる。
 
-**Windows (Store 版)**: 画面の chunk は `C:\Program Files\WindowsApps\Claude_<版>_x64__pzs8sxrjxfjjc\app\resources\ion-dist\assets\v1\*.js`、 main process は同 `app\resources\app.asar`、 埋込 engine は `%APPDATA%\Claude\claude-code\<版>\<hash>\claude.exe`。 動いている版と path は `Get-Process` の `Path` で分かる。 `WindowsApps` 配下は **dir への `cd` と `ls` の glob は Permission denied だが、 file は full path を渡せば読める** (`grep -l … "<dir>/*.js"` は失敗、 `grep -rl … "<dir>"` と `cp "<file>" <scratch>` は通る)。 1 行が数十 KB の chunk に `.{0,N}` の grep を当てると固まるので、 scratch に写して Python で位置を指定して切り出す。
+**Windows (Store 版)**: 画面の chunk は `C:\Program Files\WindowsApps\Claude_<版>_x64__pzs8sxrjxfjjc\app\resources\ion-dist\assets\v1\*.js`、 main process は同 `app\resources\app.asar`、 埋込 engine は `%APPDATA%\Claude\claude-code\<版>\<hash>\claude.exe`。 動いている版と path は `Get-Process` の `Path` で分かる。 `WindowsApps` 配下は **dir への `cd` と `ls` の glob は Permission denied だが、 file は full path を渡せば読める** (`grep -l … "<dir>/*.js"` は失敗、 `grep -rl … "<dir>"` と `cp "<file>" <scratch>` は通る)。 1 行が数十 KB の chunk に `.{0,N}` の grep を当てると固まるので、 scratch に写して Python で位置を指定して切り出す。 ⚠️ 4.4212.0 では `ion-dist` の dir が無く、 **画面の chunk は `app\resources\ion-dist.asar` の中** (`assets/v1/*.js`)。 asar は先頭 16 byte の後に JSON の header (file ごとの `offset` / `size`) が続く形式なので、 scratch に写して Python で header を読み、 file ごとに切り出して検索する (`claude-app-bundle.py` は未対応)。
 
 ## <a id="trace-from-screen-text"></a>画面の文言から原因を辿る
 

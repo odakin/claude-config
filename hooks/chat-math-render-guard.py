@@ -26,8 +26,14 @@
   - `\\[…\\]` は本体が数式にしない (常に生表示)。 表の行 (`|` で始まる行) の数式の中の `|` はセルの区切りに取られる。
   - 返事全体の gate (`ri`): `\\(`+`\\)` が無く、 `$…$` も `ti` の形 (記号を含む等) で 1 つも無い返事では KaTeX 自体を
     読まないので、 その返事の `$…$` は全部生表示。
-  写していないもの: 1 行の `$$…$$` と複数行の `$$` block は見ない (block 側の判定 `an`/`Yt`/`Zt` は読み切れておらず、
-  実測では `\\\\0` を含む 1 行の pmatrix も描かれた = 止めると誤検出になる)。 数式を含む行の Markdown の
+  - 複数行の `$$` block で、 開きの `$$` の行か閉じの `$$` の行に式が続く形は止める (`DD_FENCE_TEXT`)。
+    実測 (desktop 4.4212.0): `$$\\begin{aligned}` … `\\end{aligned}$$` の 5 行の block が数式にならず、 `\\,` `\\\\` が
+    Markdown のエスケープとして消えた地の文で出た。 4.4212.0 の in-house plugin (`c648dc9d7-*.js` の `Nt` / `Ct` / `wt`) を
+    段落 1 つの文字列に当てる限りでは数式になるはずの形で、 前段 (streaming の block 分割、 `c18fe02d2-*.js`) で切れていると
+    見られるが読み切れていない。 直し方 = 1 行の `$$…$$` (`Tt` → `Pt` = 行頭 `$$`・行末 `$$`・5 文字以上、 gate 無し) か、
+    `$$` を単独の行に出す。 `$$` だけの行で開閉する block は通す (B6、 4.4212.0 で数式に描かれることを本人の画面で確認)。 ⚠️ 較正 (過去 60 日の desktop の最終発話) では
+    この形が数百 block 書かれていた = 生表示になった返事は他にもあったはずだが、 4.4212.0 より前の版で描かれていたかは未確認。
+  写していないもの: 1 行の `$$…$$` は見ない (実測では `\\\\0` を含む 1 行の pmatrix も描かれた)。 数式を含む行の Markdown の
   構造 (見出し・箇条書き・引用) は本体も inline parser に同じ文字列を渡すので区別しない。 guard に落ちた `$` の閉じが
   次の式の開きになって落ちる連鎖は、 本体と同じに走査するが報告はしない (直すのは元の 1 箇所)。 app の式は版で変わる
   = 読んだ版は上に書いた。
@@ -340,6 +346,7 @@ def find_dollar_close(text: str, open_at: int):
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 DISPLAY_ONE_LINE = re.compile(r"^ {0,3}\$\$(.+?)\$\$\s*$")
 DISPLAY_FENCE = re.compile(r"^ {0,3}\$\$\s*$")
+DISPLAY_OPEN = re.compile(r"^ {0,3}\$\$")
 
 HINT = {
     "BS_PREV": "`\\(` の直前に半角空白を 1 つ入れる (読点・句点・括弧・日本語の直後は不可)",
@@ -350,6 +357,7 @@ HINT = {
     "BS_NOCLOSE": "同じ行に `\\)` が無い: 1 行に収める",
     "BS_EMPTY": "中身が空",
     "BRACKET": "`\\[…\\]` は描かれない: `$$…$$` にする",
+    "DD_FENCE_TEXT": "複数行の `$$` block の開き・閉じの `$$` と同じ行に式がある (`$$\\begin{aligned}` / `\\end{aligned}$$`): 全体を 1 行の `$$…$$` に書くか、 `$$` を単独の行に出す",
     "DL_OPEN": "開き `$` の直後が空白・`$`・行末 (`$ x $` は不可)",
     "DL_SPACE": "`$` の内側に空白を置かない",
     "DL_NOCLOSE": "同じ行に閉じ `$` が無い",
@@ -381,6 +389,8 @@ def scan(text: str) -> list[dict]:
     lines = text.split("\n")
     in_fence: str | None = None
     in_display = False
+    display_open = 0
+    display_reported = False
     offset = 0
     for lineno, line in enumerate(lines, 1):
         start = offset
@@ -393,12 +403,23 @@ def scan(text: str) -> list[dict]:
         if m:
             in_fence = m.group(1)
             continue
-        if DISPLAY_FENCE.match(line):
-            in_display = not in_display
-            continue
         if in_display:
+            if "$$" in line:
+                in_display = False
+                # `$$` だけの行で開き、 閉じの行に式が続く (`\end{x}$$`) 形も止める
+                if not DISPLAY_FENCE.match(line) and not display_reported:
+                    findings.append({"line": display_open, "code": "DD_FENCE_TEXT", "span": line.strip()[-40:]})
             continue
         if DISPLAY_ONE_LINE.match(line):
+            continue
+        if DISPLAY_OPEN.match(line):
+            # 複数行の `$$` block。 `$$` だけの行で開閉する形は通し (B6、 4.4212.0 で描かれることを確認済み)、
+            # 開きの行に式が続く形 (`$$\begin{aligned}`) は生表示になった実測があるので止める
+            display_reported = not DISPLAY_FENCE.match(line)
+            if display_reported:
+                findings.append({"line": lineno, "code": "DD_FENCE_TEXT", "span": line.strip()[:40]})
+            in_display = True
+            display_open = lineno
             continue
         _scan_inline(text, start, start + len(line), lineno, _is_table_row(line), findings)
     # 本体 `ri`: `\(`+`\)` も display (`$$` の対・1 行の `$$…$$`・```math) も `ti` 形の `$…$` も無い返事は KaTeX を読まない
