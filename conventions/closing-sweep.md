@@ -20,7 +20,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
   当たるなら、 **公開層に上げる文のうち事実を含みうるもの**を絞り、 残りは plan か TODO に積んで次の session に回す。
   これは漏洩の対策であって作業量の上限ではない = 技術の仕組み (道具・hook・検査) や手順の一般形を作ることは、 この条件でも絞らない。
   同じ時間帯に走っている他の締めとは、 1.5 の宣言で書く file を分ける。
-- <a id="delegated-sweep"></a>**ある session の締めを別の worker に渡す** (元の session が止まった・context が大きい・別 vendor に任せる) ときは、 依頼の spec に 3 つ書く:
+- <a id="delegated-sweep"></a>**ある session の締めを別の worker に渡す** (元の session が止まった・context が大きい・別 vendor に任せる) ときは、 渡す先は自分で締めを回せる session にし (subagent に渡すと、 その締めで得た知見がまた依頼元の締めに積もる = [multi-session-coordination.md#self-closing-delegate](multi-session-coordination.md#self-closing-delegate))、 依頼の spec に 3 つ書く:
   (1) 対象の session の完全な id と記録の種類 (Claude Code か Codex)。 worker にとって上の「この session」 は対象の session で、 その種類の道具で読む = Claude の session なら 0.3・0.5 の道具を対象の id で回し、 0.95 の inventory (Codex の session 用) は使わない
   (2) 既に済んだ拾い出し (考え方・研究の中身の回収など) の結果の file。 それを入力にして拾い直させない
   (3) 触らせない file (提出前の原稿など) と、 保護された file のうち B に当たらない変更は本人に聞くこと ([#protected-files-need-ruling](#protected-files-need-ruling))。
@@ -59,7 +59,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 
 ## <a id="collect-from-delegates"></a>0.5 委ねた先から集める (agent・子 session・別 session への依頼)
 
-委ねた先の報告は user に見えず、 委ねた側が拾わないとどこにも残らない。 5 つの口を全部見る (委ねられた側として引き受けた依頼も含む)。
+委ねた先の報告は user に見えず、 委ねた側が拾わないとどこにも残らない。 subagent の口は、 子が自分で締めを回さない分がここに積もる = 成果物と知見が残る仕事は、 最初から自分で締められる session に渡す ([multi-session-coordination.md#self-closing-delegate](multi-session-coordination.md#self-closing-delegate))。 5 つの口を全部見る (委ねられた側として引き受けた依頼も含む)。
 
 | 口 | 見る場所 |
 |---|---|

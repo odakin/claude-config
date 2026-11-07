@@ -1060,7 +1060,8 @@ def pre_agent(inp: dict) -> tuple[int, str]:
                + " / ".join(why) + "。\n"
                "  本人に見せる worker は、 掲示板の request (desktop の session からは既定で desktop) → 出力の引数で start_session。"
                " 既に request を出したなら、 その出力の start_session の引数で起こす。\n"
-               f"  本人が見ない手元の調査・検算なら description か prompt に {AGENT_OK}: 理由] を書いて出し直す"
+               f"  結果をそのまま使う手元の小さな調べもの・照合・検算なら description か prompt に {AGENT_OK}: 理由] を書いて出し直す"
+               " (方針・実装・RCA・規則の追記は subagent にせず一覧に出る worker = conventions/multi-session-coordination.md#self-closing-delegate)"
                " (掲示板で受けるなら request は --surface agent)。 規約 = " + RULE)
 
 
