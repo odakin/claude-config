@@ -650,6 +650,8 @@ worker の立ち上がりの「何を読むべきか探す」 段階は、 最�
 
 (a)-(c) が書けないのは**親自身が構成を把握していない signal** で、 その chip はまだ切り出せる状態にない (= 先に親が scout するか、 scout 自体を bounded chip にする)。 write 側の cap (「触ってよい file はこれだけ」 「成果物はこれだけ、 増やさない」) は並列衝突防止 (§1) と scope creep 防止を兼ねる。
 
+依頼書には、 方針の段か実装の段かも書く (実装の段なら確認済みの方針の file と本人の確認の発言、 方針の段を立てない作業ならその理由 = [`policy-before-implementation.md#delegating`](policy-before-implementation.md#delegating))。
+
 ### <a id="junction-fanin"></a>sizing 述語の追加軸: 合流点の入力 fan-in (2026-07-11 追記)
 
 新規概念数と別に、 **「読ませる入力 context をいくつ融合させるか」 (= fan-in)** も数える。 複数の独立した部品 script / 結果 file を 1 つに突き合わせる **junction chip** は、 新規概念が 1 個でも「全入力を読了した直後の最初の設計 turn」 に thinking が集中し、 orientation 前払い (a)-(c) が完備でも**読了直後に silent stall し得る** (実測 1 件: 入力 5 file の junction chip が file 読了直後に ~30 分沈黙・durable 出力ゼロ)。 fan-in が 4-5 file に達する junction は、 **「最小の must-close anchor 1 本を通して commit するまで」 を第 1 stage に切り出す** (= 巨大設計 turn を構造的に不可能にする) か、 spec に「骨格 Write → 実行 → append の逐次 turn 規律 + 部分 commit permission」 を焼き込む。

@@ -7,6 +7,10 @@ sections:
   - id: toc
     level: 2
     title: "目次"
+  - id: policy-before-implementation-placement
+    legacy: "2026-11-07"
+    level: 2
+    title: "2026-11-07: 「方針を先に出してから実装する」 を独立の規約 file に置き、 返信版をそこへ統合する"
   - id: rc-detail-and-unattended-refresh
     legacy: "2026-10-31"
     level: 2

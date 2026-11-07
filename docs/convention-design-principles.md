@@ -203,6 +203,8 @@ origin: 研究費様式の交通費記入ルールを是正した session。確�
 
 **Evidence (2026-06、 1 instance)**: scan PDF への text overlay 作業で「ベスト推測→user 確認→補正」 のループを 7+ rounds 反復、 session 中盤で初めて回した既存手順 (= 試験 PDF での bbox 実測 + 罫線・文字の pixel 差分分離) で短時間収束。 着手時に layer 1 doc を grep していれば見えた経路 ([`pymupdf-insert-text-baseline`](../conventions/office-automation.md#pymupdf-insert-text-baseline) + [`scan-pdf-pixel-anchor-overlay`](../conventions/office-automation.md#scan-pdf-pixel-anchor-overlay)) で、 CONVENTIONS.md §3 の事前確認 step が recall 依存ゆえ in-context に表象されない瞬間に発火しなかった本節 pattern の direct instance (§8.12)。 「行動原則を独立せず既存手順に組み込む」 設計選択は本失敗を *減らす* が *消さない* — ambient に乗せた条件は recall に依存し続けるため、 firing surface の最弱面 (§8.12) が再演する。 detailed instance は layer-3 plan に sequester (= 層 1 → 3 hardlink 禁則、 §1)。
 
+**次の段:** 方位を取った後、 実装に入る前に方針を短く本人に見せて確認を取る = [`../conventions/policy-before-implementation.md#rule`](../conventions/policy-before-implementation.md#rule)。
+
 ### <a id="motivated-substitution-trap"></a>4.1 指定された成果物・手段から逸脱する時の self-justification trap（motivated substitution）
 
 規則・禁止・必須手順の適用を自分の判断で変えそうになった場合の規範と機械検査は、[agent-rule-ownership.md](../conventions/agent-rule-ownership.md#rule) が所有する。

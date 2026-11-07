@@ -4,6 +4,7 @@
 
 ## <a id="toc"></a>目次
 
+- [2026-11-07: 「方針を先に出してから実装する」 を独立の規約 file に置き、 返信版をそこへ統合する](#policy-before-implementation-placement)
 - [2026-10-31: RC server の中身を beat に載せ、 古い server は機械が起こし直す](#rc-detail-and-unattended-refresh)
 - [2026-09-29: 規則の文書の変更の報告 — 差し戻しの後も照合し、 他の session の分は file ごとに畳み、 書かれていた記録は証拠から照合し直す](#additive-echo-bookkeeping)
 - [2026-09-29: auto mode で承認 CLI が classifier に止まる経路は、 本人の狭い allow の宣言で開ける](#approval-cli-allow-in-auto-mode)
@@ -51,6 +52,21 @@
 - [公開リポ leak 防止: 構造制約 hook + pre-commit ephemeral literal check](#public-repo-leak-prevention)
 - [sensitive-terms.txt の symlink architecture (2026-05-14 追補)](#sensitive-terms-symlink-architecture)
 - [2026-05-18: PDF Read tool fallback hook 設計判断](#pdf-read-fallback-hook)
+
+---
+
+## <a id="policy-before-implementation-placement"></a>2026-11-07: 「方針を先に出してから実装する」 を独立の規約 file に置き、 返信版をそこへ統合する
+
+**背景 (実測)**: 返信・返答書の起草には方針の段が `concise-output.md#policy-before-draft` に置かれていたが、 code・hook・設定・規則の文書の実装には同じ段が無く、 方針の誤りが実装の後に見つかって実装ごと作り直す形が残っていた。 方針の段で直された誤りはどれも入力の読みの誤りだった。
+
+**決定**: 原則・範囲・方針の段を立てない作業・下請けへの 2 段の依頼・実装の後の照合を [`conventions/policy-before-implementation.md`](conventions/policy-before-implementation.md) の 1 か所に置く。 返信版は同 file の `#drafting` / `#delegating` に統合し、 `concise-output.md#policy-before-draft` は anchor を残した pointer にする (この anchor を引く文書が切れない)。 入口は CONVENTIONS.md §5 の 11 番目の 1 行、 依頼書の書き方 (`multi-session-coordination.md#orientation-prepay`) の 1 行、 設計原則 §4 の 1 行、 Codex の入口の 1 文。 範囲の線は「本人が別の形を選びうる変更」 = 選ぶ余地がある所だけに往復を入れる。
+
+**捨てた案**:
+- CONVENTIONS.md に本文の節を置く = 入口の file に payload が入る (分野の本文は `conventions/` に分ける作り)。
+- `docs/convention-design-principles.md` に置く = 規則を設計する人向けの文書で、 実装に入る瞬間に開かれない。
+- `concise-output.md#policy-before-draft` を広げる = 出力の簡潔さの file の読む時 (doc-meta の when) と中身がずれる。 返信版を事例として 2 か所に本文を置くと片方だけ直って食い違う ([`docs/convention-design-principles.md#rule-variant-drift`](docs/convention-design-principles.md#rule-variant-drift))。
+- 範囲を実装すべてにする = 1 文の直しや記録にも往復が入り、 推す答えのままの項目を確認させる形 (`concise-output.md#no-reason-to-deviate` の実測) が戻る。
+- turn 終わりの hook で方針の有無を見る = 返事の表面から見分けられない (`concise-output.md#not-machine-detectable`)。 機械の網は掲示板の起動文の 1 文と request の段の印 (警告だけ) に置く。
 
 ---
 
