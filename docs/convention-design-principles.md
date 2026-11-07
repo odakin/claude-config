@@ -84,6 +84,8 @@ anchor-token 型の drift 検出（md/yaml を scan する registry 方式）は
 
 実例: 派生文書 A (提出文書の tex、 誤った名指し) と B (状態 doc、 匿名でほぼ正しい) の不一致を整合性 sweep が発見し、 B を A に合わせて「特定」 と commit — 合成された gloss は一次資料 (当該 arXiv の著者 list) と 1 手で矛盾する文で、 その矛盾が後日の検出 trigger にもなった (= 増幅は事故を悪化させると同時に自己矛盾を焼き込む)。 claim-target 帰属の domain 版 = [`actor-attribution.md#claim-target-attribution`](../conventions/actor-attribution.md#claim-target-attribution) 規律 9。
 
+規則の文書の中の食い違いも同じ: 「この 2 つの文が食い違っている、 直して」 と頼まれたときの正本は本人の意思 (直前の依頼) で、 agent の直前の立場ではない。 実例: 本人の求めを断っていた agent が、 食い違いを自分の断りの側 (締める側・具体的な側) に揃え、 本人の指示と逆の規約になった = [`agent-rule-ownership.md#refusal-not-in-owner-rules`](../conventions/agent-rule-ownership.md#refusal-not-in-owner-rules)。
+
 ### <a id="sot-read-side"></a>2.3 SoT の read 側 — entity を「言及するだけの store」を SoT と取り違えない
 
 §2.1/§2.2/§15 は **write 側**（正本を二重に*作る*な・宣言の衝突を sweep せよ・多重記述を是正せよ）。SoT には **read 側の双対**がある: ある案件の status を答えるとき **その案件の SoT を読む** — その entity を*言及するだけ*の別 store（受信メール・領収書・通知・log）を SoT と取り違えてはならない。
