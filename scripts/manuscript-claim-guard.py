@@ -2720,28 +2720,30 @@ def open_marks(session: tuple[str, str] | None, rel: str, repo: str = "") -> lis
     return [t for t in refusal_marks(session, rel, repo) if t.replace(microsecond=0).isoformat(timespec="seconds") not in lifted]
 
 
-def _mark_carries(texts: list[str], mark_texts: list[str], proposed: str | None = None) -> bool:
-    """締めた文 (texts) がその印の止めた文と同じ対象か = 名詞を共有する (印が名詞で止めるのと同じ線)、 または止めた文が候補に
-    そのまま在る。 止めた文が記録に無い印は運ぶと読む (前の形)。"""
+def _mark_carries(texts: list[str], mark_texts: list[str], proposed: str | None = None, old: str | None = None) -> bool:
+    """締めた文 (texts) がその印の止めた文と同じ対象か = 名詞を共有する (印が名詞で止めるのと同じ線)、 または止めた文を候補が
+    そのまま足す (候補に在って、 比べる元 old には無い。 前から file に在る文は運ばない = 試験で見つけた)。 止めた文が記録に無い
+    印は運ぶと読む (前の形)。"""
     if not mark_texts:
         return True
     if _shared_nouns(_refusal_nouns(" ".join(texts)), _refusal_nouns(" ".join(mark_texts))):
         return True
-    return proposed is not None and any(all(p in _norm_shown(proposed) for p in k) for k in _shown_keys(mark_texts))
+    if proposed is None:
+        return False
+    np_, no_ = _norm_shown(proposed), _norm_shown(old) if old is not None else ""
+    return any(all(p in np_ for p in k) and not (old is not None and all(p in no_ for p in k)) for k in _shown_keys(mark_texts))
 
 
 def _carried_marks(session: tuple[str, str] | None, rel: str, repo: str, texts: list[str],
-                   proposed: str | None = None) -> list[_dt.datetime]:
+                   proposed: str | None = None, old: str | None = None) -> list[_dt.datetime]:
     """開いた印のうち、 締めた文 (texts) が運ぶもの (古い順)。"""
-    return [t for t in open_marks(session, rel, repo) if _mark_carries(texts, _block_texts(session, rel, repo, t), proposed)]
+    return [t for t in open_marks(session, rel, repo)
+            if _mark_carries(texts, _block_texts(session, rel, repo, t), proposed, old)]
 
 
-def _candidate_tightened(repo: Path | None, rel: str, target: Path, proposed: str | None) -> list[str]:
-    """承認する候補の締めた文 = 今の file との差 (いま書く変更) で、 足した・言い直した文のうち禁止の形を含むもの。 候補が今の
-    file と同じ (先に shell で書いた) なら HEAD との差。 HEAD との差だけで見ると、 承認して書いた後でまだ commit していない締めを
-    次の別の変更の候補の文に数えた (実測)。"""
-    if proposed is None:
-        return []
+def _candidate_baseline(repo: Path | None, rel: str, target: Path, proposed: str | None) -> str:
+    """承認する候補と比べる元 = 今の file (いま書く変更)。 候補が今の file と同じ (先に shell で書いた) なら HEAD。 HEAD だけと
+    比べると、 承認して書いた後でまだ commit していない締めを次の別の変更の候補の文に数えた (実測)。"""
     try:
         old = target.read_text(encoding="utf-8") if target.is_file() else ""
     except OSError:
@@ -2751,6 +2753,15 @@ def _candidate_tightened(repo: Path | None, rel: str, target: Path, proposed: st
             old = head_text(repo, rel)
         except Exception:
             pass
+    return old
+
+
+def _candidate_tightened(repo: Path | None, rel: str, target: Path, proposed: str | None, old: str | None = None) -> list[str]:
+    """承認する候補の締めた文 = 比べる元 (_candidate_baseline) との差で、 足した・言い直した文のうち禁止の形を含むもの。"""
+    if proposed is None:
+        return []
+    if old is None:
+        old = _candidate_baseline(repo, rel, target, proposed)
     try:
         what = _rule_guard.judge_change(_rule_guard.mask_free_zones(old), _rule_guard.mask_free_zones(proposed))[2]
     except Exception:
@@ -2768,14 +2779,20 @@ def _norm_shown(text: str) -> str:
     return _SHOWN_DROP.sub("", text or "")
 
 
-def _shown_keys(texts: list[str]) -> list[tuple[str, ...]]:
+def _sentences(texts: list[str]) -> list[str]:
+    """文に分けた止めた文・締めた文 (空でないもの)。"""
+    return [s.strip() for x in texts for s in re.split(r"(?<=[。.!！?？\n])", x or "") if _norm_shown(s)]
+
+
+def _shown_keys(texts: list[str], min_len: int = SHOWN_MIN_LEN) -> list[tuple[str, ...]]:
     """見せたかの鍵 = 文ごとに、 短い文はその全体、 長い文は頭 SHOWN_KEY_LEN 字と末尾 SHOWN_TAIL_LEN 字 (比べる形)。 文ごとに
-    作る = 止めた文が 2 文のとき鍵が 2 文をまたいで、 箇条で見せた形を断った (照合の実測)。 SHOWN_MIN_LEN より短い文は鍵にしない。"""
+    作る = 止めた文が 2 文のとき鍵が 2 文をまたいで、 箇条で見せた形を断った (照合の実測)。 min_len より短い文は鍵にしない
+    (止めた文がそのまま候補に在るかを見る鍵は既定の SHOWN_MIN_LEN、 候補が書く締めの文から作る見せたかの鍵は 1 = 下限なし)。"""
     keys: list[tuple[str, ...]] = []
     for x in texts:
         for s in re.split(r"[。.!！?？\n]", x or ""):
             n = _norm_shown(s)
-            if len(n) < SHOWN_MIN_LEN:
+            if len(n) < max(1, min_len):
                 continue
             k = (n,) if len(n) <= SHOWN_KEY_LEN + SHOWN_TAIL_LEN else (n[:SHOWN_KEY_LEN], n[-SHOWN_TAIL_LEN:])
             if k not in keys:
@@ -2796,12 +2813,16 @@ def _block_texts(session: tuple[str, str] | None, rel: str, repo: str, at: _dt.d
 
 
 def _shown_after_block(agent: str, path: Path, blocked_at: _dt.datetime, said_at: _dt.datetime, texts: list[str]) -> bool | None:
-    """止めた時刻と本人の発言の間の agent の文に、 締めた文 (texts) の鍵 (_shown_keys) が全部出ているか。 鍵が無い・会話記録が
-    読めない = None (見ない)。 照合の実測: 止めた後の答えでない発言 (「それで」) を --latest が承認として記録した。 止めた時刻は
-    秒で切った記録なので、 止めた時刻の同じ秒の返事は数えない (止める直前の返事を「止めた後」 に数えた = 照合の実測)。"""
-    keys = _shown_keys(texts)
-    if not keys:
+    """止めた時刻と本人の発言の間の agent の文に、 締めた文 (texts) の鍵 (_shown_keys、 長さの下限なし) が全部出ているか。
+    締めた文が無い・会話記録が読めない = None (見ない)。 締めた文はあるのに鍵が作れない = False (断る。 6 字に満たない締めで鍵が
+    作られず、 答えでない発言で書けて印も外れた = 照合の実測)。 照合の実測: 止めた後の答えでない発言 (「それで」) を --latest が
+    承認として記録した。 止めた時刻は秒で切った記録なので、 止めた時刻の同じ秒の返事は数えない (止める直前の返事を「止めた後」
+    に数えた = 照合の実測)。"""
+    if not any(str(x or "").strip() for x in texts):
         return None
+    keys = _shown_keys(texts, min_len=1)
+    if not keys:
+        return False
     try:
         handle = open(path, encoding="utf-8", errors="replace")
     except OSError:
@@ -3882,10 +3903,12 @@ def approve_mode(args: argparse.Namespace) -> int:
     if open_marks(session, rel, rp_s):
         # 候補が運ぶ印 = 候補の締めた文 (HEAD との差) が止めた文と名詞を共有する開いた印 (印が名詞で止めるのと同じ線。 頭 20 字が
         # そのまま在るかで見ていた間、 言い換えた候補を「止めた文を含まない」 と読んで答えでない発言で書けた = 照合の実測)
-        cand_texts = _candidate_tightened(repo, rel, p, proposed)
-        carried = _carried_marks(session, rel, rp_s, cand_texts, proposed)
+        old_c = _candidate_baseline(repo, rel, p, proposed) if proposed is not None else None
+        cand_texts = _candidate_tightened(repo, rel, p, proposed, old_c)
+        carried = _carried_marks(session, rel, rp_s, cand_texts, proposed, old_c)
         said_at = _utc(str(hit[0] or ""))
-        early = [t for t in carried if said_at is None or said_at <= t]
+        # 「止めた後の発言か」 は開いた印の全部で見る (運ぶ印だけで見て、 印を運ばない候補の承認に止める前の発言を引けた = 照合の実測)
+        early = [t for t in open_marks(session, rel, rp_s) if said_at is None or said_at <= t]
         if early:
             print(f"approve: この file は、 この会話で agent が本人の求めを断った件の規則を締める変更として止めた"
                   f" ({early[-1].isoformat(timespec='seconds')})。 引けるのは止めた後の本人の発言だけ = 差分を本人に見せ、"
@@ -3905,8 +3928,11 @@ def approve_mode(args: argparse.Namespace) -> int:
                       " 差分への答えと読めない (答えでない発言を承認にしない)。 記録しない。\n"
                       "  書く締めの文をそのまま返事に引いて差分を本人に見せ、 その後の本人の返事を引いて打ち直す。", file=sys.stderr)
                 return 5
-        # 印を外すのは、 この候補が運ぶ印だけ (その file の別の変更の承認で、 止めた締めが承認なしで通った = 照合の実測)
-        entry["lifts_block"] = [t.isoformat(timespec="seconds") for t in carried]
+        # 印を外すのは、 この候補が運ぶ印のうち、 その印の止めた文の文ごとのどれにも候補が運ぶものだけ (その file の別の変更の
+        # 承認で止めた締めが通った / 1 つの印に 2 つの話題が入ると、 片方だけの候補の承認で外れてもう片方も通った = 照合の実測)
+        entry["lifts_block"] = [t.isoformat(timespec="seconds") for t in carried
+                                if all(_mark_carries(cand_texts, [s], proposed, old_c)
+                                       for s in _sentences(_block_texts(session, rel, rp_s, t)))]
     ap = approvals_path(*session)
     ap.parent.mkdir(parents=True, exist_ok=True)
     with open(ap, "a", encoding="utf-8") as fh:
@@ -5426,6 +5452,78 @@ def refusal_tightening_selftests(check) -> None:
             check("見せたかの鍵は文ごと・句読点を落とす (2 文の止めた文を箇条で見せた形を断った = 照合の実測)",
                   _shown_keys(["写真は置かない。 外部の共有にも置かない。"]) == [("写真は置かない",), ("外部の共有にも置かない",)]
                   and _norm_shown("- 写真は、 置かない。") == "写真は置かない")
+            # 回帰の試し (照合の壊す側の試しを移したもの。 題材は合成 = 架空の規則の文書)
+            base6 = _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0) + _dt.timedelta(hours=1)
+
+            def at6(k):
+                return base6 + _dt.timedelta(minutes=k)
+
+            def iso6(k):
+                return at6(k).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+            def mark6(sid_, k, text):
+                with (state_dir() / DENIED_LOG).open("a", encoding="utf-8") as f:
+                    f.write(json.dumps({"at": at6(k).isoformat(timespec="seconds"), "session": f"claude:{sid_}", "mode": "edit",
+                                        "file": "CLAUDE.md", "refusal": True, "repo": str(repo), "text": text},
+                                       ensure_ascii=False) + "\n")
+
+            def approve6(sid_, rows_, text):
+                write_tr(tdir / f"{sid_}.jsonl", refused + rows_)
+                cp6 = root / f"cand-{sid_}.md"
+                cp6.write_text(cur5 + text, encoding="utf-8")
+                ns = argparse.Namespace(file=str(doc), region=["authority:file"], change="z", quote=None, latest=True,
+                                        session=f"claude:{sid_}", transcript=None, candidate=str(cp6), target_mode=None)
+                with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                    return approve_mode(ns)
+
+            def stops6(sid_, text):
+                return any(c.get("refusal") for c in protected_changes("CLAUDE.md", cur5, cur5 + text, repo,
+                                                                       session=("claude", sid_), refusal_live=False))
+            mark6("sess-r6", 1, "写真は外部の共有に置かない。 会議は録画しない。")
+            rc6 = approve6("sess-r6", [("assistant", iso6(2), "差分です: 会議は録画しない。"), ("user", iso6(3), "当てて")],
+                           "会議は録画しない。\n")
+            check("回帰: 1 つの印に 2 つの話題、 片方だけの候補の承認では印を外さず、 もう片方の締めは止め続ける (照合の実測)",
+                  rc6 == 0 and len(open_marks(("claude", "sess-r6"), "CLAUDE.md", str(repo))) == 1
+                  and stops6("sess-r6", "写真を外部の共有に置かない。\n"))
+            mark6("sess-r7", 1, "写真禁止。")
+            check("回帰: 6 字に満たない締めも、 見せていない返事への発言 (「それで」) では記録しない (照合の実測)",
+                  approve6("sess-r7", [("assistant", iso6(2), "はい。"), ("user", iso6(3), "それで")], "写真禁止。\n") == 5)
+            check("回帰: 6 字に満たない締めも、 見せた後の発言なら記録して印を外す",
+                  approve6("sess-r7", [("assistant", iso6(2), "差分: 写真禁止"), ("user", iso6(3), "当てて")], "写真禁止。\n") == 0
+                  and not open_marks(("claude", "sess-r7"), "CLAUDE.md", str(repo)))
+            mark6("sess-r8", 2, "写真は外部の共有に置かない。")
+            check("回帰: 印を運ばない候補の承認でも、 止める前の発言は引けない (照合の実測)",
+                  approve6("sess-r8", [("user", iso6(1), "例外の行を足して")], "写真の例外は本人が決めてよい。\n") == 5)
+            for k, text in ((1, "写真は外部の共有に置かない。"), (2, "会議は録画しない。"), (3, "下書きに宛先を入れない。")):
+                mark6("sess-r9", k, text)
+            rc9 = approve6("sess-r9", [("assistant", iso6(4), "差分:\n+ 写真を外部の共有に置かない\n+ 宛先を、 下書きに入れない"),
+                                       ("user", iso6(5), "当てて")], "写真を外部の共有に置かない。\n宛先を下書きに入れない。\n")
+            check("回帰: 印 3 つで 1 つ目と 3 つ目を運ぶ候補 (diff の + と読点つきで見せた) は、 その 2 つだけを外す",
+                  rc9 == 0 and open_marks(("claude", "sess-r9"), "CLAUDE.md", str(repo)) == [at6(2)])
+            mark6("sess-r10", 1, "写真は外部の共有に置かない。")
+            ap10 = approvals_path("claude", "sess-r10")
+            ap10.parent.mkdir(parents=True, exist_ok=True)
+            with ap10.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"v": 3, "repo": str(repo), "file": "CLAUDE.md", "regions": ["authority:file"], "change": "x",
+                                    "quote": "当てて", "quote_time": iso6(2), "session": "claude:sess-r10",
+                                    "lifts_block": at6(1).isoformat(timespec="seconds")}, ensure_ascii=False) + "\n")
+            check("回帰: 前の版の承認の記録 (lifts_block が 1 つの文字列) も読んで印を外す",
+                  not open_marks(("claude", "sess-r10"), "CLAUDE.md", str(repo)))
+            cx = root / "codex-shown.jsonl"
+            cx.write_text("".join(json.dumps(o, ensure_ascii=False) + "\n" for o in (
+                {"type": "response_item", "timestamp": iso6(2), "payload": {"type": "message", "role": "assistant",
+                                                                             "content": [{"type": "output_text", "text": "差分: 写真禁止"}]}},
+            )), encoding="utf-8")
+            check("回帰: Codex の会話記録の返事で見せた形も読む",
+                  _shown_after_block("codex", cx, at6(1), at6(3), ["写真禁止。"]) is True)
+            same = root / "same-second.jsonl"
+            same.write_text(json.dumps({"type": "assistant", "timestamp": at6(1).strftime("%Y-%m-%dT%H:%M:%S.500Z"),
+                                        "message": {"content": [{"type": "text", "text": "写真禁止"}]}}, ensure_ascii=False) + "\n",
+                            encoding="utf-8")
+            check("回帰: 止めた時刻と同じ秒の返事は「止めた後」 に数えない (照合の実測)",
+                  _shown_after_block("claude", same, at6(1), at6(3), ["写真禁止。"]) is False)
+            check("回帰: 句読点だけの締めは鍵が作れない = 断る側 (見ない、 にしない)",
+                  _shown_after_block("claude", same, at6(1), at6(3), ["。、"]) is False)
         finally:
             os.environ.clear()
             os.environ.update(saved_env)
