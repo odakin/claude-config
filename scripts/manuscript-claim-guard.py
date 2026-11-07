@@ -1533,7 +1533,7 @@ REFUSAL_MARKS = re.compile(r"(私の側の決まり|私の決まり|お断り|�
 REFUSAL_SCOPED_MARKS = frozenset(("入れません", "入れないことに"))  # 範囲の言明の後では数えない印
 PROHIBITION_FORMS = re.compile(r"(しない|書かない|置かない|入れない|使わない|載せない|出さない|渡さない|触らない|禁止|してはいけない"
                                r"|させない|含めない|印字しない|送らない)")
-_PROHIBITION_EXT = re.compile(r"((?:書か|置か|入れ|載せ|出さ|残さ|写さ|使わ|渡さ|触ら|送ら|含め|させ|印字せ|せ)ず|不可|禁じ)")
+_PROHIBITION_EXT = re.compile(r"((?:書か|置か|入れ|載せ|出さ|残さ|写さ|使わ|渡さ|触ら|送ら|含め|させ|印字せ|せ)ず|不可(?![欠能避])|禁じ)")
 _REFUSAL_SCOPE = re.compile(r"((この|今回の?|本|その|今の)\s*(変更|直し|commit|コミット|版|PR|依頼|案|範囲|節|file|ファイル|回|turn|段|作業"
                             r"|実装|返答|返事)\s*(に|で|の中に|の中で)\s*(は|も)?|今回は|ここでは|ここには)")
 _CODE_SPAN = re.compile(r"`[^`\n]*`")
@@ -1563,10 +1563,13 @@ def _shared_nouns(a: set[str], b: set[str]) -> list[str]:
 
 
 def _refusal_marks(text: str) -> list[tuple[str, str, str]]:
-    """文の中の断りの印 [(印, その文, 直前の文)]。 鉤括弧・code の中の印と、 範囲の言明の後の「入れません」 類は数えない。"""
+    """文の中の断りの印 [(印, その文, 直前の文)]。 鉤括弧・code の中の印と、 範囲の言明の後の「入れません」 類は数えない。
+    鉤括弧は印の後に閉じがあるときだけ引用と読む (閉じていない「 の後の断りは数える)。"""
     try:
         import transcript_turns as tt
-        quoted = tt.inside_quote
+
+        def quoted(t: str, i: int) -> bool:
+            return tt.inside_quote(t, i) and any(ch in tt.CLOSE_Q for ch in t[i:])
     except Exception:
         def quoted(t: str, i: int) -> bool:
             return False
@@ -1604,15 +1607,31 @@ def agent_texts_since(agent: str, path: Path, since: str) -> list[str]:
     return out
 
 
+def _tightened_texts(exempt: dict | None) -> list[str]:
+    """足した・言い直した文のうち、 禁止の形を含むもの。"""
+    what = (exempt or {}).get("what") or {}
+    texts = [str(a) for a in what.get("added") or []]
+    texts += [str(p[1]) for p in what.get("edited") or [] if isinstance(p, (list, tuple)) and len(p) > 1]
+    return [t for t in texts if _prohibits(t)]
+
+
+def _approved_after(session: tuple[str, str], rel: str, repo: str, at: _dt.datetime) -> bool:
+    """その session でその file に、 時刻 at より後の本人の発言を引いた承認が記録されているか。"""
+    for a in load_approvals(*session):
+        if a.get("repo") != repo or str(a.get("file", "")).replace("\\", "/") != rel.replace("\\", "/"):
+            continue
+        t = _utc(str(a.get("quote_time") or ""))
+        if t is not None and t > at:
+            return True
+    return False
+
+
 def refusal_tightening(session: tuple[str, str] | None, exempt: dict | None, path: Path | None = None) -> str:
     """承認なしで通る判定の変更が、 その会話で断った件の規則を締める変更なら、 止める理由の 1 行 (違えば空)。"""
     try:
         if not session or not exempt or not exempt.get("ok"):
             return ""
-        what = exempt.get("what") or {}
-        texts = [str(a) for a in what.get("added") or []]
-        texts += [str(p[1]) for p in what.get("edited") or [] if isinstance(p, (list, tuple)) and len(p) > 1]
-        tightened = [t for t in texts if _prohibits(t)]
+        tightened = _tightened_texts(exempt)
         if not tightened:
             return ""
         agent, sid = session
@@ -1637,8 +1656,10 @@ def refusal_tightening(session: tuple[str, str] | None, exempt: dict | None, pat
 
 def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict | None = None,
                       authority: bool = True, baseline: str | None = None,
-                      session: tuple[str, str] | None = None) -> list[dict]:
+                      session: tuple[str, str] | None = None, refusal_live: bool = True) -> list[dict]:
     """(file, old, new) の保護領域の変更を列挙する。 各要素 = {file, region, kind, detail}。
+    refusal_live = 断った件の網を会話記録の窓で判定する (編集の hook・apply)。 commit の検査は False = 止めた印のある file だけ
+    (前の turn に通った追記を、 後の turn の断りで止めない = 照合の実測)。
 
     authority=False = 権限の lock を見ない (git repo の外の file = 規約の面でない scratch 等)。
     baseline = HEAD の全文 (編集 hook だけが渡す): old (作業ツリー) からは通らなくても、 HEAD からは通る変更 (自分の未 commit
@@ -1669,7 +1690,16 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
                       "what": _rule_guard.judge_change(_rule_guard.mask_free_zones(old), _rule_guard.mask_free_zones(new))[2]}
             refined = True
     if exempt is not None and exempt["ok"]:
-        why = refusal_tightening(session, exempt)
+        why = refusal_tightening(session, exempt) if refusal_live else ""
+        if not why and session and _tightened_texts(exempt):
+            # 止めた印は網の窓に依らない: 止めた後に本人が答えでない発言をすると断りが窓の外に出て、 同じ変更が承認なしで通った
+            # (照合の実測)。 止めた後の本人の発言を引いた承認が記録されるまで、 その file の禁止の形の変更は通さない
+            rp = str(repo) if repo else ""
+            blocked = refusal_block_time(session, rel, rp)
+            if blocked is not None and not _approved_after(session, rel, rp, blocked):
+                why = (f"この会話でこの file を断った件の網で止めた ({blocked.isoformat(timespec='seconds')}) = 止めた後の本人の承認が"
+                       "記録されるまで、 禁止の形の変更は網の窓に依らず承認なしで通さない"
+                       " (agent-rule-ownership.md#refusal-not-in-owner-rules)。 差分を見せて本人に聞く")
         if why:
             exempt = {**exempt, "ok": False, "reason": why, "refusal": True}
     if exempt is not None and exempt["ok"]:
@@ -1690,6 +1720,7 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
                 changes[-1]["inserted"] = collapse_ws(exempt.get("inserted") or "")[:200]  # 止めた追記の記録 (denied-log) 用
                 if exempt.get("refusal"):
                     changes[-1]["refusal"] = True  # 断った件の網で止めた = 承認は止めた後の本人の発言だけ (approve が確かめる)
+                    changes[-1]["refusal_repo"] = str(repo) if repo else ""  # 止めた印を repo ごとに分ける (同じ名の file)
             continue
         add(k, kind)
     if exempt is not None:
@@ -2616,8 +2647,9 @@ def context_json(text: str) -> str:
     return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}}, ensure_ascii=False)
 
 
-def refusal_block_time(session: tuple[str, str] | None, rel: str) -> _dt.datetime | None:
-    """その session でその file を断った件の網で止めた最後の時刻 (denied-log の印)。 無い・読めない = None。"""
+def refusal_block_time(session: tuple[str, str] | None, rel: str, repo: str = "") -> _dt.datetime | None:
+    """その session でその file を断った件の網で止めた最後の時刻 (denied-log の印)。 無い・読めない = None。 repo を渡すと、
+    repo の付いた印は同じ repo のものだけを見る (別の repo の同じ名の CLAUDE.md の印を取り違えない = 照合の実測)。"""
     if not session:
         return None
     sess = f"{session[0]}:{session[1]}"
@@ -2631,7 +2663,8 @@ def refusal_block_time(session: tuple[str, str] | None, rel: str) -> _dt.datetim
             e = json.loads(line)
         except ValueError:
             continue
-        if isinstance(e, dict) and e.get("refusal") and e.get("session") == sess and e.get("file") == rel:
+        if isinstance(e, dict) and e.get("refusal") and e.get("session") == sess and e.get("file") == rel \
+                and not (repo and e.get("repo") and e.get("repo") != repo):
             t = _utc(str(e.get("at", "")))
             if t is not None and (last is None or t > last):
                 last = t
@@ -2659,7 +2692,7 @@ def log_denials(left: list[dict], session: tuple[str, str] | None, mode: str) ->
             rows.append({"at": now.isoformat(timespec="seconds"), "session": f"{session[0]}:{session[1]}" if session else "",
                          "mode": mode, "file": c.get("file"), "region": c.get("region"), "kind": c.get("kind"),
                          "detail": str(c.get("detail") or "")[:200], "text": str(c.get("inserted") or "")[:200],
-                         **({"refusal": True} if c.get("refusal") else {})})
+                         **({"refusal": True, "repo": c.get("refusal_repo", "")} if c.get("refusal") else {})})
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
         tmp.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in rows), encoding="utf-8")
@@ -3327,8 +3360,9 @@ def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | GitNames |
             raise InspectionError("content-encrypted", rel)
         # 範囲は HEAD と新しい設定の広い方で判定する (設定の緩和で自分を範囲外にする経路を塞ぐ)
         # session = 断った件の網 (refusal_tightening) が会話記録を読む相手 (commit の検査も編集の hook と同じ判定)
-        ch_new = protected_changes(rel, old, new, repo, cfg, session=session)
-        ch_head = protected_changes(rel, old, new, repo, head_cfg, session=session) if head_cfg != cfg else []
+        ch_new = protected_changes(rel, old, new, repo, cfg, session=session, refusal_live=False)
+        ch_head = (protected_changes(rel, old, new, repo, head_cfg, session=session, refusal_live=False)
+                   if head_cfg != cfg else [])
         seen = {(c["region"], c["kind"]) for c in ch_new}
         changes = per_rel.setdefault(rel, [])
         changes.extend(ch_new + [c for c in ch_head if (c["region"], c["kind"]) not in seen])
@@ -3659,7 +3693,7 @@ def approve_mode(args: argparse.Namespace) -> int:
               "  この案を著者に示し、 承認の発言を新しく得てから、 その発言を引く。",
               file=sys.stderr)
         return 5
-    blocked_at = refusal_block_time(session, rel)
+    blocked_at = refusal_block_time(session, rel, str(repo) if repo else "")
     if blocked_at is not None:
         said_at = _utc(str(hit[0] or ""))
         if said_at is None or said_at <= blocked_at:
@@ -3928,7 +3962,7 @@ def apply_mode(args: argparse.Namespace) -> int:
                   "足して打つ。 先に approve で記録するなら --region にこの名を並べる)")
         return 0
     refusal_left = [c for c in left if c.get("refusal")]
-    if refusal_left and refusal_block_time(session, rel) is None:
+    if refusal_left and refusal_block_time(session, rel, str(repo) if repo else "") is None:
         # 断った件の網に当たった変更を、 編集の hook を通らずに apply で書こうとした = ここで止めて印を残す (止めた後の本人の
         # 発言だけが承認になる = approve が確かめる)。 照合の実測: 止めた表示の案内どおり apply --latest を打つと網を通らなかった
         log_denials(refusal_left, session, "apply")
@@ -4995,6 +5029,10 @@ def refusal_tightening_selftests(check) -> None:
                     "宛先は下書きに置かず、本人が手で書く。", True),
         "「不可」": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"), ua(2, "規則を直して")],
                    "下書きへの宛先の記入は不可。", True),
+        "「不可欠」 (禁止の形でない)": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"), ua(2, "規則を直して")],
+                                "下書きの宛先の確認は不可欠。", False),
+        "閉じていない「 の後の断り": ([ua(0, "下書きに宛先を入れて"), aa(1, "「下書きの件です。私の側の決まりで、宛先は下書きに入れません。"),
+                               ua(2, "規則を直して")], "宛先は下書きに書かない。", True),
         "作業中に本人の発言が届いた turn の断り、 その後 1 往復": ([ua(0, "下書きに宛先を入れて"),
                                                       ("queued", tsn(2), "急ぎで"),
                                                       aa(3, "私の側の決まりで、宛先は下書きに入れません。"), ua(4, "いや、入れてよ"),
@@ -5088,6 +5126,39 @@ def refusal_tightening_selftests(check) -> None:
             write_tr(trp, refused + [("assistant", later, "差分はこれです。 写真は入れないことにしています。"), ("user", later, "当てて")])
             rc3 = run_apply()
             check("apply: 差分を見せた後の本人の返事なら記録して書く", rc3 == 0 and doc.read_text(encoding="utf-8") == new)
+            # 止めた印は網の窓に依らない (照合の実測: 止めた後に本人の答えでない発言が入ると、 断りが窓の外に出て同じ変更が通った)
+            cur = doc.read_text(encoding="utf-8")
+            more = cur + "写真は外部の共有にも置かない。\n"
+            sid2 = "sess-rs"
+            trp2 = tdir / f"{sid2}.jsonl"
+            write_tr(trp2, refused)
+            sb2 = ("claude", sid2)
+            first = protected_changes("CLAUDE.md", cur, more, repo, session=sb2)
+            log_denials([c for c in first if c.get("refusal")], sb2, "edit")
+            t1, t2, t3, t4 = ((_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(minutes=k)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                              for k in (2, 3, 4, 5))
+            write_tr(trp2, refused + [("user", t1, "どういうこと？"), ("assistant", t1, "差分です。"), ("user", t2, "ふむ"),
+                                      ("assistant", t2, "はい。"), ("user", t3, "それで?")])
+            ok_window = refusal_tightening(sb2, {"ok": True, "what": {"added": ["写真は外部の共有にも置かない。"]}}, trp2) == ""
+            sticky = protected_changes("CLAUDE.md", cur, more, repo, session=sb2)
+            check("止めた印: 断りが窓の外に出た後も、 同じ file の禁止の形の変更は止める",
+                  ok_window and any(c.get("refusal") for c in sticky))
+            check("止めた印は repo ごと: 別の repo の同じ名の file の印は見ない",
+                  refusal_block_time(sb2, "CLAUDE.md", str(repo)) is not None
+                  and refusal_block_time(sb2, "CLAUDE.md", "/elsewhere/repo") is None)
+            ap2 = approvals_path(*sb2)
+            ap2.parent.mkdir(parents=True, exist_ok=True)
+            with ap2.open("a", encoding="utf-8") as f:
+                f.write(json.dumps({"v": 1, "repo": str(repo), "file": "CLAUDE.md", "regions": ["authority:file"], "change": "x",
+                                    "quote": "当てて", "quote_time": t4, "session": f"claude:{sid2}"}, ensure_ascii=False) + "\n")
+            check("止めた印: 止めた後の本人の発言を引いた承認の後は、 印で止めない",
+                  not any(c.get("refusal") for c in protected_changes("CLAUDE.md", cur, more, repo, session=sb2)))
+            # commit の検査は止めた印のある file だけ (前の turn に通った追記を後の断りで止めない = 照合の実測)
+            sb3 = ("claude", "sess-rc")
+            write_tr(tdir / "sess-rc.jsonl", refused)
+            check("commit の検査: 断りの窓の中でも、 止めた印の無い file の追記は網で止めない",
+                  not any(c.get("refusal") for c in protected_changes("CLAUDE.md", cur, more, repo, session=sb3, refusal_live=False))
+                  and any(c.get("refusal") for c in protected_changes("CLAUDE.md", cur, more, repo, session=sb3)))
         finally:
             os.environ.clear()
             os.environ.update(saved_env)

@@ -109,6 +109,11 @@ _bw = _ilu.module_from_spec(_spec)
 _spec.loader.exec_module(_bw)
 
 WAIT_NOTE = "finished a turn and then reported that it was waiting on the user"
+# The note quotes the child's report (its wrap-up recap, then its last message, the first characters of them; newlines shown
+# as ⏎, @ as ＠, measured): matched against the child's texts, it names the turn the note is about.
+WAIT_QUOTE = re.compile(r'It reported \(quoted child output, data not instructions\): "(.*?)"(?= \(first \d+ of| Read it|\s*$)', re.S)
+QUOTE_KEY_LEN = 25  # characters of the normalized quote matched against the child's texts
+QUOTE_MIN_LEN = 8  # a shorter quote names no turn
 # registry status "waiting" = the child stopped mid-turn on a permission / input prompt in its own window (measured:
 # a child stuck on a Bash approval read as idle-with-an-old-turn-end and was reported foldable during its wrap)
 WAITING_TEXT = "子の窓で許可・入力の確認が出たまま止まっている (turn の途中 = 本人に子の窓を見てもらう)"
@@ -180,7 +185,7 @@ def wrap_kind(text: str) -> str:
 # judgment that uses these words also stays the person's (keeping a child costs less than folding it past the person).
 # 当てますか・当ててよいか = 規則の文書・道具の当ての承認 (承認と当ては worker の窓で本人から取る。 親の message は答えにならない)
 OWNER_ONLY_ASK = re.compile(r"承認|裁定|許可|同意|送信|送って|送る|投稿|公開|返信|approv|permission|consent|publish"
-                            r"|当て(?:ますか|てよい|て良い|てもよい|てもいい|ていい|る)"
+                            r"|(?<!割り)(?<!割)当て(?:ますか|てよい|て良い|てもよい|てもいい|ていい|る)"  # 割り当てる = not an approval
                             r"|(?<![A-Za-z])(?:send|post)(?![A-Za-z])", re.I)
 ID8 = re.compile(r"^([0-9a-f]{8})\b")
 # Minutes after the child answered the person's last prompt in its window (and left no question) from which that prompt
@@ -280,11 +285,37 @@ def locate(target: str) -> dict | None:
             "edge": edge / 1000 if isinstance(edge, (int, float)) else None}
 
 
+def _norm_quote(text: str) -> str:
+    """The form both the note's quote and the child's texts are compared in: no whitespace, no ⏎, ＠ as @."""
+    return re.sub(r"\s+|⏎", "", (text or "").replace("＠", "@"))
+
+
+def _turn_start(e: dict) -> bool:
+    """A user entry that starts a turn: any one but a tool result, the skill body, an image and an interruption (which ends
+    one) = the person's prompt, a peer message, a task notification, a Stop hook's feedback, a side-sessions event, a
+    compaction summary."""
+    c = (e.get("message") or {}).get("content")
+    if isinstance(c, list):
+        if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c):
+            return False
+        t = " ".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
+    else:
+        t = c if isinstance(c, str) else ""
+    t = t.lstrip()
+    return bool(t) and not t.startswith(("Base directory for this skill:", "[Image: source", "[Request interrupted"))
+
+
+class _Note(str):
+    """A note's landing time (str, compared as a timestamp) with the child's text it quotes (`quote`, normalized, or '')."""
+    quote = ""
+
+
 def scan_child(path: str, as_of: str = "") -> dict:
     """Events from the child's transcript (timestamps): first entry, replies, turn ends, prompts of the person, asks, wrap runs.
     The app's retry line after an API error ("Try again") goes to `retries`, not to the person's prompts."""
     out = {"first": "", "replies": [], "stops": [], "human": [], "said": [], "peers": [], "asks": [], "wraps": [],
-           "retries": [], "peer_wraps": [], "peer_unwraps": [], "model_checks": [], "claims": [], "step0_handoff": False}
+           "retries": [], "peer_wraps": [], "peer_unwraps": [], "model_checks": [], "claims": [], "step0_handoff": False,
+           "starts": [], "texts": []}
     try:
         fh = open(path, encoding="utf-8", errors="replace")
     except (OSError, TypeError):
@@ -304,9 +335,19 @@ def scan_child(path: str, as_of: str = "") -> dict:
             kind = e.get("type")
             if ts and not out["first"]:
                 out["first"] = ts
+            if kind == "user" and ts and _turn_start(e):
+                out["starts"].append(ts)
             if kind == "assistant" and ts:
                 out["replies"].append(ts)
                 api_error = bool(e.get("isApiErrorMessage"))
+                for b in (e.get("message") or {}).get("content") or []:
+                    if not isinstance(b, dict):
+                        continue
+                    t = b.get("text") if b.get("type") == "text" else (
+                        (b.get("input") or {}).get("recap") if b.get("type") == "tool_use"
+                        and str(b.get("name") or "").endswith("wrap_up") else None)
+                    if isinstance(t, str) and t.strip():
+                        out["texts"].append((ts, _norm_quote(t)))
             if kind == "system" and e.get("subtype") == "stop_hook_summary":
                 out["stops"].append(ts)
                 continue
@@ -354,7 +395,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
 
 
 def parent_wait_notes(parent_path: str, local: str, as_of: str = "") -> list[str]:
-    """Times the parent was told the child ended a turn waiting on the person."""
+    """Times the parent was told the child ended a turn waiting on the person (each a _Note with the text it quotes)."""
     if not parent_path or not local:
         return []
     needle, out = f"({local}) {WAIT_NOTE}", []
@@ -368,29 +409,62 @@ def parent_wait_notes(parent_path: str, local: str, as_of: str = "") -> list[str
                 except ValueError:
                     continue
                 if isinstance(e, dict) and e.get("type") == "user" and _ts(e) and not (as_of and _ts(e)[:19] > as_of[:19]):
-                    out.append(_ts(e))
+                    note = _Note(_ts(e))
+                    c = (e.get("message") or {}).get("content")
+                    t = c if isinstance(c, str) else " ".join(b.get("text", "") for b in (c or []) if isinstance(b, dict))
+                    i = t.find(needle)
+                    m = WAIT_QUOTE.search(t, i) if i >= 0 else None
+                    note.quote = _norm_quote(m.group(1)) if m else ""
+                    out.append(note)
     except OSError:
         pass
     return out
 
 
+def _quoted_turn_end(ev: dict, n: str, starts: list[str]) -> str:
+    """When the note `n` quotes a text of the child's (QUOTE_KEY_LEN characters found in a text it wrote before the note),
+    the end of the turn that wrote it: its turn-end record, else its last reply (none of them past a new turn's start)."""
+    quote, t0 = getattr(n, "quote", ""), ""
+    for k in (3 * QUOTE_KEY_LEN, QUOTE_KEY_LEN):  # the longer key first (a stamp line opens many texts the same way)
+        q = quote[:k]
+        if len(q) < QUOTE_MIN_LEN:
+            return ""
+        t0 = max((t for t, txt in ev.get("texts", []) if t <= n and q in txt), default="")
+        if t0:
+            break
+    if not t0:
+        return ""
+    nxt = min((p for p in starts if p > t0), default="")
+    end = min((s for s in ev["stops"] if s >= t0), default="")
+    if end and end <= n and (not nxt or end <= nxt):
+        return end
+    return max((r for r in ev["replies"] if t0 <= r <= n and (not nxt or r < nxt)), default=t0)
+
+
 def _wait_points(ev: dict, notes: list[str]) -> list[tuple[str, str, str]]:
     """[(when the child stopped waiting on the person, the ask text or '', when the note about it landed or '')].
     A note lands after the child's turn end, but the app may hold it until the person's next prompt in the parent's window;
-    meanwhile the person may have answered in the child's window and the child gone on. When the child's turn was still
-    running at the note (it replied after the note and before its next turn end), the note reports the turn that ended
-    before it = date it there. Otherwise at the child's last reply before the note (measured: dated at the landing, an ask
-    the person had already answered looked open and kept a finished child)."""
+    meanwhile the person may have answered in the child's window and the child gone on. The text the note quotes names the
+    turn: found in the child's texts, the note is dated at that turn's end (_quoted_turn_end). Otherwise, when the child's
+    turn was still running at the note (it replied after the note and before its next turn end), the note reports the turn
+    that ended before the running one started = date it there; a turn starts with any user entry but a tool result (the
+    person's prompt, a peer message, a task notification, a Stop hook's feedback = measured: counting only the person's and
+    the peers' prompts dated a note before the person's answer and folded a child that waited on the person). Otherwise at
+    the child's last reply before the note (measured: dated at the landing, an ask the person had already answered looked
+    open and kept a finished child)."""
     points = [(t, a, "") for t, a in ev["asks"]]
     stops = sorted(ev["stops"])
-    prompts = sorted(list(ev["human"]) + [t for t, _ in ev["peers"]])
+    prompts = sorted(ev["starts"] if "starts" in ev else list(ev["human"]) + [t for t, _ in ev["peers"]])
     for n in notes:
+        at = _quoted_turn_end(ev, n, prompts)
+        if at:
+            points.append((at, "", n))
+            continue
         # running = the child's first reply after the note comes before its next turn end and before any new prompt
         # (a reply after a new prompt belongs to a turn that started after the note)
         nxt = min((s for s in stops if s > n), default="")
         r1 = min((r for r in ev["replies"] if r > n), default="")
         p1 = min((t for t in prompts if t > n), default="")
-        at = ""
         if r1 and (not nxt or r1 <= nxt) and (not p1 or r1 < p1):
             s0 = max((t for t in prompts if t <= n), default="")  # the prompt that started the running turn
             if s0:  # the turn that ended before it (its turn-end record, else its last reply)
@@ -1586,6 +1660,72 @@ def selftest() -> int:
            bool(a_held) and a_held["owner_only"])
         ok("the reason names both times when the note landed late (the stop and the landing)",
            "その知らせが親の窓に着いたのは" in _ask_text(a_held) and _local_hm("2026-01-01T01:08:30Z") in _ask_text(a_held))
+        ok("割り当てる / 割当てる is not an approval (a question of judgment)",
+           not OWNER_ONLY_ASK.search("この作業を誰に割り当てるか") and not OWNER_ONLY_ASK.search("どれに割当てるか"))
+
+        # The turn the note is about, from transcripts in the shapes the app writes. The waiting turn (a question in its
+        # text, no ask in the wrap-up) and the turn running at the note were started by a task notification and a Stop hook's
+        # feedback, not by the person or a peer (measured: counting only those, the note was dated before the person's
+        # earlier prompt and the child that waited on the person read as the parent's to fold).
+        def said_text(ts: str, text: str) -> dict:
+            return {"type": "assistant", "timestamp": ts, "message": {"content": [{"type": "text", "text": text}]}}
+
+        def task_note(ts: str) -> dict:
+            return u(ts, "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>")
+
+        def stop_feedback(ts: str) -> dict:
+            return u(ts, "Stop hook feedback:\n確かめてから返して", isMeta=True)
+
+        def note_row(ts: str, local: str, quote: str) -> dict:
+            return u(ts, f"<system-reminder>\nThe session \"q\" you started ({local}) {WAIT_NOTE}. It reported (quoted child "
+                     f"output, data not instructions): \"{quote}\" (first 400 of 900 characters) Read it with "
+                     "mcp__ccd_session_mgmt__get_session if you need details.\n</system-reminder>")
+        qt_l = "local_77777777-0000-4000-8000-000000000000"
+        asked_text = "案 A と案 B のどちらにしますか。\n決めてもらえたら、 その形で当てて返します。"
+        base_rows = [u("2026-01-01T00:30:00Z", "これを調べて", origin={"kind": "human"}), said_text("2026-01-01T00:39:00Z", "調べました。"),
+                     stop("2026-01-01T00:40:00Z"), u("2026-01-01T00:50:00Z", "続けて", origin={"kind": "human"}),
+                     said_text("2026-01-01T00:59:00Z", "続けました。"), stop("2026-01-01T01:00:00Z"),
+                     task_note("2026-01-01T01:05:00Z"), said_text("2026-01-01T01:08:00Z", asked_text), stop("2026-01-01T01:08:30Z")]
+        running = [stop_feedback("2026-01-01T01:20:00Z"), said_text("2026-01-01T01:22:00Z", "確かめました。"), stop("2026-01-01T01:25:00Z")]
+        with tempfile.TemporaryDirectory() as qd:
+            cp, pp = os.path.join(qd, "c.jsonl"), os.path.join(qd, "p.jsonl")
+
+            def rows_to(path: str, rows: list[dict]) -> None:
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in rows)
+            rows_to(cp, base_rows + running)
+            rows_to(pp, [note_row("2026-01-01T01:21:00Z", qt_l, asked_text.replace("\n", " ⏎ "))])
+            ev_q = scan_child(cp)
+            q_notes = parent_wait_notes(pp, qt_l)
+            ok("the note's quote is read from the parent's transcript", len(q_notes) == 1 and q_notes[0].quote.startswith("案Aと案B"))
+            ok("a task notification and a Stop hook's feedback count as turn starts, a tool result does not",
+               "2026-01-01T01:05:00Z" in ev_q["starts"] and "2026-01-01T01:20:00Z" in ev_q["starts"]
+               and not _turn_start({"type": "user", "message": {"content": [{"type": "tool_result", "content": "x"}]}}))
+            ok("the quote names the waiting turn → dated at its end (not before the person's earlier prompt)",
+               ("2026-01-01T01:08:30Z", "", "2026-01-01T01:21:00Z") in _wait_points(ev_q, q_notes))
+            a_q = open_ask(ev_q, q_notes, parent_l)
+            ok("the child waits on the person: the ask stays open", bool(a_q) and a_q["at"] == "2026-01-01T01:08:30Z")
+            plain = ["2026-01-01T01:21:00Z"]  # no quote: the running turn's start is the Stop hook's feedback
+            ok("without a quote, the running turn started by a Stop hook's feedback → dated at the turn before it",
+               ("2026-01-01T01:08:30Z", "", "2026-01-01T01:21:00Z") in _wait_points(ev_q, plain)
+               and bool(open_ask(ev_q, plain, parent_l)))
+            rows_to(cp, base_rows + [task_note("2026-01-01T01:20:55Z"), said_text("2026-01-01T01:21:10Z", "結果を見ました。"),
+                                     stop("2026-01-01T01:21:30Z")])
+            ok("a task turn that started seconds before the note → dated at the waiting turn",
+               open_ask(scan_child(cp), plain, parent_l) is not None
+               and ("2026-01-01T01:08:30Z", "", plain[0]) in _wait_points(scan_child(cp), plain))
+            answered = base_rows + [u("2026-01-01T01:15:00Z", "B で", origin={"kind": "human"}),
+                                    said_text("2026-01-01T01:17:00Z", "B で当てました。"), stop("2026-01-01T01:18:00Z")]
+            rows_to(cp, answered)
+            rows_to(pp, [note_row("2026-01-01T01:30:00Z", qt_l, asked_text.replace("\n", " ⏎ "))])
+            ok("a note that landed after the person's answer and the child's next turn: the quote dates it before the answer",
+               open_ask(scan_child(cp), parent_wait_notes(pp, qt_l), parent_l) is None)
+            cont = base_rows[:-1] + [stop("2026-01-01T01:08:30Z"), stop_feedback("2026-01-01T01:08:31Z"),
+                                     said_text("2026-01-01T01:09:00Z", "確かめ直しました。 どちらにしますか。"), stop("2026-01-01T01:09:30Z")]
+            rows_to(cp, cont)
+            rows_to(pp, [note_row("2026-01-01T01:10:00Z", qt_l, "確かめ直しました。 どちらにしますか。")])
+            ok("a turn the Stop hook continued: the quote of its last message dates the note at its last turn end",
+               ("2026-01-01T01:09:30Z", "", "2026-01-01T01:10:00Z") in _wait_points(scan_child(cp), parent_wait_notes(pp, qt_l)))
         # The requester answers the child's questions of judgment (CONTRACT.md#worker-questions-to-requester): its message in
         # the child's window after the ask closes it; an approval or a send to the outside stays the person's.
 
