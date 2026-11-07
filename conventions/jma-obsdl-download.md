@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 気象庁の過去観測データ (時別値・日別値等) をスクリプトで一括取得したいとき
 category: infra
-summary: 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる・旧 optionNumList は今 option・成功の判定は Content-Disposition: attachment・field の集合は取得のたびに bundle で照合)、 element/地点 ID の動的発見 (#element-station-discovery、 地点一覧は JSON・kansoku は 6 文字の文字列・要素表は bundle の中)、 「地域気象観測所一覧」 と obsdl の地点の対応 (#station-master-mapping = 官署 ID は s + 国際地点番号で観測所番号と別・観測開始年月日は今の観測所番号での開始・航空気象観測所は a の ID・cp932)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness、 所要時間は応答で決まり期間で大きく違う = 試しの 1 地点で測ってから見積もる #response-time-estimate)、 CSV の位相 (24 時 = 翌日 0 時)・エンコーディング・ブロック境界の gotcha (#csv-format-gotchas)、 現象なし情報/品質情報/均質番号の一次資料の意味 (#quality-columns)、 長期系列を使う前の QC 点検 4 点 = 行数の暦検算・品質符号の分布・痕跡時間 (実測 15%)・記録分解能の年代 (#long-record-qc)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js、 minify された bundle は endpoint の文字列と import をたどる・関数名でなく呼び出しから関数をたどる)、 取得物は既知データと突合してから使う (#validate-before-use)
+summary: 気象庁「過去の気象データ・ダウンロード」(obsdl) の機械取得 recipe — show/table POST の現行フィールド (#show-table-post、 旧 recipe の interAnnualFlag は現行 interAnnualType で 400 になる・旧 optionNumList は今 option・成功の判定は Content-Disposition: attachment・field の集合は取得のたびに bundle で照合)、 element/地点 ID の動的発見 (#element-station-discovery、 地点一覧は JSON・kansoku は 6 文字の文字列・要素表は bundle の中)、 「地域気象観測所一覧」 と obsdl の地点の対応 (#station-master-mapping = 官署 ID は s + 国際地点番号で観測所番号と別・観測開始年月日は今の観測所番号での開始・航空気象観測所は a の ID・cp932)、 44,000 値制限に合わせた block 設計と politeness (#volume-limit-politeness、 所要時間は応答で決まり期間で大きく違う = 試しの 1 地点で測ってから見積もる #response-time-estimate)、 CSV の位相 (24 時 = 翌日 0 時)・エンコーディング・ブロック境界の gotcha (#csv-format-gotchas)、 現象なし情報/品質情報/均質番号の一次資料の意味 (#quality-columns、 均質番号がダウンロードの期間ごとに振り直されるかは未確認)、 長期系列を使う前の QC 点検 4 点 = 行数の暦検算・品質符号の分布・痕跡時間 (実測 15%)・記録分解能の年代 (#long-record-qc)、 protocol はページ自身の JS から読む一般技法 (#protocol-from-page-js、 minify された bundle は endpoint の文字列と import をたどる・関数名でなく呼び出しから関数をたどる)、 取得物は既知データと突合してから使う (#validate-before-use、 時別値の日合計を日別値と比べ、 1 時間ずらした集計で照合が位相を見分けるかも確かめる)
 -->
 # 気象庁 obsdl の機械取得 (過去の気象データ・ダウンロード)
 
@@ -85,6 +85,7 @@ PHPSESSID 等のセッションは不要。response は Shift_JIS の CSV。
 
 - 「品質情報 < 8 は不完全値」で丸めず、**どの符号がどれだけ出るかを数えてから**除外規則を決める (`5` を採るか捨てるかで結論が動く解析がある)
 - **均質番号の変化 = 観測条件の断絶** (移転等)。長期解析ではまず単一区間かを確認する
+  - ⚠️ **均質番号がダウンロードの期間ごとに 1 から振り直されるかは確かめていない** (実測では、 手元の系列のどのブロックの中にも変化が無く、 確かめる材料が無かった)。 振り直されるなら、 ブロックの境目ちょうどでの変化は、 つないだ系列には見えない = 境目をまたぐ期間で取り直して番号を比べるまでは、 「変化なし」 を「各ブロックの中で変化なし」 と読む
 
 ## <a id="long-record-qc"></a>長期系列を使う前の QC 点検 (4 点、いずれも取得物だけで完結)
 
@@ -107,3 +108,6 @@ form POST が 400 で拒否されたら、**ネット上の recipe を変えて�
 ## <a id="validate-before-use"></a>取得物は既知データと突合してから使う
 
 取得経路を信じる前に、**同一区間の既知データ (過去に手作業で取った CSV 等) と値を突合**して経路を検証する (位相ずれ・単位・欠測表現の取り違えはここで露見する)。突合が取れて初めて多年一括取得に進む。
+
+- **時別値は同じ地点の日別値と突き合わせる**: 時別値を区間開始 (= ラベル − 1 h) の暦日で日合計にし、 別のリクエストで取った日別値 (`aggrgPeriod=1`、 降水量の合計) と 1 日ずつ比べる (位相・単位の取り違えがここで出る)
+- **その照合が位相のずれを見分けるかも確かめる**: 同じ時別値をラベルの日 (= 1 時間ずれ) で集計し直し、 不一致の日が出ることを見る (実測: 1 年で数十日が不一致になる)。 一致を確かめる検査は、 わざと間違えた入力で落ちるのを見るまで証拠にならない
