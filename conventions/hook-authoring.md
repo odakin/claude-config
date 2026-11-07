@@ -1241,7 +1241,16 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 - **git の long option は一意な前置の略形を受け付ける** (hook を飛ばす option も、 途中まで打った略形で同じく効き、 hook が走らない = 実測)。 綴りどおりの照合はこれをすり抜ける。 当てる前に、 その subcommand の option 表から一意な前置を正規の形へ展開する
 - **同じ効果の別経路も当てる**: `-c core.hooksPath=…`、 `git config core.hooksPath`、 `GIT_CONFIG_PARAMETERS` / `GIT_CONFIG_KEY_n`、 検査が読む環境変数の上書き
 - **当て切れない経路は docstring に列挙する** (変数に入れた command、 script file の中、 git alias、 `.git/hooks` の直接の編集)。 書いていない穴は「守られているつもり」 になる
-- <a id="command-reads-file-tokenize"></a>**command が file を読む (書く) かを当てる hook は、 heredoc の本文と引用符の中を command と読まない**: command の全文から「読む語 … file 名」 を正規表現で探すと、 heredoc で文書に追記した本文・commit message・`echo` の文字列の中の同じ並びで発火する (実測: 誤発火を直す確認の command の中の python の heredoc でも発火した)。 heredoc の本文 (`<<'EOF'` の次の行から終端の行まで) を除き、 shlex などで `; & | ( )` と改行を区切りに単純 command へ分け、 先頭の語 (`X=1` の代入・`command`・`sudo` などの前置きを除く) と引数で判定する。 `cd … &&` の後・pipe の前・`<` の入力・引用符で囲んだ path は読む側に数える
+- <a id="command-reads-file-tokenize"></a>**command が file を読む (書く) かを当てる hook は、 heredoc の本文と引用符の中を command と読まない**: command の全文から「読む語 … file 名」 を正規表現で探すと、 heredoc で文書に追記した本文・commit message・`echo` の文字列の中の同じ並びで発火する (実測: 誤発火を直す確認の command の中の python の heredoc でも発火した)。 heredoc の本文 (`<<'EOF'` の次の行から終端の行まで) を除き (bash・sh などの shell に渡す本文は命令 = 次の項の 2)、 shlex などで `; & | ( )` と改行を区切りに単純 command へ分け、 先頭の語 (`X=1` の代入・`command`・`sudo` などの前置きを除く) と引数で判定する。 `cd … &&` の後・pipe の前・`<` の入力・引用符で囲んだ path は読む側に数える
+- <a id="command-write-target-lexing"></a>**command が守られた file に書くかを当てる hook は、 書き込みの印をその命令の引数の中だけで見る** (実測: pipe で区切らずに読んだので、 `sed -n … | grep -iE …` の後ろの `-iE` を `sed -i` と読み、 sed が読むだけの file を書き込み先にした。 逆に sed の式の区切りの `|`・`;` で命令を割り、 `sed -i '' 's|…|…|' <file>` の書き換える file を落とした)。 引用符を数える小さな字句の読みで単純 command に分けてから、 命令ごとに当てる:
+  1. **区切り** = pipe・`&&`・`||`・`;`・`&`・改行・括弧と、 shell の予約語 (`do`・`then`・`{` など) の後ろ。 予約語を前置きに数えないと、 `for …; do sed -i …; done` の書き込みを読み落とす
+  2. **heredoc の本文は、 shell (bash・sh・zsh) に渡すときだけ命令として読む** = cat や python に渡す本文はデータ (データの行の書き込みに見える字で止めた = 実測)、 shell に渡す本文を除くと書き込みを通す
+  3. **in-place の印は、 その命令の option の束の中だけ**で見る。 束の中で `i` の前に並ぶのが引数を取らない option の文字だけのとき書き換え (`-ni`・`-Ei`・`-pi`・`-i.bak` は書き換え、 `-MList::Util` の i は違う)
+  4. **sed・perl・awk の式 (program) は書き込み先から外す** = `-e` の後の語、 無ければ最初の引数。 式の字の中の path を書き込み先と読んで止めた (実測)
+  5. **変数の先は、 同じ command の中で字の値を代入した変数と `$HOME`・`~` で置き換えて判定する**。 置き換えられない変数をどう扱うか (数えない / 字のまま当てる) は 1 つに決め、 引用符の有無で変えない (実測: 「`$` で始まる語は数えない」 を引用符を外す前に当て、 引用符つきの変数だけを字のまま読んで、 scratch を指す変数の先の `/scripts/` で止めていた)
+  6. **`$( … )` と backtick は二重引用符の中でも命令を走らせる** = 中身を別の命令として読む。 閉じない `$(` の連なりで再帰を尽かさないよう深さに上限を置く (hook が途中で落ちると fail-open = 書き込みを通すのと同じ)
+
+  校正は、 新旧の述語を全部の会話記録の呼び出しに当て、 変わった呼び出しを **両方の向き** で 1 回ずつ読む = 通すようになった呼び出しは、 前の版が止めた path と同じ命令に書き込みの形があるものを全部、 止めるようになった呼び出しは本物の書き込みか誤りかを。 合計の減りだけ見ると、 誤りの消えた分に本物の書き込みの見逃しが紛れる (実測: pipe で区切るだけの最初の候補は、 式の `|` で命令を割って本物の書き換えを通していたのに、 止める回数の合計は減って良く見えた)。 python などの道具の中の書き込み (`open(…, 'w')`) は command の語に出ない = この読み方の射程外で、 docstring に書く
 
 ## <a id="git-fixture-pinned-dates"></a>§20. test の git fixture は日付を固定する — 同じ秒に作った 2 つの履歴は同じ sha になる
 
