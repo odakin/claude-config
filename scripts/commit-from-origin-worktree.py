@@ -32,7 +32,8 @@ Codex で default branch へ送る `HEAD:<branch>` refspec の execution-permiss
 - `--apply CMD` = worktree を cwd に bash で走らせる変更 command。 環境変数 `LIVE` (live の top) と `WT` を渡す。
 - `--check CMD` = stage 後・commit 前に worktree で走らせる検査。 非 0 なら commit しない。
 - `--remove-live-copies` = push 後、 live の tree に在る**未追跡**の SRC を、 `origin/<branch>:<DST>` と一致を
-  確かめてから消す (残すと相手の pull が untracked overwrite で止まる)。 live で**追跡中の file を直接編集**して
+  確かめてから消す (残すと相手の pull が untracked overwrite で止まる)。 比べるのは平文 (`git cat-file --filters` =
+  git-crypt の file も復号して比べる。 `git show` は暗号文を返すので、 同じ中身でも「differs」 になっていた = 実測)。 live で**追跡中の file を直接編集**して
   出した場合は消さずに、 origin と一致していれば追いつき方を出す: 同じ中身の変更が unstaged のままだと
   `merge --ff-only` は「would be overwritten」 で止まり、 `git add -- <path>` で index を揃えると fast-forward が通って
   clean になる (2026-09-13 実測)。
@@ -253,18 +254,24 @@ def commit_from_origin_worktree(live: Path, message: str, copies=(), apply_cmd: 
                 if live not in s.parents:
                     continue
                 rel = os.path.relpath(s, live)
-                blob = git(live, "show", f"origin/{branch}:{dst}", check=False, binary=True)
+                # compare PLAIN text: `git show` returns the stored blob, which for a git-crypt file is the ciphertext
+                # and never equals the live copy (measured: identical copies were kept as "differs")
+                origin_plain = _plain(live, f"origin/{branch}", dst)
+                same = origin_plain is not None and s.exists() and s.read_bytes() == origin_plain
                 if git(live, "ls-files", "--error-unmatch", "--", rel, check=False).returncode == 0:
                     # tracked in live: never delete or revert. If it now equals origin, say how to catch
                     # live up: with the identical change UNSTAGED `merge --ff-only` aborts ("would be
                     # overwritten"); once the index holds the same blob the fast-forward goes through clean.
-                    if rel == dst and blob.returncode == 0 and s.exists() and s.read_bytes() == blob.stdout:
+                    if rel == dst and same:
                         log(f"[live] {rel} is tracked and now equals origin/{branch}; to catch live up: "
                             f"git -C {live} add -- {shlex.quote(rel)} && git -C {live} merge --ff-only origin/{branch}")
                     continue
-                if blob.returncode == 0 and s.exists() and s.read_bytes() == blob.stdout:
+                if same:
                     s.unlink()
                     log(f"[live] removed untracked copy {rel} (identical to origin/{branch}:{dst})")
+                elif origin_plain is None:
+                    log(f"[live] kept {rel}: could not read origin/{branch}:{dst} as plain text "
+                        f"(not on origin yet, or the decrypting filter failed in this clone)")
                 else:
                     log(f"[live] kept {rel}: differs from origin/{branch}:{dst}")
         # the same change left UNCOMMITTED in a tracked live file (you edited live, e.g. a ledger tool wrote there, then
@@ -285,7 +292,7 @@ def commit_from_origin_worktree(live: Path, message: str, copies=(), apply_cmd: 
                 log(f"[live] {f}: the live tree still holds this new file UNTRACKED (the original of what was just "
                     f"pushed). `checkout --` does not apply to an untracked file, and while it is there the live clone "
                     f"cannot fast-forward / rebase / reset --keep onto {up}. Remove it and catch live up in one command: "
-                    f"git -C {lq} show {shlex.quote(up + ':' + f)} | cmp -s - {shlex.quote(str(live / f))} && "
+                    f"git -C {lq} cat-file --filters {shlex.quote(up + ':' + f)} | cmp -s - {shlex.quote(str(live / f))} && "
                     f"git -C {lq} merge-base --is-ancestor HEAD {up} && rm -- {shlex.quote(str(live / f))} && "
                     f"git -C {lq} merge --ff-only {up} (stops before removing if the bytes differ or live has unpushed "
                     f"commits; then remove it while aligning: "
@@ -525,7 +532,7 @@ def selftest() -> int:
             subprocess.run(["git", "init", "-q", "-b", "main", str(cs)], check=True)
             sh(cs, "config", "user.email", "t@t"); sh(cs, "config", "user.name", "t")
             subprocess.run(["git-crypt", "init"], cwd=cs, capture_output=True, check=True)
-            (cs / ".gitattributes").write_text("secret.txt filter=git-crypt diff=git-crypt\n", encoding="utf-8")
+            (cs / ".gitattributes").write_text("secret*.txt filter=git-crypt diff=git-crypt\n", encoding="utf-8")
             (cs / "secret.txt").write_text("plain secret\n", encoding="utf-8")
             sh(cs, "add", "-A"); sh(cs, "commit", "-q", "-m", "base")
             subprocess.run(["git", "clone", "-q", "--bare", str(cs), str(T / "crypt.git")], check=True)
@@ -545,6 +552,50 @@ def selftest() -> int:
             check("git-crypt: the worktree is decrypted (check read the plaintext) and the push succeeds",
                   rc == 0 and b"plain secret" not in enc and "note.md" in
                   sh(T / "crypt.git", "ls-tree", "--name-only", "main").stdout)
+            # the live-copy comparisons read origin as PLAIN text (`git show` returns the ciphertext and never matched)
+            sh(cs, "fetch", "-q", "origin"); sh(cs, "merge", "-q", "--ff-only", "origin/main")
+            enc_new = cs / "secret-new.txt"
+            enc_new.write_text("new encrypted note\n", encoding="utf-8")
+            cmsg = []
+            rc = commit_from_origin_worktree(cs, "enc\n", copies=[(enc_new, "secret-new.txt")], remove_live_copies=True,
+                                             log=lambda m: cmsg.append(m))
+            stored = subprocess.run(["git", "-C", str(T / "crypt.git"), "show", "main:secret-new.txt"],
+                                    capture_output=True).stdout
+            check("git-crypt: --remove-live-copies removes an untracked copy whose PLAIN text equals origin "
+                  "(the stored blob is ciphertext = the foil has teeth)",
+                  rc == 0 and stored.startswith(b"\x00GITCRYPT") and not enc_new.exists()
+                  and any("removed untracked copy secret-new.txt" in m for m in cmsg))
+            # no --remove-live-copies: the UNTRACKED report's one-line recipe gets past its cmp and catches live up
+            enc_fresh = cs / "secret-fresh.txt"
+            enc_fresh.write_text("fresh encrypted note\n", encoding="utf-8")
+            cmsg = []
+            rc = commit_from_origin_worktree(cs, "fresh\n", copies=[(enc_fresh, "secret-fresh.txt")],
+                                             log=lambda m: cmsg.append(m))
+            rep = next((m for m in cmsg if m.startswith("[live] secret-fresh.txt")), "")
+            recipe = rep.split("in one command: ", 1)[1].split(" (stops before removing", 1)[0] if "in one command: " in rep else ""
+            subprocess.run(["bash", "-c", recipe], capture_output=True)
+            check("git-crypt: the UNTRACKED recipe compares plain text, so it removes the copy and catches live up",
+                  rc == 0 and recipe and sh(cs, "status", "--porcelain").stdout == ""
+                  and sh(cs, "rev-parse", "HEAD").stdout == sh(cs, "rev-parse", "origin/main").stdout
+                  and enc_fresh.read_text(encoding="utf-8") == "fresh encrypted note\n")
+            # a TRACKED encrypted file edited in live: the catch-up recipe is printed
+            (cs / "secret.txt").write_text("plain secret v2\n", encoding="utf-8")
+            cmsg = []
+            rc = commit_from_origin_worktree(cs, "v2\n", copies=[(cs / "secret.txt", "secret.txt")],
+                                             remove_live_copies=True, log=lambda m: cmsg.append(m))
+            check("git-crypt: a tracked encrypted live copy that equals origin gets the catch-up recipe",
+                  rc == 0 and any("secret.txt is tracked and now equals" in m for m in cmsg)
+                  and (cs / "secret.txt").read_text(encoding="utf-8") == "plain secret v2\n")
+            # the reverse side: plain text that differs after the push is kept
+            enc_diff = cs / "secret-diff.txt"
+            enc_diff.write_text("pushed version\n", encoding="utf-8")
+            cmsg = []
+            rc = commit_from_origin_worktree(cs, "diff\n", copies=[(enc_diff, "secret-diff.txt")], remove_live_copies=True,
+                                             before_push=lambda a: enc_diff.write_text("edited before the push\n",
+                                                                                       encoding="utf-8"),
+                                             log=lambda m: cmsg.append(m))
+            check("git-crypt: an untracked copy whose plain text differs from origin is kept",
+                  rc == 0 and enc_diff.exists() and any("kept secret-diff.txt: differs" in m for m in cmsg))
         else:
             print("[SKIP] git-crypt not installed")
     print("\nALL PASS" if ok else "\nFAILED")
