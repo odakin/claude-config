@@ -61,7 +61,11 @@ ARXIV_ID_RE = re.compile(
     r"(?<![\w.])((?:0[7-9]|[1-9]\d)(?:0[1-9]|1[0-2])\.\d{4,5}"
     r"|(?:hep-th|hep-ph|hep-ex|hep-lat|gr-qc|astro-ph|cond-mat|quant-ph|math-ph|nucl-th|nucl-ex|physics|math)"
     r"(?:\.[A-Z]{2})?/\d{7})(v\d+)?(?![\w])")
-PDF_TOKEN_RE = re.compile(r"(['\"]?)((?:~|/|\$\{?\w+\}?/)[^\s'\";|&<>()]*?\.pdf)\1(?=[\s'\";|&<>)]|$)", re.I)
+# 左の境界 (行頭・空白・引用符・= ( ,) から始まる token だけを拾う。 頭が ~ / / / $VAR でない相対の path (data/x.pdf・x.pdf) も拾い、
+# command の中の cd を当てた cwd で解く。 URL (scheme://) は拾わない。 実測: 境界が無く相対の path を読まなかったので、
+# `cd <repo> && pdftoppm data/<dir>/x.pdf` の途中の `/<dir>/x.pdf` が絶対 path として当たり、 repo にある file を「もう無い」 と出した
+PDF_TOKEN_RE = re.compile(r"(?:^|(?<=[\s'\"=(,]))(['\"]?)((?:~|/|\$\{?\w+\}?/|(?![a-z][a-z0-9+.-]*://)(?=[\w.]))"
+                          r"[^\s'\";|&<>()]*?\.pdf)\1(?=[\s'\";|&<>),]|$)", re.I)
 # PDF の文字を読む道具 (Python の library を -c や heredoc で呼ぶ形と、 command line の道具)。 この印がある command の PDF は
 # 取り込み口の外でも数える (実測: 原典を fitz.open に path で渡して読み、 判定の根拠にした session で 0 件と出た)
 PDF_READER_RE = re.compile(r"\b(?:fitz|pymupdf)\.open\s*\(|\bpdfplumber\.open\s*\(|\bPdfReader\s*\(|\bpypdf\b"
@@ -371,6 +375,15 @@ def selftest():
         Path(lib, "mention.pdf").write_bytes(b"%PDF-1.4 only mentioned")
         call(25, "Bash", {"command": "cd /tmp && python3 -c \"import fitz\nd = fitz.open('" + os.path.join(lib, "orig.pdf") + "')\nprint(len(d))\""})
         call(26, "Bash", {"command": "ls -la " + os.path.join(lib, "mention.pdf")})
+        # 相対の path (2026-11-09): repo の中の file を cd の後の相対で読んだ = repo の中 (数えない)。 前は途中の `/sub/x.pdf` が
+        # 絶対 path として当たり ❌ と出た。 cwd からの相対で読んだ保存済みの写しは ✅、 URL は手元の file に数えない
+        os.makedirs(os.path.join(repo, "data", "sub"))
+        Path(repo, "data", "sub", "x.pdf").write_bytes(b"%PDF-1.4 a form inside the repo")
+        call(27, "Bash", {"command": "cd " + repo + " && pdftoppm -r 70 -png data/sub/x.pdf /tmp/o"})
+        Path(lib, "rel").mkdir()
+        Path(lib, "rel", "y.pdf").write_bytes(b"%PDF-1.4 kept original")      # 保存済みと同じ中身
+        call(28, "Bash", {"command": "cd " + lib + " && python3 -c \"import fitz; print(len(fitz.open('rel/y.pdf')))\""})
+        call(29, "Bash", {"command": "pdftotext https://example.org/z.pdf - | head"})
         Path(proj, sid + ".jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
 
         calls = ssr.read_calls(Path(proj, sid + ".jsonl"))
@@ -401,6 +414,11 @@ def selftest():
         check(rd is not None and rd["mark"] == "⚠️" and "読む道具" in rd["note"],
               "PDF を読む道具 (fitz.open) に渡した PDF は取り込み口の外でも数える")
         check(os.path.join(lib, "mention.pdf") not in rows, "読む道具の無い command に出ただけの取り込み口の外の PDF は数えない")
+        check(not any(k.startswith("/sub/") or k.endswith("/sub/x.pdf") for k in rows),
+              "cd の後の相対の path は cwd で解く (repo の中の file を、 途中の / から絶対 path と読んで ❌ にしない)")
+        rel = rows.get(os.path.join(lib, "rel", "y.pdf"))
+        check(rel is not None and rel["mark"] == "✅", "読む道具に相対で渡した PDF は cwd で解いて中身で照合する")
+        check(not any("example.org" in k or k.startswith("https") for k in rows), "URL は手元の PDF に数えない")
         copy = [r for k, r in rows.items() if k.startswith(os.path.join(t, "scan", "paper.pdf"))]
         check(len(copy) == 1 and copy[0]["mark"] == "✅" and "写し" in copy[0]["what"],
               "消えた写しは cp の元で照合する (❌ にしない)")

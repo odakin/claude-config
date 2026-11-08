@@ -89,6 +89,15 @@ ATTRIB_JA = (
     "原文", "報告書", "レポート", "コメント", "指摘", "さん", "氏", "先生", "くん",
     "と言", "って言", "と述", "と主張", "と問", "によれば", "によると", "曰く", "いわく",
 )
+# 「と言」 の後がこの形なら話し手のいない言い方 (条件・可能・一般) = 人に帰した引用でない。 実測: 「「X」 と言い切ると強すぎる」
+# の X (渡した原文とは別の文書の句) を、 帰属の語「と言」 で人の言葉の引用と読み、 渡した原文に無いので ✗ にした。
+# 同じ文に別の帰属の語 (referee・さん・呼び手が渡す名前) があれば、 そちらで今までどおり帰属と読む
+IU_GENERIC = r"(?!い切|え|うと|っても|い換え)"
+
+
+def _iu_attributes(w: str, context: str) -> bool:
+    """「と言」「って言」 が、 話し手のいない言い方でない形で 1 回でも出るか。"""
+    return re.search(re.escape(w) + IU_GENERIC, context) is not None
 
 
 @dataclass
@@ -171,6 +180,10 @@ def _attrib_word(context: str, extra: tuple[str, ...]) -> str | None:
             continue
         if w in VOCATIVE:
             if re.search(re.escape(w) + r"(?![、,，！!\s])", context):
+                return w
+            continue
+        if w in ("と言", "って言"):
+            if _iu_attributes(w, context):
                 return w
             continue
         if w.lower() in low:
@@ -483,6 +496,18 @@ def selftest() -> int:
            check_text("The referee says 'the bias is small everywhere'.", [src]) == [])
     q = one('The referee writes "the sample [sic] is restricted to"')
     expect("an added [sic] is removed before matching", q.status == "ok")
+    # 話し手のいない「と言」 (2026-11-09): 条件・可能・一般の言い方は人に帰した引用でない。 帰属の語が別にあれば帰属のまま
+    for s in ("「全体に偏りが小さい」 と言い切ると強すぎるので弱めた。", "「全体に偏りが小さい」 と言えるのは第 2 版だけ。",
+              "「全体に偏りが小さい」 と言うと誤解される。", "「全体に偏りが小さい」 と言っても通じる。",
+              "「全体に偏りが小さい」 と言い換えた。"):
+        q = one(s)
+        expect("generic と言 is not an attribution: " + s, q.attrib is None)
+    q = one("「全体に偏りが小さい」 と言い切ると強すぎる、 と referee は書いた。")
+    expect("a generic と言 with another attribution word stays attributed", q.attrib == "referee" and q.failure)
+    q = one("Bさんは「全体に偏りが小さい」 と言い切っている。")
+    expect("a named speaker who 言い切る is still attributed", q.attrib is not None and q.failure)
+    q = one("「全体に偏りが小さい」 と言っている。")
+    expect("plain と言っている stays an attribution", q.attrib == "と言" and q.failure)
     print("selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

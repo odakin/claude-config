@@ -10,8 +10,10 @@
   「本体の設定が PDF と同じ」 までで、 トレイの紙が本当にそのサイズかは言わない。 実測は「報告 A4 → A4 で出た」 の一致だけ
   = 本体の設定を変えたときに報告が追従するかは未検証。 違うサイズで出たと言われたら本体を見てもらう、 は変えない。
 - queue の device-uri が機種の独自 backend (scheme が ipp / ipps でない) のときは、 URI から host と `/ipp/` の path を拾って
-  ipp:// に組み直す (実測 = 独自 backend の queue でも本体は素の ipp:// に答えた)。 組めない (dnssd 等) ・答えが無い・ipptool が
-  無いときは「未確認」 を返し、 止めない (fail-open)。
+  ipp:// に組み直す (実測 = 独自 backend の queue でも本体は素の ipp:// に答えた)。 `dnssd://` (Bonjour の名前で引く queue) は
+  広告名を `ippfind -N <名前> --print` で解いて、 返った URI に聞く (実測 = Bonjour の名前の queue で ipp://<host>.local:631 が返った)。
+  組めない・名前が見つからない・答えが無い・ipptool や ippfind が無いときは「未確認」 を返し、 止めない (fail-open)。
+  名前が見つからないときは、 広告名が変わって queue が古い名前を探し続けている恐れを ⚪ の行に書く。
 - **ただし本体に届いていないと分かるときは止める** (2026-11-04、 conventions/office-automation.md#printer-unreachable): IPP の
   問い合わせが失敗し、 かつ同じ host の port (既定 631) にも TCP で届かないとき = この機械はプリンタの網にいない。 ipp:// の
   queue は job を持ったまま再試行し、 網が戻ったときに遅れて刷る (実測 = 別の網から送った job が「プリンタが応答しません」 で
@@ -24,7 +26,7 @@ import re
 import socket
 import subprocess
 import tempfile
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 TOLERANCE_MM = 2
 
@@ -76,6 +78,34 @@ def ipp_uri(dev):
     if not m:
         return None
     return f"ipp://{m.group('host')}" + (f":{m.group('port')}" if m.group("port") else "") + (m.group("path") or "/ipp/print")
+
+
+def dnssd_service(dev):
+    """dnssd:// の device-uri → (広告名, regtype) (読めなければ None)。 例: dnssd://Some%20Printer._ipp._tcp.local./?uuid=…
+    → ("Some Printer", "_ipp._tcp.local.")。 広告名は %XX を decode する (括弧や : を含む名前がある = 実測)。"""
+    if not (dev or "").startswith("dnssd://"):
+        return None
+    m = re.match(r"dnssd://(?P<name>.+?)\.(?P<reg>_ipps?\._tcp)\.(?P<dom>[^/?]*)", dev)
+    if not m:
+        return None
+    return unquote(m.group("name")), f"{m.group('reg')}.{m.group('dom') or 'local.'}"
+
+
+def resolve_dnssd(dev, run=_run):
+    """dnssd:// の queue の本体の URI を Bonjour で引く → (uri, 理由)。 ippfind は -T の秒で自分で終わる
+    (dns-sd -L は返ってこない)。 名前が見つからない = 広告名が変わった恐れ (office-automation.md#dnssd-queue-stale-name)。"""
+    svc = dnssd_service(dev)
+    if not svc:
+        return None, f"device-uri から Bonjour の名前を読めない = {dev}"
+    name, reg = svc
+    out, why = run(["ippfind", "-T", "3", reg, "-N", name, "--print"], 8)
+    uris = [x.strip() for x in (out or "").splitlines() if re.match(r"ipps?://", x.strip())]
+    if uris:
+        return uris[0], ""
+    if out is None and why != "rc=1":  # rc=1 = 見つからない (ippfind の約束)、 それ以外 = 道具が無い・失敗
+        return None, f"ippfind が失敗 ({why})"
+    return None, (f"Bonjour で広告名「{name}」 が見つからない = queue の名前が古い恐れ (dns-sd -B {reg.split('.local')[0]} local."
+                  " の今の名前と突き合わせる。 office-automation.md#dnssd-queue-stale-name)")
 
 
 def parse_attrs(text):
@@ -197,6 +227,8 @@ def check(queue, pdf_sizes, lp_opts=(), names=None, run=_run, attrs=None, probe=
     if attrs is None:
         dev, why = device_uri(queue, run)
         uri = ipp_uri(dev)
+        if not uri and (dev or "").startswith("dnssd://"):
+            uri, why = resolve_dnssd(dev, run)
         if uri:
             attrs, why = query(uri, run=run)
             if not attrs and why.startswith("ipptool が失敗") and not (probe or port_open)(uri):
@@ -282,4 +314,29 @@ def _selftest():
     f, i = check("Q", {(210, 297)}, run=lpo, probe=lambda u: True)
     assert not f and i[0].startswith("⚪"), (f, i)
     assert port_open("ipp://") is True and port_open("ipp://127.0.0.1:9/ipp/print", timeout=0.5) is False
+    # dnssd:// の queue (2026-11-09): 広告名を ippfind で解いて聞く / 見つからない = 名前が古い恐れ / ippfind が無い = 未確認
+    assert dnssd_service("dnssd://Some%20Printer._ipp._tcp.local./?uuid=x") == ("Some Printer", "_ipp._tcp.local.")
+    assert dnssd_service("dnssd://P%20(a2%3A1d)%20(2)._ipps._tcp.local./?uuid=x") == ("P (a2:1d) (2)", "_ipps._tcp.local.")
+    assert dnssd_service("ipp://x/ipp/print") is None and dnssd_service("dnssd://nothing-here") is None
+    seen = []
+
+    def bonjour(found, why=""):
+        def run(argv, t):
+            seen.append(argv)
+            if argv[0] == "lpoptions" and "-l" not in argv:
+                return "device-uri=dnssd://Some%20Printer._ipp._tcp.local./?uuid=x\n", ""
+            if argv[0] == "lpoptions":
+                return "", ""
+            if argv[0] == "ippfind":
+                return ("ipp://SOMEHOST.local:631/ipp/print\n", "") if found else (None, why)
+            return out, ""  # ipptool = 上の A4 の答え
+        return run
+    f, i = check("Q", {(210, 297)}, run=bonjour(True), probe=lambda u: True)
+    assert not f and any("A4" in x and "✓" in x for x in i), (f, i)
+    assert any(a[0] == "ipptool" and "ipp://SOMEHOST.local:631/ipp/print" in a for a in seen), seen
+    assert any(a[:1] == ["ippfind"] and a[a.index("-N") + 1] == "Some Printer" for a in seen), seen
+    f, i = check("Q", {(210, 297)}, run=bonjour(False, "rc=1"), probe=lambda u: True)
+    assert not f and i[0].startswith("⚪") and "見つからない" in i[0] and "dnssd-queue-stale-name" in i[0], (f, i)
+    f, i = check("Q", {(210, 297)}, run=bonjour(False, "FileNotFoundError"), probe=lambda u: True)
+    assert not f and i[0].startswith("⚪") and "ippfind が失敗" in i[0], (f, i)
     return "printer_media selftest: PASS"

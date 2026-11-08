@@ -21,7 +21,9 @@
   ⏪ = 圧縮より前 (今の context に無い。 全文 = --show <id>)
 
 処分の file (--check FILE) — 1 行 1 候補、 空白区切り、 # から行末は注記:
-  <id> 記録済み|recorded <根拠>      既に記録にある。 根拠 = path:行 か <git repo の dir>@<commit>
+  <id> 記録済み|recorded <根拠>      既に記録にある。 根拠 = path:行 / path:行@commit (行を commit に固定 = 後で同じ file を
+                                    別の worker が書いても行がずれない) / path#anchor / <git repo の dir>@<commit>。 素の path:行 は、
+                                    処分の file を commit した後にその行が変わると ⚠️ (実測: 根拠の行がずれて無関係な文を指したまま通った)
   <id> 足した|added <根拠>          この締めで記録した。 根拠は同じ形
   <id> 記録しない|不要|skip <理由>   記録しない (知見を含まない・教科書の内容・本人が記録しないと決めた など)
   path は --base (既定 = 今の dir) から。 照合の出力は根拠の行 (commit なら題) を候補の文の隣に出す = 「直していない」 の項目に
@@ -51,6 +53,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -294,8 +297,62 @@ def read_dispositions(path):
     return disp
 
 
+def _git_out(args, cwd):
+    try:
+        r = subprocess.run(["git"] + args, cwd=str(cwd), capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def last_commit_time(path):
+    """path を最後に変えた commit の時刻 (epoch)。 git の外・未 commit = None。"""
+    p = Path(path).resolve()
+    out = _git_out(["log", "-1", "--format=%ct", "--", p.name], p.parent)
+    return int(out.strip()) if out and out.strip().isdigit() else None
+
+
+def line_changed_time(f, n):
+    """f の n 行目を最後に変えた時刻 (epoch)。 未 commit の変更 = 今。 git の外 = None。"""
+    f = Path(f).resolve()
+    out = _git_out(["blame", "-L", "%d,%d" % (n, n), "--porcelain", "--", f.name], f.parent)
+    if not out:
+        return None
+    if re.match(r"^0{40}\b", out):
+        return int(time.time())
+    m = re.search(r"^committer-time (\d+)$", out, re.M)
+    return int(m.group(1)) if m else None
+
+
 def resolve_evidence(ev, base):
-    """根拠を確かめて (ok, 見せる文) を返す。"""
+    """根拠を確かめて (ok, 見せる文) を返す。 形 = path:行 / path:行@commit (行を commit に固定 = 後の書き換えでずれない) /
+    path#anchor (`id="anchor"` のある行) / <git repo の dir>@<commit>。"""
+    m = re.match(r"^(.+):(\d+)@([0-9a-fA-F]{7,40})$", ev)
+    if m:
+        f = (base / os.path.expanduser(m.group(1))).resolve()
+        if not f.is_file():
+            return False, "file が無い: %s" % m.group(1)
+        top = _git_out(["rev-parse", "--show-toplevel"], f.parent)
+        if not top:
+            return False, "git の repo の外の file には commit を固定できない: %s" % m.group(1)
+        rel = os.path.relpath(str(f), top.strip())
+        text = _git_out(["show", "%s:%s" % (m.group(3), rel)], top.strip())
+        if text is None:
+            return False, "その commit にその file が無い: %s" % ev
+        lines = text.splitlines()
+        n = int(m.group(2))
+        if not 1 <= n <= len(lines):
+            return False, "行が範囲外: %s (%d 行)" % (ev, len(lines))
+        return True, "行: " + _one_line(lines[n - 1], 150)
+    m = re.match(r"^(.+)#([A-Za-z0-9_.:-]+)$", ev)
+    if m:
+        f = (base / os.path.expanduser(m.group(1))).resolve()
+        if not f.is_file():
+            return False, "file が無い: %s" % m.group(1)
+        for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+            if re.search(r"""\bid=["']%s["']""" % re.escape(m.group(2)), line):
+                return True, "行: " + _one_line(line, 150)
+        return False, "anchor が無い: %s" % ev
     m = re.match(r"^(.+)@([0-9a-fA-F]{7,40})$", ev)
     if m:
         repo = (base / os.path.expanduser(m.group(1))).resolve()
@@ -316,8 +373,22 @@ def resolve_evidence(ev, base):
     return False, "根拠の形が違う (path:行 か <repo>@<commit>): %s" % ev
 
 
-def check(cands, disp, base):
-    """rows = [(候補, 処分, 通ったか, 見せる文, 読み直す印)]。 印 = 「記録済み」 の根拠の行そのものが未決の書き方。"""
+def moved_since(ev, base, since):
+    """素の path:行 の根拠の行が、 処分の file の最後の commit (since) より後に変わったか → 知らせの文 ('' = 変わっていない・
+    判定できない)。 実測: 後から別の worker が同じ file を書いて行がずれ、 根拠が無関係な文を指したまま照合が通った。"""
+    m = re.match(r"^(.+):(\d+)$", ev or "")
+    if not m or since is None:
+        return ""
+    when = line_changed_time((base / os.path.expanduser(m.group(1))).resolve(), int(m.group(2)))
+    if when is None or when <= since:
+        return ""
+    return ("根拠の行が処分の file の commit より後に変わった (%s) = 同じ話を指しているか読み直す。 固定するなら path:行@commit"
+            % time.strftime("%m-%d %H:%M", time.localtime(when)))
+
+
+def check(cands, disp, base, since=None):
+    """rows = [(候補, 処分, 通ったか, 見せる文, 読み直す印)]。 印 = True (「記録済み」 の根拠の行そのものが未決の書き方) か、
+    根拠の行が後で変わった知らせの文 (since = 処分の file の最後の commit の時刻。 None = 見ない)。"""
     rows, bad = [], 0
     for c in cands:
         status, ev = disp.get(c["id"], (None, ""))
@@ -328,6 +399,8 @@ def check(cands, disp, base):
         else:
             ok, shown = resolve_evidence(ev, base) if ev else (False, "根拠が無い")
         warn = bool(ok and status == "recorded" and shown.startswith("行: ") and PENDING_EVIDENCE.search(shown))
+        if ok and not warn and status in ("recorded", "added"):
+            warn = moved_since(ev, base, since) or False
         bad += not ok
         rows.append((c, status, ok, shown, warn))
     unknown = sorted(set(disp) - {c["id"] for c in cands})
@@ -361,13 +434,16 @@ def report(session, pdirs, args):
     print("記録: " + ", ".join(map(str, paths)))
     print("文脈圧縮: %d 回。 ⏪ = 圧縮より前 (今の context に無い、 全文 = --show <id>)" % n_comp)
     if args.check:
-        rows, bad, unknown = check(cands, read_dispositions(args.check), Path(args.base).expanduser())
+        rows, bad, unknown = check(cands, read_dispositions(args.check), Path(args.base).expanduser(),
+                                   since=last_commit_time(args.check))
         n_warn = sum(1 for r in rows if r[4])
-        print("処分の照合: 候補 %d 件、 欠け・根拠の無いもの %d 件、 根拠の行が未決の書き方 %d 件 (⚠️ = 読み直す)" % (len(cands), bad, n_warn))
+        print("処分の照合: 候補 %d 件、 欠け・根拠の無いもの %d 件、 根拠の行が未決の書き方か後で変わった %d 件 (⚠️ = 読み直す)"
+              % (len(cands), bad, n_warn))
         for c, status, ok, shown, warn in rows:
             mark = "❌" if not ok else ("⚠️" if warn else "✅")
+            note = (" ← " + warn) if isinstance(warn, str) else (" ← 根拠の行も未決の書き方 = 記録したことになるか読み直す" if warn else "")
             print("%s %-4s %s %s\n      %s" % (mark, c["id"], status or "-", _one_line(c["text"] if c["kind"] == "S" else c["head"], 90),
-                                         _one_line(shown, 180) + (" ← 根拠の行も未決の書き方 = 記録したことになるか読み直す" if warn else "")))
+                                         _one_line(shown, 180) + note))
         for u in unknown:
             print("⚠️ 処分の file にある id が候補に無い: %s" % u)
         return 1 if bad else 0
@@ -481,6 +557,33 @@ def selftest():
             sha = subprocess.run(["git", "-C", str(base / "repo"), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
             expect("commit の根拠", resolve_evidence("repo@" + sha[:10], base), (True, "commit: 記録した"))
             expect("無い commit", resolve_evidence("repo@deadbeef", base)[0], False)
+            # 根拠の行のずれ (2026-11-09): 処分の file の commit の後に根拠の行が書き換わる。 日付は固定 (並べる順を時計に頼らない)
+            rp = base / "repo"
+
+            def commit_at(msg, when, *paths):
+                env = dict(os.environ, GIT_AUTHOR_DATE=when, GIT_COMMITTER_DATE=when)
+                subprocess.run(["git", "-C", str(rp), "add", *paths], capture_output=True)
+                subprocess.run(["git", "-C", str(rp), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                                "commit", "-q", "-m", msg], capture_output=True, env=env)
+            (rp / "notes.md").write_text("見出し\n<a id=\"sym-rule\"></a>対称性の理由を書いた行\n三行目\n", encoding="utf-8")
+            commit_at("notes", "2026-01-01T00:00:00+00:00", "notes.md")
+            sha1 = subprocess.run(["git", "-C", str(rp), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            (rp / "d.txt").write_text("x\n", encoding="utf-8")
+            commit_at("disp", "2026-01-02T00:00:00+00:00", "d.txt")
+            since = last_commit_time(rp / "d.txt")
+            expect("書き換わる前は知らせない", moved_since("repo/notes.md:2", base, since), "")
+            (rp / "notes.md").write_text("見出し\n別の worker が足した無関係な行\n<a id=\"sym-rule\"></a>対称性の理由を書いた行\n三行目\n",
+                                         encoding="utf-8")
+            commit_at("other worker", "2026-01-03T00:00:00+00:00", "notes.md")
+            expect("処分の後に行が変わった素の path:行 は知らせる", "後に変わった" in moved_since("repo/notes.md:2", base, since), True)
+            expect("変わっていない行は知らせない", moved_since("repo/notes.md:4", base, since), "")
+            expect("commit に固定した行は後の書き換えでずれない", resolve_evidence("repo/notes.md:2@" + sha1[:10], base),
+                   (True, "行: <a id=\"sym-rule\"></a>対称性の理由を書いた行"))
+            expect("固定した commit に無い行は通らない", resolve_evidence("repo/notes.md:9@" + sha1[:10], base)[0], False)
+            expect("anchor の根拠は行が動いても同じ行", resolve_evidence("repo/notes.md#sym-rule", base)[1],
+                   "行: <a id=\"sym-rule\"></a>対称性の理由を書いた行")
+            expect("無い anchor は通らない", resolve_evidence("repo/notes.md#no-such", base)[0], False)
+            expect("固定の形は commit の根拠と取り違えない", resolve_evidence("repo/notes.md:2@" + sha1[:10], base)[1].startswith("行: "), True)
 
     def bash(cmd, tid):
         return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": tid, "name": "Bash", "input": {"command": cmd}}]}}

@@ -518,6 +518,11 @@ def _quote_gate(body, sources, allow_reason):
     texts = [open(p, encoding="utf-8", errors="replace").read() for p in sources]
     quotes = aq.check_text(body, texts)
     lines = ["quote check (--quote-source):"] + ["  " + s for s in aq.format_report(quotes, "message")]
+    if aq.failures(quotes):
+        # measured: a sender passed one original, and a phrase quoted from another person's text (also in the message)
+        # read as unmatched; --quote-source takes several files, which the usage line does not show
+        lines.append("  checked against: " + ", ".join(os.path.basename(p) for p in sources)
+                     + " — a quotation from another person's text needs that original too (--quote-source is repeatable)")
     if aq.failures(quotes) and allow_reason:
         lines.append(f"  sending anyway: --allow-unmatched-quote {allow_reason!r}")
         return lines, False
@@ -560,9 +565,10 @@ def main(argv=None):
                    help="with --message: download its attachments into DIR (a new or empty "
                         "directory; scan them before importing)")
     p.add_argument("--quote-source", action="append", default=[], metavar="FILE",
-                   help="original text (e.g. the referee report as txt); quotations the message "
-                        "attributes to someone else must be substrings of it, or --send refuses "
-                        "(exit 5). Repeat for several originals")
+                   help="repeatable: original text (e.g. the referee report as txt; give each original, "
+                        "e.g. the report and a coauthor's draft, with its own --quote-source); quotations "
+                        "the message attributes to someone else must be found in one of them, or --send "
+                        "refuses (exit 5)")
     p.add_argument("--allow-unmatched-quote", metavar="REASON",
                    help="send although an attributed quotation is not in --quote-source (say why)")
     p.add_argument("--selftest", action="store_true")
