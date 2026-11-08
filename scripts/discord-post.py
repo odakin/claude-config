@@ -17,6 +17,9 @@ correct path is also the easiest path. Rules embedded here:
 Usage:
   python3 discord-post.py --token-file ~/.secrets/<bot-token> \
       --channel <CHANNEL_ID> (--content "text" | --content-file msg.txt) [--send]
+  python3 discord-post.py --preview --channel <ID> --content-file msg.txt [--attach f] [--quote-source orig.txt]
+      # draft check without the token or Discord: text, quote check, attachments. Leave --token-file off
+      # (measured: the dry run with --token-file was refused by the auto mode classifier; this form passed)
   python3 discord-post.py --token-file ... --dm-user <USER_ID> ...   # open DM first
   python3 discord-post.py --token-file ... --channel <ID> --check    # read-only probe
   python3 discord-post.py --token-file ... --channel <ID> --recent 10  # read-only: last N messages
@@ -541,6 +544,11 @@ def main(argv=None):
                         "per file on unboosted servers, warns if any single file exceeds")
     p.add_argument("--send", action="store_true",
                    help="actually send; without it this is a dry run")
+    p.add_argument("--preview", action="store_true",
+                   help="check a draft without reading the token or calling Discord: the text, the "
+                        "quote check and the attachments, as a dry run shows them. Refuses --send and "
+                        "the read-only probes (measured: a dry run with --token-file was refused by the "
+                        "auto mode classifier as an external write)")
     p.add_argument("--check", action="store_true",
                    help="read-only probe: GET the channel to validate token/UA/access")
     p.add_argument("--recent", type=int, metavar="N",
@@ -576,14 +584,24 @@ def main(argv=None):
 
     if a.selftest:
         return selftest()
-    if not a.token_file:
-        p.error("--token-file is required")
-    if not (a.channel or a.dm_user or a.member_probe or a.guilds or a.channels):
-        p.error("--channel, --dm-user, --member-probe, --guilds or --channels is required")
-    token = open(a.token_file, encoding="utf-8", errors="replace").read().strip()
-    if not token or "\x00" in token:
-        print("token file looks empty/binary (git-crypt locked?)", file=sys.stderr)
-        return 2
+    if a.preview:
+        # a preview never reads the token and never calls Discord, so nothing here can post
+        clash = [f for f, v in (("--send", a.send), ("--check", a.check), ("--recent", a.recent is not None),
+                                ("--guilds", a.guilds), ("--channels", a.channels),
+                                ("--member-probe", a.member_probe), ("--message", a.message)) if v]
+        if clash:
+            p.error("--preview cannot be combined with " + ", ".join(clash)
+                    + " (a preview never reads the token or calls Discord)")
+        token = None
+    else:
+        if not a.token_file:
+            p.error("--token-file is required")
+        if not (a.channel or a.dm_user or a.member_probe or a.guilds or a.channels):
+            p.error("--channel, --dm-user, --member-probe, --guilds or --channels is required")
+        token = open(a.token_file, encoding="utf-8", errors="replace").read().strip()
+        if not token or "\x00" in token:
+            print("token file looks empty/binary (git-crypt locked?)", file=sys.stderr)
+            return 2
 
     if a.guilds:
         guilds, err = _get_retry(f"{API}/users/@me/guilds", token)
@@ -700,19 +718,22 @@ def main(argv=None):
                   f"cap on unboosted servers; will likely fail 40005)", file=sys.stderr)
 
     if not a.send:
-        target = a.channel or f"DM(user {a.dm_user})"
+        target = a.channel or (f"DM(user {a.dm_user})" if a.dm_user else "(no target given)")
         extra = ""
         if a.attach:
             extra = f" + {len(a.attach)} attachment(s)"
             for path in a.attach:
                 extra += f"\n  attach: {path} ({os.path.getsize(path)} B)"
-        print(f"[dry run] would post {len(body)} chars to {target}{extra}; "
+        print(f"[{'preview' if a.preview else 'dry run'}] would post {len(body)} chars to {target}{extra}; "
               f"re-run with --send after the draft is approved")
         if quote_block:
             print("note: --send will refuse (exit 5) until the quotations above match "
                   "--quote-source or --allow-unmatched-quote '<reason>' is given")
         if _wants_mass_mention(body):
-            if a.channel:
+            if a.preview:
+                print("note: @everyone/@here permission not checked (a preview reads no token); "
+                      "the dry run with --token-file checks it")
+            elif a.channel:
                 # read-only GETs; nothing is posted in a dry run
                 allowed, detail = _probe_mass_mention(token, a.channel)
                 print(_mass_mention_line(allowed, detail),
@@ -884,6 +905,38 @@ def selftest():
         check("quote gate: no source -> one note, never blocks", not block and len(lines) == 1)
         lines, block = _quote_gate("hello all", [], None)
         check("quote gate: no quotation -> silent", not block and not lines)
+        lines, block = _quote_gate('The referee says "the bias is small everywhere".', [orig], None)
+        check("quote gate: an unmatched quote names the originals checked and says the flag repeats",
+              any("checked against: orig.txt" in s and "repeatable" in s for s in lines))
+        # --preview: never reads the token, never calls Discord, refuses --send (2026-11-09)
+        import contextlib
+        import io
+        draft = os.path.join(td, "draft.txt")
+        with open(draft, "w", encoding="utf-8") as fh:
+            fh.write("hello @everyone\n")
+        saved_request = globals()["_request"]
+
+        def no_network(*args, **kw):
+            raise AssertionError("a preview must not call Discord")
+        globals()["_request"] = no_network
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = main(["--preview", "--content-file", draft, "--quote-source", orig,
+                           "--token-file", os.path.join(td, "no-such-token")])
+            check("preview: exit 0 without reading the token or calling Discord",
+                  rc == 0 and "[preview] would post" in out.getvalue() and "not checked" in out.getvalue())
+            for extra in (["--send"], ["--check", "--channel", "c1"], ["--recent", "3", "--channel", "c1"]):
+                err = io.StringIO()
+                try:
+                    with contextlib.redirect_stderr(err):
+                        main(["--preview", "--content-file", draft] + extra)
+                    refused = False
+                except SystemExit as e:
+                    refused = e.code == 2 and "--preview cannot be combined" in err.getvalue()
+                check("preview: refuses " + extra[0], refused)
+        finally:
+            globals()["_request"] = saved_request
     # mass-mention pre-check: Discord permission order on synthetic ids (G = @everyone role)
     G, BOT, R = "g1", "u-bot", "r-bot"
     ME, ADM = MENTION_EVERYONE, ADMINISTRATOR
