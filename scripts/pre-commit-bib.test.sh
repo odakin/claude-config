@@ -123,6 +123,26 @@ else
 fi
 ln -sf "$HOOK" "$REPO/.git/hooks/pre-commit"
 
+# pipefail の grep -q の gate (check-pipefail-grep-q.py): pipefail の shell script に「変数を printf で grep -q に流す」 行を
+# 足す commit を止める (engine の BLOCK 見出しつき) / here-string は通る / CLAUDE_PIPEFAIL_GREP_Q_GUARD=0 で通る
+# (= 止めたのがこの gate) / コマンドの出力を流す形は警告を出して通る。 述語の SoT = engine の docstring。
+# fixture は単一引用符の中に書く (この file 自体が gate に当たらないように)。
+PGQ_BAD="$(printf '%s\n' '#!/usr/bin/env bash' 'set -o pipefail' 'printf "%s" "$x" | grep -q y')"
+PGQ_OK="$(printf '%s\n' '#!/usr/bin/env bash' 'set -o pipefail' 'grep -q y <<< "$x"')"
+PGQ_WARN="$(printf '%s\n' '#!/usr/bin/env bash' 'set -o pipefail' 'git diff --name-only | grep -q y')"
+if try_sh "$PGQ_BAD"; then
+  ng "pipefail の下で変数を grep -q に流す行を足す commit が通ってしまった"
+else
+  case "$OUT" in *"check-pipefail-grep-q: BLOCK"*) ok "pipefail の下で変数を grep -q に流す行を足す commit を pre-commit-bib が止める (engine の BLOCK 見出しつき)";; *) ng "止まったが engine の見出しが無い (別の gate?): $(printf '%s' "$OUT" | head -3)";; esac
+fi
+if try_sh "$PGQ_OK"; then ok "here-string の commit は通る"; else ng "here-string の commit が止まった: $(printf '%s' "$OUT" | head -3)"; fi
+if try_sh "$PGQ_BAD" CLAUDE_PIPEFAIL_GREP_Q_GUARD=0; then ok "escape hatch (CLAUDE_PIPEFAIL_GREP_Q_GUARD=0) で通る = 止めたのはこの gate"; else ng "escape hatch でも止まる: $(printf '%s' "$OUT" | head -3)"; fi
+if try_sh "$PGQ_WARN"; then
+  case "$OUT" in *"check-pipefail-grep-q: 警告"*) ok "コマンドの出力を grep -q に流す行は警告を出して通る";; *) ng "コマンドの出力の形で警告が出ない";; esac
+else
+  ng "コマンドの出力の形で commit が止まった: $(printf '%s' "$OUT" | head -3)"
+fi
+
 # 学生の識別子の gate (check-student-identifiers.py): この test だけの架空の一覧を env で渡し、 学生の姓を含む新しい path /
 # 氏名と学籍番号を足した行を止める / 識別子の無い commit は通る / CLAUDE_STUDENT_ID_GUARD=0 で通る (= 止めたのがこの gate) /
 # engine が見出しなしで落ちても commit は止めず 1 行出す / 壊れた一覧 (exit 3 + 見出し) では止めない。 述語の SoT = engine の docstring。

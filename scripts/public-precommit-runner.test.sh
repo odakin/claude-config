@@ -310,6 +310,17 @@ expect_named "pass-unbraced-multibyte-var-braced" 0 "run.sh" "$UMV_OK"
 CLAUDE_UNBRACED_MB_VAR_GUARD=0 expect_named "pass-unbraced-multibyte-var-escape-hatch-proves-which-gate" 0 "run.sh" "$UMV_BAD"
 
 # --------------------------------------------------------------------
+# pipefail の grep -q の gate (check-pipefail-grep-q.py): pipefail の shell script に「変数を printf で grep -q に流す」 行を
+# 足す commit を止める。 述語の SoT = check-pipefail-grep-q.py docstring。 ここは配線の固定 = 止まる / here-string は通る /
+# escape hatch で通る (= 止めたのがこの gate だという証拠)。 fixture は単一引用符の中に書く (この file 自体が gate に当たらないように)。
+# --------------------------------------------------------------------
+PGQ_BAD="$(printf '%s\n' '#!/usr/bin/env bash' 'set -o pipefail' 'printf "%s" "$x" | grep -q y')"
+PGQ_OK="$(printf '%s\n' '#!/usr/bin/env bash' 'set -o pipefail' 'grep -q y <<< "$x"')"
+expect_named "block-pipefail-grep-q" 1 "run.sh" "$PGQ_BAD"
+expect_named "pass-pipefail-grep-q-here-string" 0 "run.sh" "$PGQ_OK"
+CLAUDE_PIPEFAIL_GREP_Q_GUARD=0 expect_named "pass-pipefail-grep-q-escape-hatch-proves-which-gate" 0 "run.sh" "$PGQ_BAD"
+
+# --------------------------------------------------------------------
 # 学生の識別子の gate (check-student-identifiers.py): この test だけの架空の一覧を env で渡し、 学生の姓を含む新しい path と、
 # 氏名・学籍番号を足した行を止める / 識別子の無い file は通る / escape hatch で通る (= 止めたのがこの gate だという証拠)。
 # 述語の SoT = check-student-identifiers.py docstring。 学籍番号の形の値は実行時に組み立てる (この file 自体が gate に当たらないように)。

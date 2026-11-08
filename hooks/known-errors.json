@@ -183,6 +183,11 @@
       "match": "still has live work",
       "doc": "conventions/multi-session-coordination.md#tidy-after-child-turn-ends",
       "hint": "archive が相手の背景の作業 (見張り・Monitor・計算) か配達待ちの message で断られた疑い。 同じ turn に打ち直さず、 `child-wrap-check.py <相手>` が名指したものに合わせて動く (その節の (7))"
+    },
+    {
+      "match": "write error: Broken pipe",
+      "doc": "conventions/shell-env.md#pipefail-grep-q-sigpipe",
+      "hint": "pipefail の下で grep -q が早く読み終え、 書き手 (printf / echo) が閉じた pipe に書いて一致を黙って落とした疑いなので、 here-string (grep -q … <<< \"$x\") か -q を外して >/dev/null に直す (check-pipefail-grep-q.py --paths <file> で形を探す)"
     }
   ]
 }

@@ -465,6 +465,24 @@ if [ -f "$UMV_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
   fi
 fi
 
+# pipefail の下で変数・file を grep -q に pipe で流す形 (変数を printf / echo で流す・file を cat で流す) の gate (grep -q が
+# 最初の一致で読み終えると、 書き終わっていない書き手が閉じた pipe に書いて死に、 入力が約 64 KB を越えると一致したのに偽になる)。
+# 述語・escape hatch (CLAUDE_PIPEFAIL_GREP_Q_GUARD=0) の SoT = check-pipefail-grep-q.py docstring、
+# 規約 = conventions/shell-env.md#pipefail-grep-q-sigpipe。 コマンドの出力を流す形は警告を出すだけ (commit は止めない)。
+# 止めるのは「exit 1 かつ engine の BLOCK 見出し」 のときだけ。 見出しの無い非 0 (engine の異常終了) は 1 行出して通す。
+PGQ_ENGINE="$(dirname "$0")/check-pipefail-grep-q.py"
+if [ -f "$PGQ_ENGINE" ] && command -v python3 >/dev/null 2>&1; then
+  pgq_rc=0
+  pgq_out="$(python3 "$PGQ_ENGINE" --staged 2>&1)" || pgq_rc=$?
+  [ -n "$pgq_out" ] && printf '%s\n' "$pgq_out" >&2
+  if [ "$pgq_rc" -eq 1 ] && grep -q 'check-pipefail-grep-q: BLOCK' <<< "$pgq_out"; then
+    exit 1
+  fi
+  if [ "$pgq_rc" -ne 0 ] && ! grep -q 'check-pipefail-grep-q:' <<< "$pgq_out"; then
+    echo "⚠️ pre-commit: pipefail の grep -q の検査が異常終了した (rc=${pgq_rc}) — この commit では走っていない (commit は止めない)。 確認: python3 ${PGQ_ENGINE} --selftest" >&2
+  fi
+fi
+
 # SESSION.md の形の gate (= 案件ごとの現在地 + 正本への link。 日付を見出しにした節・commit hash・messageId・経緯を詰めた
 # 1 行・200 行を超えて育つ commit を止める。 README の自称正本 = 公開 repo では warn / CLAUDE.md の「SESSION・README に書け」 = warn)。
 # 述語・閾値・escape hatch (CLAUDE_SESSION_SHAPE_GUARD=0) の SoT = check-session-shape.py docstring、 規約 = CONVENTIONS.md#session-no-durable-record。
