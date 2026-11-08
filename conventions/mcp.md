@@ -19,6 +19,7 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
 - **複数 MCP がある場合**: セッションの deferred tools 一覧で同一サービスの MCP が何個あるか確認し、上記方法 (alias 名 / Calendar は list_calendars / アプリ内蔵 connector は自分宛 mail 読み) で UUID→アカウントの対応を把握する
 - **UUID→アカウント対応表は MCP 設定リポに保持**: 各 MCP 設定リポ (例: `gmail-mcp-config`) の CLAUDE.md または SESSION.md に UUID→アカウントの対応を記録する。memory には書かない (machine-local で cross-machine 不整合を招く。詳細: [docs/convention-design-principles.md §5](../docs/convention-design-principles.md#memory-positioning))。新規セッションで対応表が不明・古ければ、上記方法で UUID→account を照合し、差分を MCP 設定リポに追記する
 - **アカウント一覧の正本**: 各 MCP 設定リポの CLAUDE.md を参照（各プロジェクトリポの CLAUDE.md にはハードコードしない）
+- <a id="search-result-cap"></a>**検索の件数が上限 (`maxResults`) と同じなら、 結果は切れている**: Gmail の検索の結果は新しい順に並ぶ (実測) = 返った中で一番古い日付が、 見たい期間の始まりより前かを見る。 届いていなければ、 期間を割るか語を絞って引き直してから「この期間に無い」 と書く (実測: 上限ちょうどの件数が直近の数か月の無関係な便で埋まり、 見たかった前の期間が 1 件も返っていなかった)。 上の「0 件」 の扱いと同じく、 見た範囲を書く
 
 ## <a id="claude-mcp-project-resolution"></a>`claude mcp` の project 解決ルール (注意)
 

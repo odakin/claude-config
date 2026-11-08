@@ -339,6 +339,9 @@ manual transcribe で snapshot を作る方針は (a) transcription error、(b) 
   **1 段組で桁位置に意味がある** PDF。実測 (2026-09、41 pp の 2 段組 preprint): `-layout` 版は脚注と本文が
   交互に並んで grep の前後関係が信用できず、無指定版で読み直した。1 本の PDF から両方作って使い分けてよい
   (`pdftotext -layout x.pdf x-layout.txt; pdftotext x.pdf x-flow.txt`)。
+- ⚠️ <a id="pdftotext-drops-math-layout"></a>**`pdftotext` の文字層は式の分数と上下の配置を落とす** (分数の分子・分母が行から消える = 位置エネルギーの式の係数が消えた、 実測)。
+  式を照らすときは頁を画像にして読み (`pdftoppm -r 150 -f N -l N -png x.pdf out`)、 文字層は語の検索と散文の原文を写すのにだけ使う。
+  図の説明文を読み順の版 (無指定) から切り出すと、 図の軸の目盛りの数字が説明文の頭に混ざる = 切り出しの始まりを説明文の最初の語に合わせる (実測)。
 - 長い `grep` の出力は harness が tool-results dir に退避することがある (= 封じた review では読めない path)。
   文献照合の grep は `| head -40` で切って本文に残す。
 
