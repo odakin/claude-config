@@ -95,6 +95,8 @@
 - **[check-paper-prose.mutants.json](check-paper-prose.mutants.json)** — check-paper-prose.py の selftest のうち節の頭のイタリックの文の検査 (I1) の foil に歯があることを mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[check-paper-prose.py](check-paper-prose.py)** — Prose gates for LaTeX manuscripts: appendix order by first main-text reference, italic section leads, sentence length, position words, strong-word inventory.
 - **[check-pii-filenames.py](check-pii-filenames.py)** — 個人情報が file 名に出ている追跡 file を検出する。
+- **[check-pipefail-grep-q.mutants.json](check-pipefail-grep-q.mutants.json)** — check-pipefail-grep-q.py の selftest の foil に歯があることを、 述語・伏せ方・段の切り方・終了値の一部を外した mutant 12 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
+- **[check-pipefail-grep-q.py](check-pipefail-grep-q.py)** — pipefail の下の shell script で、 変数や file を `grep -q` に pipe で流す形 (`printf '%s' "$x" | grep -q …`) を見つける: commit gate の段 (--staged、 足した行の違反で exit 1) + fleet の棚卸し (--tree) (`grep -q` が最初の一致で読み終えると、 書き終わっていない書き手が閉じた pipe に書いて死に、 pipefail の下では一致したのに偽になる。 入力が pipe の容量 〔macOS で約 64 KB〕 を越えたときだけ起きる)。
 - **[check-preamble-aliases.py](check-preamble-aliases.py)** — flag raw notation where the preamble defines an alias.
 - **[check-public-marker.py](check-public-marker.py)** — Are the public-repo leak gates switched on? Lists local clones whose GitHub repo is public but lack .claude/public-repo.marker (no public pre-commit gate runs), clones marked public whose repo is private, and marked clones whose gate hooks are not installed on this machine; --fix-hooks installs them; --selftest.
 - **[check-remote-control-auth.py](check-remote-control-auth.py)** — Remote Control サーバーの auth を **この機械で** 診断する。

@@ -1,0 +1,105 @@
+{
+  "_comment": "check-pipefail-grep-q.py の selftest の foil に歯があることを、 述語・伏せ方・段の切り方・終了値の一部を外した mutant 12 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 expect_pass は、 その foil が他の foil の失敗に引きずられずに判定していることを見る。",
+  "target": "check-pipefail-grep-q.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "  FAIL ",
+  "pass_marker": "  PASS ",
+  "mutants": [
+    {
+      "name": "--staged が足した行に絞らない (既存の当たりまで出して、 触っていない行で commit を止める)",
+      "pairs": [
+        ["            if any(ln in added for ln in range(h.span[0], h.span[1] + 1)):", "            if True:"]
+      ],
+      "expect_fail": ["足した行だけを出す"],
+      "expect_pass": ["足した違反の行で exit 1"]
+    },
+    {
+      "name": "pipefail の無い file も見る (正しく動く形まで止める)",
+      "pairs": [
+        ["    if not (assume_pipefail or sets_pipefail(masked) or is_library(path)):", "    if False:"]
+      ],
+      "expect_fail": ["pipefail の無い file は見ない", "set +o pipefail と setopt no_pipe_fail"],
+      "expect_pass": ["止める: printf '%s'"]
+    },
+    {
+      "name": "読み込まれる部品を見ない (呼び元の pipefail の下で動く照合器を取り逃す)",
+      "pairs": [
+        ["    return \"lib\" in parts[:-1] or name.startswith(\"lib\")", "    return False"]
+      ],
+      "expect_fail": ["部品 (lib/ の下)", "名前が lib で始まる部品"],
+      "expect_pass": ["lib/ の下でも .test."]
+    },
+    {
+      "name": "head を上限のある書き手として外さない",
+      "pairs": [
+        ["    if w == \"head\":\n        return None\n", ""]
+      ],
+      "expect_fail": ["上限のある書き手"],
+      "expect_pass": ["cat F | grep -q"]
+    },
+    {
+      "name": "+ の無い tail も file を全部流す書き手として止める",
+      "pairs": [
+        ["        return \"file\" if TAIL_UNBOUNDED_RE.search(\" \" + rest) else None", "        return \"file\""]
+      ],
+      "expect_fail": ["上限のある書き手"],
+      "expect_pass": ["cat F | grep -q"]
+    },
+    {
+      "name": "単一引用符の中を伏せない (bash -c '...' の文字列を code として読む)",
+      "pairs": [
+        ["            hide(i + 1, j)\n", "            pass\n"]
+      ],
+      "expect_fail": ["単一引用符の中 (bash -c"],
+      "expect_pass": ["here-string"]
+    },
+    {
+      "name": "段の始まりを入れ子の深さで見ない (printf \"$(cmd)\" の中の括弧で段を切る)",
+      "pairs": [
+        ["        if depth[j] == pd:\n            ch = masked[j]", "        if True:\n            ch = masked[j]"]
+      ],
+      "expect_fail": ["コマンドの置換を書き手に含む"],
+      "expect_pass": ["$(...) の中の形"]
+    },
+    {
+      "name": "引数を取る旗の後ろの文字も旗として読む (-eq を quiet にする)",
+      "pairs": [
+        ["            if ch in ARG_TAKING:\n                break", "            if False:\n                break"]
+      ],
+      "expect_fail": ["-eq は pattern が q"],
+      "expect_pass": ["-Fqx と -qm1"]
+    },
+    {
+      "name": "コマンドの出力の形も止める (警告にしない)",
+      "pairs": [
+        ["                (findings if h.kind != \"cmd\" else warns).append(format_hit(path, h))", "                findings.append(format_hit(path, h))"]
+      ],
+      "expect_fail": ["コマンドの出力の形は警告だけで exit 0"],
+      "expect_pass": ["足した違反の行で exit 1"]
+    },
+    {
+      "name": "heredoc の本文を伏せない (試験の材料の文字を code として読む)",
+      "pairs": [
+        ["                    hide(s, s + len(body))", "                    pass"]
+      ],
+      "expect_fail": ["heredoc の本文 (引用符つき・引用符なし)"],
+      "expect_pass": ["heredoc の後ろの行は見る"]
+    },
+    {
+      "name": "\\ の続き行の改行を残す (続き行で段を切って取り逃す)",
+      "pairs": [
+        ["            if i + 1 < n and data[i + 1] == 0x0A:\n                hide(i, i + 2, 0x20)", "            if i + 1 < n and data[i + 1] == 0x0A:\n                hide(i, i + 1, 0x20)"]
+      ],
+      "expect_fail": ["続き行は 1 つの pipeline"],
+      "expect_pass": ["行末の | の後の改行も"]
+    },
+    {
+      "name": "redirection の & (2>&1 / &>) を段の区切りと読む",
+      "pairs": [
+        ["            if ch == \"&\" and ((j > 0 and masked[j - 1] in \"<>\") or masked[j + 1:j + 2] == \">\"):", "            if False:"]
+      ],
+      "expect_fail": ["2>&1 と &>"],
+      "expect_pass": ["|& も pipe"]
+    }
+  ]
+}
