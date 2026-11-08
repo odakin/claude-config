@@ -130,3 +130,7 @@ sections:
     legacy: "16"
     level: 2
     title: "16. 原稿の書き手の番が別の session にある間に著者の裁定が出たら"
+  - id: parallel-drafting
+    legacy: "17"
+    level: 2
+    title: "17. 何人かの worker を並べて書かせる前に、 何の誤りを減らすために並べるかを書く"
