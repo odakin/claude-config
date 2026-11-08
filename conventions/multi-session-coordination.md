@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates) + 並列 session の開始時の一覧・turn 終わりの検査が同じ用事 (mail・台帳の項目・依頼) を求めるとき (#pending-item-claims) + Workflow (agent を並べる script) を組む・起動する・途中で止める・直して再開する前 (#workflow-fan-out) + 他の session の未 commit の変更が残る作業ツリーで test を回すとき (#verify-on-clean-export) + 子に仕事を渡すとき、 subagent か自分で締められる session かを選ぶ前 (#self-closing-delegate) + subagent に照合 (批判役・検算) を頼むとき (#subagent-work-on-record)
+when: 並列 AI session と同じ repo を触るとき + spawn/handoff・セッション宛て掲示板を設計するとき + 他 session が名乗った窓口・担当に従う・記録する前 (#board-role-claim-is-not-assignment) + 作ったものの検収を別 session に頼む・頼まれたとき (#review-handoff) + 並行した worker が同じ file の全文の候補を作ったとき (#parallel-full-text-candidates) + 並列 session の開始時の一覧・turn 終わりの検査が同じ用事 (mail・台帳の項目・依頼) を求めるとき (#pending-item-claims) + Workflow (agent を並べる script) を組む・起動する・途中で止める・直して再開する前 (#workflow-fan-out) + 他の session の未 commit の変更が残る作業ツリーで test を回すとき (#verify-on-clean-export) + 子に仕事を渡すとき、 subagent か自分で締められる session かを選ぶ前 (#self-closing-delegate) + subagent に照合 (批判役・検算) を頼むとき (#subagent-work-on-record) + 同じ仕事 (方針・文の起草・判定) を何人かの worker に並べて書かせる前・並べた成果を集約するとき (#parallel-drafting)
 category: harness-core
 summary: 同 user の並列 AI session を安全に協調させる規律 (= 同 path race 防御、明示 add、**同一 file は明示 add でも巻き込むので `git commit -- <path>` で index を経由しない (#staging-window-race、 hook が見る範囲も自分の path だけになる)**、**生成物の再生成はその防御を貫通する (#generated-file-contamination)**、**起きた後の追跡は commit の `Agent-Session:` + model/effort trailer (#session-provenance-trailer)**、handoff、Git immutable-event board の主体は session、提出と受領を分離、明示引継ぎ、project SoT へ昇格、**Workflow は起動の前に本数と波数を空回しで見積もり、 観点は 1 本の prompt に並べ、 script を直したら再開でなく済んだ結果を file で渡す (#workflow-fan-out)**)
 -->
@@ -1127,7 +1127,7 @@ agent ごとの model の書き方は [§10 の #workflow-agent-model](#workflow
 <a id="workflow-split-by-shared-input"></a>**agent の単位は「同じ入力を読む塊」 — 観点は 1 本の prompt に並べる**:
 
 - **既定**: 1 本の agent = 1 つの入力のまとまり (1 repo・1 群の file・1 文書)。 その入力について確かめる観点と項目は、 1 本の prompt に節として並べ、 結果は観点ごとの field で返させる (schema)。
-- **観点・票を別の agent に分けるのは、 独立が要るときだけにする**: (1) 盲検・cold-eyes (相手の結論や依頼者の見立てを見せない = [`cold-eyes-isolation.md`](cold-eyes-isolation.md)) (2) 同じ問いへの独立の票 (誤りが相関しないことに価値がある反証の票) (3) 1 本の context に入らない量 (4) 並行して別の file を書き換える (worktree)。 分けるときは script に `// workflow-lenses: independent — <理由>` を書き、 票の数 × 項目数が何波になるかを見積もる。
+- **観点・票を別の agent に分けるのは、 独立が要るときだけにする**: (1) 盲検・cold-eyes (相手の結論や依頼者の見立てを見せない = [`cold-eyes-isolation.md`](cold-eyes-isolation.md)) (2) 同じ問いへの独立の票 (誤りが相関しないことに価値がある反証の票) (3) 1 本の context に入らない量 (4) 並行して別の file を書き換える (worktree)。 分けるときは script に `// workflow-lenses: independent — <理由>` を書き、 票の数 × 項目数が何波になるかを見積もる。 同じ材料・同じ方針を渡した票は、 誤りが入力から来ると独立にならない = 掲示板の worker や子の session を並べて書かせる起草も同じ考えで設計する ([§17](#parallel-drafting))。
 - **実測**: 同じ項目を 2 つの観点 (今やれるか / 規則に触れないか) で別々に確かめた agent は、 読んだ file の約半分が重なった (file 名の Jaccard 0.47)。 打った command の重なりは 5% = 同じものを別の手順で読み直していた。 観点が別でも入力は同じなので、 独立が要らない観点は 1 本にまとめる。
 - **項目ごとに独立の票を回したいときは段で絞る**: まず入力ごとの 1 本で全項目を判定し、 疑わしい項目 (反証された・証拠が薄い) だけを次の段で独立に確かめる。 次の段の件数にも上限を置く。
 
@@ -1185,6 +1185,39 @@ const v = await agent(`${args.previous} を Read で全部読み、 label が re
 
 <a id="writer-turn-table"></a>**書き手が 2 つ以上あるときは、 番の表を最初に file に書く** — 順番を message で継ぎ足すと、 依頼元自身の伝え方が食い違う (実測)。 表 (何を・誰が・どの順で) を repo の plan に書いて SESSION から指し、 番を動かすときは表を直してから掲示板と message で出す。 「いま止まっているのは誰で、 誰の番か」 に表から答えられる形にする。 受け取りの文で次の作業に触れるときは、 「合図を待つ」 か「いま始める」 かを言い切る (実測: 受け取りの記録の未来形の 1 文を合図待ちと読んで、 worker が止まった)。
 
+## <a id="parallel-drafting"></a>17. 何人かの worker を並べて書かせる前に、 何の誤りを減らすために並べるかを書く
+
+同じ仕事 (方針・文の起草・判定) を何人かの worker に互いの成果を見せずに書かせ、 比べて 1 本を選ぶ・組み合わせると、 並べた数だけ確かになったように見える。 確かになるのは、 何本かの誤りが互いに独立で、 比べると誤りが浮くときだけ。 本節は [§15 の #workflow-split-by-shared-input](#workflow-split-by-shared-input) の「独立の票」 (誤りが相関しないことに価値がある反証の票) の考えを、 掲示板の worker や子の session を並べる起草に広げる。 同じ設計の仕事を並べて互いに合わない解が出る問題は [§6](#pilot-single-brain) で、 向きが逆 (あちらは解が散る、 こちらは誤りが揃う)。
+
+<a id="parallel-drafting-why"></a>**なぜ (実測)**: 2 つの vendor の worker を混ぜて並べ、 方針の段と起草の段を続けて担わせた返答書で、 受け手 (共著者) が誤りとした点は、 どれも並べた全部の版に共通にあったか、 worker を畳んだ後に入った。 版どうしの比べで拾えた直しは、 どれも一部の版にだけある違いだった。 壊れ方は 5 つ:
+
+1. **独立だったのは書き手だけ** — 互いの file を読ませなくても、 渡した材料・方針・自己点検の基準が同じなら、 違うのは言い回し・長さ・組み方だけで、 中身の誤りは全部の版に共通に入る。 材料の置き方が割り付け (どのメモがどの問いへの答えか) を示していると、 同じ割り付けが人数分出る。 中身を方針で固めた後の起草 (方針と食い違う文を書かせない・方針に無いことを足させない、 と縛った起草) では、 なおさら言い回ししか違わない。 vendor を混ぜても、 誤りが入力から来ると散らない。
+2. **比べは違う所しか拾わない** — 版どうしの比べで目に映るのは、 一部の版にだけある中身。 全部に共通の中身は「方針と合う」 の 1 行で通る。 方針に合うことは、 方針が受け手の問いに答えていることを示さない。 選ぶ基準を簡潔さにすると、 共通の誤りを持ったまま一番短い版が残る。
+3. **少数意見が集約で落ちた** — 1 本だけが書いた警告や「決めてもらうこと」 は、 比べの表では違いの 1 行にしかならず、 採否の記録なしに落ちた (実測: 子の 1 人が挙げた「共著者が自分でやると言った部分を、 こちらで作るか」 の問いが本人への問いに入らなかった。 起草者の 1 人が書いた並べ替えの危険を、 集約者は一度は採り、 後で前の判断も警告も引かずに逆にした)。
+4. **最後の変更のとき、 書いた者でない目がいなかった** — 並べた子を締めて畳んだ後に、 集約者が自分で直しを当てて送ると、 並べた意味が最後の 1 手で消える。 これは送る前の照合票の 3 で塞がる ([`rebuttal-letter.md#pre-send-verification-sheet`](rebuttal-letter.md#pre-send-verification-sheet)) ので、 本節では扱わない。
+5. **照合の役が、 役の形を変えたときに消えた** — 1 人が書き、 もう 1 人は書かずに照合する案が、 照合に回す予定の人にも書かせる、 という本人の答えで起草の人数の話に置き換わり、 照合の役が無くなることを依頼元が言わなかった。 本人の答えは人数の話で、 照合の役を退けたわけではない。
+
+加えて**時間**: N 本を読むには N 倍の時間が要る。 集約者と本人の時間が増えないなら、 並べるほど 1 本あたりの読みが薄くなる (実測: 会議と並行して並べた回で、 1 本あたりの確かめは短く、 本人は並べた方針の束と未決の点の一覧を会議の合間に受けた)。
+
+<a id="parallel-drafting-rule"></a>**規則**:
+
+1. **並べる前に、 何の誤りを減らすために並べるかを依頼書に書く** — 書けないなら並べない。 言い回しの選択肢がほしいだけなら、 そう書き、 中身を確かめた数には数えない。
+2. <a id="write-one-doubt-one"></a>**中身 (方針) が決まった後の文の起草は、 1 人が書き、 もう 1 人 (書き手と別の vendor) は書かずに疑う、 を既定にする** — 書く人を増やしても誤りは散らないので、 増やすなら疑う目に回す。
+   - 疑う役に渡すもの = 受け手の原文 (referee の報告など)、 共著者の原文 (チャットの発言を含む)、 確定した方針の各項。 書き手の草稿は、 方針への判定を出させた後に渡す (先に渡すと、 草稿の読みで方針を読む)。
+   - 問いは 3 つで、 方針の項目ごとに 1 行で返させる: 方針の各項は受け手の文 (問い・指摘) への答えになっているか / 共著者の文をどう扱うか (間に文を入れる・置き換える・共著者が自分でやると言った部分) / 受け手はどこを突くか。
+   - これは書き終えた草稿への照らし ([`rebuttal-letter.md#answer-fit-check`](rebuttal-letter.md#answer-fit-check) の批判役) と同じ問いを、 文を書く前の方針に当てる段。 草稿の後の照らしは今のまま別に立てる: 疑う役は方針を読んでいるので、 方針を知らない批判役の代わりにならない。
+   - 別の vendor にするのは、 同じ model の盲点を減らすため。 入力から来る誤りは vendor では減らないので、 独立は渡す物と問いでつくる。 別の vendor を使えない環境では、 別の session に同じ物と問いを渡す。
+3. **独立に書かせて並べるのは、 中身が決まっていない段 (方針の段) で、 各自に違う問い・違う材料を持たせるときにする** — 例 (架空): 1 人は受け手の文から、 1 人は共著者のメモから、 1 人は原稿から答えを組む。 依頼書を人数分書く手間がかかるので、 全体の方針のような大きい仕事に使う。 同じ材料で並べるなら、 1 のとおり何の違いを見るために並べるかを書く。
+4. <a id="parallel-collation-table"></a>**集約の表に 3 つを置く** (方針の段・起草の段とも): (a) 何本にも共通の中身 (「共通 = 比べでは確かめていない」 の印を付ける) (b) 違い (c) 子が挙げた「決めてもらうこと」「決まっていない点」 の全件と、 採否とその理由。 本人への問いを絞るときも、 (c) から落とした項目には理由を 1 行書く。 採った警告を後で逆にするなら、 前の判断と警告を引いて書く。 選ぶ基準は、 受け手の問いへの答えになっているか (2 の問い) を先にし、 簡潔さは後。
+5. **本人が人数・役の形を変えたら、 消える役を 1 行で言い、 残すなら誰が持つかを推してから従う** — 本人の指示が人数の話でも、 それで消える役 (照合・疑う役) は、 依頼元が言わないと誰も言わない。 言うのは消える役だけで、 本人の指示には従う。
+6. **共著者が自分でやると言った部分は、 作る前に共著者に聞く** — 並べた子がこの問いを挙げたら 4 の (c) に残す。 返答書での形 = [`rebuttal-letter.md#coauthor-will-rebuild`](rebuttal-letter.md#coauthor-will-rebuild)、 既存部分を直す了解の一般則 = [`shared-repo.md#primary-author-consent`](shared-repo.md#primary-author-consent)。
+
+**費用**: 起草の段の窓が減る (並べた人数 → 2)。 集約者が読む草稿は 1 本、 疑う役の表は 1 枚。 疑う役の 1 段の分だけ遅くなる。 集約の表は 1 回ごとに数分の手間。 共著者に聞く間、 その部分の案は止まる。
+
+**捨てた案**: 並べる人数を増やす・vendor を混ぜる (入力から来る誤りは、 人数でも vendor でも散らない) / 並べるのをやめて 1 人で全部 (疑う役まで消える) / 起草者の自己点検の項目を足す (共通の入力から来る誤りは、 同じ点検を何人に足しても共通のまま) / 会議の最中は起草させない (時間は原因の一部だが、 会議の後でも同じ設計なら同じ誤りが入る。 共著者がその場にいる間は、 共著者にしか答えられない問いを先に聞くほうが効く) / 並べた子を送るまで締めさせない (文脈を持つ子に最後の変更を見せられるが、 窓が開いたままになる。 書いた者でない目は照合票の 3 で別に立てられる)。
+
+**検算・実装を並べるときも問いは同じ** = 誤りがどの軸で出るか (実装・入力・規約) を先に言い、 その軸で違えられる並べ方にする (別 vendor の独立の実装 = [`physics-verification-cycle.md#cross-vendor-red-team`](../../ai-collaboration/conventions/physics-verification-cycle.md#cross-vendor-red-team))。
+
 ## 関連
 
 - cross-session operational board の generic pattern: §13
@@ -1192,6 +1225,7 @@ const v = await agent(`${args.previous} を Read で全部読み、 label が re
 - worker task の切り方 (sizing 述語 + orientation 前払い) = spec author 宛の規律: §9 (output 側の死機構は [`output-cap-death-loop.md`](output-cap-death-loop.md))
 - delegate を main と別 model で走らせる選択 (alias 不能 / custom agent / headless CLI): §10 (bug 回避のみを目的にした model 切替は [`tool-call-robustness.md`](tool-call-robustness.md))
 - worktree (隔離) か ローカルか = 並列変更の隔離 vs live 反映のトレードオフ: §8
+- 何人かを並べて書かせる前に何の誤りを減らすかを書く・1 人が書き別 vendor が疑う・集約の表: §17
 - collaborator (= 他 user) との Git race / branching: [`shared-repo.md`](shared-repo.md)
 - 4 軸 sweep + sweep goal alignment (= 「✓ pass」 closure を禁じる規律): [`CONVENTIONS.md` §3](../CONVENTIONS.md)
 - review / audit の goal は error 発見 規律: 同上 §3 「sweep / review / audit の goal alignment」
