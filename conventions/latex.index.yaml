@@ -277,7 +277,7 @@ sections:
     title: "チャット本文での位置参照"
   - id: latex-in-chat-codeblock
     level: 2
-    title: "チャットで LaTeX / 数式を渡すときは code block で（コピペ保全）"
+    title: "転記用の LaTeX ソースを渡すときは code block で（コピペ保全）"
   - id: md-math-preview
     level: 2
     title: "数式入りの Markdown を人に見せるときは HTML にして browser で開く (右パネルは数式を描かない)"

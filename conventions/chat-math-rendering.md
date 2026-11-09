@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: チャットの返事に数式を書くとき (読ませる数式・コピペ用の LaTeX の両方) + 返事の数式が生の TeX のまま表示されたとき + 数式の書き方の規則を CLAUDE.md や template に置くとき
 category: harness-core
-summary: チャットの数式の書き方は返事を読む画面で決まる。 既定 = desktop の Code タブで読む返事は LaTeX で書く。 Code タブは KaTeX で描くので、 描ける区切りと KaTeX にあるコマンドだけを使う (`\[…\]`・physics パッケージ・行またぎ・表のセルの `|` は生表示)。 `$…$` と `\(…\)` には描画器の gate がある (`$…$` = 60 文字超・数式記号の無い式・裸の英字 4 連続は生表示 / `\(…\)` = 直前が半角空白でない・中身に数式記号が無いと生表示) = 本体の判定式を読んで確定。 規則を知っているだけでは防げないので、 Stop hook chat-math-render-guard.py が返事を本体と同じ式で検査して止める。 CLI のターミナル・headless・Remote Control (未測定)・読む画面が分からないときは Unicode。 コピペ用の LaTeX は code block
+summary: 読む画面ごとの数式表示の正本。 Codex app と Claude desktop の Code タブでは LaTeX の組版表示を既定にし、ソースを渡す場合と分ける。 Codex の文中・複数行の独立式、Claude 固有の区切り・inline gate と Stop hook、非描画・未測定の画面での Unicode を、それぞれの節で扱う
 -->
 # チャットでの数式の書き方
 
@@ -9,10 +9,11 @@ summary: チャットの数式の書き方は返事を読む画面で決まる�
 
 ## <a id="by-surface"></a>画面ごとの書き方
 
-**既定 = 返事を Code タブで読むなら、 数式は LaTeX で書く** ([#code-tab-katex](#code-tab-katex) の規則で。 描けない式は Stop hook [`chat-math-render-guard.py`](../hooks/chat-math-render-guard.py) が止めて書き直させる)。 Unicode で書くのは、 数式を描かない画面と、 読む画面が分からないとき:
+**既定 = Codex app または Claude desktop の Code タブで読む返事では、文中・独立式とも LaTeX で組版表示する。** 読むための数式と、ソースの書き方を説明・転記するための code 表示を分ける。区切りと制約は画面別の節を適用し、別アプリの制限を流用しない。Unicode で書くのは、数式を描かない画面と、読む画面が分からないとき:
 
 | 画面 | 数式の描画 | 書き方 |
 |---|---|---|
+| Codex app の会話本文 | 文中・複数行の独立式を描く | **LaTeX** を [#codex-app-katex](#codex-app-katex) の規則で (既定) |
 | Claude desktop app の Code タブ | KaTeX で描く | **LaTeX** を [#code-tab-katex](#code-tab-katex) の規則で (既定) |
 | Claude Code CLI (ターミナル) | 描かない | `_` / `^` + Unicode (σ ∂ ℏ ∫ など) |
 | headless (`claude -p`・定期実行の出力) | 読む画面が別 (log・通知) | Unicode |
@@ -20,9 +21,30 @@ summary: チャットの数式の書き方は返事を読む画面で決まる�
 | 画面が決まらない (複数の画面で読まれる・どれか分からない) | — | Unicode (どの画面でも崩れない) |
 | コピペして `.tex` に貼る LaTeX 片 | (読ませない) | code block = [latex.md#latex-in-chat-codeblock](latex.md#latex-in-chat-codeblock) |
 
-Code タブかどうかは、 system prompt の記述 (Claude desktop app の Code tab で動いている旨) か、 環境変数 `CLAUDE_CODE_ENTRYPOINT` (= `claude-desktop`) で分かる。 Remote Control でスマホから読む session のように、 同じ session でも読む画面が変わることがある。 迷ったら Unicode。
+Claude の Code タブかどうかは、system prompt の記述か、環境変数 `CLAUDE_CODE_ENTRYPOINT` (= `claude-desktop`) で分かる。Codex app はそのアプリの文脈か本人の確認で特定し、Claude の環境変数では判定しない。Remote Control のように同じ session でも読む画面が変わることがある。画面が分からなければ Unicode。
 
-## <a id="code-tab-katex"></a>Code タブで LaTeX を書くときの規則
+## <a id="codex-app-katex"></a>Codex app で LaTeX を書くときの規則
+
+**読ませる数式は、文中も独立式も会話本文で組版する。** 画像化・PDF 化・Unicode への置き換えを既定にしない。
+
+- 文中は `\( … \)`、独立式は別行の `\[` と `\]` で囲む。複数行はその内側に `\begin{aligned} … \\ … \end{aligned}` を置く。
+- 読ませる数式を backtick や通常の code block に入れない。区切りやソースを説明するときは code 表示にし、**それを数式表示の試験と数えない**。転記用のソースを求められたら [latex.md#latex-in-chat-codeblock](latex.md#latex-in-chat-codeblock) に従う。
+- リポジトリのプリアンブルに依存する独自マクロは、標準の数式コマンドへ展開して示す。
+- 表示が崩れたら、同じ画面で短い式を、通常の本文として出し直す。文中と独立式、元テキストの改行、区切りを一つずつ変えて照合する。アプリ内に描画の code があることだけで実画面での成功を断定せず、一度の失敗だけで非対応と断定しない。
+- Claude の Code タブの `\[…\]` 非対応・inline gate・Stop hook は次節の専用規則であり、Codex app の判定には使わない。
+
+表示の確認範囲 (macOS、アプリ版 `26.1029.61003`): 文中の不等式・分数・根号・添字を含む式と、同じ二行のガウス積分を次の形で出したものが画面で組版された。確認はこの画面と例の範囲であり、全アプリ版・全 LaTeX コマンドへの保証ではない。
+
+| 独立式の形 | 確認した表示 |
+|---|---|
+| 別行の `\[ … \]` 内に、改行した `aligned` | 二行の組版 |
+| `\[\begin{aligned} … \end{aligned}\]` を元テキストでは一行に置く | 二行の組版 |
+| 別行の `$$ … $$` 内に `aligned` | 二行の組版 |
+| `math` 指定の fenced block 内に `aligned` | 二行の組版 (通常のソース表示用 code block と区別する) |
+
+最初の表示失敗の原因は未特定で、同じ形での再試行は表示された。画像による回避を標準手順にせず、上の本文表示を使う。
+
+## <a id="code-tab-katex"></a>Claude の Code タブで LaTeX を書くときの規則
 
 実測 (Code タブでの画面の試験と、 アプリ本体 2.26454.2・2.31226.0・2.31226.1 の描画器の code の照合):
 
@@ -61,4 +83,4 @@ Code タブかどうかは、 system prompt の記述 (Claude desktop app の Co
 
 ## <a id="where-to-put-the-rule"></a>規則をどこに置くか
 
-規則の本文は本 doc だけに置き、 CLAUDE.md や template には要点と本 doc への参照だけを書く (同じ本文を複数の file に写すと、 片方だけ直る)。 個人層が既定 ([#by-surface](#by-surface) = Code タブなら LaTeX) と違う書き方を決めるとき (例: どの画面で読まれるかが session ごとに決まらない人が、 Code タブでも Unicode にする) は、 違える理由と範囲を個人層の規則に書き、 どの画面が何を描くかの事実は本 doc に合わせる。
+規則の本文は本 doc だけに置き、CLAUDE.md・AGENTS.md・template には読む契機と本 doc への参照を書く (同じ本文を複数の file に写すと、片方だけ直る)。個人層が [画面別の既定](#by-surface) と違う書き方を決めるときは、違える理由と範囲を個人層の規則に書き、どの画面が何を描くかの事実は本 doc に合わせる。

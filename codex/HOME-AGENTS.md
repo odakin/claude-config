@@ -1,8 +1,7 @@
 # Global Codex bootstrap
 
-This layer-1 file is the instruction kernel loaded before task-specific
-sources. Keep trigger conditions and pointers here; keep rule bodies in their
-canonical documents. The contract is
+This layer-1 kernel holds triggers and pointers; rule bodies stay in their
+canonical documents. Contract:
 `codex/PARITY.md#instruction-entrypoint-kernel`.
 
 Resolve layer-1 pointers from the `claude-config` repository containing the
@@ -23,6 +22,9 @@ Use the `claude-config-conventions` skill for this Codex integration and treat
 `codex/PARITY.md#codex-integration-sot` as its technical source of truth. Use
 `claude-config-operations` for covered runbooks and reusable scripts, and
 `codex-automation-routing` for reminders, schedules, monitors, and follow-ups.
+
+Before writing math replies, read and apply
+`conventions/chat-math-rendering.md#by-surface`.
 
 ## Delivery and handoff
 

@@ -20,6 +20,12 @@ Machine-specific install, configuration, and Hook-trust state are layer-4
 facts: inspect them with `scripts/audit-codex-integration.sh` instead of
 recording them in this repository.
 
+The global bootstrap routes mathematical replies to
+[chat-math-rendering.md](../conventions/chat-math-rendering.md#codex-app-katex),
+which owns the app's rendering defaults and verified examples. Keep that
+surface-specific rule there; do not import Claude's renderer restrictions or
+its math Stop hook into Codex.
+
 `scripts/check-codex-integration.py --check` enforces the mechanically
 verifiable part of this arrangement in local checks and CI: canonical pointers,
 the absence of durable Codex implementation detail in `SESSION.md`, known
