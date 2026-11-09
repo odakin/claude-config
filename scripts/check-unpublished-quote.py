@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""check-unpublished-quote.py — Stop verbatim text of unpublished documents (your private manuscripts) from being committed to a public repo: matches quoted spans and long prose runs in the staged added lines or a commit message against hashed word shingles of the declared sources; --selftest.
+r"""check-unpublished-quote.py — Stop verbatim text of unpublished documents (your private manuscripts, and third-party records you keep privately) from being committed to a public repo: matches quoted spans, long prose runs and Japanese character runs in the staged added lines or a commit message against hashed shingles of the declared sources; --selftest.
 
 Why (2026-09-13): examples in public convention docs quoted unpublished manuscripts, three times in one week,
 although a written rule forbade it (claude-config CLAUDE.md#non-identifier-content-leak). Every existing gate
@@ -7,7 +7,7 @@ looks for identifiers (names, e-mail, repo names, paths) or for Japanese text of
 manuscript sentences passed all of them. This gate covers the verbatim part only: a paraphrase of an
 unpublished result still passes, and the written rule still applies to it.
 
-Two detectors, calibrated by replaying the public repos' history (--replay):
+Three detectors, calibrated by replaying the public repos' history (--replay):
   quoted span  = text inside `backticks`, "double quotes", “curly quotes” or the Japanese brackets 「…」 / 『…』
                  (each pair of a nesting is its own span, so 「… 『inner』 …」 checks the inner quotation too)
                  with >= QUOTE_MIN_WORDS words and >= QUOTE_MIN_CONTENT content words, every QUOTE_K-word window
@@ -15,8 +15,22 @@ Two detectors, calibrated by replaying the public repos' history (--replay):
                  documents quote with the brackets; until 2026-10-19 an English sentence inside them passed.
   prose run    = PROSE_K consecutive content words (>= 3 letters, not a function word) that occur in a source,
                  outside fenced code blocks. Catches a copied sentence or paragraph without quote marks.
+  japanese run = JA_K consecutive characters (whitespace removed, NFKC) holding >= JA_MIN kana/kanji that occur in
+                 a source, over consecutive added lines: quoted or not, and inside fenced code blocks too (a record
+                 pasted as an example in a ``` block is the leak this is for). A leading list / quote / comment
+                 marker of each line is dropped before the lines are joined. The two word detectors never see
+                 Japanese (it breaks their runs), so until 2026-11-09 a copied Japanese sentence of a third party
+                 passed every gate of a public repo (measured). JA_K and JA_MIN are the values
+                 check-confidential-leak.py calibrated for its Japanese fingerprints. Replaying the full history of
+                 every public repo, a real copy was caught and the false positives were of two forms (measured):
+                 the headings of an official form that a source also holds (settled with `public:` below) and one
+                 sentence kept both in a public doc and in a private record (settled by keeping it in one place).
+                 A fragment shorter than JA_K passes.
 Text is normalised first: LaTeX comments, math, preamble, citation/label keys and control sequences are removed,
-Japanese text breaks a run. Shingles present in REPO_DF_MAX or more top-level dirs are boilerplate and ignored.
+and so is code in a LaTeX source (\texttt / \lstinline / \mintinline, \verb, a brace group that holds \ttfamily, an
+environment that starts with \ttfamily, verbatim / lstlisting / minted / alltt environments: a shell command quoted
+in a manuscript matched the same command in a public CI file as a prose run, measured). Shingles present in REPO_DF_MAX or more top-level dirs are boilerplate
+and ignored (each detector separately).
 
 Where it runs: public-precommit-runner.sh (staged) and commit-msg-leak-guard-runner.sh (message), and only in
 repos with .claude/public-repo.marker. Private repos are never checked (they quote their own manuscripts).
@@ -26,6 +40,12 @@ $CLAUDE_UNPUBLISHED_SOURCES, or ~/.claude/unpublished-sources.txt). One directiv
     discover: ~/Claude .tex      files with this suffix under the non-public top-level dirs of ~/Claude
     include: ~/Dropbox/drafts/**/*.tex    extra sources (glob, ** allowed)
     exclude: */published-articles/*       fnmatch on the absolute path (published or third-party text)
+    public: ~/forms/kit/sample.tex sha256:<hex>   one source file whose text is known to be public (an official form
+                                          or kit kept unchanged next to the owner's filled copy): its shingles are
+                                          subtracted from the index while the file's SHA-256 is the declared one. Ignored
+                                          unless it is one of the sources, and ignored inside a public repo (a live public
+                                          file would hide its own future content). The real path is checked (a symlink
+                                          does not get round either rule)
 No config, or no readable source = not armed = exit 0 (fail-open). `--check-wiring` says which, via canaries.
 The index is cached per source file under ~/.cache/claude-unpublished-index (hashes only, never text). Every cache
 file is written to a temp name and renamed into place and carries its payload's length + digest, so gates running at
@@ -54,6 +74,7 @@ from __future__ import annotations
 import argparse
 import array
 import bisect
+import bisect
 import fnmatch
 import glob
 import hashlib
@@ -65,6 +86,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
@@ -85,7 +107,10 @@ QUOTE_K = 5
 QUOTE_MIN_WORDS = 5
 QUOTE_MIN_CONTENT = 3
 REPO_DF_MAX = 3
-INDEX_VERSION = 5            # 5: cache files are atomic + self-describing (length + digest), see Index
+JA_K = 24                    # characters per Japanese window (whitespace removed, NFKC); = check-confidential-leak.py
+JA_MIN = 4                   # kana + kanji in a window, fewer = an ASCII window (the word detectors' business)
+INDEX_VERSION = 6            # 5: cache files are atomic + self-describing (length + digest), see Index / 6: the ja family
+                             #    and code removed from LaTeX sources
 UNION_MAGIC = b"UQIDX5\n"
 MARKER = Path(".claude") / "public-repo.marker"
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "claude-unpublished-index"
@@ -107,6 +132,20 @@ KEY_CMD_RE = re.compile(r"\\(?:cite[a-z]*|[cC]ref|labelcref|eqref|ref|autoref|pa
                         r"includegraphics|url|href|bibliography|bibliographystyle|usepackage|documentclass)"
                         r"\*?(?:\[[^\]]*\])*\{[^}]*\}")
 CS_RE = re.compile(r"\\[A-Za-z@]+\*?")
+# code in a LaTeX source is not prose: a shell command quoted in a manuscript matched the same command in a public CI
+# file (measured). Removed whole: \texttt{..} / \lstinline{..} (one argument), \mintinline{lang}{..} (two), \verb|..|,
+# a brace group that holds \ttfamily ({\small\ttfamily ..}), an environment that starts with \ttfamily
+# (\begin{quote}\small\ttfamily .. \end{quote}: the switch ends with its environment, the form of the measured false
+# positive) and verbatim-like environments. A \ttfamily anywhere else is left as text = stays indexed.
+CODE_ENV_RE = re.compile(r"\\begin\{(verbatim|Verbatim|lstlisting|minted|alltt)\*?\}.*?\\end\{\1\*?\}", re.S)
+CODE_CMD_RE = re.compile(r"\\verb\*?([^A-Za-z\s]).*?\1"
+                         r"|\\(?:texttt|lstinline)\*?(?:\[[^\]]*\])?\{[^{}]*\}"
+                         r"|\\mintinline\*?(?:\[[^\]]*\])?\{[^{}]*\}\{[^{}]*\}"
+                         r"|\{[^{}]*?\\ttfamily\b[^{}]*\}")
+CODE_TT_ENV_RE = re.compile(r"\\begin\{([A-Za-z]+\*?)\}(?:\[[^\]]*\])?(?:\s*\\(?:tiny|scriptsize|footnotesize|small|"
+                            r"normalsize|large|Large)\b)*\s*\\ttfamily\b.*?\\end\{\1\}", re.S)
+# a leading list / quote / heading / comment marker of a target line (dropped before lines are joined for the ja family)
+LEAD_MARK_RE = re.compile(r"^\s*(?:(?:[>#*+\-]+|\d+[.)]|//|%|;)\s*)+")
 COMMENT_RE = re.compile(r"(?<!\\)%.*")
 ACK_RE = re.compile(r"\\(?:(?:sub)*section\*?\{Acknowledge?ments?\}|begin\{acknowledge?ments?\}|acknowledge?ments?\b)"
                     r".*?(?=\\(?:sub)*section|\\appendix|\\bibliography|\\begin\{thebibliography\}|\\end\{document\}|$)", re.S | re.I)
@@ -114,7 +153,7 @@ QUOTE_RE = re.compile(r"`([^`\n]{8,400})`|\"([^\"\n]{8,400})\"|\u201c([^\u201d\n
 JP_QUOTE_CLOSE = {"\u300d": "\u300c", "\u300f": "\u300e"}   # \u300d closes \u300c / \u300f closes \u300e (nested pairs: bracket_spans)
 QUOTE_SPAN_MIN, QUOTE_SPAN_MAX = 8, 400                        # the same span length as QUOTE_RE
 BREAK = None
-FAMILIES = ("prose", "quote")
+FAMILIES = ("prose", "quote", "ja")
 
 
 # ----------------------------------------------------------------------------- text -> word stream
@@ -124,6 +163,9 @@ def normalize(text: str, latex: bool) -> str:
         if m:
             text = text[m.end():]
         text = COMMENT_RE.sub("", text)
+        text = CODE_ENV_RE.sub(" ", text)
+        text = CODE_TT_ENV_RE.sub(" ", text)
+        text = CODE_CMD_RE.sub(" ", text)
         text = ACK_RE.sub(" ", text)
         text = MATH_BLOCK_RE.sub(" ", text)
     text = DISPLAY_RE.sub(" ", text)
@@ -147,6 +189,27 @@ def tokens(text: str, latex: bool = False, family: str = "prose") -> list:
         if family == "quote" or is_content(w):
             out.append(w)
     return out
+
+
+def ja_text(text: str, latex: bool = False) -> str:
+    """The text the ja family reads: the same normalisation as the word families, then NFKC, whitespace removed."""
+    return "".join(unicodedata.normalize("NFKC", normalize(text, latex)).split())
+
+
+def _is_ja(ch: str) -> bool:
+    return "぀" <= ch <= "ヿ" or "一" <= ch <= "鿿" or ch == "\u3005"   # 々
+
+
+def ja_shingles(s: str):
+    """Yield (start index, hash) for every JA_K-character window of s that holds >= JA_MIN kana/kanji."""
+    if len(s) < JA_K:
+        return
+    c = [0]
+    for ch in s:
+        c.append(c[-1] + _is_ja(ch))
+    for i in range(len(s) - JA_K + 1):
+        if c[i + JA_K] - c[i] >= JA_MIN:
+            yield i, shingle_hash([s[i:i + JA_K]], "ja")
 
 
 def shingle_hash(words, family: str = "prose") -> int:
@@ -173,7 +236,7 @@ def read_config(path):
     p = Path(os.path.expanduser(str(path)))
     if not p.is_file():
         return None
-    cfg = {"discover": [], "include": [], "exclude": []}
+    cfg = {"discover": [], "include": [], "exclude": [], "public": []}
     for raw in p.read_text(encoding="utf-8", errors="replace").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line or ":" not in line:
@@ -217,6 +280,35 @@ def source_files(cfg) -> list:
     return sorted(f for f in found if not any(fnmatch.fnmatch(f, x) for x in excl))
 
 
+def public_files(cfg, sources=()):
+    """Files declared with `public: <file> sha256:<hex>` = a source file whose text is known to be public (an official form
+    or kit kept unchanged next to the owner's filled copy). Their shingles are subtracted from the index. One file per
+    line, pinned to its content: a file that changed since it was declared is not subtracted (the owner may have written
+    into it), a file that is not one of the sources is not subtracted (the line is for public text a source holds, not a
+    way to take any text out of the index), and a file inside a public repo is ignored (a live public file would subtract
+    its own future content, so a leak written into it would hide). The real path is checked, so a symlink does not get
+    round these. All fail towards blocking. Returns (subtracted files, [(file, reason not subtracted)])."""
+    real_sources = {os.path.realpath(s) for s in sources}
+    ok, skipped = [], []
+    for line in cfg.get("public", []):
+        parts = line.split()
+        if len(parts) != 2 or not parts[1].startswith("sha256:"):
+            skipped.append((line, "not `<file> sha256:<hex>`"))
+            continue
+        f = os.path.realpath(os.path.expanduser(parts[0]))
+        if not os.path.isfile(f):
+            skipped.append((f, "missing"))
+        elif any((p / MARKER).is_file() for p in Path(f).parents):
+            skipped.append((f, "inside a public repo"))
+        elif f not in real_sources:
+            skipped.append((f, "not a source file"))
+        elif hashlib.sha256(Path(f).read_bytes()).hexdigest() != parts[1][len("sha256:"):].lower():
+            skipped.append((f, "changed since it was declared"))
+        else:
+            ok.append(f)
+    return sorted(set(ok)), skipped
+
+
 def repo_label(path: str, cfg) -> str:
     for d in cfg["discover"]:
         root = Path(os.path.expanduser(d.split()[0]))
@@ -235,8 +327,9 @@ def top_dir(path: str, cfg) -> str:
 class Index:
     def __init__(self, cfg, prose_k=PROSE_K, cache_dir=CACHE_DIR, df_max=REPO_DF_MAX):
         self.cfg, self.cache, self.df_max = cfg, Path(cache_dir), df_max
-        self.k = {"prose": prose_k, "quote": QUOTE_K}
+        self.k = {"prose": prose_k, "quote": QUOTE_K, "ja": JA_K}
         self.files = source_files(cfg)
+        self.public, self.public_skipped = public_files(cfg, self.files)
         self.per_file = {f: {} for f in FAMILIES}
         self.union = {f: array.array("Q") for f in FAMILIES}
 
@@ -280,8 +373,11 @@ class Index:
         if a is not None:
             return a
         text = Path(path).read_text(encoding="utf-8", errors="replace")
-        stream = tokens(text, latex=path.endswith(".tex"), family=family)
-        a = array.array("Q", sorted({h for _, h in shingles(stream, self.k[family], family)}))
+        if family == "ja":
+            a = array.array("Q", sorted({h for _, h in ja_shingles(ja_text(text, latex=path.endswith(".tex")))}))
+        else:
+            stream = tokens(text, latex=path.endswith(".tex"), family=family)
+            a = array.array("Q", sorted({h for _, h in shingles(stream, self.k[family], family)}))
         raw = a.tobytes()
         try:
             self.cache.mkdir(parents=True, exist_ok=True)
@@ -310,12 +406,13 @@ class Index:
 
     def _manifest(self) -> str:
         stamps = []
-        for f in self.files:
-            try:
-                st = os.stat(f)
-            except OSError:
-                continue
-            stamps.append([f, st.st_size, st.st_mtime_ns])
+        for kind, files in (("source", self.files), ("public", self.public)):
+            for f in files:
+                try:
+                    st = os.stat(f)
+                except OSError:
+                    continue
+                stamps.append([kind, f, st.st_size, st.st_mtime_ns])
         blob = json.dumps([INDEX_VERSION, self.k, self.df_max, stamps]).encode()
         return hashlib.sha1(blob).hexdigest()
 
@@ -353,6 +450,14 @@ class Index:
                 prev, count = h, 1
             if prev is not None and count < self.df_max:
                 out.append(prev)
+            pub = set()
+            for f in self.public:      # text declared public (an official form, a kit): not a leak where it recurs
+                try:
+                    pub.update(self._file_hashes(f, family))
+                except OSError:
+                    continue
+            if pub:
+                out = array.array("Q", (h for h in out if h not in pub))
             self.union[family] = out
         try:
             self.cache.mkdir(parents=True, exist_ok=True)
@@ -374,7 +479,7 @@ class Index:
         """Drop per-file cache pairs of sources that are gone or re-keyed (older INDEX_VERSION, moved file) once
         they have not been touched for a month. Runs only after a union rebuild, so it costs nothing on a hit."""
         live = {hashlib.sha1(f"{INDEX_VERSION}:{fam}:{self.k[fam]}:{f}".encode()).hexdigest()
-                for fam in FAMILIES for f in self.files}
+                for fam in FAMILIES for f in self.files + self.public}
         cutoff = time.time() - max_age_days * 86400
         try:
             entries = list(self.cache.iterdir())
@@ -390,7 +495,7 @@ class Index:
                 pass
 
     def armed(self) -> bool:
-        return bool(self.union["prose"]) or bool(self.union["quote"])
+        return any(bool(self.union[f]) for f in FAMILIES)
 
     def contains(self, family: str, h: int) -> bool:
         u = self.union[family]
@@ -479,6 +584,50 @@ def prose_runs(lines, index: Index, skip=frozenset()):
     return [(where[a], where[b + k - 1], b - a + k, h) for a, b, h in runs]
 
 
+def ja_runs(lines, index: Index, skip=frozenset()):
+    """lines = [(line number, text)]. Returns [(first line, last line, characters in the run, hash)]: the Japanese
+    windows of a block of consecutive lines found in a source, overlapping windows merged into one run. A line in
+    `skip` or a gap in the line numbers ends the block (a sentence wrapped over consecutive lines is one block). The
+    leading marker of each line (`> `, `- `, `1. `, `# `, `// `) is dropped first, or a quoted or listed sentence
+    wrapped into lines shorter than JA_K would never match (measured)."""
+    out = []
+
+    def block(chars: str, starts: list) -> None:
+        offsets = [o for o, _ in starts]          # starts = [(offset of the line's first character, line number)]
+
+        def line_at(i: int) -> int:
+            return starts[bisect.bisect_right(offsets, i) - 1][1]
+
+        cur = None
+        for i, h in ja_shingles(chars):
+            if not index.contains("ja", h):
+                continue
+            if cur and i < cur[1] + JA_K:
+                cur[1] = i
+            else:
+                if cur:
+                    out.append((line_at(cur[0]), line_at(cur[1] + JA_K - 1), cur[1] - cur[0] + JA_K, cur[2]))
+                cur = [i, i, h]
+        if cur:
+            out.append((line_at(cur[0]), line_at(cur[1] + JA_K - 1), cur[1] - cur[0] + JA_K, cur[2]))
+
+    chars, starts, n, prev = [], [], 0, None
+    for ln, text in lines:
+        if ln in skip or (prev is not None and ln != prev + 1):
+            block("".join(chars), starts)
+            chars, starts, n, prev = [], [], 0, None
+            if ln in skip:
+                continue
+        piece = ja_text(LEAD_MARK_RE.sub("", text))
+        if piece:
+            starts.append((n, ln))
+            chars.append(piece)
+            n += len(piece)
+        prev = ln
+    block("".join(chars), starts)
+    return out
+
+
 def bracket_spans(text: str) -> list:
     """Contents of every 「…」 / 『…』 pair on a line, nested pairs included (outer and inner are separate spans).
     A closer pairs with the nearest open bracket of its own kind; openers left unclosed inside it are dropped."""
@@ -523,14 +672,20 @@ def quoted_hits(lines, index: Index, skip=frozenset(), min_words=QUOTE_MIN_WORDS
 
 def scan_lines(path, lines, index, full_text=None, min_words=QUOTE_MIN_WORDS):
     skip = fenced_lines(full_text) if (full_text is not None and path.endswith((".md", ".markdown"))) else frozenset()
+    published = frozenset()
     if full_text is not None:
         # 公刊済みの著作の書誌 (arXiv の要旨・題名、 公開先 link だけの行) は定義上公開済み
-        skip = set(skip) | _published_lines(path, full_text)
+        published = frozenset(_published_lines(path, full_text))
+        skip = set(skip) | published
     found = []
     for a, b, n, h in prose_runs(lines, index, skip):
         found.append((path, a, b, f"prose run of {n} content words", "prose", h))
     for ln, n, h in quoted_hits(lines, index, skip, min_words):
         found.append((path, ln, ln, f"quoted span of {n} words", "quote", h))
+    # the ja family reads fenced blocks too: 24 characters of kana/kanji are not code, and a record pasted as an example
+    # in a ``` block is the leak it is for (the word families skip fences for code false positives)
+    for a, b, n, h in ja_runs(lines, index, published):
+        found.append((path, a, b, f"japanese run of {n} characters", "ja", h))
     return found
 
 
@@ -587,13 +742,16 @@ def scan_message(cfg, path, cwd=None, index=None) -> int:
 
 # ----------------------------------------------------------------------------- wiring check with canaries
 def _canaries(index: Index):
-    prose = quote = None
+    prose = quote = ja = None
     for f in index.files:
         try:
             text = Path(f).read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         latex = f.endswith(".tex")
+        if ja is None and index.union["ja"]:
+            s = ja_text(text, latex)
+            ja = next((s[i:i + JA_K] for i, h in ja_shingles(s) if index.contains("ja", h)), None)
         if prose is None:
             st = tokens(text, latex, "prose")
             prose = next((" ".join(st[s:s + index.k["prose"]]) for s, h in shingles(st, index.k["prose"], "prose")
@@ -606,9 +764,9 @@ def _canaries(index: Index):
                         index.contains("quote", x) for _, x in shingles(win, QUOTE_K, "quote")):
                     quote = " ".join(win)
                     break
-        if prose and quote:
+        if prose and quote and (ja or not index.union["ja"]):
             break
-    return prose, quote
+    return prose, quote, ja
 
 
 def check_wiring(cfg, cfg_path, through_hooks=False) -> int:
@@ -623,9 +781,12 @@ def check_wiring(cfg, cfg_path, through_hooks=False) -> int:
     if not index.armed():
         print(f"NOT ARMED [unpublished-quote]: config {cfg_path} lists source files but they yield no text")
         return 1
-    prose, quote = _canaries(index)
+    prose, quote, ja = _canaries(index)
     results = {}
-    for name, text in (("prose", prose and f"An example: {prose}."), ("quote", quote and f"Example: `{quote}`.")):
+    cases = [("prose", prose and f"An example: {prose}."), ("quote", quote and f"Example: `{quote}`.")]
+    if index.union["ja"]:   # no Japanese source on this machine = the ja family is simply not armed (not a failure)
+        cases.append(("ja", ja and f"例: {ja}。"))
+    for name, text in cases:
         if not text:
             results[name] = False
             continue
@@ -644,8 +805,11 @@ def check_wiring(cfg, cfg_path, through_hooks=False) -> int:
                     sys.stderr = old
     ok = all(results.values())
     print(f"{'ARMED' if ok else 'BROKEN'} [unpublished-quote]: {len(index.files)} source file(s), "
-          f"{len(index.union['prose'])} prose + {len(index.union['quote'])} quote shingles; canaries: "
-          + ", ".join(f"{k} {'blocked' if v else 'NOT blocked'}" for k, v in results.items()))
+          f"{len(index.union['prose'])} prose + {len(index.union['quote'])} quote + {len(index.union['ja'])} ja "
+          f"shingles" + (f" ({len(index.public)} public file(s) subtracted)" if index.public else "") + "; canaries: "
+          + ", ".join(f"{k} {'blocked' if v else 'NOT blocked'}" for k, v in results.items())
+          + "".join(f"\n  ⚠️ public: not subtracted ({why}): {repo_label(f, cfg)}" for f, why in index.public_skipped)
+          + ("" if index.union["ja"] else " (ja: no Japanese source text, not armed)"))
     if ok and through_hooks:
         hooks = check_through_hooks(quote)
         hooks_ok = all(hooks.values())
@@ -726,22 +890,25 @@ def scan_tree(cfg, repo, index=None, out=print) -> int:
 def replay(cfg, repo, max_commits, prose_k, quote_min) -> int:
     index = Index(cfg, prose_k=prose_k).build()
     rc, revs = _git(["rev-list", f"--max-count={max_commits}", "HEAD"], cwd=repo)
-    counts = {"prose": 0, "quote": 0}
+    counts = {f: 0 for f in FAMILIES}
     for sha in revs.split():
         rc, diff = _git(["show", "--no-color", "-U0", "--format=", "--no-ext-diff", sha], cwd=repo)
         hits = []
         for path, lines in added_lines_from_diff(diff).items():
             full = _git(["show", f"{sha}:{path}"], cwd=repo)[1] if (path.endswith((".md", ".markdown")) or _published_applies(path)) else None
             hits += scan_lines(path, lines, index, full, quote_min)
+        rc, msg = _git(["show", "-s", "--format=%B", sha], cwd=repo)   # the message, as commit-msg sees it
+        hits += scan_lines("(commit message)", list(enumerate([l for l in msg.split("\n") if not l.startswith("#")], 1)),
+                           index, None, quote_min)
         if hits:
             _, subj = _git(["log", "-1", "--format=%h %cs %s", sha], cwd=repo)
             print(subj.strip()[:100])
             for path, a, b, kind, family, h in hits:
                 counts[family] += 1
                 print(f"    {path}:{a}-{b} {kind} <- {', '.join(index.sources_of(family, h))}")
-    print(f"prose_k={prose_k} quote_min={quote_min}: prose {counts['prose']}, quote {counts['quote']} in "
-          f"{len(revs.split())} commit(s); index {len(index.union['prose'])} + {len(index.union['quote'])} shingles "
-          f"from {len(index.files)} file(s)")
+    print(f"prose_k={prose_k} quote_min={quote_min} ja_k={JA_K}: prose {counts['prose']}, quote {counts['quote']}, "
+          f"ja {counts['ja']} in {len(revs.split())} commit(s); index {len(index.union['prose'])} + "
+          f"{len(index.union['quote'])} + {len(index.union['ja'])} shingles from {len(index.files)} file(s)")
     return 0
 
 
@@ -778,14 +945,38 @@ Then those numbers come from one careful toy run.
         (base / "privproj").mkdir()
         (base / "privproj" / "paper.tex").write_text(manuscript)
         (base / "privproj" / "notes.tex").write_text("Gardening tomatoes during humid summers in coastal villages.\n")
+        # synthetic Japanese only: a third-party record (declared with include:) and a LaTeX source with a comment
+        kansou = "紫色の象が大理石の噴水のまわりで静かに踊っていた夜のことを今もよく覚えています。"
+        jcomment = "青い硝子の灯台が凍った海の上でゆっくりと回り続けていた冬の夜。"
+        jack = "この研究は寛大な財団の助成によって支えられていることにここで深く感謝したい。"
+        (base / "privproj" / "records.yaml").write_text(f"- comment: {kansou}\n")
+        (base / "privproj" / "jmemo.tex").write_text(f"\\begin{{document}}\n% {jcomment}\n本文はこれだけ。\n\\end{{document}}\n")
         (base / "pubrepo" / ".claude").mkdir(parents=True)
         (base / "pubrepo" / MARKER).write_text("")
         (base / "pubrepo" / "copy.tex").write_text("We show that the lattice regulator preserves the hidden symmetry.\n")
+        # an official kit (public text) that the owner filled in: the kit's sentence is in both files
+        kit = "研究計画の最終年度の前の年度に応募する場合に書く事項をここに記入すること。"
+        own = "私たちの新しい提案は灰色の雲の上に浮かぶ小さな庭園の観測から始まる。"
+        (base / "privproj" / "filled.tex").write_text(f"\\begin{{document}}\n{kit}\n{own}\n\\end{{document}}\n")
+        (base / "kitdir").mkdir()
+        (base / "kitdir" / "sample.tex").write_text(f"\\begin{{document}}\n{kit}\n\\end{{document}}\n")
+        (base / "pubrepo" / "kit-public.tex").write_text(f"\\begin{{document}}\n{own}\n\\end{{document}}\n")
         for n in ("b1", "b2", "b3"):
             (base / n).mkdir()
-            (base / n / "ack.tex").write_text("This work was supported by the generous funding agency grant number.\n")
+            (base / n / "ack.tex").write_text(f"This work was supported by the generous funding agency grant number.\n{jack}\n")
+        # not sources: a file holding the record's sentence, and a symlink to a file inside the public repo
+        (base / "outside").mkdir()
+        (base / "outside" / "stray.tex").write_text(f"\\begin{{document}}\n{kansou}\n\\end{{document}}\n")
+        (base / "outside" / "kit-link.tex").symlink_to(base / "pubrepo" / "kit-public.tex")
         conf = base / "sources.txt"
-        conf.write_text(f"discover: {base} .tex\nexclude: */notes.tex\n")
+        sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()  # noqa: E731
+        conf.write_text(f"discover: {base} .tex\ninclude: {base}/privproj/*.yaml\nexclude: */notes.tex\n"
+                        f"public: {base}/kitdir/sample.tex sha256:{sha(base / 'kitdir' / 'sample.tex')}\n"
+                        f"public: {base}/pubrepo/kit-public.tex sha256:{sha(base / 'pubrepo' / 'kit-public.tex')}\n"
+                        f"public: {base}/kitdir/*.tex\n"
+                        f"exclude: */outside/*\n"
+                        f"public: {base}/outside/stray.tex sha256:{sha(base / 'outside' / 'stray.tex')}\n"
+                        f"public: {base}/outside/kit-link.tex sha256:{sha(base / 'outside' / 'kit-link.tex')}\n")
         cache = base / "cache"
         cfg = read_config(conf)
 
@@ -897,6 +1088,67 @@ Then those numbers come from one careful toy run.
                ["inner text here", "a 『inner text here』 b", "y z w v u", "x「y z w v u」"])
         expect("bracket_spans: an opener left unclosed inside a pair is dropped, a stray closer is ignored",
                bracket_spans("」「abc 『def ghi jkl」") == ["abc 『def ghi jkl"])
+        jl = lambda *ls: list(enumerate(ls, 1))  # noqa: E731
+        expect("ja: a Japanese sentence of a declared record is a japanese run in a public file",
+               [f[4] for f in scan_lines("x.md", jl(f"受講生の声: {kansou}"), idx, "")] == ["ja"])
+        expect("ja: ... also inside 「」", [f[4] for f in scan_lines("x.md", jl(f"感想 「{kansou}」 より"), idx, "")] == ["ja"])
+        half = len(kansou) // 2
+        expect("ja: ... and wrapped over two consecutive lines (one run, lines 1-2)",
+               half < JA_K and [(f[1], f[2]) for f in scan_lines("x.md", jl(kansou[:half], kansou[half:]), idx, "")] == [(1, 2)])
+        expect("ja: ... but not across non-consecutive lines", ja_runs([(1, kansou[:half]), (5, kansou[half:])], idx) == [])
+        expect("ja: a fragment one character shorter than JA_K passes", ja_runs([(1, kansou[:JA_K - 1])], idx) == [])
+        expect("ja: ... foil: a fragment of exactly JA_K is caught", len(ja_runs([(1, kansou[:JA_K])], idx)) == 1)
+        expect("ja: spaces inside the copy do not matter", bool(ja_runs([(1, " ".join(kansou))], idx)))
+        expect("ja: a window with fewer than JA_MIN kana/kanji is not a Japanese window",
+               list(ja_shingles("abcdefghijklmnopqrstu" + "日本語")) == [])
+        expect("ja: ... foil: JA_MIN of them make one", len(list(ja_shingles("abcdefghijklmnopqrst" + "日本語の"))) == 1)
+        expect("ja: a Japanese LaTeX comment of a source is not indexed", ja_runs([(1, jcomment)], idx) == [])
+        expect("ja: Japanese boilerplate in 3 top-level dirs is dropped", ja_runs([(1, jack)], idx) == [])
+        expect("ja: ... foil: with the filter relaxed it is indexed", bool(ja_runs([(1, jack)], idx4)))
+        expect("public: the text of a declared public file (an official kit) is subtracted from the index",
+               ja_runs([(1, kit)], idx) == [])
+        expect("... foil: the owner's own sentence in the same filled form is still indexed", bool(ja_runs([(1, own)], idx)))
+        expect("public: a declaration pointing into a public repo is ignored (the own sentence there stays indexed above)",
+               any(f.endswith("sample.tex") for f in idx.public) and not any("pubrepo" in f for f in idx.public)
+               and any("pubrepo" in f and "public repo" in why for f, why in idx.public_skipped))
+        expect("public: a line without a pinned sha256 (a glob) subtracts nothing",
+               any(why.startswith("not `") for _, why in idx.public_skipped) and len(idx.public) == 1)
+        expect("public: a declared file that is not a source is ignored (the record's sentence stays indexed)",
+               any(f.endswith("stray.tex") and why == "not a source file" for f, why in idx.public_skipped)
+               and bool(ja_runs([(1, kansou)], idx)))
+        expect("public: a symlink to a file inside a public repo is ignored (its real path is checked)",
+               sum(f.endswith("kit-public.tex") and "public repo" in why for f, why in idx.public_skipped) == 2)
+        kit_file = base / "kitdir" / "sample.tex"
+        kit_text = kit_file.read_text()
+        kit_file.write_text(kit_text.replace("\\end{document}", f"{own}\n\\end{{document}}"))
+        idx_changed = Index(cfg, cache_dir=cache).build()      # the same cache: the union must be rebuilt
+        expect("public: a declared file that changed since it was declared is not subtracted (the kit sentence is back)",
+               not idx_changed.public and bool(ja_runs([(1, kit)], idx_changed))
+               and any("changed" in why for _, why in idx_changed.public_skipped))
+        kit_file.write_text(kit_text)
+        fenced = f"```yaml\n- comment: {kansou}\n```"
+        expect("ja: ... also inside a fenced block of a markdown file (the word families skip fences, this one does not)",
+               [f[4] for f in scan_lines("x.md", jl(*fenced.split("\n")), idx, fenced)] == ["ja"])
+        expect("ja: ... and wrapped into short quoted or listed lines (the leading markers are dropped)",
+               [(f[1], f[2]) for f in scan_lines("x.md", jl("> " + kansou[:half], "> " + kansou[half:]), idx, "")] == [(1, 2)]
+               and [(f[1], f[2]) for f in scan_lines("x.md", jl("- " + kansou[:half], "  " + kansou[half:]), idx, "")] == [(1, 2)])
+        expect("ja: 々 counts as a kanji", _is_ja("々") and not _is_ja("、"))
+        expect("ja: an unrelated Japanese sentence passes", ja_runs([(1, "雨の日には図書館の窓から見える古い時計塔の針がいつも少しだけ遅れて見える。")], idx) == [])
+        code_tex = (r"\begin{document}Setup: {\small\ttfamily toolctl mkenv .sandbox; .sandbox/run/fetch add --quiet frobnicate}"
+                    r" \texttt{make check all targets quickly} \verb|run every single selftest now| finish."
+                    r" \begin{quote}\small\ttfamily wobble --ledger grommets\end{quote} closing."
+                    "\n\\begin{verbatim}\nsome literal block words here\n\\end{verbatim}\n\\end{document}")
+        expect("code in a LaTeX source (a brace group with \\ttfamily, \\texttt, \\verb, verbatim) is not indexed",
+               not {"frobnicate", "targets", "selftest", "literal", "grommets"} & set(tokens(code_tex, latex=True))
+               and {"setup", "finish", "closing"} <= set(tokens(code_tex, latex=True)))
+        expect("... foil: the same text read as a target (not LaTeX) keeps those words",
+               {"frobnicate", "targets", "selftest", "literal", "grommets"} <= set(tokens(code_tex)))
+        narrow_tex = (r"\begin{document}\begin{quote}A plain quotation \ttfamily velvet lanterns remain indexed\end{quote}"
+                      r" \texttt{make}{trailing prose words} \mintinline{python}{import frobnicate}\end{document}")
+        nt = set(tokens(narrow_tex, latex=True))
+        expect("... but a \\ttfamily that neither opens an environment nor sits in a brace group, and a group after"
+               " \\texttt's one argument, stay indexed",
+               {"velvet", "lanterns", "trailing", "prose"} <= nt and "frobnicate" not in nt)
         ack_tex = "\\begin{document}Body text here.\n\\subsection*{Acknowledgement}We thank the generous funding agency.\n\\section{Next}Tail words.\n\\end{document}"
         expect("acknowledgments are not indexed, and indexing resumes at the next section",
                "funding" not in tokens(ack_tex, latex=True) and {"body", "tail"} <= set(tokens(ack_tex, latex=True)))
@@ -908,6 +1160,9 @@ Then those numbers come from one careful toy run.
         msg = base / "MSG"
         msg.write_text("Explain: the lattice regulator preserves the hidden symmetry of the toy model at every order\n# comment\n")
         expect("a commit message with a verbatim sentence blocks", quiet(scan_message, cfg, msg, cwd=pub, index=idx) == 1)
+        jmsg = base / "MSGJA"
+        jmsg.write_text(f"感想を引く: {kansou}\n")
+        expect("ja: a commit message with the Japanese sentence blocks", quiet(scan_message, cfg, jmsg, cwd=pub, index=idx) == 1)
         empty = Index({"discover": [], "include": [], "exclude": []}, cache_dir=base / "c0").build()
         expect("no source = not armed = exit 0", scan_staged(None, cwd=pub, index=empty) == 0)
         with open(os.devnull, "w") as devnull:
@@ -916,7 +1171,7 @@ Then those numbers come from one careful toy run.
                 wrc = check_wiring(cfg, conf)
             finally:
                 sys.stdout = old_out
-        expect("--check-wiring arms and both canaries block through the real index", wrc == 0)
+        expect("--check-wiring arms and the canaries (prose, quote, ja) block through the real index", wrc == 0)
 
         tree = base / "treerepo"
         (tree / ".claude").mkdir(parents=True)

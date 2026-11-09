@@ -192,14 +192,22 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
 公開 repo の規約の「実例」 に未公開原稿の文をほぼ逐語で写した commit が 1 週間で 3 回 landed したのは、 この隙間だった。
 
 - **target は公開 repo だけ** (`.claude/public-repo.marker`)。 原稿 repo や決定台帳は原稿を引くのが仕事なので対象にしない。
-- **源の宣言は個人層**: `discover: ~/Claude .tex` (= 非公開 repo の `.tex` 全部。 新しい原稿 repo も自動で入る) と、
-  公刊済み・第三者の本文を外す `exclude:`。 script には置き場所を書かない。
-- **検出は 2 つ**。 較正で分かったのは、 漏れた例示の大半が**引用符に入った 5〜9 語の短い断片**だったこと
+- **源の宣言は個人層**: `discover: ~/Claude .tex` (= 非公開 repo の `.tex` 全部。 新しい原稿 repo も自動で入る)、
+  非公開に持つ第三者の記録 (受講生の感想など) を足す `include:`、 公刊済み・第三者の本文を外す `exclude:`、
+  源の file にも入っている公開の文 (owner が記入した公式の様式の見出しなど) を索引から差し引く `public: <file> sha256:<hex>`
+  (file ごとに中身で固定する = 書き換えた file は差し引かない。 源の file でないもの・公開 repo の中の file は宣言しても無視する、
+  symlink は実体の path で見る)。 script には置き場所を書かない。
+- **検出は 3 つ**。 英語の 2 つ (下の 2 行) の較正で分かったのは、 漏れた例示の大半が**引用符に入った 5〜9 語の短い断片**だったこと
   (内容語の shingle だけでは 7 語で 1 件も拾えなかった):
   - **quoted span** = backtick・二重引用符・日本語の鉤括弧 「…」『…』 の中の、 空白区切りで 5 語以上 (内容語 3 以上) の文で、 5 語の窓が全部源に在るもの。
     鉤括弧は入れ子の外側と内側を別々の span として見る (「… 『内側』 …」 の内側も見る)。
   - **prose run** = 引用符なしで、 内容語 6 個の連続が源と一致するもの (markdown の fence の中は除く)。
-- **正規化**: LaTeX の comment・数式・preamble・引用 key・制御綴り・謝辞の節を除き、 日本語は run を切る。
+  - **japanese run** (2026-11-09〜) = 空白を除き NFKC で揃えた 24 字のうちかな漢字が 4 字以上の窓が源と一致するもの (引用符の有無に依らず、
+    続いた追加行はつないで見る)。 英語の 2 つは日本語を語の切れ目として捨てるので、 第三者の日本語の文の写しはそれまでどの段も通った
+    (実測)。 24 字より短い断片は通る。
+- **正規化**: LaTeX の comment・数式・preamble・引用 key・制御綴り・謝辞の節と、 LaTeX の源の code (`\texttt`・`\verb`・`\ttfamily` を
+  含む `{…}` の group・verbatim 系の環境) を除き、 日本語は英語の 2 つの run を切る (日本語は japanese run が見る)。 code を除くのは、 源の報告に引いた
+  環境構築の command が公開 repo の CI の file と同じ語の並びになった誤検出のため (実測)。
   3 つ以上の top-level dir に現れる shingle は定型として捨てる。 索引は hash だけを cache に置く。
 - **較正** (公開 2 repo の全履歴 1,667 commit に replay):
 
@@ -219,6 +227,12 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
   書き換えた。 鉤括弧の中で日本語と英文が混ざる span を英文の断片ごとに見る案は、 同じ履歴で当たりが path の誤検出 1 件だけだったので入れていない。
   一般則 = sweep の「無い」 は形ごとに陽性対照を通してから信じる ([`../docs/convention-design-principles.md#sweep-null-needs-per-form-control`](../docs/convention-design-principles.md#sweep-null-needs-per-form-control))。
   較正の陽性対照は、 書き手の言語で使う引用の形ごとに 1 つずつ selftest に置く。
+- <a id="japanese-run-calibration"></a>**japanese run の較正** (2026-11-09): 公開 repo 全部の全履歴 (commit の追加行と message) に replay すると、
+  本物の漏洩の写しは当たり (実測)、 誤検出は 2 つの形だった = (1) 公式の様式の見出しが、 源 (owner が記入した様式) と層1 の道具の
+  selftest の両方にある → `public:` で公式の kit の file を宣言して差し引いた (2) owner の書いた 1 文が、 公開の規約と非公開の記録の
+  両方にある → 記録の側を規約の節への参照に置き換えた (同じ文を 2 か所に持たない)。 窓を 16 字にすると当たりは約 6 倍になり、
+  増えた分は定型句 (挨拶・一般的な言い回し) だった = 24 字を採った。 日本語の窓は markdown の code fence の中も見る (24 字のかな漢字は
+  code でなく、 記録の書式の例として fence に貼った 1 件が漏洩の形そのもの)。
 
 - **捕まえないもの = 言い換え** (上の表どおり)。 未公開の結果を自分の言葉で書いた例示は通るので、
   規律 ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak)) はそのまま要る。
@@ -383,10 +397,15 @@ fresh な index に置き、 **全 file が「追加行」 に見える状態**�
 `pipefail` の下で使っていて、 入力が pipe の容量を超えると一致が黙って消え、 非公開 repo の path を含む公開 repo を
 「0」 と記録した (commit の gate は差分が小さいので同じ照合が効いていた = 型は [`shell-env.md#pipefail-grep-q-sigpipe`](shell-env.md#pipefail-grep-q-sigpipe))。
 もう 1 つの形 = **漏洩以外の段が漏洩の段より前にある** runner は、 その段が止めた tree で漏洩の段に届かない
-(SESSION の形・壊れた text の検査が止めた tree を「0」 と記録する作りだった)。 ∴ 棚卸しの道具は
+(SESSION の形・壊れた text の検査が止めた tree を「0」 と記録する作りだった)。 3 つめの形 = **識別子の段 (Tier A〜C) に受理済みの
+当たりがあると、 runner が後の段 (Tier D〜F) を回さない** 作りで、 棚卸しはその repo を D〜F を見ずに「受理済みのみの 0」 と記録した
+(実測)。 4 つめの形 = **target の種類で動く段**: 作業リポの機密の検査 (Tier D-2) は remote のある repo でだけ動くので、 remote の
+無い一時 repo で回す棚卸しでは一度も走っていなかった (実測 = カナリアは remote ありで止まり、 無しで通る)。 ∴ 棚卸しの道具は
 (1) 走査の前に、 架空の非公開 repo 名を先頭に置いた大きな tree で検出器が拾うかを 1 回確かめ、 拾えなければ走査せずに止める
 (2) runner が非 0 で終わったのに漏洩の段の見出しも「漏洩の段を通った」 の 1 行も無いときは「未走査」 と記録する
-(3) 台帳は repo ごとの最新の行で読み、 対照が通った回の 0 だけを走査済に数える (= 対照を入れる前の 0 は、 検出器が直った後の回で自動で走査し直される)
+(3) 台帳は repo ごとの最新の行で読み、 対照が通り、 かつ Tier D〜F まで回って未公開文書の逐語の検査がその機械で armed だった回の 0 (印 `ctl-df`) だけを走査済に数える (= それより前の 0 は、 検出器が直った後の回で自動で走査し直される)
+(4) runner に棚卸しの印 (`CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1`) を渡し、 runner は印があれば A〜C の当たりの後も D〜F を回す (commit の動きは変えない。 G は棚卸しでは回らない作り)
+(5) 一時 repo に network に出ない仮の remote を置く (6) `--all` は未記録 → 最新の行が 0 → 最新の行が finding の順に回す (finding の残る repo が毎回の上限を使い切って後ろの repo に届かない形を避ける、 実測)
 (実装 = [`scripts/scan-public-tree.sh`](../scripts/scan-public-tree.sh) の `control_check` / `scan_one` / `already_scanned`)。
 一般則 = [`docs/convention-design-principles.md#sweep-null-needs-per-form-control`](../docs/convention-design-principles.md#sweep-null-needs-per-form-control)。
 
@@ -459,6 +478,8 @@ finding は「直す」 か「見た上で残す」 のどちらかで閉じる�
 | arXiv / DOI の書誌 (題名・著者・要旨)、 公開論文への link だけの行 | 何もしない (runner が構造で外す = [`#published-metadata-is-public`](#published-metadata-is-public))。 残るなら構造 (id / URL) が無い |
 | 外部の公開データを機械が変換した file | **`generated:` 宣言** ([`#generated-data-declaration`](#generated-data-declaration)) |
 | 名前が公開 repo 自身の identity の一部 (公開 mirror の源の名前など) | 非公開 repo 名の例外 list (owner 判断、 criterion は層1 の安全規則) |
+| 未公開文書の逐語の検査の当たりが、 源の file にも入っている公開の文 (公式の様式・kit の見出し) | 個人層の源の宣言に **`public: <file> sha256:<hex>`** (その公開の file を中身で固定して宣言する、 [`#unpublished-text-public-gate`](#unpublished-text-public-gate)) |
+| 同じ当たりが、 owner の文を公開の文書と非公開の記録の両方に持っている形 | **同じ文を 2 か所に持たない** (非公開の記録の側を公開の文書の節への参照に置き換える) |
 
 - どの種類の term が当たったかは gate の出力から分からない (件数と file 名だけ) — [`scripts/explain-sensitive-hits.py`](../scripts/explain-sensitive-hits.py) `--repo` が同じ除外を当てた後の残りを種類つき・term を伏せて出す
 - **archived の公開 repo** は push できない。 受理一覧を入れるなら unarchive → commit (message に `[skip ci]` = 古い CI を起こさない) → push → すぐ archive に戻し、 戻ったことを確認する

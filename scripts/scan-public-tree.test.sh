@@ -171,11 +171,25 @@ mkdir -p "$MOCK_LAYER"
 printf '# mock\n' > "$MOCK_LAYER/CLAUDE.md"
 printf '| repo | desc | visibility |\n|---|---|---|\n| `mockpriv-foo/` | mock | private |\n' > "$MOCK_LAYER/repos.md"
 ST11="$T/state11"
-out="$(CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST11" "$SELF" --repo "$CLEAN" 2>/dev/null)"; rc=$?
+# 印 ctl-df は未公開文書の逐語の検査 (D-1) がこの機械で armed のときだけ付く = 偽の個人層に源を 1 つ置く (2026-11-09)
+MROOT11="$T/mock-claude-root-11"
+mkdir -p "$MROOT11/mockpriv-paper"
+printf '%s\n' '\begin{document}' \
+  'We argue that the amber lantern estimator keeps the patient symmetry intact at every order of the toy series.' \
+  '\end{document}' > "$MROOT11/mockpriv-paper/draft.tex"
+printf 'discover: %s .tex\n' "$MROOT11" > "$MOCK_LAYER/unpublished-sources.txt"
+out="$(XDG_CACHE_HOME="$T/uq-cache11" CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST11" "$SELF" --repo "$CLEAN" 2>/dev/null)"; rc=$?
 printf '%s' "$out" | grep -q '照合器の対照が落ちた' \
   && check ng "T11: 照合器は大きな入力でも一致を拾う (対照が落ちた: $out)" || check ok "T11: 照合器は大きな入力でも一致を拾う"
-grep -q "	0	ctl$" "$ST11/public-tree-scan.tsv" 2>/dev/null \
-  && check ok "T11b: 対照が通った回は clean を 0 で記録" || check ng "T11b: 対照が通った回は clean を 0 で記録 (rc=$rc)"
+grep -q "	0	ctl-df$" "$ST11/public-tree-scan.tsv" 2>/dev/null \
+  && check ok "T11b: 対照が通り漏洩の段まで回った回は clean を 0 (印 ctl-df) で記録" \
+  || check ng "T11b: 対照が通り漏洩の段まで回った回は clean を 0 (印 ctl-df) で記録 (rc=$rc)"
+rm -f "$MOCK_LAYER/unpublished-sources.txt"
+ST11C="$T/state11c"
+out="$(CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST11C" "$SELF" --repo "$CLEAN" 2>/dev/null)"; rc=$?
+grep -q "	0	ctl$" "$ST11C/public-tree-scan.tsv" 2>/dev/null \
+  && check ok "T11f: foil: D-1 の源が無い機械では、 漏洩の段を通っても印は ctl だけ (走査済に数えない)" \
+  || check ng "T11f: foil: D-1 の源が無い機械では、 漏洩の段を通っても印は ctl だけ (rc=$rc)"
 # 非公開 repo 名を先頭に置いた大きな tree は Tier C で finding になる (= 9/15 型の取りこぼしの再現)
 BIGLEAK="$(mk_repo bigleak "$(printf 'see mockpriv-foo for this\n'; awk 'BEGIN { for (i = 1; i <= 6000; i++) printf "line %d: filler\n", i }')")"
 out="$(CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST11" "$SELF" --repo "$BIGLEAK" 2>/dev/null)"; rc=$?
@@ -193,6 +207,56 @@ git -C "$RULEDOC" -c user.email=t@example.com -c user.name=t commit -qm rule >/d
 out="$(CLAUDE_CODE_SESSION_ID=scan-test-session CLAUDE_STATE_DIR="$ST13" "$SELF" --repo "$RULEDOC" 2>/dev/null)"; rc=$?
 [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '0 finding' \
   && check ok "T13: agent の session から回しても漏洩の段まで届く" || check ng "T13: agent の session から回しても漏洩の段まで届く (rc=$rc: $out)"
+
+# ---- (14) 受理済みの Tier A の当たりがあっても Tier D〜F を回す (2026-11-09): runner が A〜C に当たりがあると
+# D〜F を回さない作りだった間、 棚卸しはその repo を D〜F を見ずに「受理済みのみの 0」 と記録していた ----
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$SELF")/check-unpublished-quote.py" ]; then
+  MROOT="$T/mock-claude-root"
+  mkdir -p "$MROOT/mockpriv-paper"
+  printf '%s\n' '\begin{document}' \
+    'We argue that the velvet compass estimator keeps the gentle balance alive at every order of the toy series.' \
+    '\end{document}' > "$MROOT/mockpriv-paper/draft.tex"
+  printf 'discover: %s .tex\n' "$MROOT" > "$MOCK_LAYER/unpublished-sources.txt"
+  ST14="$T/state14"
+  ACC="$(mk_repo accd "setup は ${FAKE_ABS}/Claude/x を見る。
+Example: \`the velvet compass estimator keeps the gentle balance alive\` in a rule.")"
+  printf '%s   # 見た上で残すと決めた例\n' "$FAKE_ABS" > "$ACC/.claude/public-tree-accept.txt"
+  out="$(XDG_CACHE_HOME="$T/uq-cache" CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST14" "$SELF" --repo "$ACC" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 1 ] && grep -q '識別子でない漏洩の段' <<< "$out" \
+    && check ok "T14: 受理済みの Tier A の当たりの後も Tier D の当たりを finding にする" \
+    || check ng "T14: 受理済みの Tier A の当たりの後も Tier D の当たりを finding にする (rc=$rc: $out)"
+  ACC2="$(mk_repo accd2 "setup は ${FAKE_ABS}/Claude/x を見る。")"
+  printf '%s   # 見た上で残すと決めた例\n' "$FAKE_ABS" > "$ACC2/.claude/public-tree-accept.txt"
+  out="$(XDG_CACHE_HOME="$T/uq-cache" CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST14" "$SELF" --repo "$ACC2" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 0 ] && grep -q 'Tier D-F も通った' <<< "$out" && grep -q "	0	ctl-df$" <<< "$(tail -1 "$ST14/public-tree-scan.tsv")" \
+    && check ok "T14b: foil: 受理済みのみで Tier D〜F も通った回は 0 (印 ctl-df) で記録" \
+    || check ng "T14b: foil: 受理済みのみで Tier D〜F も通った回は 0 (印 ctl-df) で記録 (rc=$rc: $out)"
+  # 印 ctl だけの古い 0 (D〜F を見ていないことがある) は走査済に数えない
+  REC14="$(tail -1 "$ST14/public-tree-scan.tsv" | cut -f1)"
+  printf '%s\tdeadbeef\t2026-11-07\t0\tctl\n' "$REC14" >> "$ST14/public-tree-scan.tsv"
+  out="$(XDG_CACHE_HOME="$T/uq-cache" CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST14" "$SELF" --repo "$ACC2" 2>/dev/null)"
+  grep -q '台帳に走査済' <<< "$out" \
+    && check ng "T14c: 印 ctl だけの 0 は走査済に数えない" || check ok "T14c: 印 ctl だけの 0 は走査済に数えない"
+  out="$(XDG_CACHE_HOME="$T/uq-cache" CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST14" "$SELF" --repo "$ACC2" 2>/dev/null)"
+  grep -q '台帳に走査済' <<< "$out" \
+    && check ok "T14d: foil: 印 ctl-df の 0 は走査済に数える" || check ng "T14d: foil: 印 ctl-df の 0 は走査済に数える"
+  rm -f "$MOCK_LAYER/unpublished-sources.txt"
+fi
+
+# ---- (15) 作業リポの機密の検査 (Tier D-2) も棚卸しで走る (2026-11-09): D-2 は remote のある repo でだけ動くので、
+# remote の無い一時 repo で回す棚卸しでは黙って素通りしていた。 一時 repo に仮の remote を置く ----
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$SELF")/check-confidential-leak.py" ]; then
+  PAT15="$T/mock-leak-patterns"
+  printf 'mock-label\tMOCK-CONF-TOKEN-[0-9]+\n' > "$PAT15"
+  ST15="$T/state15"
+  D2REPO="$(mk_repo d2repo 'ふつうの文。 MOCK-CONF-TOKEN-42 を含む。')"
+  out="$(CLAUDE_LEAK_PATTERNS="$PAT15" CLAUDE_LEAK_SOURCES="$T/no-such-pointer" CLAUDE_STATE_DIR="$ST15" "$SELF" --repo "$D2REPO" 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 1 ] && grep -q 'confidential-leak' <<< "$out" \
+    && check ok "T15: tree の中の作業リポの機密 (Tier D-2) を finding にする" \
+    || check ng "T15: tree の中の作業リポの機密 (Tier D-2) を finding にする (rc=$rc: $out)"
+  out="$(CLAUDE_LEAK_PATTERNS="$PAT15" CLAUDE_LEAK_SOURCES="$T/no-such-pointer" CLAUDE_STATE_DIR="$ST15" "$SELF" --repo "$CLEAN" --force 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 0 ] && check ok "T15b: foil: その token の無い tree は 0" || check ng "T15b: foil: その token の無い tree は 0 (rc=$rc: $out)"
+fi
 
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
