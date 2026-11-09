@@ -94,6 +94,17 @@
       ],
       "expect_fail": ["機密 dir の下なら中身が索引に無くても縛る"],
       "expect_pass": ["機密 dir の下の成果物は task・summary・result_path を落とす", "無関係な成果物は縛らない"]
+    },
+    {
+      "name": "基点の下の読めない dir で解決を止める (stat の PermissionError を飛ばさない)",
+      "pairs": [
+        [
+          "        except OSError:\n            continue  # 基点の下の読めない dir",
+          "        except FileNotFoundError:\n            continue  # 基点の下の読めない dir"
+        ]
+      ],
+      "expect_fail": ["読めない dir が基点の下にあっても次の dir で解決する"],
+      "expect_pass": ["相対の result_path を基点の下で解決する"]
     }
   ]
 }

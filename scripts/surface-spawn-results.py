@@ -299,8 +299,12 @@ def _resolve_result(rp):
     except OSError:
         return None
     for b in cands:
-        if (b / rp).exists():
-            return b / rp
+        q = b / rp
+        try:
+            q.stat()  # exists() は版で読めない dir の扱いが違う (3.12 までは PermissionError、 3.14 は False)
+        except OSError:
+            continue  # 基点の下の読めない dir (他人の 700 の dir など) は飛ばして次を見る。 無い path も同じ
+        return q
     return None
 
 
@@ -466,6 +470,18 @@ def selftest():
         os.environ["CLAUDE_SPAWN_RESULTS_BASE"] = str(d)
         check("相対の result_path を基点の下で解決する",
               _resolve_result("plans/r.md") == d / "repoA" / "plans" / "r.md")
+        # 基点の下に読めない dir があっても止まらずに次の dir を見る (Linux の /tmp の root の 700 の dir の形)
+        locked = d / "locked"  # repoA より前に並ぶ名前
+        locked.mkdir()
+        locked.chmod(0)
+        try:
+            try:
+                got = _resolve_result("plans/r.md")
+            except OSError:
+                got = None  # 例外で selftest を止めず、 この check の FAIL にする
+            check("読めない dir が基点の下にあっても次の dir で解決する", got == d / "repoA" / "plans" / "r.md")
+        finally:
+            locked.chmod(0o755)
         os.environ.pop("CLAUDE_SPAWN_RESULTS_BASE", None)
     # ---- marker schema の縛り ----
     # 他の case と marker が混ざらないよう、専用の temp dir で回す。

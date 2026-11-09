@@ -394,6 +394,13 @@ def selftest() -> int:
         print(("✓ " if cond else "✗ ") + what)
         ok = ok and bool(cond)
 
+    try:
+        import cryptography.hazmat.primitives.ciphers.aead  # noqa: F401
+    except ImportError:
+        # 暗号化の無い python では書き出し・検索が exit 3 で止まる = 検査を回せない (理由を出して飛ばす)
+        print("SKIP: cryptography の module が無い = 暗号化と検索の検査を飛ばす (pip install cryptography)")
+        return 0
+
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         cdir = td / "claude" / "projects" / "-proj"
