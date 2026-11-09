@@ -227,6 +227,15 @@ build step を持たない runtime project (= 自作 MCP server、 CLI、 script
 
 lockfile が重なる monorepo の PR を手元の `npm install <pkg>@^X` でまとめて当てると、 npm は範囲内の最新を解決するので、 Dependabot が cooldown で見送った公開直後の版が入る (実測: `@modelcontextprotocol/sdk@^1.30.1` が前日公開の 1.32.0 に解決)。 当てた後に、 変わった package の公開日 (`npm view <pkg> time`) を cooldown 日数と突き合わせ、 新しすぎるものは Dependabot の提案した版に固定する。 Dependabot は main に同じ版が入ると元の PR を自分で閉じる。
 
+### <a id="pinned-env-lockfile-major-bump"></a>版を固定した解析環境で、 lock file だけを変える間接の依存の major の上げ (2026-11-09)
+
+脆弱性の修正が間接の依存 (repo の code は直接使わず、 別の library が引く) の major の上げで、 PR の差分が lock file だけのとき、 当てる前に 2 つを確かめる:
+
+- **lock を使う人の道具の版で読めるか**: PR の lock は Dependabot の側の新しい道具が書くので、 書式の番号 (uv.lock の `revision` など) が上がっていることがある。 lock を使う人の手元の版 (結果の記録に書いた版) を一時 venv に入れ (`pip install 'uv==<版>'`)、 PR の lock で `uv lock --check` と `uv sync --locked` を回し、 lock が書き換わらないことを `cmp` で見る (実測: 書式の番号が 2 つ上がった lock を、 古い版の uv がそのまま受け入れた)。
+- **その依存の役目で出力が変わらないか**: 先に何に使われているかを確かめ (repo の code が直接 import するか、 どの library が引くか)、 その役目の出力を新旧の環境で比べる。 図を読み書きする画像の library なら、 同じ図を PNG・JPG・TIFF・PDF・SVG に書いて byte で比べ、 書き出し中の非推奨の警告を数える (PDF・SVG は作成日時と乱数の ID が毎回変わるので、 その差だけかを見る)。 数値の library の版が lock の差分で動いていないことも見る。
+
+実測で通った当て方 = PR の merge でなく、 PR の head の lock を main に写して path を明示して commit する (確かめたことを commit message に書ける)。 ⚠️ 警告は GitHub の依存の一覧 (dependency graph = `repos/<r>/dependency-graph/sbom` で読める) が数え直されて初めて閉じる。 uv の lock では、 lock を足したときには走った数え直しの job (Actions の一覧の `Graph Update: uv in <dir>`) が、 直した lock を main に push してから 45 分たっても走らず、 警告も PR も開いたままだった (実測)。 push の後に「閉じた」 と報告せず、 依存の一覧の版を読んで確かめ、 閉じていなければ開いた警告を毎日出す surface に任せる。
+
 ### Dependabot security-update PR は monorepo の全 manifest を cover しないことがある
 
 `directories:` 設定の monorepo で、 同一脆弱 package が複数 subdir の lockfile に出ても、 Dependabot の **security-update PR は一部 dir のみ生成される** ことがある (= rate-limit / batching)。 partial PR だけ merge すると残 dir の alert を見逃す。 → **全 affected dir 横断の local `npm audit fix` (non-`--force`) の方が完全**。 local fix → push → 残った partial PR は supersede として close、 が確実 (= §10 cascading loop に乗せて PR を 1 件ずつ追う より速い)。
