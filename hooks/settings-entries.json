@@ -66,6 +66,15 @@
           "timeout": 90
         }
       ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/owner-asks.sh",
+          "timeout": 10
+        }
+      ]
     }
   ],
   "UserPromptSubmit": [
@@ -83,6 +92,15 @@
           "type": "command",
           "command": "~/.claude/hooks/codex-parent-worker-record-nudge.py",
           "timeout": 5
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/owner-asks.sh",
+          "timeout": 10
         }
       ]
     }
@@ -388,6 +406,16 @@
           "timeout": 5
         }
       ]
+    },
+    {
+      "matcher": "SendMessage|Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*send_email|mcp__ccd_session_mgmt__.*|mcp__ccd_session__.*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/owner-asks.sh",
+          "timeout": 5
+        }
+      ]
     }
   ],
   "PostToolUse": [
@@ -609,6 +637,26 @@
         {
           "type": "command",
           "command": "~/.claude/hooks/wrap-reply-knowledge-check.py",
+          "timeout": 10
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/owner-asks.sh",
+          "timeout": 10
+        }
+      ]
+    }
+  ],
+  "PreCompact": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/owner-asks.sh",
           "timeout": 10
         }
       ]

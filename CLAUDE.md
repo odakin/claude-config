@@ -200,7 +200,7 @@ claude-config/
 <!-- agent-free:end id=auto-tree-conventions -->
 <!-- agent-free:begin id=auto-tree-hooks -->
 <!-- AUTO-TREE:hooks BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は hooks/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── hooks/                # Claude Code hooks (114 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── hooks/                # Claude Code hooks (116 file。 setup.sh が ~/.claude/hooks/ に symlink。 全列挙 + 説明 = hooks/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:hooks END -->
 <!-- agent-free:end id=auto-tree-hooks -->
 ├── hammerspoon/
@@ -211,7 +211,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (429 file + formcase/ 26 module + lib/ 83 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (430 file + formcase/ 26 module + lib/ 83 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
