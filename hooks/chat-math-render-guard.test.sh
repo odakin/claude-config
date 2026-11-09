@@ -3,7 +3,7 @@
 #
 # §A incident replay (Code タブで生表示になった実測の形): 読点の直後の `\(` / 記号の無い `\(g\)` /
 #     `\(-i\,d/dx\)` (CLI flag 形) / `$P_D$` / `$ x $` / `\[…\]` / `\|` / 60 文字超の `$…$` / 表のセルの `|`。
-# §B 誤検出の regression: 空白の後の `\(…\)` (`\,` 入りを含む) / `$t$` / `$x-y$` / `$1/N^2$` / 1 行と複数行の `$$` /
+# §B 誤検出の regression: 空白の後の `\(…\)` (`\,` 入りを含む) / `$t$` / `$x-y$` / `$1/N^2$` / 1 行の `$$` (複数行の block は §A で止める) /
 #     inline code と fenced block の中 / 強調で包んだ式 / `{-}i` / 通貨の `$5` / CLI の session。
 # §C fail-open: stop_hook_active / transcript 不在 / 空入力 = 沈黙。
 
@@ -82,7 +82,9 @@ case_ "B2 \\, 入りも空白の後なら描かれる" $D 0 "" '測度 \( a\,\ma
 case_ "B3 \$t\$ と \$x-y\$" $D 0 "" '時刻 $t$ と差 $x-y$ を取る。'
 case_ "B4 数字始まりで ^ を持つ \$1/N^2\$" $D 0 "" '展開は $1/N^2$ の次数で。'
 case_ "B5 1 行の \$\$…\$\$ (\\\\0 を含む)" $D 0 "" $'行列は\n$$D\\Phi=\\begin{pmatrix}a&b\\\\0&1\\end{pmatrix}$$\nである。'
-case_ "B6 複数行の \$\$ block" $D 0 "" $'次を示す。\n$$\n\\int_{\\mathbb R} b(\\omega)\\,g(\\omega)\\,\\mathrm d\\omega=\\iint a\\,g(h)\n$$\n以上。'
+case_ "A15 複数行の \$\$ block の開きの行に式 (\$\$\\begin{aligned})" $D 1 "DD_FENCE_TEXT" $'次の項を足す。\n\n$$\\begin{aligned}\nL &= -\\tfrac12\\left(M_3\\, \\tilde g \\tilde g\\right) \\\\\n&- m_{H_u}^2 H_u^* H_u\n\\end{aligned}$$\n\n以上。'
+case_ "A16 複数行の \$\$ block の閉じの行に式 (\\end{pmatrix}\$\$)" $D 1 "DD_FENCE_TEXT" $'行列は\n\n$$\nM = \\begin{pmatrix}\na & b \\\\\nc & d\n\\end{pmatrix}$$\n\nである。'
+case_ "B6 \$\$ だけの行で開閉する複数行の block (中身は inline として見ない)" $D 0 "" $'次を示す。\n$$\n\\int_{\\mathbb R} b(\\omega)\\,g(\\omega)\\,\\mathrm d\\omega=\\iint a\\,g(h) \\quad \\( K \\)\n$$\n以上。'
 case_ "B7 inline code の中" $D 0 "" '例: `\(K\)` は生表示になる (規約の例示)。'
 case_ "B8 fenced block の中" $D 0 "" $'例:\n```\n\\(K\\) と $P_D$\n```\n以上。'
 case_ "B9 強調で包んだ式" $D 0 "" '結論は **\( b\in C_0^\infty \)** である。'
