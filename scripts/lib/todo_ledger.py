@@ -18,6 +18,10 @@
      `todo/` 側が勝つ (= 移行中も動く。 旧 file の entry は todo/ に無いものだけ、 旧 file の順で後ろに続く)。
   4. file の `id` ≠ file 名 / mapping でない / parse できない / 暗号文のまま (git-crypt locked) = `TodoLedgerError`
      (黙って読み飛ばさない。 fail-open にしたい読み手は自分で捕まえる)。
+     本 module を使わず glob で YAML を読む読み手 (inbox と台帳を同じ glob の list で読む「記録済み」 の集合など) は、
+     mapping を 1 件として読む (`[data] if isinstance(data, dict)`)。 list の file だけを受ける形
+     (`if not isinstance(data, list): continue`) は 1 file 1 entry の台帳を黙って全部飛ばす (実測: 分割の後に 1 本だけ残り、
+     台帳にだけ記録した id を「未記録」 と見ていた。 移行のときは path でなく、 この型の検査で読み手を探す)。
   5. 書き手は **entry の file だけ**を書く (`write_todo` = text をそのまま書く。 書く前に parse して id と file 名を照合)。
 
 使い方:
