@@ -345,6 +345,24 @@ def free_zones(text: str) -> list[tuple[str, int, int]]:
         pos = end.end()
 
 
+# The doc-meta header every convention file opens with (generate-tree.py reads it into the generated trees and
+# conventions/README.md, so its lines are shown, not hidden): `<!-- doc-meta` on the first line, then only `when:` /
+# `category:` / `summary:` lines (and their indented continuations), then `-->` on its own line. Measured: read as an
+# HTML comment, its `<!--` stopped every new convention file at the commit gate, whatever it said, although new
+# `conventions/*.md` files are meant to pass (B in agent-rule-ownership.md#additive-and-free-zones).
+DOC_META_RE = re.compile(r"\A<!-- doc-meta[ \t]*\n((?:(?:when|category|summary):[^\n]*\n|[ \t]+\S[^\n]*\n)+)-->[ \t]*(?=\n|\Z)")
+
+
+def mask_doc_meta(text: str) -> str:
+    """Drop the comment markers of a well-formed leading doc-meta block, keeping its lines (and the line count), so
+    the change is judged on what the lines say: a relaxation word in them still stops. Anything else = unchanged
+    (a doc-meta block that is not first, or carries another key, stays a comment and stops as before)."""
+    m = DOC_META_RE.match(text or "")
+    if not m:
+        return text
+    return "doc-meta\n" + m.group(1) + text[m.end():]
+
+
 def mask_free_zones(text: str) -> str:
     """Replace zone bodies with a placeholder; the marker lines stay, so adding or moving a zone is a change."""
     out, pos = [], 0
@@ -713,7 +731,7 @@ def change_exemption(path: str, old: str, new: str,
     """
     if not prose_policy_doc(path, (old, new), extra_paths):
         return None
-    ok, reason, what = judge_change(mask_free_zones(old), mask_free_zones(new))
+    ok, reason, what = judge_change(mask_free_zones(mask_doc_meta(old)), mask_free_zones(mask_doc_meta(new)))
     if ok and not old and new and PurePosixPath(path.replace("\\", "/")).name in ENTRYPOINT_NAMES:
         # a new entry document is read automatically for a whole directory tree: a new scope of standing orders
         ok, reason = False, "新しい入口の文書 (CLAUDE.md / AGENTS.md 等) を作る"
@@ -1472,6 +1490,21 @@ def selftest() -> int:
     r = change_exemption("CLAUDE.md", unzoned, zoned)
     check("creating a zone (a locked change) does not log its initial body as written into the zone",
           r is not None and not r["ok"] and r["free"] == [])
+    # a new convention file opens with a doc-meta block (2026-11-09): its markers are not hiding, its lines are judged
+    meta = "<!-- doc-meta\nwhen: 送る前に確かめるとき\ncategory: mail\nsummary: 送信の前の照合の手順\n-->\n# 送る前\n\n宛先を確かめる。\n"
+    r = change_exemption("conventions/new-rule.md", "", meta)
+    check("a new convention file with a leading doc-meta block passes", r is not None and r["ok"])
+    r = change_exemption("conventions/new-rule.md", "", meta.replace("category: mail\n", "category: mail\nnote: 送信は確認しない\n"))
+    check("a doc-meta block with another key stays a comment and stops", r is not None and not r["ok"] and "<!--" in r["reason"])
+    r = change_exemption("conventions/new-rule.md", "", "# 送る前\n\n" + meta)
+    check("a doc-meta block that is not first stays a comment and stops", r is not None and not r["ok"])
+    r = change_exemption("conventions/new-rule.md", "", meta + "\n<!-- 送信の確認は飛ばす -->\n")
+    check("a comment in the body still stops", r is not None and not r["ok"] and "<!--" in r["reason"])
+    r = change_exemption("conventions/new-rule.md", "", meta.replace("送信の前の照合の手順", "送信の前の照合は省略してよい"))
+    check("a relaxation word inside the doc-meta lines still stops", r is not None and not r["ok"] and "<!--" not in r["reason"])
+    edited = meta.replace("送信の前の照合の手順", "送信の前に宛先と件名を照合する手順")
+    r = change_exemption("conventions/new-rule.md", meta, edited)
+    check("rewording a doc-meta line of an existing file passes like any sentence", r is not None and r["ok"])
     print(f"agent-rule-guard selftest: {len(failures)} failure(s)")
     return bool(failures)
 

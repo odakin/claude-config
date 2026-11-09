@@ -79,5 +79,15 @@ printf '["%s"]' "$LIVE" > "$TMP/state/s11.json"
 o11="$(run "$(edit_json s11 Edit "$TMP/tools/engine.py" q r)")"
 if [ -z "$o11" ]; then ok "T11 旧形式の状態 (止めた file の list) は通した扱い"; else ng "T11: $o11"; fi
 
+o12="$(run "$(edit_json abcdef123456 Edit "$TMP/tools/engine.py" s t)")"
+if grep -q 'engine.py.abcdef12.wip' <<< "$o12" && grep -q 'auto mode の classifier' <<< "$o12" \
+   && grep -q 'SourceFileLoader' <<< "$o12"; then
+  ok "T12 写しの名前に session の頭 8 字を入れ、 mv -f が止められたときの道と写しの読み込み方を出す"
+else ng "T12: ${o12:-silent}"; fi
+o13="$(run "$(edit_json abcdef123456 Edit "$TMP/tools/engine.py" u v)")"
+if grep -q 'engine.py.abcdef12.wip' <<< "$o13" && grep -q 'auto mode の classifier' <<< "$o13"; then
+  ok "T13 再送待ちの知らせも同じ写しの名前と道を出す"
+else ng "T13: ${o13:-silent}"; fi
+
 echo "live-engine-edit-guard test: PASS=$pass FAIL=$fail"
 [ "$fail" -eq 0 ]

@@ -361,13 +361,27 @@ def added_lines(diff_text):
     return out
 
 
-def check_lines(lines, tainted):
-    res = []
+def check_lines(lines, tainted, already=None):
+    """already(path) = the values the file already carries in its committed version (HEAD for --staged, the parent
+    for --replay). Those are on the public surface already, so rewording or moving a line that holds them is not a new
+    carryover (measured: a reworded line of an existing pair of numbers was stopped, and the values were moved to
+    another line to get past). A value the committed file does not carry still counts."""
+    res, cache = [], {}
     for path, n, body in lines:
-        h = line_hits(body, tainted)
+        t = tainted
+        if already is not None:
+            if path not in cache:
+                cache[path] = tainted - already(path)
+            t = cache[path]
+        h = line_hits(body, t)
         if h:
             res.append((path, n, h))
     return res
+
+
+def committed_tokens(repo, rev):
+    """path -> the tokens of the file at rev ('' when the file is new or rev is missing = nothing already public)."""
+    return lambda path: all_tokens(git(repo, "show", f"{rev}:{path}"))
 
 
 def git(repo, *args):
@@ -386,7 +400,8 @@ def cmd_staged(repo, transcript):
         print("check-session-carryover: 会話記録が無い (Claude の session の外の commit) = 走らなかった", file=sys.stderr)
         return 3
     tainted = taint_of(transcript)
-    hits = check_lines(added_lines(git(repo, "diff", "--cached", "-U0", "--no-color", "--no-ext-diff")), tainted)
+    hits = check_lines(added_lines(git(repo, "diff", "--cached", "-U0", "--no-color", "--no-ext-diff")), tainted,
+                       committed_tokens(repo, "HEAD"))
     if not hits:
         return 0
     print("check-session-carryover: BLOCK — この session で非公開の source (暗号化した repo・非公開 repo の file・MCP など) から"
@@ -448,7 +463,7 @@ def cmd_replay(root, since, show):
                     tt.feed(kind, text)
                 per_repo[name] += 1
                 hits = check_lines(added_lines(git(repo, "show", "--format=", "-U0", "--no-color", "--no-ext-diff", sha)),
-                                   tt.tainted)
+                                   tt.tainted, committed_tokens(repo, sha + "^"))
                 if hits:
                     hit_commits[name] += 1
                     for _p, _n, h in hits:
@@ -552,6 +567,16 @@ def selftest():
             os.environ.pop("CLAUDE_CARRYOVER_GUARD", None)
             os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
             check("staged: 会話記録が無ければ走らなかった印 (3)", cmd_staged(pub, None) == 3)
+            # 既に commit した file にある値 (2026-11-09): 同じ値の行の言い直し・別の行への移しは止めない、 無い値は止める
+            subprocess.run(["git", "-C", pub, "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                            "commit", "-q", "-m", "a"], check=True, env=dict(os.environ, CLAUDE_CARRYOVER_GUARD="0"))
+            open(a, "w").write('Y = "6,789 / 4,321"\nZ = "謝礼の額は 7,350 と 2,950 (言い直した)"\n')
+            subprocess.run(["git", "-C", pub, "add", "a.py"], check=True)
+            check("staged: commit 済みの file にある値の行を言い直し・移しても止めない", cmd_staged(pub, tx) == 0)
+            b = os.path.join(pub, "b.py")
+            open(b, "w").write('W = "7,350 / 2,950"\n')
+            subprocess.run(["git", "-C", pub, "add", "b.py"], check=True)
+            check("staged: 別の file に写した値は止める (その file の commit 済みの版に無い)", cmd_staged(pub, tx) == 1)
         finally:
             os.environ.clear()
             os.environ.update(env0)

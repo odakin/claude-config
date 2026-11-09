@@ -258,7 +258,7 @@ tool で読み、 その値を同じ session の中で公開 repo の selftest�
 
 - **捕まえないもの**: 言い換え・計算し直した値 (足した・丸めた)、 1 つだけの短い数、 Codex の commit (会話記録の場所が違う)、
   subagent の中の commit。 規律 ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak)) はそのまま要る。
-- <a id="session-carryover-rewritten-line"></a>**前からある数の行を言い直すと止まる (誤検出のかたち)**: 公開の doc に前からある数の組 (3 桁区切りの数が 2 つ) の行の、 括弧の中の 1 句だけを言い直しても、 その行は差分の追加行になり、 数が前からあっても止まる (実測)。 避け方 = 数を含む行には触れず、 足す・直す文は数の無い別の行 (下の段の箇条) に書く (その行の数を変える必要があるときは、 下の配線の段の「公開の値がたまたま同じ」 の扱いになる)。 gate の側で同じ hunk の削除行にある値を数えないようにする直しは、 検査の file を変えるので本人の裁定で
+- <a id="session-carryover-rewritten-line"></a>**前からある数の行の言い直しは数えない**: 当たった値が、 その file の commit 済みの版 (pre-commit = HEAD、 replay = その commit の親) に既にあれば数えない = 既に公開の surface にある値で、 新しい持ち込みでない。 前は、 公開の doc に前からある数の組の行の括弧の中の 1 句だけを言い直しても、 その行が差分の追加行になって止まり、 数を別の行に移して通した (実測)。 同じ hunk の削除行だけを見る形では、 行を移した場合を救えない。 別の file に写した値と、 その file に無かった値は今までどおり数える。 前の commit で既に漏れた値はこの検査では見えなくなる = tree の棚卸しの側で拾う
 - **配線** = 公開 repo の pre-commit の Tier G (`public-precommit-runner.sh`、 session の env `CLAUDE_CODE_SESSION_ID` が在るときだけ。
   tree の棚卸しでは走らせない = session が読んだものでなく tree 全体を見る場だから)。 止まったら file と行と規則の名前だけを出す。
   公開の値がたまたま同じ (公開の料金など) と確かめた場合だけ `CLAUDE_CARRYOVER_GUARD=0` で 1 回通す (本人の指示があるときだけ)。

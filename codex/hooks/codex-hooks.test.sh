@@ -8,6 +8,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/../../scripts/lib/test-err-trap.sh"
 TEMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEMP_ROOT"' EXIT
+# The real guard state must not change: one stage once ran the adapter without the test's state dir, and its two
+# denials were written to the owner's denied-log on every run (measured: lines of the test's session in the real log).
+# Without MANUSCRIPT_CLAIM_GUARD_STATE_DIR the guard writes under ~/.claude/state/manuscript-claim-guard.
+REAL_DENIED_LOG="${HOME}/.claude/state/manuscript-claim-guard/denied-log.jsonl"
+real_denied_lines() { if [ -f "$REAL_DENIED_LOG" ]; then wc -l < "$REAL_DENIED_LOG" | tr -d ' '; else echo 0; fi; }
+REAL_DENIED_BEFORE="$(real_denied_lines)"
 
 python3 -m json.tool "$SCRIPT_DIR/hooks.json" >/dev/null
 grep -q 'pre_tool_policy.py' "$SCRIPT_DIR/hooks.json"
@@ -565,7 +571,8 @@ PY
 [ "$(printf '%s' "$MCG_BASH" | mcg_decision)" = deny ]
 
 # The native Desktop path may omit tool workdir while reporting only task cwd.
-MCG_REPO="$MCG_REPO" MCG_ADAPTER="$SCRIPT_DIR/manuscript_claim_guard.py" python3 - <<'PY'
+MANUSCRIPT_CLAIM_GUARD_STATE_DIR="$TEMP_ROOT/mcg-state" MANUSCRIPT_CLAIM_GUARD_HOME="$MCG_HOME" \
+  MCG_REPO="$MCG_REPO" MCG_ADAPTER="$SCRIPT_DIR/manuscript_claim_guard.py" python3 - <<'PY'
 import json, os, subprocess, sys
 repo = os.environ['MCG_REPO']
 def inspect(command, workdir=None):
@@ -780,4 +787,12 @@ for carrier in ('event_msg','response_item'):
 print('Approval sources: unknown tags excluded, latest human retained and body-free diagnostics passed')
 PY
 
+REAL_DENIED_AFTER="$(real_denied_lines)"
+if [ "$REAL_DENIED_AFTER" != "$REAL_DENIED_BEFORE" ]; then
+  # another session's guard may write while the test runs; a test line is told by its session name
+  if tail -n "$((REAL_DENIED_AFTER - REAL_DENIED_BEFORE))" "$REAL_DENIED_LOG" | grep '"codex:cdx-' >/dev/null; then
+    echo "FAIL: the test wrote to the real denied-log ($REAL_DENIED_LOG): give every adapter call MANUSCRIPT_CLAIM_GUARD_STATE_DIR" >&2
+    exit 1
+  fi
+fi
 echo "Codex hook tests passed"
