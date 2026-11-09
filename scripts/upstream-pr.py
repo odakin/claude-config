@@ -21,7 +21,12 @@
   after    出した PR が merge されたら手元の branch を消す。 merge されずに閉じたら 1 回だけ伝える。 公開しない
   drop     準備したが出さないと決めた PR を捨てる (branch の先は backup の ref に残る)。 公開しない
 
-所有者の判定: GitHub の権限で admin、 または push できて repo の持ち主と同じ login なら所有者 = 何もしない。
+対象 = 層1 の repo だけ (この道具の repo、 または base の repo の名が claude-config / ai-collaboration)。 共有 project の
+repo (書き込み権限のある共同研究者が直接 push する repo) では何も出さない・prepare もしない。
+
+所有者の判定: GitHub の権限で admin、 または push できて repo の持ち主と同じ login なら所有者 = 何もしない。 gh がそう
+言わない (別の account で login している・gh が無い) ときは、 git の push の dry-run (無い名の ref に打つ = 何も書かない)
+も当て、 本人の git の認証で push できれば所有者とみなす (gh の account に依らずに所有者の機械で黙る)。
 push できるが所有者でない人 (書き込み権限のある第三者) は origin の branch から PR (main には push しない)。
 push できない人は fork から PR。 最後に確かめた結果は .git/upstream-pr/permission.json に 24 時間残し、 gh が使えない
 ときはその結果を使う (所有者の機械で、 一時の network の切れで黙るのをやめないため)。 PR の記録 = 同じ dir の state.json
@@ -56,13 +61,16 @@ commit の author と committer の email。
 
 ## 呼び方
 
-  upstream-pr.py status [--repo DIR ...] [--json]      (--repo の既定 = この道具の repo と、 隣の ai-collaboration)
+  upstream-pr.py status [--repo DIR ...] [--json | --brief] [--cached-only] [--timeout SEC] [--quiet-errors]
+                 (--repo の既定 = この道具の repo と、 隣の ai-collaboration。 --brief = turn の終わりの促し用の 2 行。
+                  --cached-only = network に出ず前に確かめた権限だけで判定 = 時間の枠の短い hook 用。 権限を確かめたことが
+                  無ければ何も出さず、 裏で確かめておく (所有者かどうか分からないまま PR を勧めない))
   upstream-pr.py prepare --repo DIR --slug NAME --title TITLE [--body-file F] [--paths P ... | --commits SHA ...] [--reset-author]
                  (--paths も --commits も無ければ、 作業中の変更の全部と upstream より先の commit の全部を 1 本の PR に。
                   片方だけ渡すと、 もう片方は入れない。 --commits all = 先の commit の全部)
   upstream-pr.py send --repo DIR --slug NAME --yes [--title TITLE] [--body-file F]
   upstream-pr.py restore --repo DIR
-  upstream-pr.py after [--repo DIR ...]
+  upstream-pr.py after [--repo DIR ...] [--timeout SEC]
   upstream-pr.py drop --repo DIR --slug NAME
   upstream-pr.py --selftest
 
@@ -113,6 +121,9 @@ RUNNER_PASS = "[public-precommit-runner] leak tiers passed"
 NETWORK_HINTS = ("error connecting", "dial tcp", "no such host", "could not resolve", "timeout", "timed out",
                  "network is unreachable", "connection refused", "connection reset", "temporary failure in name resolution")
 AUTH_HINTS = ("gh auth login", "not logged", "authentication", "bad credentials", "http 401", "requires authentication")
+LAYER1_NAMES = ("claude-config", "ai-collaboration")  # base の repo の名 (owner は問わない = fork の fork でも同じ)
+PROBE_REF = "refs/heads/upstream-pr-push-probe"
+NET_TIMEOUT = [60]  # network の 1 回の上限 (秒)。 入口の hook は --timeout で短くする
 
 EXIT_OK, EXIT_BLOCKED, EXIT_USAGE, EXIT_UNAVAILABLE, EXIT_APPROVAL, EXIT_NO_GH = 0, 1, 2, 3, 4, 5
 
@@ -186,11 +197,12 @@ def gh_exe():
     return shutil.which("gh")
 
 
-def gh_run(args, cwd=None, timeout=60):
+def gh_run(args, cwd=None, timeout=None):
     """(rc, stdout, stderr, kind). kind = ok / no-gh / network / auth / notfound / error."""
     exe = gh_exe()
     if not exe:
         return 127, "", "", "no-gh"
+    timeout = timeout or NET_TIMEOUT[0]
     try:
         r = subprocess.run([exe, *args], capture_output=True, text=True, cwd=cwd, env=clean_env(), timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -388,37 +400,76 @@ def subject(repo: Repo, sha: str) -> str:
 
 
 # ----------------------------------------------------------------------------- permission
-def permission(repo: Repo, refresh=False):
-    """{'role': owner|writer|none|None, 'login', 'id', 'unknown': <理由>, 'stale': bool}"""
+def is_layer1(repo: Repo) -> bool:
+    """層1 の repo か (この道具の repo、 または base の repo の名が LAYER1_NAMES)。 共有 project の repo
+    (書き込み権限のある共同研究者が直接 push する repo) で PR を勧めないための線。"""
+    try:
+        if repo.root.resolve() == TOOL_REPO.resolve():
+            return True
+    except OSError:
+        pass
+    return (repo.slug or "").split("/")[-1].lower() in LAYER1_NAMES
+
+
+def git_push_probe(repo: Repo) -> str:
+    """git の認証で base の remote に push できるか (yes / no / unknown)。 dry-run で無い名の ref に打つ = 何も書かない。
+    gh が別の account で login している所有者の機械でも、 git の push は本人の鍵で通る (= gh の account に依らない判定)。"""
+    try:
+        r = subprocess.run(["git", "-C", str(repo.root), "push", "--dry-run", "--porcelain", "--no-verify",
+                            repo.base_remote, f"HEAD:{PROBE_REF}"], capture_output=True, text=True,
+                           env=clean_env(), stdin=subprocess.DEVNULL, timeout=NET_TIMEOUT[0])
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    if r.returncode == 0:
+        return "yes"
+    text = (r.stderr + r.stdout).lower()
+    if any(h in text for h in NETWORK_HINTS):
+        return "unknown"
+    return "no"
+
+
+def permission(repo: Repo, refresh=False, cached_only=False):
+    """{'role': owner|writer|none|None, 'login', 'id', 'unknown': <理由>, 'stale': bool, 'via': gh|git}
+    gh が owner / writer と言わないときは git の push の dry-run も当て、 通れば owner (= 何もしない)。"""
     cache = repo.load_cache("permission") or None
     if cache and cache.get("slug") != repo.slug:
         cache = None
-    if cache and not refresh and time.time() - cache.get("checked_epoch", 0) < PERM_TTL:
-        return dict(cache, stale=False)
+    if cache and not refresh and (cached_only or time.time() - cache.get("checked_epoch", 0) < PERM_TTL):
+        return dict(cache, stale=time.time() - cache.get("checked_epoch", 0) >= PERM_TTL)
+    if cached_only:
+        return {"role": None, "unknown": "no-cache"}
     if not repo.slug:
         return {"role": None, "unknown": "not-github"}
     user, kind, _ = gh_json(["api", "user"])
     info = None
     if user is not None:
         info, kind, _ = gh_json(["api", f"repos/{repo.slug}"])
-    if user is None or info is None:
-        if cache:
-            return dict(cache, stale=True, unknown=kind)
-        return {"role": None, "unknown": kind}
-    perms = info.get("permissions") or {}
-    owner_login = ((info.get("owner") or {}).get("login") or "")
-    login = user.get("login") or ""
-    if perms.get("admin") or (perms.get("push") and login.lower() == owner_login.lower()):
-        role = "owner"
-    elif perms.get("push"):
-        role = "writer"
+    role, via, unknown = None, "gh", None
+    if user is not None and info is not None:
+        perms = info.get("permissions") or {}
+        owner_login = ((info.get("owner") or {}).get("login") or "")
+        login = user.get("login") or ""
+        if perms.get("admin") or (perms.get("push") and login.lower() == owner_login.lower()):
+            role = "owner"
+        elif perms.get("push"):
+            role = "writer"
+        else:
+            role = "none"
     else:
-        role = "none"
-    cache = {"slug": repo.slug, "role": role, "login": login, "id": user.get("id"), "owner": owner_login,
-             "fork": bool(info.get("fork")), "parent": ((info.get("parent") or {}).get("full_name")),
-             "checked_epoch": int(time.time())}
-    repo.save_cache("permission", cache)
-    return dict(cache, stale=False)
+        unknown = kind
+    if role in (None, "none") and git_push_probe(repo) == "yes":
+        role, via = "owner", "git"
+    if role is None:
+        if cache:
+            return dict(cache, stale=True, unknown=unknown)
+        return {"role": None, "unknown": unknown}
+    new = {"slug": repo.slug, "role": role, "via": via, "checked_epoch": int(time.time())}
+    if user is not None and info is not None:
+        new.update({"login": user.get("login") or "", "id": user.get("id"),
+                    "owner": ((info.get("owner") or {}).get("login") or ""), "fork": bool(info.get("fork")),
+                    "parent": ((info.get("parent") or {}).get("full_name"))})
+    repo.save_cache("permission", new)
+    return dict(new, stale=False, unknown=unknown)
 
 
 def noreply_line(perm) -> str:
@@ -766,6 +817,8 @@ def cmd_prepare(a) -> int:
         raise Fail(EXIT_USAGE, "--slug は英小文字・数字・. _ - の 48 字まで (branch 名 upstream-pr/<slug> になる)")
     if not (a.title or "").strip():
         raise Fail(EXIT_USAGE, "--title が要る (PR の題。 作業中の変更の commit message にもなる)")
+    if not is_layer1(repo):
+        raise Fail(EXIT_USAGE, f"{repo.name} は層1 の repo ({' / '.join(LAYER1_NAMES)}) でない = この道具の対象の外")
     ensure_writable(repo, f"PR の準備「{a.title}」")
     perm = permission(repo)
     if perm.get("role") == "owner":
@@ -885,15 +938,15 @@ def cmd_send(a) -> int:
     if kind == "no-gh":
         raise Fail(EXIT_NO_GH, gh_missing_line("no-gh"))
     perm = permission(repo, refresh=True)
-    if perm.get("unknown") == "network":
-        raise Fail(EXIT_APPROVAL, approval_text("GitHub に届かない (network が無い)", what))
-    if perm.get("unknown") == "auth":
-        raise Fail(EXIT_NO_GH, gh_missing_line("auth"))
-    if perm.get("stale") or perm.get("role") is None:
-        raise Fail(EXIT_UNAVAILABLE, f"push できるかを確かめられない ({perm.get('unknown')}) = 出さない")
-    if perm["role"] == "owner":
+    if perm.get("role") == "owner" and not perm.get("stale"):
         print(f"{repo.name}: push できる (所有者) = PR にしない。 何もしない")
         return EXIT_OK
+    if perm.get("unknown") == "network":
+        raise Fail(EXIT_APPROVAL, approval_text("GitHub に届かない (network が無い)", what))
+    if perm.get("unknown") in ("auth", "no-gh"):
+        raise Fail(EXIT_NO_GH, gh_missing_line(perm["unknown"]))
+    if perm.get("stale") or perm.get("role") is None or not perm.get("login"):
+        raise Fail(EXIT_UNAVAILABLE, f"push できるかを確かめられない ({perm.get('unknown')}) = 出さない")
     with repo.lock():
         st = repo.load_state()
         entry = st.get("prs", {}).get(a.slug) or entry
@@ -1030,6 +1083,8 @@ def cmd_restore(a) -> int:
 
 
 def cmd_after(a) -> int:
+    if a.timeout:
+        NET_TIMEOUT[0] = a.timeout
     rc_all = EXIT_OK
     for rp in repos_from_args(a.repo):
         try:
@@ -1090,6 +1145,32 @@ def cmd_drop(a) -> int:
     return EXIT_OK
 
 
+def print_brief(b):
+    """turn の終わりの促し用の 2 行 (commit + push の代わりに PR を勧める)。"""
+    root = b["repo"]
+    if b.get("unknown") == "not-github":
+        print(f"📤 {b['name']} ({root}): upstream に入っていない手元の変更があるが、 remote が GitHub でない = PR にできない")
+        return
+    parts = []
+    if b["paths"]:
+        parts.append(f"作業中 {len(b['paths'])} file")
+    if b["commits"]:
+        parts.append(f"upstream より先の commit {len(b['commits'])} 本")
+    if b["prepared"]:
+        parts.append(f"準備済みの PR {len(b['prepared'])} 本")
+    if b["open"]:
+        parts.append(f"出した PR {len(b['open'])} 本")
+    route = {"writer": "push できるが所有者でない = origin の branch から PR",
+             "none": "push できない = fork から PR"}.get(b["role"], "push できるか未確認")
+    print(f"📤 {b['name']} ({root}): {'・'.join(parts)} — {route}")
+    if b["paths"] or b["commits"]:
+        print("  → commit + push でなく PR にする (書き換えた理由がこの turn に残っているうちに本文を書く。 出すのは本人に 1 回聞いてから): "
+              f"{tool_cmd('prepare', '--repo', root, '--slug', '<短い名>', '--title', '<題>')}"
+              f" / 詳細と 3 択 = {tool_cmd('status', '--repo', root)}")
+    elif b["prepared"]:
+        print(f"  → 準備済みの PR を本人に 1 回聞いてから出す: {tool_cmd('status', '--repo', root)}")
+
+
 def repos_from_args(given):
     if given:
         return given
@@ -1100,9 +1181,22 @@ def repos_from_args(given):
     return out
 
 
-def status_one(repo: Repo):
+def refresh_in_background(repo: Repo):
+    """cache だけで判定する入口 (時間の枠の短い hook) が cache を持たないとき、 次の回のために裏で確かめておく。"""
+    try:
+        subprocess.Popen([sys.executable, str(SELF), "status", "--refresh", "--repo", str(repo.root)],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         env=clean_env(), start_new_session=True)
+    except OSError:
+        pass
+
+
+def status_one(repo: Repo, cached_only=False, refresh=False):
     """表示する block の dict。 黙るなら None。"""
-    if repo.disabled():
+    if repo.disabled() or not is_layer1(repo):
+        return None
+    if refresh:
+        permission(repo, refresh=True)
         return None
     paths = wip_paths(repo)
     commits, merges = ahead_commits(repo)
@@ -1115,8 +1209,11 @@ def status_one(repo: Repo):
     if not repo.slug:
         return {"repo": str(repo.root), "name": repo.name, "role": None, "unknown": "not-github",
                 "paths": paths, "commits": commits}
-    perm = permission(repo)
+    perm = permission(repo, cached_only=cached_only)
     if perm.get("role") == "owner":
+        return None
+    if cached_only and perm.get("unknown") == "no-cache":
+        refresh_in_background(repo)  # 所有者かどうか分からないまま勧めない (所有者の機械で黙るのが先)
         return None
     login = perm.get("login")
     return {"repo": str(repo.root), "name": repo.name, "role": perm.get("role"), "unknown": perm.get("unknown"),
@@ -1128,18 +1225,28 @@ def status_one(repo: Repo):
 
 
 def cmd_status(a) -> int:
+    if a.timeout:
+        NET_TIMEOUT[0] = a.timeout
     blocks = []
     for rp in repos_from_args(a.repo):
         try:
-            b = status_one(Repo(rp))
+            b = status_one(Repo(rp), cached_only=a.cached_only, refresh=a.refresh)
         except Fail as exc:
-            if a.repo:
+            if a.repo and not a.quiet_errors:
                 print(f"⚠️ upstream-pr status: {exc.msg}")
+            continue
+        except (OSError, subprocess.SubprocessError) as exc:
+            if not a.quiet_errors:
+                print(f"⚠️ upstream-pr status: {exc!r}")
             continue
         if b:
             blocks.append(b)
     if a.json:
         print(json.dumps(blocks, ensure_ascii=False, indent=1))
+        return EXIT_OK
+    if a.brief:
+        for b in blocks:
+            print_brief(b)
         return EXIT_OK
     for b in blocks:
         root = b["repo"]
@@ -1241,13 +1348,16 @@ def selftest() -> int:
         (bindir / "gh").write_text(FAKE_GH)
         (bindir / "gh").chmod(0o755)
         state_file = tmp / "gh-state.json"
+        fake_ssh = bindir / "ssh-deny"  # 本物の GitHub の代わり: git の push の dry-run を「鍵が無い」 で断る
+        fake_ssh.write_text("#!/bin/sh\necho 'git@github.com: Permission denied (publickey).' >&2\nexit 255\n")
+        fake_ssh.chmod(0o755)
         login, uid = "contrib", 4242
         noreply = f"{uid}+{login}@users.noreply.github.com"
         base_env = clean_env(drop=AGENT_ENV + ("CLAUDE_CARRYOVER_TRANSCRIPT",))
         base_env.update({"HOME": str(home), "XDG_CACHE_HOME": str(tmp / "cache"), "CLAUDE_PERSONAL_LAYER": "none",
                          "UPSTREAM_PR_ENGINE_DIR": os.environ.get("UPSTREAM_PR_ENGINE_DIR") or str(TOOL_SCRIPTS),
                          "FAKE_GH_STATE": str(state_file),
-                         "UPSTREAM_PR_GH": str(bindir / "gh"),
+                         "UPSTREAM_PR_GH": str(bindir / "gh"), "GIT_SSH_COMMAND": str(fake_ssh),
                          "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_DATE": "2001-01-01T00:00:00Z",
                          "GIT_COMMITTER_DATE": "2001-01-01T00:00:00Z"})
         base_env.pop("GIT_LITERAL_PATHSPECS", None)
@@ -1297,6 +1407,9 @@ def selftest() -> int:
             for k, v in (("user.name", "Contrib"), ("user.email", noreply),
                          ("upstream-pr.base", "upstream-owner/claude-config")):
                 sh("git", "-C", clone, "config", k, v)
+            # fetch は手元の bare から、 push は GitHub の形の URL (= 偽の ssh が断る) = push できない人の clone
+            sh("git", "-C", clone, "remote", "set-url", "--push", "origin",
+               "git@github.com:upstream-owner/claude-config.git")
 
         priv = parent / "private-notes"
         sh("git", "init", "-q", "-b", "main", priv)
@@ -1321,6 +1434,29 @@ def selftest() -> int:
         r = tool("status", "--repo", clone, env=dict(base_env, UPSTREAM_PR_GH=""))
         expect("owner: silent from cached role even without gh", r.stdout.strip() == "", r.stdout)
 
+        # 1b. gh が別の account で login している所有者: git の鍵で push できる = 黙る
+        fresh_clone()
+        sh("git", "-C", clone, "config", "--unset", "remote.origin.pushurl")
+        gh_state(login="family-account", perm={"push": False, "admin": False})
+        (clone / "README.md").write_text("# demo\n\nowner edit\n")
+        r = run_status()
+        perm_cache = json.loads((clone / ".git" / STATE_DIRNAME / "permission.json").read_text())
+        probe_left = sh("git", "--git-dir", tmp / "up.git", "rev-parse", "-q", "--verify", PROBE_REF,
+                        check=False).stdout.strip()
+        expect("owner via git push: silent even when gh is another account (the dry-run writes no ref)",
+               r.stdout.strip() == "" and perm_cache.get("via") == "git" and not probe_left,
+               r.stdout + r.stderr + str(perm_cache))
+
+        # 1c. 層1 でない repo (共有 project など) では、 書き込み権限があっても PR を勧めない
+        fresh_clone()
+        sh("git", "-C", clone, "config", "upstream-pr.base", "upstream-owner/shared-project")
+        gh_state(base="upstream-owner/shared-project", perm={"push": True, "admin": False})
+        (clone / "README.md").write_text("# demo\n\nshared edit\n")
+        r = run_status()
+        r2 = tool("prepare", "--repo", clone, "--slug", "x", "--title", "t")
+        expect("not layer 1: status silent, prepare refuses",
+               r.stdout.strip() == "" and r2.returncode == EXIT_USAGE and "層1" in r2.stderr, r.stdout + r2.stderr)
+
         # 2. 変更の無い clone は黙る
         fresh_clone()
         gh_state()
@@ -1333,10 +1469,20 @@ def selftest() -> int:
         sh("git", "-C", clone, "commit", "-q", "-m", "Add a general note")
         (clone / "README.md").write_text("# demo\n\nA small public repository used by the selftest, now clearer.\n")
         (clone / "extra.md").write_text("Another general paragraph.\n")
+        r = tool("status", "--repo", clone, "--cached-only")
+        expect("cached-only without a cache: silent (no advice before the role is known)",
+               r.stdout.strip() == "", r.stdout + r.stderr)
+        for _ in range(50):  # 裏の確かめが cache を書くのを待つ
+            if (clone / ".git" / STATE_DIRNAME / "permission.json").exists():
+                break
+            time.sleep(0.1)
         r = run_status()
         expect("contributor: status shows the block",
                "作業中の変更 2 file" in r.stdout and "先の commit 1 本" in r.stdout and "fork から PR" in r.stdout,
                r.stdout + r.stderr)
+        r = tool("status", "--repo", clone, "--brief", "--cached-only")
+        expect("brief (cached): the turn-end line says PR instead of commit + push",
+               "commit + push でなく PR" in r.stdout and len(r.stdout.strip().splitlines()) == 2, r.stdout + r.stderr)
         before = sh("git", "-C", clone, "status", "--porcelain").stdout
         r = tool("prepare", "--repo", clone, "--slug", "clarify-readme", "--title", "Clarify the README")
         expect("prepare: passes the leak checks", r.returncode == 0 and "漏洩の検査 = 通った" in r.stdout, r.stdout + r.stderr)
@@ -1466,6 +1612,7 @@ def selftest() -> int:
 
         # 6. 書き込み権限のある第三者: origin の branch から PR、 main には push しない
         fresh_clone()
+        sh("git", "-C", clone, "config", "--unset", "remote.origin.pushurl")
         gh_state(perm={"push": True, "admin": False})
         (clone / "ok.md").write_text("A general paragraph about the checks.\n")
         tool("prepare", "--repo", clone, "--slug", "writer", "--title", "Add a paragraph")
@@ -1521,6 +1668,11 @@ def main() -> int:
     p = sub.add_parser("status")
     p.add_argument("--repo", action="append")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--brief", action="store_true")
+    p.add_argument("--cached-only", action="store_true")
+    p.add_argument("--refresh", action="store_true")
+    p.add_argument("--timeout", type=int)
+    p.add_argument("--quiet-errors", action="store_true")
     p = sub.add_parser("prepare")
     p.add_argument("--repo", required=True)
     p.add_argument("--slug", required=True)
@@ -1539,6 +1691,7 @@ def main() -> int:
     p.add_argument("--repo", required=True)
     p = sub.add_parser("after")
     p.add_argument("--repo", action="append")
+    p.add_argument("--timeout", type=int)
     p = sub.add_parser("drop")
     p.add_argument("--repo", required=True)
     p.add_argument("--slug", required=True)
