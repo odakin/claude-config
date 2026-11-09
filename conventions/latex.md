@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -379,6 +379,28 @@ LuaTeX-ja は英数字と和文の間に空き (xkanjiskip) を入れる。 半�
 
 - `\let\c@table\c@figure` (`\makeatletter` の中で) で表が図の counter を使う。 番号の見た目は `\thefigure` と `\thetable` を同じ形に定義する
 - hyperref の anchor は `figure.…` と `table.…` に分かれたままなので、 種類の名前を付ける参照 ([#named-refs-without-cleveref](#named-refs-without-cleveref)) では「図」「表」 が種類どおりに出る (実測)
+
+## <a id="mark-after-heading-number"></a>選んだ見出しの番号の後ろにだけ印を付ける (飛ばしてよい節など) — 見出しと目次の番号の欄に出し、 参照・柱・しおりに漏らさない (jsclasses・ltjsbook)
+
+source は名前の頭に印の命令 (`\section{\skipmark 題}`・`\begin{proof}[\skipmark 証明]`) と書き、 表示だけを番号の後ろ (「1.2* 題」、 章は「第 2 章*」、 目次は番号の欄に「1.2*」、 証明は「証明*」) に出す形。
+
+- **漏れる形 3 つ** (どれも実測):
+  - `\thesection` (章は `\thechapter`) を差し替える → `\ref` の番号・柱・目次・しおりの番号に全部出る (`\refstepcounter` が `\@currentlabel` をその時点の `\the…` で作る)
+  - 章の `\@chappos` (「章」) に印を足す → 見出しと目次の番号には出るが、 柱の `\chaptermark` も `\@chappos` を mark の時点で展開するので柱にも出る
+  - 題の頭に印の命令を残したまま組む → 柱・しおり・目次の題に印が出て、 目次では題の頭が印の幅だけ右にずれる
+- **漏れない形**:
+  1. 見出しの命令 (`\@sect`・`\@chapter`) を包み、 題の頭が印の命令かを区切りつきの引数で判定する。 見出しに出す題からは印を外し、 目次・柱・しおりへ渡す短い題は頭を「何も出さない目印」 (`\protected\def\skiptocmark{}`) に替えて元の命令を呼ぶ。 印があったかは旗で持ち、 呼んだ後に倒す
+  2. 節の見出しの番号: `\@seccntformat` を `\csname the#1\endcsname\ifskip\skipsym\fi\quad` にする (`\@svsec` を作る `\protected@edef` の時点で旗を見る。 `\skipsym` は `\protected`)。 番号と題の間の空き (`\quad`) は印の有無で変わらない
+  3. 章の見出しの番号: `\@makechapterhead` を group で包み、 旗が立っていればその中だけ `\@chappos` の後ろに印を足す (柱は `\@chapter` の中の `\chaptermark` で先に作られているので触らない)
+  4. 目次: `\numberline` を包み、 番号の引数の直後の token を `\futurelet` で覗く。 目印なら番号の欄の中 (番号の直後) に印を入れて目印を食べる = 題の頭は印の無い行と揃う。 `\@ifnextchar` は空白を飛ばすので使わない
+  5. しおり: `\pdfstringdefDisableCommands{\let\skiptocmark\@empty}`
+  6. 番号の無い見出し (`\section*`・前付けの章・`secnumdepth` を越える段) は印の置き場が無いので包まず、 元の形 (その場に印) のままにする = 印が黙って消えない
+  7. 証明: `proof` の見出しの引数も同じ判定で印を後ろへ。 環境の名前は変えない (`\end{proof}` の名前で効く仕掛けを壊さない)
+- hyperref と nameref も `\@sect`・`\@chapter` を包むが、 引数をそのまま渡すので、 どちらが外側でも働く (実測)。 nameref の題の参照は目印を含むだけで、 印は出ない
+- **外すときは先に `.toc` を消す** — `.toc` に目印の命令が残り、 定義が無いと次の組みで止まる (自作の命令を `.toc`・`.aux` に書く仕掛けに共通の罠)
+- 和文: LuaTeX-ja は和文の字と半角の `*` の間に和欧文間の空きを入れない (実測 0pt、 同じ所に英字・数字を置くと四分の空き) = 「第 2 章*」「証明*」 は詰まって出る。 記号を替えたら測り直す
+- 目次の番号の欄: jsclasses の節の欄は 3.683\zw、 章の欄は「第章」 の幅 + 2.683\zw で、 A5・10pt では「10.12*」「第10章*」 も欄に収まった (実測)。 番号が長い本は欄を測る
+- 確かめ: 原稿を 1 度だけ写した dir で前後の仕掛けを組み、 頁の画素と字を比べる (変わってよい頁 = 印のある見出し・目次の行・証明の見出しと、 前の形で印が出ていた柱だけ)。 試しの文書で `\ref`・柱・しおりの文字を読む
 
 ## <a id="luatexja-per-command-kanji-weight"></a>1 つの命令だけ和文の字の太さを替える (luatexja) — 和文の字体を 1 つ足し、 縦組みの宣言も添える
 
