@@ -58,6 +58,8 @@ SETUP.md (= `templates/shared-project/SETUP.md.template` を埋めて生成し�
 
 共有リポの一般ルール: [claude-config/conventions/shared-repo.md](https://github.com/<owner>/claude-config/blob/main/conventions/shared-repo.md)
 
+チャットの数式: desktop の Code タブで読む返事は LaTeX (KaTeX で描ける形)、 CLI のターミナル・読む画面が分からないときは `_` `^` + Unicode。 正本 = [claude-config/conventions/chat-math-rendering.md](https://github.com/<owner>/claude-config/blob/main/conventions/chat-math-rendering.md)
+
 ## 公開前 audit
 
 新しい collaborator を追加する前に、[`AUDIT.md`](AUDIT.md) のチェックリストを通すこと。

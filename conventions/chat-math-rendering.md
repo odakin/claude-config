@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: チャットの返事に数式を書くとき (読ませる数式・コピペ用の LaTeX の両方) + 返事の数式が生の TeX のまま表示されたとき + 数式の書き方の規則を CLAUDE.md や template に置くとき
 category: harness-core
-summary: チャットの数式の書き方は返事を読む画面で決まる。 desktop の Code タブは KaTeX で描くので、 描ける区切りと KaTeX にあるコマンドだけを使う (`\[…\]`・physics パッケージ・行またぎ・表のセルの `|` は生表示)。 `$…$` と `\(…\)` には描画器の gate がある (`$…$` = 60 文字超・数式記号の無い式・裸の英字 4 連続は生表示 / `\(…\)` = 直前が半角空白でない・中身に数式記号が無いと生表示) = 本体の判定式を読んで確定。 規則を知っているだけでは防げないので、 Stop hook chat-math-render-guard.py が返事を本体と同じ式で検査して止める。 CLI のターミナルは描かないので Unicode。 コピペ用の LaTeX は code block
+summary: チャットの数式の書き方は返事を読む画面で決まる。 既定 = desktop の Code タブで読む返事は LaTeX で書く。 Code タブは KaTeX で描くので、 描ける区切りと KaTeX にあるコマンドだけを使う (`\[…\]`・physics パッケージ・行またぎ・表のセルの `|` は生表示)。 `$…$` と `\(…\)` には描画器の gate がある (`$…$` = 60 文字超・数式記号の無い式・裸の英字 4 連続は生表示 / `\(…\)` = 直前が半角空白でない・中身に数式記号が無いと生表示) = 本体の判定式を読んで確定。 規則を知っているだけでは防げないので、 Stop hook chat-math-render-guard.py が返事を本体と同じ式で検査して止める。 CLI のターミナル・headless・Remote Control (未測定)・読む画面が分からないときは Unicode。 コピペ用の LaTeX は code block
 -->
 # チャットでの数式の書き方
 
@@ -9,10 +9,14 @@ summary: チャットの数式の書き方は返事を読む画面で決まる�
 
 ## <a id="by-surface"></a>画面ごとの書き方
 
+**既定 = 返事を Code タブで読むなら、 数式は LaTeX で書く** ([#code-tab-katex](#code-tab-katex) の規則で。 描けない式は Stop hook [`chat-math-render-guard.py`](../hooks/chat-math-render-guard.py) が止めて書き直させる)。 Unicode で書くのは、 数式を描かない画面と、 読む画面が分からないとき:
+
 | 画面 | 数式の描画 | 書き方 |
 |---|---|---|
-| Claude desktop app の Code タブ | KaTeX で描く | LaTeX を [#code-tab-katex](#code-tab-katex) の規則で |
+| Claude desktop app の Code タブ | KaTeX で描く | **LaTeX** を [#code-tab-katex](#code-tab-katex) の規則で (既定) |
 | Claude Code CLI (ターミナル) | 描かない | `_` / `^` + Unicode (σ ∂ ℏ ∫ など) |
+| headless (`claude -p`・定期実行の出力) | 読む画面が別 (log・通知) | Unicode |
+| Remote Control (スマホなどで読む) | 未測定 | Unicode (測ったら本表を直す) |
 | 画面が決まらない (複数の画面で読まれる・どれか分からない) | — | Unicode (どの画面でも崩れない) |
 | コピペして `.tex` に貼る LaTeX 片 | (読ませない) | code block = [latex.md#latex-in-chat-codeblock](latex.md#latex-in-chat-codeblock) |
 
@@ -57,4 +61,4 @@ Code タブかどうかは、 system prompt の記述 (Claude desktop app の Co
 
 ## <a id="where-to-put-the-rule"></a>規則をどこに置くか
 
-規則の本文は本 doc だけに置き、 CLAUDE.md や template には要点と本 doc への参照だけを書く (同じ本文を複数の file に写すと、 片方だけ直る)。 個人層で書き方を絞る (例: 画面によらず常に Unicode) のは自由。 その時も、 どの画面が何を描くかの事実は本 doc に合わせる。
+規則の本文は本 doc だけに置き、 CLAUDE.md や template には要点と本 doc への参照だけを書く (同じ本文を複数の file に写すと、 片方だけ直る)。 個人層が既定 ([#by-surface](#by-surface) = Code タブなら LaTeX) と違う書き方を決めるとき (例: どの画面で読まれるかが session ごとに決まらない人が、 Code タブでも Unicode にする) は、 違える理由と範囲を個人層の規則に書き、 どの画面が何を描くかの事実は本 doc に合わせる。
