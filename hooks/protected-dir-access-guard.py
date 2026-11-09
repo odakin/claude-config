@@ -15,7 +15,7 @@
                                         置き場を、 触ってもいけない dir として使う。 二重管理にしないため)
 
 判定 (保護 dir D、 その親 dir の名前 P、 D の名前 B)。 Bash の command は単純 command (改行・; & | ( ) で割った 1 片。
-`\` 改行は継ぐ) ごとに shlex で語に分けて読む = 引用符の中の `/` (awk の "/"・sed の s/…/…/)・文の中の語は数えない。
+`\\` 改行は継ぐ) ごとに shlex で語に分けて読む = 引用符の中の `/` (awk の "/"・sed の s/…/…/)・文の中の語は数えない。
 heredoc の本文は command として読まず、 shell (`bash <<EOF`) と python (`python3 - <<EOF`) に流す本文だけを中身として読む。
 `bash -c` / `sh -c` / `eval` の文字列は command として読み直す。 同じ command の `for … in` の並びと代入は変数の値として読む:
   確認を出す (ask = 本人が dialog の文字から「中に入る」 と読める)

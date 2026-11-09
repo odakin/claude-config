@@ -71,6 +71,15 @@
       "hooks": [
         {
           "type": "command",
+          "command": "~/.claude/hooks/session-start-upstream-pr.sh",
+          "timeout": 30
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
           "command": "~/.claude/hooks/owner-asks.sh",
           "timeout": 10
         }

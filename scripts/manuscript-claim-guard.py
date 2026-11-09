@@ -1542,7 +1542,11 @@ PROHIBITION_FORMS = re.compile(r"(しない|書かない|置かない|入れな�
                                r"|させない|含めない|印字しない|送らない)")
 _PROHIBITION_EXT = re.compile(r"((?:書か|置か|入れ|載せ|出さ|残さ|写さ|使わ|渡さ|触ら|送ら|含め|させ|印字せ|せ)ず|不可(?![欠能避視逆解分])|禁じ)")
 _REFUSAL_SCOPE = re.compile(r"((この|今回の?|本|その|今の)\s*(変更|直し|commit|コミット|版|PR|依頼|案|範囲|節|file|ファイル|回|turn|段|作業"
-                            r"|実装|返答|返事)\s*(に|で|の中に|の中で)\s*(は|も)?|今回は|ここでは|ここには)")
+                            r"|実装|返答|返事)\s*(に|で|の中に|の中で)\s*(は|も)?|今回は|ここでは|ここには"
+                            # 書く面の公開の範囲を理由にした言明 (「層1 の公開の文なので、 … の語は入れません」 = 公開の文に書かない語の
+                            # 範囲を言う文で、 本人の求めの断りではない。 実測: 規則の file の承認の要らない言い直しがこの文で承認の道に
+                            # 回された)。 「この変更には」 型と同じ穴を持つ (本人が公開の面に書けと頼んだ件をこの形で断ると数えない)
+                            r"|(?:公開|層\s*[1１]|public)[^。\n]{0,24}?(?:なので|のため|ため|だから))")
 _CODE_SPAN = re.compile(r"`[^`\n]*`")
 _REFUSAL_NOUN = re.compile(r"[一-龥ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_-]{3,}")
 _REFUSAL_NOUN_STOP = frozenset("こと もの ため 場合 本人 規則 文書 file repo Claude claude agent session".split())
@@ -1660,9 +1664,11 @@ def refusal_tightening(session: tuple[str, str] | None, exempt: dict | None, pat
         for t in tightened:
             shared = _shared_nouns(_refusal_nouns(t), refused)
             if shared:
+                hit = next((s for _, s, p in marks if _shared_nouns(_refusal_nouns(t), _refusal_nouns(s + " " + p))), marks[0][1])
                 return (f"その会話で agent が本人の求めを断った件 (返事の「{marks[0][0]}」) の規則を、 断った向きに締める変更"
                         f" (足した文と断りの文が「{shared[0]}」 を共有) = 締める向きでも承認なしで通さない"
-                        " (agent-rule-ownership.md#refusal-not-in-owner-rules)。 言い換えで通さず、 差分を見せて本人に聞く")
+                        " (agent-rule-ownership.md#refusal-not-in-owner-rules)。 言い換えで通さず、 差分を見せて本人に聞く。"
+                        f" 当たった断りの文 = 「{collapse_ws(hit)[:120]}」")
         return ""
     except Exception:
         return ""
@@ -5468,6 +5474,14 @@ def apply_mode(args: argparse.Namespace) -> int:
         if regions:
             print("  承認の要る領域 = " + ", ".join(regions) + " (裁定を受けたら、 この command に --quote '<裁定の発言>' を"
                   "足して打つ。 先に approve で記録するなら --region にこの名を並べる)")
+        # 止める理由 = 緩める語か・断った件の網か・当たった文 (実測: 理由を見るために guard の関数を呼ぶ使い捨ての code を 5 回書いた)
+        for c in left:
+            why = str(c.get("detail") or "")
+            why = why[len(PROSE_DETAIL):] if why.startswith(PROSE_DETAIL) else why
+            if why:
+                print(f"  止める理由 ({c['region'].split('~', 1)[0]}{' = 断った件の網' if c.get('refusal') else ''}): {why[:400]}")
+            if c.get("refusal") and c.get("inserted"):
+                print("  本人に見せる締めの文 = " + " / ".join(x for x in str(c["inserted"]).split("\n") if x)[:400])
         return 0
     refusal_left = [c for c in left if c.get("refusal")]
     if refusal_left and not _carried_marks(session, rel, str(repo) if repo else "",
@@ -6567,6 +6581,11 @@ def refusal_tightening_selftests(check) -> None:
                                                      "宛先は下書きに書かない。", True),
         "範囲の言明 (数えない)": ([ua(0, "宛先の件も直す?"), aa(1, "宛先の直しは方針の外なので、この変更には入れません。"),
                              ua(2, "OK、それを規則に書いて")], "方針の外の宛先の直しは変更に入れない。", False),
+        "公開の範囲を理由にした言明 (数えない)": ([ua(0, "続きをやって"),
+                                       aa(1, "層1 の公開の文なので、来歴は「実測」 とだけ書き、件数・日付・案件の語は入れません。"),
+                                       ua(2, "規則を直して")], "公開の文の来歴に件数・日付・案件の語を書かない。", False),
+        "公開の範囲でない理由の断り (数える)": ([ua(0, "下書きに宛先を入れて"), aa(1, "宛先は危ないので、下書きに入れません。"),
+                                     ua(2, "規則を直して")], "宛先は下書きに書かない。", True),
         "code の中の印 (数えない)": ([ua(0, "網の仕組みを教えて"), aa(1, "網は `私の側の決まり` のような印を見て、宛先の規則を締める変更を止めます。"),
                                 ua(2, "宛先の規則に一文足して")], "宛先は下書きに書かない。", False),
         "2 往復より前の断り (今の窓の外)": ([ua(0, "下書きに宛先を入れて"), aa(1, "私の側の決まりで、宛先は下書きに入れません。"),

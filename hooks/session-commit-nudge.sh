@@ -43,6 +43,10 @@
 #     - stdin JSON から session_id 抽出
 #     - $STATE_DIR/<session_id>.list を読み、 各 repo に git status --porcelain
 #     - DIRTY > 0 の repo を集計、 1 件以上で stdout に nudge text injection
+#     - 層1 の repo (claude-config・ai-collaboration) を push できない人の clone では、 「commit + push」 の
+#       代わりに「PR にする」 を出す (engine = 本 repo の scripts/upstream-pr.py の status --brief。 dirty だけで
+#       なく upstream より先の commit も拾う = push を断られて手元に残った commit)。 engine が黙る
+#       (所有者・変更なし) repo は従来どおり dirty の行に回る。 python3 / engine が無ければ従来どおり
 #     - 状態 hash で同 dirty set への重複 nudge を suppress (= 同 turn 内
 #       で複数 Stop が連続発火しても rep noise を出さない)
 #     - stop_hook_active=true なら exit 0 (= recursive loop 防止)
@@ -68,6 +72,7 @@
 #
 # Test isolation:
 #   SESSION_TOUCH_STATE_DIR=/tmp/test-xyz/ を env で指定すると state dir 隔離。
+#   UPSTREAM_PR_ENGINE=<path> で層1 の PR の engine を差し替える (空 = engine 無し)。
 #   test script (= session-commit-nudge.test.sh) はこれを使う。
 #
 # bash 3.2 互換:
@@ -142,6 +147,42 @@ compute_sha1() {
   fi
 }
 
+# ----------------------------------------------------------------------
+# upstream_pr_engine: 層1 の PR の engine (本 repo の scripts/upstream-pr.py) の path を ENGINE と
+# ENGINE_REPO に置く (無ければ空)。 ~/.claude/hooks/ の symlink を辿って本 repo を特定する
+# ----------------------------------------------------------------------
+ENGINE=""
+ENGINE_REPO=""
+upstream_pr_engine() {
+  local SELF LINK
+  if [ "${UPSTREAM_PR_ENGINE+set}" = "set" ]; then
+    [ -n "$UPSTREAM_PR_ENGINE" ] && [ -f "$UPSTREAM_PR_ENGINE" ] && ENGINE="$UPSTREAM_PR_ENGINE"
+    return 0
+  fi
+  command -v python3 >/dev/null 2>&1 || return 0
+  SELF="${BASH_SOURCE[0]}"
+  while [ -L "$SELF" ]; do
+    LINK="$(readlink "$SELF")"
+    case "$LINK" in /*) SELF="$LINK" ;; *) SELF="$(dirname "$SELF")/$LINK" ;; esac
+  done
+  ENGINE_REPO="$(cd "$(dirname "$SELF")/.." 2>/dev/null && pwd -P)" || return 0
+  [ -f "$ENGINE_REPO/scripts/upstream-pr.py" ] && ENGINE="$ENGINE_REPO/scripts/upstream-pr.py"
+  return 0
+}
+
+# ----------------------------------------------------------------------
+# layer1_candidate <repo_root>: engine の述語 (本 repo / base の repo の名が claude-config・ai-collaboration)
+# の上位集合 = python を起こす前の絞り (conventions/hook-authoring.md#prefilter-superset-of-predicate)
+# ----------------------------------------------------------------------
+layer1_candidate() {
+  local REPO="$1" URLS
+  [ -n "$ENGINE_REPO" ] && [ "$REPO" = "$ENGINE_REPO" ] && return 0
+  [ -n "$(git -C "$REPO" config --get upstream-pr.base 2>/dev/null)" ] && return 0
+  URLS="$(git -C "$REPO" config --get-regexp '^remote\..*\.url$' 2>/dev/null || true)"
+  case "$URLS" in *claude-config*|*ai-collaboration*) return 0 ;; esac
+  return 1
+}
+
 case "$MODE" in
   track)
     # PostToolUse Edit/Write/MultiEdit → track repo
@@ -160,11 +201,22 @@ case "$MODE" in
 
     [ ! -f "$TOUCH_FILE" ] && exit 0
 
-    # Build nudge body, listing each dirty repo with file count
+    # Build nudge body, listing each dirty repo with file count.
+    # 層1 の repo で push できない人の clone は L1_BODY (PR の勧め) に回し、 dirty の行には入れない
+    upstream_pr_engine
     BODY=""
+    L1_BODY=""
     while IFS= read -r REPO; do
       [ -z "$REPO" ] && continue
       [ ! -d "$REPO" ] && continue
+      if [ -n "$ENGINE" ] && layer1_candidate "$REPO"; then
+        L1_OUT="$(python3 "$ENGINE" status --brief --quiet-errors --timeout 8 --repo "$REPO" 2>/dev/null || true)"
+        if [ -n "$L1_OUT" ]; then
+          L1_BODY="${L1_BODY}${L1_OUT}
+"
+          continue
+        fi
+      fi
       DIRTY_COUNT="$(git -C "$REPO" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
       if [ "$DIRTY_COUNT" -gt 0 ]; then
         BODY="${BODY}  - ${REPO}: ${DIRTY_COUNT} file(s) dirty
@@ -172,10 +224,10 @@ case "$MODE" in
       fi
     done < "$TOUCH_FILE"
 
-    [ -z "$BODY" ] && exit 0  # all clean → silent
+    [ -z "$BODY" ] && [ -z "$L1_BODY" ] && exit 0  # all clean → silent
 
     # Dedup: same dirty-state hash since last nudge → silent
-    STATE_HASH="$(compute_sha1 "$BODY")"
+    STATE_HASH="$(compute_sha1 "$BODY$L1_BODY")"
     LAST_NUDGED=""
     [ -f "$NUDGED_FILE" ] && LAST_NUDGED="$(cat "$NUDGED_FILE" 2>/dev/null || echo '')"
     if [ -n "$STATE_HASH" ] && [ "$STATE_HASH" = "$LAST_NUDGED" ]; then
@@ -184,10 +236,16 @@ case "$MODE" in
     [ -n "$STATE_HASH" ] && echo "$STATE_HASH" > "$NUDGED_FILE" 2>/dev/null
 
     # Emit nudge (= system reminder injection per Stop hook contract)
-    printf '[session-commit-nudge] このセッションで編集した repo に未 commit 残:\n'
-    printf '%s' "$BODY"
-    printf 'セッション終了前に commit + push 推奨 (= 別 session に WT を「拾われ」 て\n'
-    printf '意図しない commit + push されるのを防ぐ、 CLAUDE.md §17 圧力 (4))。\n'
+    if [ -n "$BODY" ]; then
+      printf '[session-commit-nudge] このセッションで編集した repo に未 commit 残:\n'
+      printf '%s' "$BODY"
+      printf 'セッション終了前に commit + push 推奨 (= 別 session に WT を「拾われ」 て\n'
+      printf '意図しない commit + push されるのを防ぐ、 CLAUDE.md §17 圧力 (4))。\n'
+    fi
+    if [ -n "$L1_BODY" ]; then
+      printf '[session-commit-nudge] 層1 の repo に upstream へ入っていない変更がある (この clone では push できない = commit + push でなく PR):\n'
+      printf '%s' "$L1_BODY"
+    fi
     exit 0
     ;;
 esac

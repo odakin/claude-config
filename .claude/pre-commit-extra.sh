@@ -79,15 +79,24 @@ if [ -f "$BLOAT" ] && command -v python3 >/dev/null 2>&1; then
 fi
 
 # --- 検査 6: 共有 repo に置いた雛形の写しの古さ (warn のみ、 CI には無い) ---
-# templates/shared-project/ の collaborator-check・python-env・pdf-publish を変える commit は、 共有 repo に置いた写しを
-# 古くする (古さが生まれる瞬間)。 その commit のときだけ、 base (この checkout の親 dir、 TEMPLATE_COPIES_BASE で上書き) で
+# 共有 repo に写しを置く正本 (templates/shared-project/ の雛形と、 project に写した利用者の hook) を変える commit は、
+# 写しを古くする (古さが生まれる瞬間)。 その commit のときだけ、 base (この checkout の親 dir、 TEMPLATE_COPIES_BASE で上書き) で
 # 写しが正本と違う repo と配り直しの 1 行を出す。 正本を直した session が、 写しの配り直しまでを 1 単位にする。
+# 見る正本の path は道具の --watched-paths から読む (ここに書き写さない = 見る種類を足しても、 この file は直さない)。
 # 判定の正本 = scripts/check-template-copies.py (終了値 1 = 古い写しあり、 それ以外の非 0 = 走っていない)。
 # 規約 = conventions/shared-repo.md#template-copy-staleness
 TCOPY="$REPO_ROOT/scripts/check-template-copies.py"
 if [ -f "$TCOPY" ] && command -v python3 >/dev/null 2>&1; then
-  tc_staged="$(git -C "$REPO_ROOT" diff --cached --name-only -- templates/shared-project/collaborator-check \
-    templates/shared-project/python-env templates/shared-project/pdf-publish 2>/dev/null)"
+  tc_paths="$(python3 "$TCOPY" --watched-paths 2>/dev/null)"
+  tc_staged=""
+  if [ -n "$tc_paths" ]; then
+    # 道具の定数の path に空白は無い = 単語に分けて git に渡す
+    # shellcheck disable=SC2086
+    tc_staged="$(git -C "$REPO_ROOT" diff --cached --name-only -- $tc_paths 2>/dev/null)"
+  else
+    echo "  ⚠️ [pre-commit-extra] 雛形の写しの検査が見る path を道具から読めない — この commit では走っていない" >&2
+    warned=1
+  fi
   if [ -n "$tc_staged" ]; then
     tc_out="$(python3 "$TCOPY" 2>&1)"; tc_rc=$?
     if [ "$tc_rc" -eq 1 ]; then

@@ -95,6 +95,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[session-start-provenance.test.sh](session-start-provenance.test.sh)** — Claude session model cache の fixture test
 - **[session-start-rewrite-follow.sh](session-start-rewrite-follow.sh)** — SessionStart: 履歴を書き換えられた (force-push) repo の clone を、 書き換えられない層 (本 repo) の判定で新しい履歴に揃える + manifest のある repo に pre-push stub を置く (engine = scripts/lib/git_rewrite_follow.py。 fetch はしない = 同じ session の同期 sweep が fetch した remote-tracking ref を読む)
 - **[session-start-rewrite-follow.test.sh](session-start-rewrite-follow.test.sh)** — SessionStart の追従 hook の入口 test (判定本体の test = scripts/lib/git_rewrite_follow.py を直接実行)
+- **[session-start-upstream-pr.sh](session-start-upstream-pr.sh)** — SessionStart: 層1 の repo (claude-config・ai-collaboration) に upstream へ入っていない手元の変更があり、 その人が push できない (所有者でない) ときだけ、 PR にする道を 1 block で出す + 出した PR の後片付け (engine = scripts/upstream-pr.py の status と after)。 所有者の機械・変更の無い clone では何も出さない
+- **[session-start-upstream-pr.test.sh](session-start-upstream-pr.test.sh)** — self-tests for session-start-upstream-pr.sh (配線だけを見る: engine は stub。 判定の中身 = scripts/upstream-pr.py --selftest)
 - **[session-start-windows-bootstrap.sh](session-start-windows-bootstrap.sh)** — SessionStart hook (layer 1): Windows 環境の毎 session 自動自己修復
 - **[session-start-windows-bootstrap.test.sh](session-start-windows-bootstrap.test.sh)** — self-tests for session-start-windows-bootstrap.sh
 - **[settings-entries.json](settings-entries.json)** — 層1 hook の settings.json 配線の唯一の list (event → entries)。

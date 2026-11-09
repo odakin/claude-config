@@ -101,8 +101,8 @@ assert_silent() {
 
 assert_nudge() {
   local name="$1" output="$2" expected_substr="$3"
-  if printf '%s' "$output" | grep -q "session-commit-nudge"; then
-    if [ -z "$expected_substr" ] || printf '%s' "$output" | grep -q "$expected_substr"; then
+  if grep -q "session-commit-nudge" <<< "$output"; then
+    if [ -z "$expected_substr" ] || grep -q "$expected_substr" <<< "$output"; then
       PASS=$((PASS+1))
       printf '  ✓ %s (nudge fired)\n' "$name"
     else
@@ -151,7 +151,7 @@ track_edit "$SID" "$REPO3B/file.txt"
 ( cd "$REPO3A" && git add file.txt && git commit --quiet -m "case3a commit" ) >/dev/null 2>&1
 OUT="$(stop_check "$SID")"
 assert_nudge "case 3: split outcome → nudge for dirty only" "$OUT" "$REPO3B"
-if printf '%s' "$OUT" | grep -q "$REPO3A"; then
+if grep -q "$REPO3A" <<< "$OUT"; then
   FAIL=$((FAIL+1))
   FAILED_CASES="${FAILED_CASES}  ✗ case 3 over-report (committed repo also listed)\n"
   printf '  ✗ case 3 over-report — REPO3A should NOT appear\n'
@@ -227,8 +227,8 @@ track_edit "$SID_A" "$REPO9A/file.txt"
 track_edit "$SID_B" "$REPO9B/file.txt"
 OUT_A="$(stop_check "$SID_A")"
 OUT_B="$(stop_check "$SID_B")"
-if printf '%s' "$OUT_A" | grep -q "$REPO9A" && ! printf '%s' "$OUT_A" | grep -q "$REPO9B" \
-   && printf '%s' "$OUT_B" | grep -q "$REPO9B" && ! printf '%s' "$OUT_B" | grep -q "$REPO9A"; then
+if grep -q "$REPO9A" <<< "$OUT_A" && ! grep -q "$REPO9B" <<< "$OUT_A" \
+   && grep -q "$REPO9B" <<< "$OUT_B" && ! grep -q "$REPO9A" <<< "$OUT_B"; then
   PASS=$((PASS+1))
   printf '  ✓ case 9: session_id isolation\n'
 else
@@ -249,6 +249,67 @@ assert_silent "case 10: stop_hook_active=true → silent" "$OUT"
 # --- case 11: no jq output JSON → silent (no session_id) ---
 OUT="$(echo '{"foo": "bar"}' | "$HOOK" nudge 2>/dev/null)"
 assert_silent "case 11: malformed/no session_id → silent" "$OUT"
+
+# --- case 12-15: 層1 の repo の PR の勧め (engine = stub。 配線だけを見る、 判定の中身は upstream-pr.py --selftest) ---
+STUB="$TEST_ROOT/stub-upstream-pr.py"
+printf '%s\n' 'import os, sys' \
+  'open(os.environ["STUB_LOG"], "a").write(" ".join(sys.argv[1:]) + "\n")' \
+  'say = os.environ.get("STUB_SAY", "")' \
+  'if say: print(say)' > "$STUB"
+export STUB_LOG="$TEST_ROOT/stub.log"
+: > "$STUB_LOG"
+L1_LINE="📤 claude-config: 作業中 1 file — push できない = fork から PR"
+
+# stop_check_with <engine> <stub が出す行> <session_id>: env を hook の process に直接渡す (関数の前の代入に頼らない)
+stop_check_with() {
+  local ENG="$1" SAY="$2" SID="$3" JSON
+  JSON="$(jq -n --arg sid "$SID" '{session_id: $sid, stop_hook_active: false}')"
+  printf '%s' "$JSON" | UPSTREAM_PR_ENGINE="$ENG" STUB_SAY="$SAY" "$HOOK" nudge 2>/dev/null
+}
+
+SID="sid-case12-$$"
+REPO12="$(mk_repo case12)"
+git -C "$REPO12" remote add origin https://github.com/someone/claude-config.git
+echo "x" > "$REPO12/file.txt"
+track_edit "$SID" "$REPO12/file.txt"
+OUT="$(stop_check_with "$STUB" "$L1_LINE" "$SID")"
+assert_nudge "case 12: layer-1 repo, cannot push → PR instead of commit + push" "$OUT" "commit + push でなく PR"
+assert_nudge "case 12b: the engine's line is passed on" "$OUT" "$L1_LINE"
+case "$OUT" in
+  *"未 commit 残"*) FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  ✗ case 12c (the dirty line also fired)\n"
+                    printf '  ✗ case 12c: the dirty line also fired\n' ;;
+  *) PASS=$((PASS+1)); printf '  ✓ case 12c: no commit + push line for that repo\n' ;;
+esac
+
+SID="sid-case13-$$"
+REPO13="$(mk_repo case13)"
+git -C "$REPO13" remote add origin https://github.com/someone/ai-collaboration.git
+echo "x" > "$REPO13/file.txt"
+track_edit "$SID" "$REPO13/file.txt"
+OUT="$(stop_check_with "$STUB" "" "$SID")"
+assert_nudge "case 13: layer-1 repo, engine silent (owner) → the usual dirty line" "$OUT" "$REPO13"
+
+SID="sid-case14-$$"
+REPO14="$(mk_repo case14)"
+git -C "$REPO14" remote add origin https://github.com/someone/shared-project.git
+echo "x" > "$REPO14/file.txt"
+track_edit "$SID" "$REPO14/file.txt"
+OUT="$(stop_check_with "$STUB" "$L1_LINE" "$SID")"
+assert_nudge "case 14: not a layer-1 repo → the usual dirty line" "$OUT" "$REPO14"
+if grep -qF -- "$REPO14" "$STUB_LOG"; then
+  FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  ✗ case 14b (engine was called for a non-layer-1 repo)\n"
+  printf '  ✗ case 14b: engine was called for a non-layer-1 repo\n'
+else
+  PASS=$((PASS+1)); printf '  ✓ case 14b: engine not called for a non-layer-1 repo\n'
+fi
+
+SID="sid-case15-$$"
+REPO15="$(mk_repo case15)"
+git -C "$REPO15" remote add origin https://github.com/someone/claude-config.git
+echo "x" > "$REPO15/file.txt"
+track_edit "$SID" "$REPO15/file.txt"
+OUT="$(stop_check_with "" "" "$SID")"
+assert_nudge "case 15: no engine → the usual dirty line" "$OUT" "$REPO15"
 
 # ======================================================================
 echo ""
