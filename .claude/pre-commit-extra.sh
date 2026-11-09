@@ -1,14 +1,14 @@
 #!/bin/bash
-# .claude/pre-commit-extra.sh — claude-config 固有の pre-commit 規律 (検査 1-3・5 = 警告のみ / 検査 4 legacy gate = BLOCK)
+# .claude/pre-commit-extra.sh — claude-config 固有の pre-commit 規律 (検査 1-3・5・6 = 警告のみ / 検査 4 legacy gate = BLOCK)
 #
 # public-precommit-runner.sh が leak gate を pass 後に chain で呼ぶ (= 既存 channel への
 # 相乗り。 新規 standalone 検出器 / dashboard 項目を増やさない)。 exit code は親に透過するが、
 # 本 hook は **warning のみで常に exit 0** にして commit を止めない (= drift は annoyance 級で、
 # convention-design-principles.md §9.1 〔= #blast-radius-triage〕 の triage に従い catastrophic 級の block を当てない)。
 #
-# 検査: (1) 生成 doc、(2) 自動生成 index、(3) Codex integration contract、(5) SESSION.md の行数を
+# 検査: (1) 生成 doc、(2) 自動生成 index、(3) Codex integration contract、(5) SESSION.md の行数、 (6) 雛形の写しの古さを
 #       その commit の瞬間・その本人へ warning で surface する。CI は (1)-(3) を BLOCK として実行する
-#       (= doc 記載の recall 依存 trigger を機械発火に格上げ)。(5) は CI に無い (= 行数で red にしない)。
+#       (= doc 記載の recall 依存 trigger を機械発火に格上げ)。(5)(6) は CI に無い (= 行数・他の repo の写しで red にしない)。
 #
 # 由来: DESIGN.md 2026-06-13「CONVENTIONS.md 冒頭の conventions/ 列挙」 の格上げ trigger の実体
 #       (35→56 file の列挙 drift が ~2.5 ヶ月 silent 累積した RCA)。 2026-07-10 に comm ベースの
@@ -75,6 +75,30 @@ if [ -f "$BLOAT" ] && command -v python3 >/dev/null 2>&1; then
   elif [ -n "$bloat_err" ]; then
     printf '%s\n' "$bloat_err" | sed 's/^/  /' >&2
     warned=1
+  fi
+fi
+
+# --- 検査 6: 共有 repo に置いた雛形の写しの古さ (warn のみ、 CI には無い) ---
+# templates/shared-project/ の collaborator-check・python-env・pdf-publish を変える commit は、 共有 repo に置いた写しを
+# 古くする (古さが生まれる瞬間)。 その commit のときだけ、 base (この checkout の親 dir、 TEMPLATE_COPIES_BASE で上書き) で
+# 写しが正本と違う repo と配り直しの 1 行を出す。 正本を直した session が、 写しの配り直しまでを 1 単位にする。
+# 判定の正本 = scripts/check-template-copies.py (終了値 1 = 古い写しあり、 それ以外の非 0 = 走っていない)。
+# 規約 = conventions/shared-repo.md#template-copy-staleness
+TCOPY="$REPO_ROOT/scripts/check-template-copies.py"
+if [ -f "$TCOPY" ] && command -v python3 >/dev/null 2>&1; then
+  tc_staged="$(git -C "$REPO_ROOT" diff --cached --name-only -- templates/shared-project/collaborator-check \
+    templates/shared-project/python-env templates/shared-project/pdf-publish 2>/dev/null)"
+  if [ -n "$tc_staged" ]; then
+    tc_out="$(python3 "$TCOPY" 2>&1)"; tc_rc=$?
+    if [ "$tc_rc" -eq 1 ]; then
+      echo "  ⚠️ [pre-commit-extra] この commit で雛形の写しが古くなる (配り直して、 各 repo で写しの file だけを path 指定で commit + push する):" >&2
+      printf '%s\n' "$tc_out" | sed 's/^/    /' >&2
+      warned=1
+    elif [ "$tc_rc" -ne 0 ]; then
+      echo "  ⚠️ [pre-commit-extra] 雛形の写しの検査が異常終了 (rc=$tc_rc) — この commit では走っていない" >&2
+      printf '%s\n' "$tc_out" | head -3 | sed 's/^/    /' >&2
+      warned=1
+    fi
   fi
 fi
 
