@@ -15,8 +15,10 @@ conventions/multi-session-coordination.md#codex-thread-close。
     ある thread (会話の窓) は、 最後の turn の終わりから GRACE 分 (既定 10、 env CODEX_THREAD_CLOSE_GRACE_MIN) 経つまで
     「本人と話している途中」 として残す (Claude 側の ANSWERED_GRACE_MIN と同じ値と同じ理由)。
   - 掲示板: thread が自分で投稿した・claim した・宛先になった・本文で名指しされた依頼 (全 id か、 機械の中で一意な先頭 8 字)
-    のうち、 受け取り (accept) も取り下げ (abandoned) もされていないもの。 thread が claim に使った役 (role id) 宛ての、
-    まだ誰も引き受けていない依頼 = 次の依頼 (残す)。 掲示板の root は --board-root か env CODEX_THREAD_CLOSE_BOARD_ROOTS
+    のうち、 受け取り (accept) も取り下げ (abandoned) もされていないもの。 今の担当が thread の claim に使った役 (role id)
+    で、 閉じておらず誰も引き受けていない依頼 = 次の依頼 (残す)。 担当と状態は掲示板の reducer (ai-collaboration
+    board/board_workflow.py、 隣に無ければ同じ遷移の写し) で読む = request の `assignee`、 assignee の handover で移り、
+    release で引受待ちに戻る (reviewer の handover の `target` は担当でない)。 掲示板の root は --board-root か env CODEX_THREAD_CLOSE_BOARD_ROOTS
     (無ければ CHILD_WRAP_BOARD_ROOTS、 os.pathsep 区切り、 glob 可)。 層1 に既定は無い。
   - 作業 dir の種類:
       sealed = 封じた盲検の sandbox (cwd の AGENTS.md の頭が「# Isolated」)。 wrap は頼まない = sandbox の規則が返送の後に
@@ -51,7 +53,9 @@ subcommand:
       残って見える項目を開くと thread/resume が「archived なので先に unarchive」 と断る (中身は壊れない)。
   unarchive THREAD   thread/unarchive (戻す)。 Codex の CLI の `codex unarchive <id>` も同じく戻す。
 台帳 = env CODEX_THREAD_CLOSE_LOG か ~/.claude/state/codex-thread-close.jsonl (wrap の依頼・archive・戻しの時刻と根拠)。
-状態 DB・queue・lock の配置は Codex の未文書の手元の layout = 読めなければ「分からない」 として残す側に倒す。
+状態 DB・queue・lock の配置は Codex の未文書の手元の layout = 読めなければ「分からない」 として残す側に倒す。 状態 DB は
+WAL の -wal/-shm が片づいた後 (書き手が全部閉じた時) は読み取り専用で開けない (実測、 アプリは動いたまま) = その時は
+書き込まない設定 (query_only) の通常の接続で読む (_state_connect)。
 """
 from __future__ import annotations
 
@@ -87,6 +91,7 @@ QUESTION_TAIL = re.compile(r"[?？]\s*$|(?:ますか|でしょうか|ません�
 URL_OR_CODE = re.compile(r"`[^`]*`|https?://\S+|\[[^\]]*\]\([^)]*\)")
 SEALED_HEAD = re.compile(r"^#\s*Isolated\b")
 CLOSED_BOARD = {"accepted", "abandoned"}
+ROLE_PREFIXES = ("role-", "resident-")  # the board's role ids (board_workflow.ROLE_PREFIXES)
 
 
 # ---------------------------------------------------------------- small helpers
@@ -176,10 +181,35 @@ def asks_owner(msg: dict | None) -> str | None:
 
 # ---------------------------------------------------------------- Codex state (read-only)
 
-def state_rows(ids=None, unarchived_interactive=False) -> list[dict] | None:
+def _state_connect():
+    """(connection, columns) on Codex's state DB, or None. First the shared read-only opener (lib/codex_threads.py).
+    Measured: when every writer has closed the WAL database, its -wal/-shm files are gone and a read-only connection
+    cannot open it ("unable to open database file") while the app is still running; then open it normally with
+    query_only on (SQLite makes the -shm/-wal files as any client would, and this connection writes nothing)."""
     if ct is None:
         return None
     got = ct._connect(None)
+    if got is not None:
+        return got
+    try:
+        from session_provenance_cache import codex_state_databases
+    except Exception:
+        return None
+    for database in codex_state_databases(dict(os.environ)):
+        try:
+            con = sqlite3.connect(str(database), timeout=2)
+            con.execute("PRAGMA query_only = ON")
+            cols = {str(r[1]) for r in con.execute("PRAGMA table_info(threads)")}
+            if "id" in cols:
+                return con, [c for c in ct.COLUMNS if c in cols]
+            con.close()
+        except (OSError, sqlite3.Error):
+            continue
+    return None
+
+
+def state_rows(ids=None, unarchived_interactive=False) -> list[dict] | None:
+    got = _state_connect()
     if got is None:
         return None
     con, cols = got
@@ -201,9 +231,7 @@ def state_rows(ids=None, unarchived_interactive=False) -> list[dict] | None:
 
 
 def all_ids() -> list[str]:
-    if ct is None:
-        return []
-    got = ct._connect(None)
+    got = _state_connect()
     if got is None:
         return []
     con, _ = got
@@ -296,48 +324,107 @@ def board_threads(roots) -> list[dict]:
     return out
 
 
-def request_status(evs: list[dict], request_id: str) -> str:
-    """The request's state from its events (the same transitions as the board's reducer, without its validation)."""
-    st = None
+_BOARD_REDUCER = []  # [function or None], loaded once
+
+
+def board_reducer():
+    """The board's own reducer (ai-collaboration board/board_workflow.reduce_workflow), or None when it is not beside
+    this checkout. One reading of a request's state and current assignee = the board's, not a copy that drifts."""
+    if not _BOARD_REDUCER:
+        fn = None
+        path = Path(os.environ.get("AI_COLLABORATION_DIR") or HERE.parents[1] / "ai-collaboration") / "board/board_workflow.py"
+        if path.exists() and not os.environ.get("CODEX_THREAD_CLOSE_NO_BOARD_REDUCER"):
+            try:
+                spec = importlib.util.spec_from_file_location("codex_close_board_workflow", path)
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                fn = mod.reduce_workflow
+            except Exception:  # an unreadable engine falls back to the local reading below
+                fn = None
+        _BOARD_REDUCER.append(fn)
+    return _BOARD_REDUCER[0]
+
+
+def reduce_fallback(evs: list[dict], request_id: str) -> dict:
+    """The same transitions as the board's reducer (board_workflow.apply) without its validation: the request names its
+    worker in `assignee`; a handover with handover_role=assignee moves the work to its `target` (and drops the claim);
+    a handover with handover_role=reviewer moves only the review; a release returns the request to requested with the
+    same assignee; accept / abandoned close it."""
+    s = {"status": "unknown", "assigned_to": None, "claim": None}
     for e in evs:
         if e.get("request_id") != request_id and e.get("event_id") != request_id:
             continue
         k = e.get("kind")
         if k == "request" and e.get("event_id") == request_id:
-            st = "requested"
-        elif st in CLOSED_BOARD:
+            s.update(status="requested", assigned_to=e.get("assignee"), claim=None)
+        elif s["status"] in CLOSED_BOARD or k == "note":
             continue
+        elif k == "handover" and e.get("handover_role") == "assignee":
+            s.update(assigned_to=e.get("target"), claim=None, status="requested")
         elif k == "claim":
-            st = "working"
-        elif k == "submit":
-            st = "submitted"
-        elif k == "revise":
-            st = "revision"
+            s.update(claim=e, status="working")
         elif k == "release":
-            st = "requested"
+            s.update(claim=None, status="requested")
+        elif k == "submit":
+            s["status"] = "submitted"
+        elif k == "revise":
+            s["status"] = "revision"
         elif k == "blocker":
-            st = "blocked"
+            s["status"] = "blocked"
         elif k in ("accept", "abandoned"):
-            st = "accepted" if k == "accept" else "abandoned"
-    return st or "unknown"
+            s["status"] = "accepted" if k == "accept" else "abandoned"
+    lease = (s["claim"] or {}).get("lease_until")
+    if s["status"] in ("working", "revision") and lease:
+        try:
+            if _dt.datetime.fromisoformat(lease.replace("Z", "+00:00")).timestamp() <= now_ts():
+                s["status"] = "stale"  # the board's reducer: an expired claim on work in progress
+        except ValueError:
+            pass
+    return s
+
+
+def reduce_request(evs: list[dict], request_id: str) -> dict:
+    """{status, assigned_to, claim} of one request: the board's reducer over that request's thread when it is beside this
+    checkout, else reduce_fallback. A thread holds one v2 request; events of other requests are left out first."""
+    fn = board_reducer()
+    mine = [e for e in evs if e.get("request_id") == request_id or e.get("event_id") == request_id
+            or (e.get("kind") == "note" and not e.get("request_id"))]
+    if fn is not None:
+        try:
+            st = fn(mine, _dt.datetime.fromtimestamp(now_ts(), _dt.timezone.utc))
+            if st.get("request") is not None:
+                return {"status": st.get("status"), "assigned_to": st.get("assigned_to"), "claim": st.get("claim")}
+        except Exception:
+            pass
+    return reduce_fallback(evs, request_id)
+
+
+def request_status(evs: list[dict], request_id: str) -> str:
+    return reduce_request(evs, request_id)["status"] or "unknown"
 
 
 def board_links(tid: str, threads: list[dict], unique8: bool) -> dict:
     """Requests this thread posted, claimed, was addressed by or is named in; roles it claimed; requests waiting on them."""
     t8 = tid[:8]
     linked, roles = {}, set()
+    # Only an id that a request event carries is a request. Measured: path-touch notes carry their own event id as
+    # request_id with no request anywhere, and counting them read "unknown" = an open request that kept the thread.
+    home = {e["event_id"]: bt for bt in threads for e in bt["events"] if e.get("kind") == "request" and e.get("event_id")}
     for bt in threads:
         for e in bt["events"]:
             a = e.get("actor") or {}
             rid = e.get("request_id") or (e.get("event_id") if e.get("kind") == "request" else None)
-            if not rid:
+            if not rid or rid not in home:
                 continue
             how = None
+            task = str(a.get("task") or "")
             if a.get("session_id") == tid:
                 how = "actor"
-            elif a.get("agent") == "codex" and str(a.get("task") or "").startswith(t8) and unique8:
+            elif a.get("agent") == "codex" and (task.startswith(tid) or (unique8 and task.startswith(t8))):
+                # the native id in the claim's name: the full id, or the board's 8-character form when it names one
+                # thread on this machine (measured: a worker's claims carried the full id while 8 characters were shared)
                 how = "actor"
-                if str(a.get("session_id") or "").startswith("role-"):
+                if str(a.get("session_id") or "").startswith(ROLE_PREFIXES):
                     roles.add(a["session_id"])
             elif ((e.get("target") or {}).get("session_id") == tid) or ((e.get("assignee") or {}).get("session_id") == tid):
                 how = "target"
@@ -346,21 +433,29 @@ def board_links(tid: str, threads: list[dict], unique8: bool) -> dict:
                 if tid in body or (unique8 and re.search(rf"(?<![0-9a-f]){t8}(?![0-9a-f])", body)):
                     how = "named"
             if how:
-                key = (str(bt["dir"]), rid)
-                linked.setdefault(key, {"thread": bt["dir"].name, "project": bt["dir"].parent.name, "request": rid,
-                                        "how": set(), "events": bt["events"]})["how"].add(how)
+                hb = home[rid]  # the request's own thread holds its workflow events
+                key = (str(hb["dir"]), rid)
+                linked.setdefault(key, {"thread": hb["dir"].name, "project": hb["dir"].parent.name, "request": rid,
+                                        "how": set(), "events": hb["events"]})["how"].add(how)
     out = []
     for (_, rid), v in linked.items():
         out.append({"thread": v["thread"], "project": v["project"], "request": rid, "how": sorted(v["how"]),
                     "status": request_status(v["events"], rid)})
-    nxt = []
+    # Next request = an open, unclaimed request whose current assignee is a role this thread claimed under. The assignee
+    # is the request's `assignee` as moved by later handovers (handover_role=assignee); `target` on a request is not
+    # the v2 schema, and a reviewer handover's target is not the worker (measured: reading the request's `target`
+    # found no next request on the real board, so a thread with one waiting was judged closable).
+    nxt, seen = [], set()
     for bt in threads:
         for e in bt["events"]:
-            if e.get("kind") == "request" and (e.get("target") or {}).get("session_id") in roles:
-                st = request_status(bt["events"], e["event_id"])
-                if st == "requested":
-                    nxt.append({"thread": bt["dir"].name, "project": bt["dir"].parent.name, "request": e["event_id"],
-                                "role": e["target"]["session_id"]})
+            if e.get("kind") != "request" or e.get("event_id") in seen:
+                continue
+            seen.add(e.get("event_id"))
+            st = reduce_request(bt["events"], e["event_id"])
+            who = (st.get("assigned_to") or {}).get("session_id")
+            if who in roles and st.get("claim") is None and st.get("status") not in CLOSED_BOARD:
+                nxt.append({"thread": bt["dir"].name, "project": bt["dir"].parent.name, "request": e["event_id"],
+                            "role": who, "status": st.get("status")})
     return {"requests": out, "roles": sorted(roles), "next": nxt}
 
 
@@ -724,7 +819,22 @@ def cmd_wait(a) -> int:
 
 
 def resolve(token: str) -> str:
-    tid = ct.resolve(token) if ct is not None else None
+    """A full thread id from a full id or a unique prefix (8+ characters), through the same opener as state_rows."""
+    token = (token or "").strip().lower()
+    tid = None
+    if ct is not None and ct.THREAD_ID.fullmatch(token):
+        tid = token
+    elif ct is not None and ct.PREFIX.fullmatch(token):
+        got = _state_connect()
+        if got is not None:
+            con, _ = got
+            try:
+                rows = con.execute("SELECT id FROM threads WHERE id LIKE ? LIMIT 3", (token + "%",)).fetchall()
+            except sqlite3.Error:
+                rows = []
+            finally:
+                con.close()
+            tid = rows[0][0] if len(rows) == 1 else None
     if not tid:
         sys.exit(f"⛔ thread が一意に決まらない: {token}")
     return tid
@@ -901,39 +1011,129 @@ def _selftest() -> int:
     r = judge(T, th(sealed, turn("spec", "done.")), None, done, sandbox=collected)
     check("依頼文 1 つの窓には待ちを掛けない", r["closable"])
     os.environ["CODEX_THREAD_CLOSE_NOW"] = "1794300000"
-    # board links
+    # board: events in the board's v2 shape (the field set of real request / claim / submit / accept / handover / release
+    # events: schema_version, project, actor{agent, task, instance, session_id}, source_policy, lease_until, request_id,
+    # assignee on the request, reply_to, target + handover_role on a handover). Values are synthetic.
+    REQ = "c1000000-0000-4000-8000-000000000001"  # the requesting Claude session (synthetic)
+
+    def v2(kind, eid, rid, sid, at, agent="claude", task=None, **extra):
+        e = {"schema_version": 2, "event_id": eid, "thread_id": "t-" + rid, "project": {"key": "proj", "repo": None},
+             "actor": {"agent": agent, "task": task or f"{sid[:8]} ({agent})", "instance": f"{agent}@host", "session_id": sid},
+             "kind": kind, "source_policy": "ordinary", "created_at": at, "lease_until": None, "summary": f"{kind} {rid}",
+             "touches": [], "references": [], "promoted_to": [], "supersedes": [], "details": "", "request_id": rid}
+        e.update(extra)
+        return e
+
+    def request(rid, assignee, at, summary=None):
+        e = v2("request", rid, rid, REQ, at, assignee={"agent": "codex", "session_id": assignee}, acceptance="done",
+               deliverables=["out.md"])
+        if summary:
+            e["summary"] = summary
+        return e
+
+    def claim(rid, role, at, task=f"{T[:8]} (Codex)"):
+        return v2("claim", "C-" + rid, rid, role, at, agent="codex", task=task, lease_until="2026-11-09T23:00:00Z")
+
+    def write_thread(root, name, evs):
+        d = root / "events" / "proj" / name
+        d.mkdir(parents=True)
+        for e in evs:
+            (d / f"{e['event_id']}.json").write_text(json.dumps(e, ensure_ascii=False))
+
     root = tmp / "board"
-    d = root / "events" / "proj" / "2026-11-09-x"
-    d.mkdir(parents=True)
-    evs = [{"kind": "request", "event_id": "R1", "created_at": "2026-11-09T00:00:00Z", "actor": {"agent": "claude", "session_id": "c"},
-            "summary": "盲検を起こす"},
-           {"kind": "note", "event_id": "N1", "request_id": "R1", "created_at": "2026-11-09T00:01:00Z",
-            "actor": {"agent": "claude", "session_id": "role-a"}, "summary": f"Codex の thread {T[:8]} を起こした"},
-           {"kind": "accept", "event_id": "A1", "request_id": "R1", "created_at": "2026-11-09T00:09:00Z",
-            "actor": {"agent": "claude", "session_id": "c"}, "summary": "ok"}]
-    for e in evs:
-        (d / f"{e['event_id']}.json").write_text(json.dumps(e, ensure_ascii=False))
+    write_thread(root, "2026-11-09-x", [
+        request("R0", "role-a", "2026-11-09T00:00:00Z", summary="盲検を起こす"),
+        v2("note", "N0", "R0", "role-a", "2026-11-09T00:01:00Z", summary=f"Codex の thread {T[:8]} を起こした"),
+        claim("R0", "role-a", "2026-11-09T00:02:00Z", task="22222222 (opus)"),
+        v2("submit", "S-R0", "R0", "role-a", "2026-11-09T00:05:00Z", agent="codex", task="22222222 (opus)",
+           reply_to="C-R0", deliverables=["out.md"]),
+        v2("accept", "A-R0", "R0", REQ, "2026-11-09T00:09:00Z", reply_to="S-R0")])
     bt = board_threads([root])
     links = board_links(T, bt, unique8=True)
     check("本文の先頭 8 字で依頼に結び付き、 受け取り済みと読む",
           len(links["requests"]) == 1 and links["requests"][0]["status"] == "accepted")
     check("foil: 先頭 8 字が一意でなければ本文では結び付けない", not board_links(T, bt, unique8=False)["requests"])
-    d2 = root / "events" / "proj" / "2026-11-09-y"
-    d2.mkdir(parents=True)
-    for e in [{"kind": "request", "event_id": "R2", "created_at": "2026-11-09T01:00:00Z", "actor": {"agent": "claude", "session_id": "c"},
-               "target": {"agent": "codex", "session_id": "role-w"}, "summary": "work"},
-              {"kind": "claim", "event_id": "C2", "request_id": "R2", "created_at": "2026-11-09T01:01:00Z",
-               "actor": {"agent": "codex", "session_id": "role-w", "task": f"{T[:8]} (Codex)"}, "summary": "c"},
-              {"kind": "accept", "event_id": "A2", "request_id": "R2", "created_at": "2026-11-09T02:00:00Z",
-               "actor": {"agent": "claude", "session_id": "c"}, "summary": "ok"},
-              {"kind": "request", "event_id": "R3", "created_at": "2026-11-09T03:00:00Z", "actor": {"agent": "claude", "session_id": "c"},
-               "target": {"agent": "codex", "session_id": "role-w"}, "summary": "next job"}]:
-        (d2 / f"{e['event_id']}.json").write_text(json.dumps(e, ensure_ascii=False))
+    # the thread claimed R1 under role-w and it was accepted = normal completion
+    write_thread(root, "2026-11-09-r1", [
+        request("R1", "role-w", "2026-11-09T01:00:00Z"),
+        claim("R1", "role-w", "2026-11-09T01:01:00Z"),
+        v2("submit", "S-R1", "R1", "role-w", "2026-11-09T01:30:00Z", agent="codex", task=f"{T[:8]} (Codex)",
+           reply_to="C-R1", deliverables=["out.md"]),
+        v2("accept", "A-R1", "R1", REQ, "2026-11-09T02:00:00Z", reply_to="S-R1")])
     links = board_links(T, board_threads([root]), unique8=True)
-    check("claim した役を引き、 その役宛ての未着手の依頼を次の依頼と読む",
-          links["roles"] == ["role-w"] and [n["request"] for n in links["next"]] == ["R3"])
-    check("request_status: release の後は引受待ちに戻る", request_status(
-        [{"kind": "request", "event_id": "X"}, {"kind": "claim", "request_id": "X"}, {"kind": "release", "request_id": "X"}], "X") == "requested")
+    check("通常の完了: claim した役 role-w を引き、 次の依頼は無い", links["roles"] == ["role-w"] and links["next"] == [])
+    r = judge(T, th(sealed, turn("spec", "done.")), None, links, sandbox=collected)
+    check("通常の完了: 受け取り済みで次の依頼が無ければ畳める", r["closable"])
+    # the counterexample: an unclaimed R2 whose assignee (the v2 field) is role-w
+    write_thread(root, "2026-11-09-r2", [request("R2", "role-w", "2026-11-09T03:00:00Z")])
+    links = board_links(T, board_threads([root]), unique8=True)
+    check("反例: assignee が role-w の未着手の依頼を次の依頼と読む", [n["request"] for n in links["next"]] == ["R2"])
+    r = judge(T, th(sealed, turn("spec", "done.")), None, links, sandbox=collected)
+    check("反例: 次の依頼があれば残す (前の形は target を読んで畳める側に出した)",
+          not r["closable"] and any("次の依頼" in x for x in r["reasons"]))
+    # handovers and a release move or keep the work
+    write_thread(root, "2026-11-09-r3", [
+        request("R3", "role-w", "2026-11-09T04:00:00Z"),
+        v2("handover", "H-R3", "R3", REQ, "2026-11-09T04:01:00Z", reply_to="R3",
+           target={"agent": "codex", "session_id": "role-x"}, handover_role="assignee")])
+    write_thread(root, "2026-11-09-r4", [
+        request("R4", "role-x", "2026-11-09T05:00:00Z"),
+        v2("handover", "H-R4", "R4", REQ, "2026-11-09T05:01:00Z", reply_to="R4",
+           target={"agent": "codex", "session_id": "role-w"}, handover_role="assignee")])
+    write_thread(root, "2026-11-09-r5", [
+        request("R5", "role-w", "2026-11-09T06:00:00Z"),
+        claim("R5", "role-w", "2026-11-09T06:01:00Z", task="99999999 (Codex)"),
+        v2("release", "L-R5", "R5", "role-w", "2026-11-09T06:30:00Z", agent="codex", task="99999999 (Codex)",
+           reply_to="C-R5")])
+    write_thread(root, "2026-11-09-r6", [
+        request("R6", "role-y", "2026-11-09T07:00:00Z"),
+        v2("handover", "H-R6", "R6", REQ, "2026-11-09T07:01:00Z", reply_to="R6",
+           target={"agent": "codex", "session_id": "role-w"}, handover_role="reviewer")])
+    write_thread(root, "2026-11-09-r7", [
+        request("R7", "role-w", "2026-11-09T08:00:00Z"),
+        claim("R7", "role-w", "2026-11-09T08:01:00Z", task="99999999 (Codex)")])
+    write_thread(root, "2026-11-09-touch", [  # a path-touch note: its own id as request_id, no request event
+        v2("note", "TOUCH1", "TOUCH1", T, "2026-11-09T09:00:00Z", agent="codex", task="wrap")])
+    write_thread(root, "2026-11-09-r8", [  # a claim named by the full thread id
+        request("R8", "role-z", "2026-11-09T09:10:00Z"),
+        claim("R8", "role-z", "2026-11-09T09:11:00Z", task=f"{T} (Codex)"),
+        v2("submit", "S-R8", "R8", "role-z", "2026-11-09T09:20:00Z", agent="codex", task=f"{T} (Codex)",
+           reply_to="C-R8", deliverables=["out.md"]),
+        v2("accept", "A-R8", "R8", REQ, "2026-11-09T09:30:00Z", reply_to="S-R8")])
+    bt = board_threads([root])
+    lk = board_links(T, bt, unique8=False)
+    check("foil: 依頼の event の無い request_id (宣言の note) は依頼に結び付けない",
+          not any(r["request"] == "TOUCH1" for r in board_links(T, bt, unique8=True)["requests"]))
+    check("claim の名が完全な thread id なら、 先頭 8 字が一意でなくても役を引く", "role-z" in lk["roles"])
+    nxt = sorted(n["request"] for n in board_links(T, bt, unique8=True)["next"])
+    check("担当の handover: role-w から外へ移した依頼は次の依頼でない", "R3" not in nxt)
+    check("担当の handover: role-w へ移した依頼は次の依頼", "R4" in nxt)
+    check("release: 引き受けた後に手放した role-w の依頼は次の依頼", "R5" in nxt)
+    check("foil: reviewer の handover の target は担当でない", "R6" not in nxt)
+    check("foil: 別の窓が role-w で引き受け中の依頼は次の依頼でない", "R7" not in nxt)
+    check("次の依頼の全体 = R2・R4・R5", nxt == ["R2", "R4", "R5"])
+    # the local reading and the board's reducer agree on every request here (when the engine is beside this checkout)
+    if board_reducer() is not None:
+        agree = True
+        for t in bt:
+            for e in t["events"]:
+                if e["kind"] != "request":
+                    continue
+                a, b = reduce_request(t["events"], e["event_id"]), reduce_fallback(t["events"], e["event_id"])
+                same = (a["status"] == b["status"] and (a["assigned_to"] or {}).get("session_id")
+                        == (b["assigned_to"] or {}).get("session_id") and (a["claim"] is None) == (b["claim"] is None))
+                agree = agree and same
+        check("掲示板の reducer と手元の写しが全部の依頼で同じ状態・担当を出す", agree)
+    os.environ["CODEX_THREAD_CLOSE_NO_BOARD_REDUCER"] = "1"
+    _BOARD_REDUCER.clear()
+    nxt_local = sorted(n["request"] for n in board_links(T, board_threads([root]), unique8=True)["next"])
+    del os.environ["CODEX_THREAD_CLOSE_NO_BOARD_REDUCER"]
+    _BOARD_REDUCER.clear()
+    check("掲示板の reducer が無くても同じ次の依頼を出す", nxt_local == ["R2", "R4", "R5"])
+    check("reduce_fallback: release の後は引受待ちに戻り、 担当は残る", reduce_fallback(
+        [request("X", "role-w", "2026-11-09T00:00:00Z"), claim("X", "role-w", "2026-11-09T00:01:00Z"),
+         v2("release", "L-X", "X", "role-w", "2026-11-09T00:02:00Z", agent="codex", reply_to="C-X")], "X")
+          == {"status": "requested", "assigned_to": {"agent": "codex", "session_id": "role-w"}, "claim": None})
     check("asks_owner: 頼みの形 (ください) は問いと数える", asks_owner({"text": "確認してください。"}) is not None)
     check("asks_owner: 完了の報告は問いでない", asks_owner({"text": "Completed both stages.\n[Review](R.md)"}) is None)
     check("is_wrap_input: `$wrap` と型つきの入力を読む", is_wrap_input({"content": [{"type": "text", "text": "$wrap"}]})

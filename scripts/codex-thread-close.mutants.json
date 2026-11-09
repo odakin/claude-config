@@ -1,0 +1,75 @@
+{
+  "_comment": "codex-thread-close.py の selftest の掲示板の foil に歯があることを、 次の依頼の読み方の直しの一部を外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 mutant 1 は直す前の形 (request の target を宛先と読み、 v2 の assignee を見ない = 次の依頼のある thread を畳める側に出した)。",
+  "target": "codex-thread-close.py",
+  "run": "env AI_COLLABORATION_DIR={spec_dir}/../../ai-collaboration python3 {} --selftest",
+  "fail_marker": "FAIL: ",
+  "pass_marker": "OK: ",
+  "mutants": [
+    {
+      "name": "次の依頼の宛先を request の target で読む (直す前の形)",
+      "pairs": [
+        ["who = (st.get(\"assigned_to\") or {}).get(\"session_id\")", "who = (e.get(\"target\") or {}).get(\"session_id\")"]
+      ],
+      "expect_fail": [
+        "反例: assignee が role-w の未着手の依頼を次の依頼と読む",
+        "反例: 次の依頼があれば残す",
+        "担当の handover: role-w へ移した依頼は次の依頼",
+        "release: 引き受けた後に手放した role-w の依頼は次の依頼"
+      ],
+      "expect_pass": [
+        "通常の完了: claim した役 role-w を引き、 次の依頼は無い",
+        "foil: reviewer の handover の target は担当でない"
+      ]
+    },
+    {
+      "name": "手元の写しが reviewer の handover も担当の移しと読む",
+      "pairs": [
+        ["elif k == \"handover\" and e.get(\"handover_role\") == \"assignee\":", "elif k == \"handover\":"]
+      ],
+      "expect_fail": [
+        "掲示板の reducer と手元の写しが全部の依頼で同じ状態・担当を出す",
+        "掲示板の reducer が無くても同じ次の依頼を出す"
+      ],
+      "expect_pass": [
+        "反例: assignee が role-w の未着手の依頼を次の依頼と読む"
+      ]
+    },
+    {
+      "name": "依頼の event の有無を見ずに request_id を依頼と数える (宣言の note を開いた依頼と読む)",
+      "pairs": [
+        ["if not rid or rid not in home:", "if not rid:"],
+        ["hb = home[rid]  #", "hb = home.get(rid, bt)  #"]
+      ],
+      "expect_fail": [
+        "foil: 依頼の event の無い request_id (宣言の note) は依頼に結び付けない"
+      ],
+      "expect_pass": [
+        "通常の完了: claim した役 role-w を引き、 次の依頼は無い"
+      ]
+    },
+    {
+      "name": "claim の名の完全な thread id を見ず、 先頭 8 字の一意性だけで役を引く",
+      "pairs": [
+        ["(task.startswith(tid) or (unique8 and task.startswith(t8)))", "(unique8 and task.startswith(t8))"]
+      ],
+      "expect_fail": [
+        "claim の名が完全な thread id なら、 先頭 8 字が一意でなくても役を引く"
+      ],
+      "expect_pass": [
+        "反例: assignee が role-w の未着手の依頼を次の依頼と読む"
+      ]
+    },
+    {
+      "name": "手元の写しが lease の切れた claim を stale と読まない",
+      "pairs": [
+        ["                s[\"status\"] = \"stale\"  # the board's reducer: an expired claim on work in progress\n", "                pass\n"]
+      ],
+      "expect_fail": [
+        "掲示板の reducer と手元の写しが全部の依頼で同じ状態・担当を出す"
+      ],
+      "expect_pass": [
+        "掲示板の reducer が無くても同じ次の依頼を出す"
+      ]
+    }
+  ]
+}

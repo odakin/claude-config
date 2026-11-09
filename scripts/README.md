@@ -143,6 +143,7 @@
 - **[close-pdf-form-boxes.py](close-pdf-form-boxes.py)** — Excel→PDF 出力で落ちたフォームの枠罫線を検出して閉じる。
 - **[codex-app-launch.py](codex-app-launch.py)** — Codex の仕事を Codex アプリで進行が見え、 その窓から話しかけられる形で起こす (アプリを書き手にする)。
 - **[codex-headless-launch-check.py](codex-headless-launch-check.py)** — 掲示板の依頼の worker や盲検の判定 session を headless の `codex exec` で起こす Bash を止め、 Codex アプリに出る起こし方を出す (理由を書けば通す。 hook の engine)。
+- **[codex-thread-close.mutants.json](codex-thread-close.mutants.json)** — codex-thread-close.py の selftest の掲示板の foil に歯があることを、 次の依頼の読み方の直しの一部を外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[codex-thread-close.py](codex-thread-close.py)** — 仕事を終えた Codex のチャット (thread) を、 wrap させてから archive する (指揮役が使う)。 判定 (list / check)・wrap の依頼・wrap の turn の待ち・archive・戻し (unarchive)。 --selftest。
 - **[codex-wrap-inventory.py](codex-wrap-inventory.py)** — Codexの指定sessionの会話・道具・委譲先をread-onlyで集める。--selftest。
 - **[codex_mail_install.py](codex_mail_install.py)** — Install/audit only the owner-selected Codex mail skill and narrow prompt rule.
