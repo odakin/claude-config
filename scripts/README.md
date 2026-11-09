@@ -417,6 +417,7 @@
 - **[transcript-tool-result.py](transcript-tool-result.py)** — Claude Code の会話記録 (jsonl) から tool の戻り値を file に取り出す
 - **[transplant-functions.py](transplant-functions.py)** — Copy named top-level functions of one Python file into another (foil: run the new tests against the version before a fix).
 - **[tune-seal-image.py](tune-seal-image.py)** — Calibrate a digitized seal PNG against a *printed* reference — stroke width and ink color.
+- **[upstream-pr.py](upstream-pr.py)** — 層1 の repo (claude-config・ai-collaboration) を push できない人の clone で、 手元の変更を「気づく → 準備 → 本人の 1 回の確認 → fork から PR → 手元の main を upstream に戻す」 まで運ぶ (status / prepare / send / restore / after)。 所有者 (push できる人) の機械では何もしない。 --selftest 内蔵。
 - **[usage-window-report.py](usage-window-report.py)** — この機械の Claude Code の会話記録から、 ある時間帯に何がどれだけ token を使ったかを、 設定フォルダ × model・session・時間ごとに数える (読むだけ)。
 - **[uyghur-tts.py](uyghur-tts.py)** — Generate Uyghur speech through the public Idirak/MMS-TTS endpoint.
 - **[validate-codex-skills.test.sh](validate-codex-skills.test.sh)** — shipped Codex skills の discovery metadata を検証する
