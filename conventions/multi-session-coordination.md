@@ -864,6 +864,8 @@ session identity は記録上の責任主体であり、認証・ACL の代わ�
 worker の「できた」で閉じると、確認していない成果が完了扱いになる。依頼には宛先と完了条件を
 持たせ、作業側と確認側を別 session にする。**提出によって、次に動く責任が確認側へ移る**。
 
+<a id="acceptance-items-with-values"></a>**完了条件に並べるのは、 合否の値 (0・同じ・上限) を書ける項目だけ** — 値の無い量 (頁数・語数の前後) を合否の項目と同じ並びに書くと、 受け手は前の報告の値を期待値と読み、 変わったら異常として調べる (実測)。 前の報告の値を、 次の依頼の期待値に写さない。 組版の例 = [`edit-intent-record.md#page-count-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#page-count-not-a-gate) (掲示板は値の無い頁数・overfull を書いた request に注意を 1 行出す = [`CONTRACT.md#acceptance-value-check`](../../ai-collaboration/board/CONTRACT.md#acceptance-value-check))。
+
 | 遷移 | 記録する内容と次の責任 |
 |---|---|
 | request → claim | 宛先 session が期限付きで引受。横から別 session が奪わない |

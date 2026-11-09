@@ -283,7 +283,7 @@ main から消える。 これを防ぐには `git merge -s ours overleaf/master
 Overleaf の git bridge は、 git 側から push を受けた瞬間に **web editor 上の未 commit 編集を同じ commit に畳み込む** (= editor には staging が無く、 bridge が push を契機に「editor の現在状態」 を snapshot する)。 帰結 2 つ:
 
 1. **commit author は push 者だが、 中身は複数人でありうる** (= [`actor-attribution.md`](actor-attribution.md) の carrier-proxy の Overleaf 版)。 `git log --author` で「誰が何をしたか」 を読むと誤帰属する。 中身の帰属は diff の内容指紋で判断する。
-2. **自分が compile・検証した状態と、 実際に push された状態が異なりうる**。 push 前の compile 結果 (頁数 / error / overfull) を push 後の gate として報告すると、 巻き込まれた編集分が未検証のまま「clean」 と報告される。
+2. **自分が compile・検証した状態と、 実際に push された状態が異なりうる**。 push 前の compile 結果 (error / 未定義参照) を push 後の gate として報告すると、 巻き込まれた編集分が未検証のまま「clean」 と報告される。
 
 **規律: push したら必ず `git show HEAD -- <main tex>` で実際に入った diff を確認し、 自分の編集以外が混ざっていたら再 compile して gate を測り直す** (= push 前の測定値を流用しない)。 巻き込みゼロの確認は「diff の行数 = 自分の編集の行数」 の一致で機械的にできる。
 

@@ -477,9 +477,9 @@ source は名前の頭に印の命令 (`\section{\skipmark 題}`・`\begin{proof
 
 **症状**: 記法の一括置換 (下付き添字を縦棒つきの label に替える等) で本文の文字列長が変わると、 総頁数は不変でも**付録の開始頁・表・図の頁**が動く。 目次の頁番号も変わる。
 
-**なぜ頁数比較では足りない**: 組版 gate の「頁数・未定義参照・error」 ([`edit-intent-record.md#build-gate`](../../ai-collaboration/conventions/edit-intent-record.md#build-gate)) のうち頁数は**総和**なので、 前半が 1 頁縮んで後半が 1 頁伸びると相殺して気付かない。
+**なぜ総頁数では見えない**: 総頁数は**総和**なので、 前半が 1 頁縮んで後半が 1 頁伸びると相殺する。 頁数・頁割りが動くこと自体は不具合でない (文を直せば動く。 組版の関門は error と未定義参照だけ = [`edit-intent-record.md#page-count-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#page-count-not-a-gate))。 頁割りを見るのは、 頁を揃えて比べる検査 (頁ごとの画像・文字の比較) を使えるかを決めるため。
 
-**対処**: `.aux` の `\newlabel` から label→(番号, 頁) を取り、 版間で比べる。 頁が動いた label と**番号が動いた** label (= 参照の意味が変わる) を分けて出す。 道具 = [`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py) (`--before-aux/--after-aux`)。 同 script の `--before-log/--after-log` は log の**折返しを復元**してから overfull を数える (79 桁で折れた警告は素の grep が落とす)。 規律 = [`physics-verification-cycle.md#page-count-is-not-pagination`](../../ai-collaboration/conventions/physics-verification-cycle.md#page-count-is-not-pagination)。
+**対処**: `.aux` の `\newlabel` から label→(番号, 頁) を取り、 版間で比べる。 頁が動いていれば頁ごとの比較をやめ、 語の多重集合で比べる (英文の直し = [`#prose-pass-pdf-word-diff`](#prose-pass-pdf-word-diff)、 型の入れ替え = [`#class-conversion-body-check`](#class-conversion-body-check))。 頁が動いた label と**番号が動いた** label (= 参照の意味が変わる) を分けて出す。 道具 = [`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py) (`--before-aux/--after-aux`)。 同 script の `--before-log/--after-log` は log の**折返しを復元**してから overfull を数える (79 桁で折れた警告は素の grep が落とす)。 規律 = [`physics-verification-cycle.md#page-count-is-not-pagination`](../../ai-collaboration/conventions/physics-verification-cycle.md#page-count-is-not-pagination)。
 
 ## <a id="variant-comparison-images"></a>記法・体裁の案は、 組版した姿を左右に並べて決める (source の diff では決められない) (2026-09-12)
 
@@ -788,7 +788,7 @@ for y0, y1, s in sorted((b[1], b[3], b[4][:40]) for b in p.get_text("blocks") if
 \suppressfloats[t]   % この頁の上には float を置かない
 ```
 
-- 図をその図を使う節の直後に `[ht]` で置くと、 説明の途中で図が次の頁の頭に飛ばず、 読む流れに沿う。 頁数が増えないかは組んで確かめる。
+- 図をその図を使う節の直後に `[ht]` で置くと、 説明の途中で図が次の頁の頭に飛ばず、 読む流れに沿う。 図がその節の近くに出たかは組んで確かめる。
 
 ## <a id="supplement-in-same-pdf"></a>Supplemental Material は、 まず同じ PDF の文献表の後に置く
 
