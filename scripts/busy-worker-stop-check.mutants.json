@@ -29,6 +29,18 @@
      "pairs": [["        return 2, busy_archive_text(busy, ids[0])\n", "        pass\n"]],
      "expect_fail": ["archive of a session mid-turn → blocked with 'wait for the turn end', not 'ask the person'",
                      "... the person's word after it does not pass a mid-turn archive (the turn end does)"],
-     "expect_pass": ["desktop stop_session on a busy session → blocked", "close_consent: 「閉じて良し」 is a fold word (the word in the measured scene)"]}
+     "expect_pass": ["desktop stop_session on a busy session → blocked", "close_consent: 「閉じて良し」 is a fold word (the word in the measured scene)"]},
+    {"name": "本人とのやりとりの理由が無い子の wrap の記録を見ない (直す前の判定)",
+     "pairs": [["    if not reasons:\n        return wrap_check(inp, ids, cw)", "    if not reasons:\n        return 0, \"\""]],
+     "expect_fail": ["R6: own child, no wrap after the parent's last message → blocked once"],
+     "expect_pass": ["R6: own child that ran the wrap after the parent's last message → passes"]},
+    {"name": "本人の「畳んで」 で wrap の無い子も通す (直す前の判定)",
+     "pairs": [["        return wrap_check(inp, ids, cw)  # the person's word covers the person's side, not a missing wrap", "        return 0, \"\""]],
+     "expect_fail": ["R6: the person's 「畳んで」 passes the person's side, then the missing wrap stops it once"],
+     "expect_pass": ["R6: own child, no wrap after the parent's last message → blocked once"]},
+    {"name": "本人の苦情・問いの文も「wrap なしで」 の言葉と読む (直す前の判定)",
+     "pairs": [["        if s.endswith((\"？\", \"?\")) or NO_WRAP_DROP.search(s):\n            continue", "        if False:\n            continue"]],
+     "expect_fail": ["no_wrap_said: not those words"],
+     "expect_pass": ["no_wrap_said: the words that skip the wrap"]}
   ]
 }

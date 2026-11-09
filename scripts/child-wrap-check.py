@@ -16,7 +16,11 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
 照合 (子ごと):
   - 動き: live の registry の status (busy = まだ動いている / waiting = turn の途中で許可・入力の確認が出たまま止まっている。
     どちらも turn の途中 = 畳まない。 waiting を turn の終わりと読むと、 子が wrap の途中で許可を待っているのに「畳んでよい」 と出た (実測))
-  - wrap: 子の記録の wrap skill の起動 (Skill tool の skill=wrap か、 skill の本文の差し込み)
+  - wrap: 子の記録の wrap skill の起動 (Skill tool の skill=wrap か、 skill の本文の差し込み)。 最後の wrap の turn が終わった
+    後に子が file を書いた・commit した (Edit・Write・MultiEdit・NotebookEdit・`git commit|push`) なら、 その分は wrap されて
+    いない = 記録が無いと数える (実測: wrap の後に親が仕事を 1 つ足し、 前の wrap が数えられて、 足した分は wrap なしで畳まれた。
+    「wrap の後の親の message」 で数える形は、 過去の archive に当てると受け取りの知らせ・礼の後の畳みを止めた = 実測)。 wrap の記録の無いことだけが残す理由なら、 出力の頭に「次の一手 = 先に wrap skill を頼む」 と送る文
+    (WRAP_ASK_TEXT) を出す (実測: 親が本人への問いからこの理由を落とし、 本人の「畳んで」 が理由の欠けた問いへの答えになった)
   - commit: 子の commit (全 repo の commit に入る `Agent-Session: claude:<子の transcript id>` の trailer で引く) が、
     その repo の remote-tracking branch に入っているか (push 済みか)
   - 本人待ちの問い: 子の turn が本人待ちで終わった最後の時点 (子の wrap_up の ask / blocked、 親の記録の
@@ -75,8 +79,15 @@ Usage:
   child-wrap-check.py --hook-sendmessage [--rule <参照>]  PostToolUse(SendMessage) の hook 用: 自分の子 (切り離した
         session は子でない) に wrap を頼んだ message (wrap_kind) なら、 同じ turn に --wait の見張りを出す 1 行を
         additionalContext で返す (それ以外は何も出さない)
+  child-wrap-check.py --hook-presend [--rule <参照>]  PreToolUse(SendMessage) の hook 用: 自分の子への締めの頼み (締め・仕上げ・
+        片づけ + 頼みの形 = close_ask) に wrap skill の名が無ければ 1 回目を止め (deny)、 送る文 (WRAP_ASK_TEXT) を返す。 同じ子への
+        次の送信 (PRESEND_PASS_MIN 分以内) は通す (別の仕上げなら同じ文で送り直す)。 hook の文・照合の出力が「wrap を頼む」 を
+        言うときは、 どれもこの文そのものを出す = 文脈圧縮の後も写せる (実測: 圧縮の後に親が締めの頼みを自分の語で書き、 skill の
+        名が消えた)
   child-wrap-check.py --hook-accept --board-root … [--rule …]   PostToolUse(Bash) の hook 用: `board.py accept` で自分の子の
-        依頼を受け取った直後に、 子の状態に合わせた 1 行を返す
+        依頼を受け取った直後に、 子の状態に合わせた 1 行を返す。 締めを渡した依頼 (scripts/wrap-delegate-spec.py の骨の印が
+        依頼書・提出・その turn に読んだ file にある) の受け取りなら、 accept_lines の行 (依頼元の --check の 1 行と、 提出の
+        「見ていない」 の行) も足す
   child-wrap-check.py --hook-stop --board-root … [--rule …] [--stop-mode off|observe|block]   Stop の hook 用: due / wrapped の
         子を残したまま turn を終えると、 子ごとに 1 回だけ止める (observe = 記録だけ。 既定 = env CHILD_FINISHED_STOP か observe)
   --no-wrap-needed (wrap の記録を判定に入れない) / --json / --selftest
@@ -135,6 +146,10 @@ MAX_COMMITS = 30
 # "(delivery: undelivered; …)" when it did not go, measured)
 SEND_FAILED = re.compile(r'\\?"success\\?"\s*:\s*false|delivery: undelivered')
 RETRY_TEXTS = {"Try again"}  # the app's retry after an API error (measured on the desktop app)
+# the child's own writes (a file edit, a git commit or push): work after its wrap's turn is not covered by that wrap
+WRITE_TOOLS = frozenset(("Edit", "Write", "MultiEdit", "NotebookEdit"))
+# the subcommand position only (not 「git log --grep=push」「git config push.default」)
+GIT_WRITE = re.compile(r"\bgit(?:\s+-[Cc]\s+\S+|\s+--[\w-]+(?:=\S+)?)*\s+(?:commit|push)\b")
 # Latin-letter boundaries, not \b: Python counts kana as word characters, so \bwrap\b misses 「wrapして」.
 WRAP_WORD = re.compile(r"(?<![A-Za-z])wrap(?![A-Za-z])", re.I)
 # A message asks the child to wrap only when the word is followed by a request; the word alone is a mention (measured:
@@ -180,6 +195,44 @@ def wrap_kind(text: str) -> str:
                 or (strong and WRAP_REQ_SENTENCE.search(WRAP_SENTENCE_END.split(after, 1)[0]))):
             kind = "request"
     return kind
+
+
+# The words a parent sends to ask its child to wrap. The hooks and this tool print them whole, so the parent copies them
+# instead of putting the step in its own words (measured: after compactions a parent wrote 「締め (…) をして終えて」 with the
+# skill's name gone, the child did not run the skill, and the parent tried to fold it; the summaries had carried "wrap" as
+# a common word, and the parent rendered it as its everyday word for closing).
+WRAP_ASK_TEXT = ("wrap skill で仕上げてください (Skill tool の skill=wrap。 この session で得た知見・手順・script を上の層の正本へ移し、"
+                 " 正本・参照・SESSION を整え、 repo ごとに commit + push して、 移した先を報告)。")
+# A closing request without the skill's name (「締め (…) をして終えて」「仕上げてください」「片づけて終えて」): the closing word
+# followed in its sentence by a request form. wrap_kind() decides whether the skill is named; a message that names it passes.
+CLOSE_WORD = re.compile(r"締め(?!切)|〆(?!切)|仕上げ|片[づ付]け")  # not 締め切り・〆切 (a deadline)
+# not a request to close: about the word or a step around it (締めの前に / 締めが上げたもの / 締めは後で), negated, done
+CLOSE_NOT = re.compile(r"^[\s)）」』]*(?:の\s*(?:sweep|手順|話|語|仕様|前|後|あと|中|途中)|が|は\s*(?:後|あと|まだ|不要|要らな|いらな)"
+                       r"|ない|ず|る\s*(?:な|の\s*は)|済|終え|終わ)")
+CLOSE_REQ = re.compile(r"ください|下さい|お願い|終えて|おえて|進めて|やって|して(?:終|おわ|から|ね|$|。)|しといて|て終")
+# the sentence puts the closing off (「仕上げ (wrap) も、 区切りが付いてからで構いません」 = measured, not a request now)
+CLOSE_LATER = re.compile(r"構いません|かまいません|後で|あとで|からで(?:いい|よい|結構)|待って|待機|しなくて|不要")
+# the skill named in any form (「wrap skill」「wrap の skill」「skill=wrap」「/wrap」「`wrap`」): such a request is not stopped
+# even when wrap_kind() does not read it as one (measured: 「wrap の skill で締め直し」 was not a wrap_kind request)
+SKILL_NAMED = re.compile(r"(?<![A-Za-z])wrap(?![A-Za-z])\s*(?:の\s*)?skill|skill\s*=\s*wrap(?![A-Za-z])|(?<![\w/])/wrap(?![\w-])|`wrap`", re.I)
+
+
+def close_ask(text: str) -> bool:
+    """A closing request (CLOSE_WORD + a request form in its sentence, not negated, put off or about the word) that does
+    not name the wrap skill (SKILL_NAMED, or wrap_kind 'request'). Quotes 「」 are dropped first."""
+    if wrap_kind(text) == "request" or SKILL_NAMED.search(text or ""):
+        return False
+    t = WRAP_QUOTE.sub("", text or "")
+    for m in CLOSE_WORD.finditer(t):
+        after = t[m.end():]
+        if CLOSE_NOT.match(after):
+            continue
+        if m.group(0).startswith("片") and t[:m.start()].rstrip().endswith("を"):
+            continue  # 「TODO を片付けて」 = a job on an object, not the child's closing
+        sentence = WRAP_SENTENCE_END.split(after, 1)[0]
+        if CLOSE_REQ.search(sentence) and not CLOSE_LATER.search(sentence):
+            return True
+    return False
 # An ask only the person can answer: an approval that counts only in the window it is given in (a protected file's change,
 # an operation the permission check holds) or a send to the outside. The parent's message does not answer it. A question of
 # judgment that uses these words also stays the person's (keeping a child costs less than folding it past the person).
@@ -315,7 +368,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
     The app's retry line after an API error ("Try again") goes to `retries`, not to the person's prompts."""
     out = {"first": "", "replies": [], "stops": [], "human": [], "said": [], "peers": [], "asks": [], "wraps": [],
            "retries": [], "peer_wraps": [], "peer_unwraps": [], "model_checks": [], "claims": [], "step0_handoff": False,
-           "starts": [], "texts": []}
+           "starts": [], "texts": [], "writes": []}
     try:
         fh = open(path, encoding="utf-8", errors="replace")
     except (OSError, TypeError):
@@ -381,8 +434,12 @@ def scan_child(path: str, as_of: str = "") -> dict:
                         out["asks"].append((ts, str(inp.get("ask") or "(blocked)")))
                     elif name == "Skill" and str(inp.get("skill") or "").split(":")[-1] == "wrap":
                         out["wraps"].append(ts)
+                    elif name in WRITE_TOOLS:
+                        out["writes"].append(ts)
                     elif name == "Bash":
                         cmd = str(inp.get("command") or "")
+                        if GIT_WRITE.search(cmd):
+                            out["writes"].append(ts)
                         if STEP0_CHECK.search(cmd):
                             out["model_checks"].append(ts)
                         if CLAIM_RUN.search(cmd):
@@ -683,6 +740,51 @@ def owner_reasons(target: str) -> list[str]:
     return owner_hold(target)["reasons"]
 
 
+def late_writes(ev: dict) -> list[str]:
+    """Times the child wrote (a file edit or a git commit / push) after the turn of its last wrap ended ([] when it has
+    no wrap, or the wrap's turn has not ended)."""
+    if not ev["wraps"]:
+        return []
+    last = max(ev["wraps"])
+    end = min((s for s in ev["stops"] if s and s[:19] >= last[:19]), default="")
+    return [w for w in ev.get("writes", []) if end and w[:19] > end[:19]]
+
+
+def _wrap_reason(ev: dict, parent: str, earlier_wraps: list[str] | tuple = ()) -> str:
+    """'' when the child ran the wrap skill and wrote nothing after that wrap's turn ended (ev["wraps"] already filtered);
+    else the reason, starting with WRAP_MISSING. Work after the wrap's turn (asked for by a later message of the parent)
+    is not covered by that wrap (measured: after the parent asked for one more piece of work, the earlier wrap was
+    counted and the child was folded with that piece unwrapped). A later message that led to no write (an accept
+    notice, a thank-you) does not count: replayed on past archives, reading "a message after the wrap" as
+    unwrapped work stopped folds after such notices (measured)."""
+    if not ev["wraps"]:
+        # measured: a parent passed --since 10 minutes after its wrap request, and the wrap run fell outside the window
+        return WRAP_MISSING + (f" (--since より前の {_local_hm(max(earlier_wraps))} に wrap の記録がある = --since が"
+                               " wrap の依頼より後になっている。 --since を渡さなければ、 道具が子の窓に届いた依頼の時刻から数える)"
+                               if earlier_wraps else "")
+    late = late_writes(ev)
+    if late:
+        return (f"{WRAP_MISSING} (最後の wrap {_local_hm(max(ev['wraps']))} の後の作業が wrap されていない = その turn が終わった後に、"
+                f" 子が {_local_hm(min(late))} から file を書いた・commit した)")
+    return ""
+
+
+def wrap_hold(target: str) -> dict:
+    """The cheap wrap part of check_child, for the archive guard (scripts/busy-worker-stop-check.py): {"found", "child":
+    the app record's parent and detached flag, "reason": '' or the WRAP_MISSING reason, "last_msg": the parent's last
+    message as it landed}."""
+    c = locate(target)
+    if not c:
+        return {"found": False, "reason": "", "parent": "", "last_msg": ""}
+    ev = scan_child(c["path"])
+    off = _called_off(ev, c["parent"])
+    ev["wraps"] = [w for w in ev["wraps"] if w > off]
+    last_msg = max((ts for ts, frm in ev["peers"] if frm == c["parent"] and ts), default="") if c["parent"] else ""
+    late = late_writes(ev)
+    return {"found": True, "reason": _wrap_reason(ev, c["parent"]), "parent": c["parent"], "last_msg": last_msg,
+            "local": c["local"], "first": ev["first"], "key": max(late) if late else (max(ev["wraps"], default="") or ev["first"])}
+
+
 def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since: str = "") -> dict:
     c = locate(target)
     if not c:
@@ -724,11 +826,9 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     talking = owner_after_parent(ev, c["parent"], _epoch(as_of) if as_of else None)
     if talking:
         reasons.append(_talking_text(talking))
-    if need_wrap and not ev["wraps"]:
-        # measured: a parent passed --since 10 minutes after its wrap request, and the wrap run fell outside the window
-        reasons.append("wrap の記録が無い" + (f" (--since より前の {_local_hm(max(earlier_wraps))} に wrap の記録がある = --since が"
-                                              " wrap の依頼より後になっている。 --since を渡さなければ、 道具が子の窓に届いた依頼の時刻から数える)"
-                                              if earlier_wraps else ""))
+    wr = _wrap_reason(ev, c["parent"], earlier_wraps) if need_wrap else ""
+    if wr:
+        reasons.append(wr)
     bad = [x for x in commits if not x["pushed"]]
     if bad:
         reasons.append("push されていない commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}" for x in bad))
@@ -738,6 +838,18 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
             "background": bg, "unanswered_send": pend, "as_of": as_of}
 
 
+WRAP_MISSING = "wrap の記録が無い"
+
+
+def wrap_first(r: dict) -> bool:
+    """The only thing keeping the child is its missing wrap (and commits the wrap will push): the next step is to ask for
+    the wrap, not to ask the person whether to fold (measured: a parent dropped this reason from its question to the
+    person, and the person's 「畳んで」 answered a question that hid it)."""
+    rs = r.get("reasons") or []
+    return any(x.startswith(WRAP_MISSING) for x in rs) and all(
+        x.startswith((WRAP_MISSING, "push されていない commit")) for x in rs)
+
+
 def render(rows: list[dict]) -> str:
     lines = []
     for r in rows:
@@ -745,6 +857,15 @@ def render(rows: list[dict]) -> str:
         if not r["found"]:
             lines.append("    " + r["reasons"][0])
             continue
+        if wrap_first(r):
+            lines.append(f"    → 次の一手 = 先に wrap skill を頼む (本人に畳むかを聞く前に): 子へ SendMessage で「{WRAP_ASK_TEXT}」"
+                         f" と送り、 同じ turn に Bash の run_in_background で `python3 ~/Claude/claude-config/scripts/child-wrap-check.py"
+                         f" --wait {r['local']}` を出す")
+        elif any(x.startswith(WRAP_MISSING) for x in r.get("reasons") or []):
+            # measured: with another reason beside it (the person talking with the child), the parent dropped this one from
+            # its question to the person
+            lines.append("    → 次の一手 = 下の理由が片づいてから、 畳む前に wrap skill を頼む (送る文 = 「" + WRAP_ASK_TEXT + "」)。"
+                         " 本人に畳むかを聞くなら、 「wrap の記録が無い」 も並べて、 理由を全部書く")
         lines.append(f"    動き={r['status']}  最後の turn の終わり={_local_hm(r['last_turn_end']) if r['last_turn_end'] else 'なし'}"
                      f"  wrap={_local_hm(r['last_wrap']) if r['last_wrap'] else 'なし'}"
                      + ("  (archive 済み)" if r["archived"] else ""))
@@ -1079,7 +1200,14 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
     if not wraps:
         row["state"] = "due"
     elif started and any(s > started for s in ev["stops"]):
-        row["state"] = "wrapped"
+        # the same rule as check_child / the archive guard: work written after the wrap's turn is not wrapped (measured:
+        # the Stop net said "wrapped = check and archive" while the check said the later work was unwrapped)
+        ev_w = dict(ev, wraps=[w for w in ev["wraps"] if w > off])
+        if late_writes(ev_w):
+            row["state"] = "due"
+            row["reasons"].append(_wrap_reason(ev_w, parent_local))
+        else:
+            row["state"] = "wrapped"
     else:
         row["state"] = "wrapping"
     return row
@@ -1192,7 +1320,8 @@ def _accept_line(r: dict, rule: str, extra: str = "") -> str:
     tail = f" 規則 = {rule}" if rule else ""
     if r["state"] == "due":
         return (f"🧺 規則 10 の番: {who} の依頼を受け取った (accept)。 この子に開いている依頼は無く、 本人も待っていない。"
-                " この turn のうちに規則 10 の順で畳む = model を確かめる → wrap を頼む → 同じ turn に見張り"
+                " この turn のうちに規則 10 の順で畳む = model を確かめる → 子へ SendMessage で"
+                f"「{WRAP_ASK_TEXT}」 と送る (言い換えない = skill の名が無いと子は skill を起動しない) → 同じ turn に見張り"
                 f" (`python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {r['local']}`) → 起こされたら照合して archive。"
                 " 次の仕事に使うなら、 この turn に次の依頼を掲示板に出す (宛先 = その子の役。 道具は開いている依頼と数える)。"
                 + (f" {extra}" if extra else "") + tail)
@@ -1224,7 +1353,7 @@ def hook_accept(inp: dict, roots: list[str], rule: str, extra: str = "") -> str:
         return ""
     m = re.search(r"--request[= ]+['\"]?(\d{8}T\d{6}Z-[a-z]+-[0-9a-f]+)", cmd)
     me = ds.find(str(inp.get("session_id") or ""))
-    if not m or not me or not roots:
+    if not m or not roots:
         return ""
     rid, instance = m.group(1), instance_name()
     events = load_board(roots)
@@ -1234,16 +1363,78 @@ def hook_accept(inp: dict, roots: list[str], rule: str, extra: str = "") -> str:
         if e.get("request_id") == rid and e.get("kind") in ("claim", "submit") and a.get("instance") == instance:
             mm = ID8.match(str(a.get("task") or ""))
             workers.add(mm.group(1) if mm else str(a.get("session_id") or "")[:8])
-    if not workers:
-        return ""
-    ppath = sm.transcript_path(me["cli_id"]) or ""
     lines = []
-    for c in children_of(me["local_id"]):
-        if c["cli"][:8] in workers and not c["detached"] and not c["archived"]:
-            line = _accept_line(finished_state(c, me["local_id"], ppath, events, instance), rule, extra)
-            if line:
-                lines.append(line)
+    if workers and me:
+        ppath = sm.transcript_path(me["cli_id"]) or ""
+        for c in children_of(me["local_id"]):
+            if c["cli"][:8] in workers and not c["detached"] and not c["archived"]:
+                line = _accept_line(finished_state(c, me["local_id"], ppath, events, instance), rule, extra)
+                if line:
+                    lines.append(line)
+    # A delegated closing (the spec, the submission or a file read this turn carries wrap-delegate-spec.py's mark) = the
+    # requester runs its own --check this turn, and sees the submission's "not seen" lines next to the person's words
+    try:
+        wd = _wrap_delegate()
+        lines += wd.accept_lines(rid, events, wd.read_paths_since(str(inp.get("transcript_path") or ""), wd.submit_time(rid, events)))
+    except Exception:
+        pass
     return "\n".join(lines)
+
+
+def _wrap_delegate():
+    spec = _ilu.spec_from_file_location("wrap_delegate_spec", os.path.join(HERE, "wrap-delegate-spec.py"))
+    m = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+PRESEND_PASS_MIN = 60  # after a stopped closing request, the next send to the same child within this many minutes passes
+
+
+def hook_presend(inp: dict, rule: str) -> str:
+    """PreToolUse(SendMessage): a closing request to one's own child that does not name the wrap skill (close_ask) is
+    denied once, with the words to send (WRAP_ASK_TEXT); the next send to the same child within PRESEND_PASS_MIN minutes
+    passes (a different finishing job, e.g. a manuscript, is resent as is). '' = let it through."""
+    if inp.get("tool_name") != "SendMessage":
+        return ""
+    ti = inp.get("tool_input") or {}
+    to, msg = str(ti.get("to") or ""), str(ti.get("message") or "")
+    if not close_ask(msg):
+        return ""
+    local = _local_of(to)
+    me = ds.find(str(inp.get("session_id") or ""))
+    child = ds.find(local) if local else None
+    if not me or not child or child.get("parent") != me.get("local_id") or child.get("detached"):
+        return ""
+    d = os.environ.get("CHILD_CLOSE_ASK_STATE_DIR") or os.path.expanduser("~/.claude/state/child-close-ask")
+    path = os.path.join(d, re.sub(r"[^A-Za-z0-9_.-]", "_", me["local_id"]) + ".json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            seen = json.load(fh)
+    except (OSError, ValueError):
+        seen = {}
+    now = time.time()
+    if now - float(seen.get(local) or 0) < PRESEND_PASS_MIN * 60:
+        seen.pop(local, None)
+        decision = ""
+    else:
+        seen[local] = now
+        decision = ("🧺 child-wrap-check: 子 (" + (child.get("title") or local) + ") への締めの頼みに wrap skill の名が無い = 子は"
+                    " skill を起動せず、 wrap の記録が残らない (実測: 文脈圧縮の後に締めの頼みを自分の語で書き、 skill の名が消えた)。"
+                    f" 送る文 = 「{WRAP_ASK_TEXT}」 (締めの中身を足すなら、 この文の後に書く)。 skill の名を入れて送り直す。"
+                    " wrap でない別の仕上げ (原稿の仕上げなど) なら、 同じ文のまま送り直せば通る (止めるのは子ごとに 1 回)。"
+                    + (f" 規則 = {rule}" if rule else ""))
+    try:
+        os.makedirs(d, exist_ok=True)
+        with open(path + ".tmp", "w", encoding="utf-8") as fh:
+            json.dump(seen, fh)
+        os.replace(path + ".tmp", path)
+    except OSError:
+        return ""  # cannot remember the first stop = do not stop (the resend would be stopped again)
+    if not decision:
+        return ""
+    return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                              "permissionDecisionReason": decision}}, ensure_ascii=False)
 
 
 def _state_file(parent_local: str) -> str:
@@ -1306,7 +1497,8 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
         for r in fold:
             lines.append(f"- {r['title'] or r['local']} ({r['local']}) — 受け取り {_local_hm(r['accepted_at'])} から {r['hours']} 時間"
                          + ("、 wrap は終わっている = 照合して archive" if r["state"] == "wrapped" else ""))
-        lines.append("この turn のうちに規則 10 の順で畳む (wrap を頼む → 見張り → 照合 → archive)。 本人がこの子について別の指示を"
+        lines.append(f"この turn のうちに規則 10 の順で畳む (子へ SendMessage で「{WRAP_ASK_TEXT}」 と送る → 同じ turn に見張り"
+                     " → 照合 → archive。 送る文は言い換えない)。 本人がこの子について別の指示を"
                      "しているなら (例 = 使用量の上限が戻るまで待つ)、 それを本人に 1 行で書いて turn を終える。"
                      + (f" {extra}" if extra else ""))
     if ask:
@@ -1348,6 +1540,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--hook-sendmessage", action="store_true")
     ap.add_argument("--hook-accept", action="store_true")
     ap.add_argument("--hook-stop", action="store_true")
+    ap.add_argument("--hook-presend", action="store_true")
     ap.add_argument("--stop-mode", choices=("off", "observe", "block"))
     ap.add_argument("--finished", action="store_true")
     ap.add_argument("--parent", default="")
@@ -1364,6 +1557,14 @@ def main(argv: list[str]) -> int:
         if not a.targets or not roots:
             ap.error("--wait-due には子の local_… と --board-root (か env CHILD_WRAP_BOARD_ROOTS) が要る")
         return wait_due(a.targets, roots, a.max_minutes if a.max_minutes != 180 else 720)
+    if a.hook_presend:
+        try:
+            out = hook_presend(json.loads(sys.stdin.read() or "{}"), a.rule)
+        except Exception:
+            return 0  # fail-open
+        if out:
+            print(out)
+        return 0
     if a.hook_sendmessage or a.hook_accept or a.hook_stop:
         try:
             inp = json.loads(sys.stdin.read() or "{}")
@@ -1914,6 +2115,30 @@ def selftest() -> int:
         ok("wrap_kind: a report or a name is neither", wrap_kind(mentions[2]) == "" and wrap_kind(mentions[3]) == "")
         ok("wrap_kind: a retraction then a new request → request",
            wrap_kind("さきほどの wrap は取り消します。 区切りが付いたら wrap をお願いします。") == "request")
+        # R5: a closing request without the skill's name (shapes from the measured messages, words synthetic)
+        unnamed = ["この窓は締め (見張りを止めて、 残りを結果の file に) をして終えてください",
+                   "締め (背景の見張りを止める) をして終えて", "仕上げてください", "片づけて終えて"]
+        named = [WRAP_ASK_TEXT, "締め (/wrap、背景の見張りを止めて空なのを確かめる) まで進めて終えてください",
+                 "済んだら wrap の skill で締め直して、 知らせてください"]
+        not_close = ["締めは後で。 先に表を直して", "締めの sweep の手順を読んで", "〆切は 11/20 です", "締めないでください",
+                     "締めの前に、 SESSION の節を直してください", "仕上げ (wrap) も、 区切りが付いてからで構いません",
+                     "前の子の締めが上げたものは重ねないでください", "〆切までに表を直してください",
+                     "締め切りが近いので、 先に表を直してください", "残りの TODO を片付けてください"]
+        ok("close_ask: closing requests without the skill's name", all(close_ask(m) for m in unnamed))
+        ok("close_ask: a request that names the skill is not one", not any(close_ask(m) for m in named))
+        ok("close_ask: not a closing request (later / about the word / a deadline / negated)", not any(close_ask(m) for m in not_close))
+        os.environ["CHILD_CLOSE_ASK_STATE_DIR"] = os.path.join(td, "close-ask")
+        pre = dict(hook, tool_input={"to": ids("answered")[0], "message": unnamed[0]})
+        out1 = hook_presend(pre, "R")
+        ok("presend: an unnamed closing request to own child → denied once, with the words to send",
+           '"deny"' in out1 and WRAP_ASK_TEXT in json.loads(out1)["hookSpecificOutput"]["permissionDecisionReason"])
+        ok("presend: the resend to the same child passes", hook_presend(pre, "R") == "")
+        ok("presend: after that pass, the next unnamed request is stopped again", '"deny"' in hook_presend(pre, "R"))
+        hook_presend(pre, "R")
+        ok("presend: a request that names the skill → passes",
+           hook_presend(dict(hook, tool_input={"to": ids("answered")[0], "message": WRAP_ASK_TEXT}), "R") == "")
+        ok("presend: someone else's child → passes",
+           hook_presend(dict(hook, tool_input={"to": ids("nowrap")[0], "message": unnamed[0]}), "R") == "")
         done, _ = turn_done_after(ids("overridden")[0], since=_epoch("2026-01-01T01:00:00"))
         ok("--wait: idle with a turn end after since → done", done)
         done, why = turn_done_after(ids("overridden")[0], since=_epoch("2026-01-01T02:00:00"))
@@ -2097,8 +2322,44 @@ def selftest() -> int:
         c_st = {r["local"]: r for r in finished(bp_l, [board], as_of="2026-01-02T01:30:00")}[cl]["state"]
         ok("a wrap the parent called off: its run and its stop do not count → due again, not wrapped", c_st == "due")
         ok("a wrap the parent called off: check_child does not count the run", any(
-            x.startswith("wrap の記録が無い") for x in check_child(cl, as_of="2026-01-02T01:30:00")["reasons"]))
+            x == WRAP_MISSING for x in check_child(cl, as_of="2026-01-02T01:30:00")["reasons"]))
         ok("a wrap the parent called off: --wait has no request to count from", last_parent_wrap(cl) == "")
+        # the parent asked for one more piece of work after the child's wrap: that wrap does not cover it (R6)
+        edit = lambda ts: {"type": "assistant", "timestamp": ts, "message": {"content": [  # noqa: E731
+            {"type": "tool_use", "id": "e", "name": "Edit", "input": {"file_path": "/x"}}]}}
+        ml, mc = kid("c100000d", base + [peer("2026-01-02T01:20:05Z", WRAP_ASK_TEXT, bp_l), skill_wrap("2026-01-02T01:20:30Z"),
+                                         edit("2026-01-02T01:20:50Z"), reply("2026-01-02T01:21:00Z"), stop("2026-01-02T01:21:05Z"),
+                                         peer("2026-01-02T01:25:00Z", "もう 1 件: 表の見出しも直して", bp_l),
+                                         edit("2026-01-02T01:25:30Z"), reply("2026-01-02T01:26:00Z"), stop("2026-01-02T01:26:05Z")])
+        r_more = check_child(ml, as_of="2026-01-02T01:30:00")
+        ok("a write after the wrap's turn ended → wrap missing (the later work is not wrapped)", any(
+            x.startswith(WRAP_MISSING) and "turn が終わった後" in x for x in r_more["reasons"]))
+        ok("writes inside the wrap's own turn → no wrap reason", not any(
+            x.startswith(WRAP_MISSING) for x in check_child(ml, as_of="2026-01-02T01:22:00")["reasons"]))
+        al, ac = kid("c100000e", base + [peer("2026-01-02T01:20:05Z", WRAP_ASK_TEXT, bp_l), skill_wrap("2026-01-02T01:20:30Z"),
+                                         edit("2026-01-02T01:20:50Z"), reply("2026-01-02T01:21:00Z"), stop("2026-01-02T01:21:05Z"),
+                                         peer("2026-01-02T01:25:00Z", "提出を受け取りました。 ありがとうございました", bp_l),
+                                         reply("2026-01-02T01:26:00Z"), stop("2026-01-02T01:26:05Z")])
+        ok("the parent's notice after the wrap, the child wrote nothing after → no wrap reason (not a request)", not any(
+            x.startswith(WRAP_MISSING) for x in check_child(al, as_of="2026-01-02T01:30:00")["reasons"]))
+        Rl = "20260102T000000Z-claude-0000a3"
+        event("claim", Rl, "2026-01-02T00:01:00", task="c100000d (opus)", sid="role-proj-latework")
+        event("accept", Rl, "2026-01-02T01:10:00", task="x", sid="x")
+        Ra = "20260102T000000Z-claude-0000a4"
+        event("claim", Ra, "2026-01-02T00:01:00", task="c100000e (opus)", sid="role-proj-notice")
+        event("accept", Ra, "2026-01-02T01:10:00", task="x", sid="x")
+        st_late = {r["local"]: r for r in finished(bp_l, [board], as_of="2026-01-02T01:30:00")}
+        ok("finished: wrap ran after the accept, then the child wrote after the wrap's turn → due (not wrapped), with the reason",
+           st_late[ml]["state"] == "due" and any(x.startswith(WRAP_MISSING) for x in st_late[ml]["reasons"]))
+        ok("finished: wrap ran, only the parent's notice after it → wrapped", st_late[al]["state"] == "wrapped")
+        ok("wrap_hold (the archive guard's part) reads the same reason", wrap_hold(ml)["reason"].startswith(WRAP_MISSING)
+           and wrap_hold(ml)["parent"] == bp_l)
+        ok("render: only the missing wrap keeps the child → the next step (ask for the wrap) comes first, with the words",
+           render([r_more]).splitlines()[1].strip().startswith("→ 次の一手 = 先に wrap skill を頼む") and WRAP_ASK_TEXT in render([r_more]))
+        r_two = render([dict(r_more, reasons=r_more["reasons"] + ["本人がこの子の窓で話している途中"])])
+        ok("render: another reason beside the missing wrap → the step says to ask for the wrap after it, and to list every reason"
+           " when asking the person", r_two.splitlines()[1].strip().startswith("→ 次の一手 = 下の理由が片づいてから")
+           and "理由を全部書く" in r_two and "先に wrap skill を頼む (本人に" not in r_two)
         os.remove(_state_file(bp_l))
         why30 = json.loads(hook_stop(stop_in, [board], "R", "block") or "{}").get("reason", "")
         ok("grace 30: the long-answered child is in the 'fold' part, no 'ask' part",

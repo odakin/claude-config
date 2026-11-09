@@ -26,6 +26,13 @@ Why (実測): 見え方や model を直すために、 動いている worker �
     owner_hold の since) より後に、 子を畳んでよいと言っていれば (CLOSE_WORD = 「閉じていいよ」「畳んで」 など。
     同じ節が打ち消し・問いなら数えない) 1 回目から通す (実測: 本人の「閉じていいよ」 の 1 分後の archive を、 その言葉が
     1 回目の止めより前だったために 2 回止めた)。 どの子を指すかは見ない (止めた後の本人の発言で通すのと同じ粒度)。
+  - archive_session で相手が自分の子 (app の記録の親がこの session、 切り離していない) なら、 子に wrap の記録があり、
+    その wrap の turn の後に書いていない (file の編集・commit) かを見る (scripts/child-wrap-check.py の wrap_hold)。 無ければ 1 回目は止め、 照合の理由を全部、 道具の語の
+    まま返し、 送る文の見本 (child-wrap-check.py の WRAP_ASK_TEXT) と見張りの 1 行を出す。 同じ子への 2 回目 (その間に子が新しく
+    書いていない) は通す。 本人がこの窓で、 親の最後の message より後に wrap を省くと言っていれば (NO_WRAP =「wrap なしで」
+    「締めは要らない」 など) 1 回目から通す。 本人の「閉じていい」「畳んで」 (CLOSE_WORD) は本人の側の理由だけを通し、 wrap の
+    記録の無いことは通さない (実測: 親の本人への問いが「wrap の記録が無い」 を落とし、 本人の「畳んで」 が理由の欠けた問いへの
+    答えになった。 止めたのは app の別の理由だった)。
   - Bash だけ: 本人が直前の発言で止めるよう明示に言ったなら、 command に `# stop-ok: <本人の発言の一部を逐語で>` を
     付けると、 その文字列が本人の最新の発言に在る時に限って 1 回目から通す (逐語でなければ通さない)。
 
@@ -340,27 +347,105 @@ def owner_check(inp: dict, ids: list[str]) -> tuple[int, str]:
         return 0, ""  # fail-open
     reasons = hold.get("reasons") or []
     if not reasons:
-        return 0, ""
+        return wrap_check(inp, ids, cw)
     sid, key = inp.get("session_id") or "", "owner:" + ids[0]
     st = load_state(sid)
     if consent_after(inp.get("transcript_path") or "", hold.get("since") or ""):
         if st.pop(key, None) is not None:
             save_state(sid, st)
-        return 0, ""
+        return wrap_check(inp, ids, cw)  # the person's word covers the person's side, not a missing wrap
     h_ts, _ = last_human(inp.get("transcript_path") or "")
     if st.get(key) and h_ts and h_ts > st[key]:
         st.pop(key, None)
         save_state(sid, st)
-        return 0, ""
+        return wrap_check(inp, ids, cw)
     st.setdefault(key, time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()))
     save_state(sid, st)
+    try:
+        wr = cw.wrap_hold(ids[0]).get("reason") or ""
+    except Exception:
+        wr = ""
     return 2, ("🛑 busy-worker-stop-check: 畳もうとした子は、 本人とのやりとりが終わっていないので 1 回目は止めた。\n"
-               + "\n".join("  - " + r for r in reasons) + "\n"
+               + "\n".join("  - " + r for r in reasons + ([wr] if wr else [])) + "\n"
                "  判断の問いなら親が子に答えを送ってから畳む (送った後なら同じ操作は通る)。 本人だけが答えられる問い"
                " (承認・外部への発信) と本人が子と話している途中は、 本人に 1 行で伝えて畳んでよいかを聞く (本人が答えた後なら通る。"
                " 本人がこの窓で、 子の問い・子の窓での最後の発言より後に「閉じていい」 などと言っていれば 1 回目から通る)。"
                " 照合の全体 = `python3 ~/Claude/claude-config/scripts/child-wrap-check.py "
                f"{ids[0]}`。 規約 = {CHILD_RULE}")
+
+
+# The person's word in this window that the child is folded without a wrap (「wrap なしで畳んで」「締めは要らない」); it
+# counts only after the parent's last message to the child (an older word was about an older job).
+NO_WRAP = re.compile(r"(?<![A-Za-z])wrap\s*(?:は|を|の)?\s*(?:なし|無し|なく|せず|しないで|しなくて|不要|要らな|いらな|抜き)"
+                     r"|(?:締め|仕上げ)\s*(?:は|を)?\s*(?:なし|無し|せず|ずに|ないで|なくて|不要|要らな|いらな|抜き)", re.I)
+# a question or a complaint about a fold without a wrap is not the person's word to skip it (measured: the person's
+# 「なに、ここもwrapせずに閉じてたの？」 matched NO_WRAP). The sentence is read whole: a question mark at its end, or
+# a question / a denial word in it, drops it; the phrase must be followed by a fold word (CLOSE_WORD, not negated) or end
+# its clause (「締めは要らない」「wrap なしでいい」).
+NO_WRAP_SENTENCE = re.compile(r"[^。！!？?\n]+(?:[。！!？?\n]|$)")
+NO_WRAP_DROP = re.compile(r"なぜ|なんで|何で|どうして|って(?:何|なに)|とは言って|言ってない|言っていない")
+NO_WRAP_END = re.compile(r"^(?:い|く)?\s*(?:です|でいい|でよい|で大丈夫|で結構|でOK)?\s*(?:よ|ね)?\s*$", re.I)
+
+
+def no_wrap_said(text: str) -> bool:
+    """Whether a prompt says the child is folded without a wrap (NO_WRAP in a sentence that is not a question or a
+    complaint, followed by a fold word that is not negated, or ending its clause)."""
+    for sm_ in NO_WRAP_SENTENCE.finditer(text or ""):
+        s = sm_.group(0).strip()
+        if s.endswith(("？", "?")) or NO_WRAP_DROP.search(s):
+            continue
+        m = NO_WRAP.search(s)
+        if not m:
+            continue
+        rest = s[m.end():].rstrip("。！!\n")
+        fold = CLOSE_WORD.search(rest)
+        if fold:
+            tail = CLAUSE_END.split(rest[fold.end():], 1)[0][:16]
+            if not CLOSE_NOT_AFTER.search(tail):
+                return True
+            continue
+        if NO_WRAP_END.match(rest):
+            return True
+    return False
+
+
+def wrap_check(inp: dict, ids: list[str], cw) -> tuple[int, str]:
+    """archive_session of one's own child that has no wrap record, or wrote after its wrap's turn
+    (child-wrap-check.py wrap_hold): stopped once, with the tool's reasons in full and the words to send; the second
+    archive of the same child (no new write since) passes; the person's word in this window, after that message, that
+    the wrap is skipped (NO_WRAP) passes it at once. Measured: the parent's question to the person dropped the
+    tool's 'wrap の記録が無い', the person's 「畳んで」 answered it, and only an unrelated refusal of the app kept the child."""
+    try:
+        hold = cw.wrap_hold(ids[0])
+        me = cw.ds.find(str(inp.get("session_id") or ""))
+        child = cw.ds.find(hold.get("local") or ids[0]) if hold.get("found") else None
+    except Exception:
+        return 0, ""  # fail-open
+    if not hold.get("reason") or not me or not child or hold.get("parent") != me.get("local_id") or child.get("detached"):
+        return 0, ""
+    since = hold.get("last_msg") or hold.get("first") or ""
+    tpath = inp.get("transcript_path") or ""
+    if any(ts[:19] > since[:19] and no_wrap_said(t) for ts, t in human_prompts(tpath)):
+        return 0, ""
+    sid, key, mark = inp.get("session_id") or "", "wrap:" + ids[0], hold.get("key") or since
+    st = load_state(sid)
+    if st.get(key) == mark:  # the same state as at the first stop = the second try passes
+        st.pop(key, None)
+        save_state(sid, st)
+        return 0, ""
+    st[key] = mark
+    save_state(sid, st)
+    try:
+        reasons = cw.check_child(ids[0])["reasons"] or [hold["reason"]]
+    except Exception:
+        reasons = [hold["reason"]]
+    return 2, ("🛑 busy-worker-stop-check: 畳もうとした子に wrap の記録が無い (か、 wrap の turn の後に書いた分がある) ので 1 回目は止めた。"
+               " 照合の理由 (全部、 道具の語のまま):\n" + "\n".join("  - " + r for r in reasons) + "\n"
+               f"  先に wrap を頼む = 子へ SendMessage で「{cw.WRAP_ASK_TEXT}」 と送り、 同じ turn に Bash の run_in_background で"
+               f" `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {ids[0]}` を出す (起こされた turn の照合が ✅ なら畳む)。"
+               " 本人に畳むかを聞くなら、 上の理由を全部書いて聞く (1 つに選ばない)。 本人がこの窓で「wrap なしで」 などと言えば"
+               " 1 回目から通る。 理由を全部見た上で畳むなら、 同じ操作をもう一度打てば通る。"
+               f" 規約 = {CHILD_RULE}")
 
 
 def main() -> int:
@@ -506,6 +591,64 @@ def selftest() -> int:
         os.environ.pop("CHILD_WRAP_ANSWERED_GRACE_MIN", None)
         rc, _ = run(arch, {"session_id": sc_local}, sid="L16")
         ok("scene, the default 10-minute grace: 22 minutes after the child answered → passes with no word", rc == 0)
+        # R6: one's own child with no wrap record after the parent's last message (the parent's window = parent_cli)
+        parent_cli = "f0f0f0f0-0000-4000-8000-00000000000f"
+        with open(os.path.join(ddir, parent_local + ".json"), "w", encoding="utf-8") as fh:
+            json.dump({"sessionId": parent_local, "cliSessionId": parent_cli}, fh)
+
+        def kid(local: str, cli: str, wrap: bool) -> None:
+            with open(os.path.join(ddir, local + ".json"), "w", encoding="utf-8") as fh:
+                json.dump({"sessionId": local, "cliSessionId": cli, "spawnedFrom": {"sessionId": parent_local}}, fh)
+            rows_ = [{"type": "user", "timestamp": "2026-01-01T01:00:00.000Z", "message": {"content": "Background (from the session that started this one): 依頼"}},
+                     {"type": "user", "timestamp": "2026-01-01T01:10:00.000Z", "message": {"content":
+                      f'<cross-session-message from="{parent_local}">{cw_mod.WRAP_ASK_TEXT}</cross-session-message>'}}]
+            if wrap:
+                rows_.append({"type": "assistant", "timestamp": "2026-01-01T01:10:30.000Z", "message": {"content": [
+                    {"type": "tool_use", "id": "w", "name": "Skill", "input": {"skill": "wrap"}}]}})
+            rows_ += [{"type": "assistant", "timestamp": "2026-01-01T01:11:00.000Z", "message": {"content": [{"type": "text", "text": "済み"}]}},
+                      {"type": "system", "subtype": "stop_hook_summary", "timestamp": "2026-01-01T01:11:01.000Z"}]
+            with open(os.path.join(pdir, "-w", cli + ".jsonl"), "w", encoding="utf-8") as fh:
+                for e in rows_:
+                    fh.write(json.dumps(e, ensure_ascii=False) + "\n")
+
+        spec_ = _ilu.spec_from_file_location("child_wrap_check", os.path.join(HERE, "child-wrap-check.py"))
+        cw_mod = _ilu.module_from_spec(spec_)
+        spec_.loader.exec_module(cw_mod)
+        nw_local, nw_cli = "local_00000006-0000-4000-8000-000000000000", "d0d0d0d0-0000-4000-8000-00000000000d"
+        ww_local, ww_cli = "local_00000007-0000-4000-8000-000000000000", "e0e0e0e0-0000-4000-8000-00000000000e"
+        kid(nw_local, nw_cli, wrap=False)
+        kid(ww_local, ww_cli, wrap=True)
+        transcript(("2026-01-01T01:20:00.000Z", "畳んで"))
+        rc, txt = run(arch, {"session_id": nw_local}, sid=parent_cli)
+        ok("R6: own child, no wrap after the parent's last message → blocked once, the reasons and the words to send"
+           " (the person's 「畳んで」 does not cover a missing wrap)",
+           rc == 2 and "wrap の記録が無い" in txt and cw_mod.WRAP_ASK_TEXT in txt)
+        rc, _ = run(arch, {"session_id": nw_local}, sid=parent_cli)
+        ok("R6: the second archive of the same child → passes", rc == 0)
+        transcript(("2026-01-01T01:20:00.000Z", "wrap なしで畳んで"))
+        rc, _ = run(arch, {"session_id": nw_local}, sid=parent_cli)
+        ok("R6: the person said 「wrap なしで」 after the parent's last message → passes at the first try", rc == 0)
+        transcript(("2026-01-01T01:05:00.000Z", "wrap なしで畳んで"))
+        rc, _ = run(arch, {"session_id": nw_local}, sid=parent_cli)
+        ok("R6: 「wrap なしで」 before the parent's last message (an older job) → blocked", rc == 2)
+        run(arch, {"session_id": nw_local}, sid=parent_cli)
+        rc, _ = run(arch, {"session_id": ww_local}, sid=parent_cli)
+        ok("R6: own child that ran the wrap after the parent's last message → passes", rc == 0)
+        rc, _ = run(arch, {"session_id": nw_local}, sid="L20")
+        ok("R6: not this session's child → passes", rc == 0)
+        transcript(("2026-01-01T00:00:00.000Z", "x"), ("2099-01-01T00:00:00.000Z", "それはもういい、畳んで"))
+        rc, txt = run(arch, {"session_id": idle_local}, sid=parent_cli)
+        ok("R6: the person's 「畳んで」 passes the person's side, then the missing wrap stops it once", rc == 2 and "wrap の記録が無い" in txt)
+        ok("no_wrap_said: the words that skip the wrap", all(no_wrap_said(s) for s in (
+            "wrap なしで畳んで", "締めは要らない", "wrap しないで閉じて", "wrap なしでいい", "wrap は不要です。 閉じちゃって")))
+        ok("no_wrap_said: not those words (no skip, or a question / complaint / denial)", not any(no_wrap_said(s) for s in (
+            "畳んで", "wrap して閉じて", "wrap skill で仕上げて", "なに、ここもwrapせずに閉じてたの？", "wrap しないで閉じるのはやめて",
+            "wrap なしで畳むのはダメ", "wrap せずに閉じないで", "仕上げずに閉じたのはなぜ？", "wrap は要らないとは言ってない",
+            "なんで wrap なしで畳んで、 と言ったの")))
+        transcript(("2026-01-01T01:20:00.000Z", "なに、ここもwrapせずに閉じてたの？"))
+        rc, _ = run(arch, {"session_id": nw_local}, sid=parent_cli)
+        ok("R6: the person's complaint 「…wrapせずに閉じてたの？」 does not pass the missing wrap", rc == 2)
+        run(arch, {"session_id": nw_local}, sid=parent_cli)
         rc, _ = run("Bash", {"command": "claude agents --json | head"})
         ok("listing sessions → passes", rc == 0)
         rc, _ = run("Bash", {"command": "git rm b0b0b0b0.txt"})

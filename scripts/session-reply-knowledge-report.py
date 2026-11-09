@@ -39,7 +39,10 @@
   session-reply-knowledge-report.py --hook-stop < <Stop hook の JSON>   # 締め (/wrap) の turn で照合が通っていなければ 1 回差し戻す
   session-reply-knowledge-report.py --selftest
 一覧の 1 行は 200 字以内 (cut で切って読んでも id と問いが残る)。
---hook-stop は記録の末尾 4 MB だけを読み、 締めの印 (/wrap・wrap の skill) が無ければすぐ戻る (Stop のたびに呼ばれるため)。
+--hook-stop は記録の末尾 4 MB だけを読み、 締めの印 (/wrap・wrap の skill・締めを渡した依頼の受け取りの印) が無ければすぐ戻る
+(Stop のたびに呼ばれるため)。 締めを渡した依頼 (scripts/wrap-delegate-spec.py の骨で渡したもの) を受け取った turn では、
+受け取りの直後の hook が出す印 (`wrap-delegate: target=<id8>`) が名指す session の id の --check が通るまで 1 回差し戻す
+(依頼元が自分の窓で回す 1 行 = closing-sweep.md#delegated-reply-knowledge-check)。
 差し戻しは 1 turn に 1 回 (自分の差し戻しが同じ turn にあれば見ない。 他の hook の差し戻しの後は判定する =
 conventions/hook-authoring.md#stop-hook-active-other-hooks)。 hooks/ の入口の file は保護された file で、 置くには本人の裁定が要る。
 
@@ -75,7 +78,9 @@ NOT_TURN_HEADS = ("Base directory for this skill", "This session is being contin
 LEADING_REMINDERS = re.compile(r"^(?:\s*<system-reminder>.*?</system-reminder>)+\s*", re.S)
 PENDING_EVIDENCE = re.compile(r"対象外|扱わない|触れない|未検算|未導出|未検証|未記録|未確認|今後|保留|out of scope|not covered|\bTODO\b", re.I)
 BLOCK_MARK = "返事にしか無い知見の照合が通っていません"
-WRAP_MARK = re.compile(rb"<command-name>/wrap</command-name>|skills[/\\]+wrap\b|\"skill\": ?\"(?:[\w-]+:)?wrap\"")
+WRAP_MARK = re.compile(rb"<command-name>/wrap</command-name>|skills[/\\]+wrap\b|\"skill\": ?\"(?:[\w-]+:)?wrap\"|wrap-delegate: target=")
+# 締めを渡した依頼を受け取った印 (scripts/wrap-delegate-spec.py の ACCEPT_MARK の ASCII の部分。 変えるときは両方)
+DELEGATE_MARK = re.compile(r"wrap-delegate: target=([0-9a-f]{8})")
 STATUS = {"記録済み": "recorded", "recorded": "recorded", "足した": "added", "added": "added",
           "記録しない": "skip", "不要": "skip", "skip": "skip"}
 
@@ -240,17 +245,31 @@ def _is_wrap_turn(span):
     return False
 
 
+def _delegated_targets(span):
+    """turn の中で、 締めを渡した依頼を受け取った印 (受け取りの直後の hook が出す、 DELEGATE_MARK) が名指す session の id8。"""
+    out = []
+    for e in span:
+        if e.get("type") == "attachment":
+            for m in DELEGATE_MARK.finditer(json.dumps(e.get("attachment") or {}, ensure_ascii=False)):
+                if m.group(1) not in out:
+                    out.append(m.group(1))
+    return out
+
+
 def stop_check(entries):
-    """締めの turn で処分の照合が通っていなければ、 差し戻しの理由を返す (それ以外は None)。"""
+    """締めの turn で処分の照合が通っていなければ、 差し戻しの理由を返す (それ以外は None)。 締めを worker に渡した依頼を
+    受け取った turn (scripts/wrap-delegate-spec.py の骨で渡した依頼) も締めの turn = 対象の session の id の --check が要る。"""
     heads = [i for i, e in enumerate(entries) if _turn_head(e) is not None]
     if not heads:
         return None
     span = entries[heads[-1]:]
-    if not _is_wrap_turn(span):
+    targets = _delegated_targets(span)
+    wrap_turn = _is_wrap_turn(span)
+    if not wrap_turn and not targets:
         return None
     if any(e.get("type") == "user" and BLOCK_MARK in _text(e) for e in span):
         return None  # 自分の差し戻しは 1 turn に 1 回 (stop_hook_active だけでは見ない = 他の hook の差し戻しの後も判定する)
-    runs = {}
+    runs, passed = {}, []
     for e in span:
         for b in (e.get("message") or {}).get("content") or [] if isinstance((e.get("message") or {}).get("content"), list) else []:
             if not isinstance(b, dict):
@@ -258,12 +277,21 @@ def stop_check(entries):
             if b.get("type") == "tool_use" and b.get("name") == "Bash":
                 cmd = str((b.get("input") or {}).get("command", ""))
                 if "session-reply-knowledge-report" in cmd and "--check" in cmd:
-                    runs[b.get("id")] = True
+                    runs[b.get("id")] = cmd
             elif b.get("type") == "tool_result" and b.get("tool_use_id") in runs:
                 c = b.get("content")
                 out = c if isinstance(c, str) else " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict))
                 if "欠け・根拠の無いもの 0 件" in out:
-                    return None
+                    passed.append(runs[b.get("tool_use_id")])
+    missing = [t for t in targets if not any(t in c for c in passed)]
+    if missing:
+        return ("締めを渡した依頼 (対象 = session " + "・".join(missing) + ") を受け取った turn で、 " + BLOCK_MARK + "。 "
+                "依頼元も自分の窓で `python3 %s %s --delegated --check <worker の処分の file>` を通す (Stop hook はこの session の"
+                " 会話記録の中の --check しか見ない = worker の窓で通しても数えない)。 処分の file の path は worker の提出にある。\n"
+                "正本 = claude-config/conventions/closing-sweep.md#delegated-reply-knowledge-check"
+                % (HERE / "session-reply-knowledge-report.py", missing[0]))
+    if passed or not wrap_turn:
+        return None
     return ("締め (/wrap) の turn で、 " + BLOCK_MARK + "。 "
             "`python3 %s <session id の先頭 8 字>` で候補 (文脈圧縮の要約が「未決」 と書いた項目・本人の問いとその返事・"
             "圧縮より前の返事) を出し、 1 件ずつ読んで記録し、 処分 (記録済み / 足した / 不要) を file に書いて `--check <file>` を通す。\n"
@@ -607,6 +635,19 @@ def selftest():
     expect("自分の差し戻しは 1 回だけ", stop_check([wrap, said("締めた"), own_fb, said("書き足した")]), None)
     expect("Skill tool で起こした締め", stop_check([human("仕上げて"), {"type": "assistant", "message": {"content": [
         {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "wrap"}}]}}, said("締めた")]) is not None, True)
+    # 締めを渡した依頼を受け取った turn (受け取りの直後の hook が印を出す = wrap-delegate-spec.py の accept_lines)
+    acc = bash("python3 board.py accept --request 20260101T000000Z-claude-000001", "a1")
+    mark = {"type": "attachment", "attachment": {"type": "hook_additional_context",
+                                                 "content": ["🧾 wrap-delegate: target=0123abcd — 締めを渡した依頼を受け取った"]}}
+    dcmd = "python3 scripts/session-reply-knowledge-report.py 0123abcd --delegated --check /x/d.txt"
+    d_block = stop_check([human("受け取って"), acc, result("a1", "accepted"), mark, said("受け取った")])
+    expect("締めを渡した依頼の受け取り + 照合なし = 差し戻す (対象の id を名指す)", bool(d_block) and "0123abcd" in d_block, True)
+    expect("対象の id の --check が通れば通す", stop_check([human("受け取って"), acc, result("a1", "accepted"), mark,
+                                                    bash(dcmd, "c1"), result("c1", "欠け・根拠の無いもの 0 件"), said("済")]), None)
+    expect("別の session の --check では通さない", stop_check([human("受け取って"), acc, result("a1", "accepted"), mark,
+                                                    bash(dcmd.replace("0123abcd", "99999999"), "c1"),
+                                                    result("c1", "欠け・根拠の無いもの 0 件"), said("済")]) is not None, True)
+    expect("印の無い受け取りは見ない", stop_check([human("受け取って"), acc, result("a1", "accepted"), said("受け取った")]), None)
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "t.jsonl"
         p.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in [human("x" * 300), said("y")] * 20 + [wrap, said("締めた")]) + "\n",

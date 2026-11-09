@@ -80,6 +80,22 @@
     {"name": "app の古い send_message を数えない",
      "pairs": [["                                                    or (name.endswith(\"__send_message\") and str(inp.get(\"session_id\") or \"\") in to)):", "                                                    ):"]],
      "expect_fail": ["the app's older send_message to the child counts too"],
-     "expect_pass": ["the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"]}
+     "expect_pass": ["the parent's message after the child's last turn end keeps it (delivery or the next turn pending)"]},
+    {"name": "wrap の turn の後に書いた分を数えない (直す前の判定)",
+     "pairs": [["    if late:\n        return (f\"{WRAP_MISSING} (最後の wrap", "    if False:\n        return (f\"{WRAP_MISSING} (最後の wrap"]],
+     "expect_fail": ["a write after the wrap's turn ended → wrap missing"],
+     "expect_pass": ["the parent's notice after the wrap, the child wrote nothing after → no wrap reason"]},
+    {"name": "締めの頼みに wrap skill の名があっても締めの頼みと読む",
+     "pairs": [["    if wrap_kind(text) == \"request\" or SKILL_NAMED.search(text or \"\"):\n        return False\n    t = WRAP_QUOTE.sub", "    t = WRAP_QUOTE.sub"]],
+     "expect_fail": ["close_ask: a request that names the skill is not one", "presend: a request that names the skill → passes"],
+     "expect_pass": ["close_ask: closing requests without the skill's name"]},
+    {"name": "送り直しも止める (1 回だけ止めない)",
+     "pairs": [["    if now - float(seen.get(local) or 0) < PRESEND_PASS_MIN * 60:", "    if False:"]],
+     "expect_fail": ["presend: the resend to the same child passes"],
+     "expect_pass": ["presend: an unnamed closing request to own child → denied once"]},
+    {"name": "畳む番の判定が wrap の turn の後の書き込みを見ない (直す前の判定)",
+     "pairs": [["        if late_writes(ev_w):\n            row[\"state\"] = \"due\"", "        if False:\n            row[\"state\"] = \"due\""]],
+     "expect_fail": ["finished: wrap ran after the accept, then the child wrote after the wrap's turn → due"],
+     "expect_pass": ["finished: wrap ran, only the parent's notice after it → wrapped"]}
   ]
 }
