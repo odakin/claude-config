@@ -72,6 +72,8 @@ for label_name in ["<重要送信者ラベル>", "<トピックラベル>"]:
 
 dashboard 全体の末尾で呼び出し (= 既存 TODO 表示等の後)、 user / Claude が「最も新しい関心事」 として認識する位置に配置。
 
+<a id="list-all-pages"></a>**ラベルの全体を読む段 (未読に依らず「ラベルあり ∧ 記録に無い」 を出す段など) は、 一覧を 1 page で止めない** — `messages.list` は新しい順に返す ([`mcp.md#search-result-cap`](mcp.md#search-result-cap) と同じ) ので、 1 page (`maxResults`) で止めると、 その数より古いラベルつきの便が黙って段の外に出る (実測: 段に出るべき便が全部 1 page の外にあり、 段は 0 件だった)。 `nextPageToken` を尽きるまで辿り、 metadata を取る前に絞る = 段に並べない便は一覧の検索で外し (自分の送信なら `q="-in:sent"`)、 記録済みの id は引いてから metadata を取る (実測: 全部の metadata を取る形と同じ行を、 ずっと短い時間で出した)。 既読・未読・日付に依らない段を日数 (`newer_than:`) で切ると、 同じ取りこぼしが日数の外に移るだけ。
+
 ## リポ間の連携
 
 ```
