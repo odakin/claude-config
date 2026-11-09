@@ -49,6 +49,9 @@ sections:
   - id: figures-in-body-references-last
     level: 2
     title: "本文の図を本文の中に置き、 文献表を付録の後ろに置く — `placeins` の section option と `[tbp]`"
+  - id: class-conversion-body-check
+    level: 2
+    title: "原稿の型 (document class) を替えたときに、 本文が変わっていないことを確かめる"
   - id: table-caption-position
     level: 2
     title: "表の caption を上に置くか下に置くかは、 投稿先の雛形を開いて決める"
