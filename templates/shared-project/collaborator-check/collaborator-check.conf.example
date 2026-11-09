@@ -4,7 +4,12 @@
 #   file <path> [<上書きの環境変数>] -- <直し方>
 #   command <名前> -- <直し方>
 #   read <file の節> -- <何が書いてあるか>
+#   repo <dir 名> <clone URL> [<上書きの環境変数>] -- <何に使うか>
+#   board <board dir> [<engine の dir の環境変数>] -- <何か>
 #   python [<入口の path、 既定 tools/py>] -- <何に使うか>
+#
+#   ⚠️ 上書きの環境変数に Claude Code・SDK 自身の変数 (CLAUDE_CONFIG_DIR・CLAUDE_CODE_*・ANTHROPIC_*) を使わない
+#     (session が値を入れていることがあり、 check はその行を読まずに ⚠️ を出す)。 名前は <REPO>_REPO_DIR / <NAME>_FILE の形に
 #
 # 例 (合成):
 # read CLAUDE.md §共同編集者向け -- 招待された人が最初に読む節

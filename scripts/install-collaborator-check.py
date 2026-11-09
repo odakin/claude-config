@@ -432,6 +432,36 @@ def selftest() -> int:
         r = subprocess.run([sys.executable, __file__, "check", str(repo)], capture_output=True, text=True, env=env)
         if r.returncode == 0:
             fails.append("写しを変えたのに check が通った")
+        # 上書きの変数に Claude Code・SDK 自身の変数を使った行は読まずに ⚠️ を出す
+        # (値の入った CLAUDE_CONFIG_DIR を repo の置き場と取り違えて、 そこへ clone しない)
+        ccdir = td / "cc-config-dir"
+        (repo / CONF).write_text(
+            CONF_HEADER
+            + "repo claude-config https://github.com/odakin/claude-config CLAUDE_CONFIG_DIR -- 規約\n"
+            + "file ~/.secrets/selftest-token CLAUDE_CODE_TOKEN_FILE -- token を置く\n"
+            + "board board ANTHROPIC_BOARD_DIR -- 掲示板の自分宛て\n")
+        out_r = run(extra=dict(pathenv, CLAUDE_CONFIG_DIR=str(ccdir), CLAUDE_CODE_TOKEN_FILE=str(tok)))
+        for var, sug in (("CLAUDE_CONFIG_DIR", "CLAUDE_CONFIG_REPO_DIR"),
+                         ("CLAUDE_CODE_TOKEN_FILE", "SELFTEST_TOKEN_FILE"),
+                         ("ANTHROPIC_BOARD_DIR", "AI_COLLABORATION_DIR")):
+            if not any(l.lstrip().startswith("⚠️") and f"変数 {var} は" in l and f"例 {sug}" in l
+                       for l in out_r.splitlines()):
+                fails.append(f"{var} の行で ⚠️ と代わりの名前 {sug} が出ない:\n{out_r}")
+        if ccdir.exists() or (td / "claude-config").exists():
+            fails.append("Claude Code の変数を使った repo 行を読んで clone した")
+        # 同じ行で名前を変えれば止めない (接頭の境目 = CLAUDE_CODEX_ は CLAUDE_CODE_ に当たらない)
+        (repo / CONF).write_text(
+            CONF_HEADER
+            + "repo claude-config https://github.com/odakin/claude-config CLAUDE_CONFIG_REPO_DIR -- 規約\n"
+            + "file ~/.secrets/selftest-token CLAUDE_CODEX_TOKEN_FILE -- token を置く\n"
+            + "board board AI_COLLABORATION_DIR -- 掲示板の自分宛て\n")
+        ok_env = dict(pathenv, CLAUDE_CONFIG_DIR=str(ccdir), CLAUDE_CONFIG_REPO_DIR="none")
+        out_n = run("--all", extra=ok_env)
+        if "⚠️" in out_n or "⏭ claude-config は使わない" not in out_n \
+                or "✅ ~/.secrets/selftest-token がある" not in out_n:
+            fails.append(f"Claude Code の変数でない名前の行を止めた / 読まなかった:\n{out_n}")
+        if run(extra=ok_env).strip():
+            fails.append(f"揃っているのに出力した:\n{run(extra=ok_env)}")
         # conf が無い repo では何も出さない
         (repo / CONF).unlink()
         if run().strip():

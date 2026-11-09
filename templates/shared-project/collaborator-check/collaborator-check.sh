@@ -26,6 +26,10 @@
 #     `--venv-check` を聞く (network なし、 何も変えない)。 venv の用意・requirements への追従は入口が初回の実行で
 #     自動でやるので、 ここで出すのは人の手が要るとき (宣言の版の Python がこの機械に無い / 宣言外の venv を使っている) だけ。
 #     規約 = conventions/python-env.md
+#   ⚠️ 上書きの環境変数 (file・repo・board 行) に Claude Code・SDK 自身の変数 (CLAUDE_CONFIG_DIR・CLAUDE_CODE_*・ANTHROPIC_*)
+#     を使わない。 session がその変数に値を入れていることがあり、 check がその値 (例 = Claude Code の設定フォルダ) を
+#     この行の置き場と取り違える (無ければそこへ clone もする)。 当たる行は読まずに ⚠️ を出す。 名前は
+#     <REPO>_REPO_DIR / <NAME>_FILE の形にする (止める名前の一覧 = 下の RESERVED_ENV_NAMES・RESERVED_ENV_PREFIXES)
 #
 # 出力: file / command / repo が揃っていれば何も出さない。 read は clone ごとの初回だけ出す
 # (印 = .git/collaborator-check.seen)。 欠けた項目・その場で clone した repo・初回の read を 1 block で出す。
@@ -66,6 +70,37 @@ expand_home() {
   esac
 }
 
+# 上書きの変数に使えない名前 = Claude Code・SDK が自分で読む変数 (完全一致の名前と、 接頭)。 足すときはここに並べる
+RESERVED_ENV_NAMES="CLAUDE_CONFIG_DIR"
+RESERVED_ENV_PREFIXES="CLAUDE_CODE_ ANTHROPIC_"
+
+reserved_env() {
+  local n
+  for n in $RESERVED_ENV_NAMES; do [ "$1" = "$n" ] && return 0; done
+  for n in $RESERVED_ENV_PREFIXES; do case "$1" in "$n"*) return 0 ;; esac; done
+  return 1
+}
+
+reserved_list() {
+  local n out=""
+  for n in $RESERVED_ENV_NAMES; do out="${out}・${n}"; done
+  for n in $RESERVED_ENV_PREFIXES; do out="${out}・${n}*"; done
+  printf '%s' "${out#・}"
+}
+
+# 代わりの名前の例: <素を大文字にして英数字以外を _ に><末尾>。 それ自体が止める名前に当たれば COLLAB_ を前に付ける
+env_suggest() {
+  local s
+  s="$(printf '%s' "$1" | sed 's/^\.*//' | LC_ALL=C tr 'a-z' 'A-Z' | LC_ALL=C sed 's/[^A-Z0-9_]/_/g')$2"
+  reserved_env "$s" && s="COLLAB_${s}"
+  printf '%s' "$s"
+}
+
+reserved_line() {  # $1 = 行の種類、 $2 = 変数、 $3 = 代わりの名前の例、 $4 = conf の行
+  missing="$missing
+  ⚠️ .collaborator-check.conf の ${1} 行の上書きの変数 ${2} は Claude Code・SDK 自身の変数 ($(reserved_list)) で、 session が値を入れていることがある (その値をこの行の置き場と取り違える) → この行は読まない。 変数の名前を変える (例 ${3}): ${4}"
+}
+
 while IFS= read -r line || [ -n "$line" ]; do
   case "$line" in ''|'#'*) continue ;; esac
   head="${line%% -- *}"
@@ -81,6 +116,10 @@ while IFS= read -r line || [ -n "$line" ]; do
       path="$(expand_home "${2:-}")"
       envvar="${3:-}"
       shown="${2:-}"
+      if [ -n "$envvar" ] && reserved_env "$envvar"; then
+        reserved_line file "$envvar" "$(env_suggest "${shown##*/}" _FILE)" "$line"
+        continue
+      fi
       if [ -n "$envvar" ]; then
         val="$(printenv "$envvar" 2>/dev/null)"
         if [ "$val" = "none" ]; then
@@ -127,6 +166,10 @@ while IFS= read -r line || [ -n "$line" ]; do
   ⚠️ .collaborator-check.conf の repo の URL は https:// か file:// だけ: $line"
         continue ;;
       esac
+      if [ -n "$envvar" ] && reserved_env "$envvar"; then
+        reserved_line repo "$envvar" "$(env_suggest "$name" _REPO_DIR)" "$line"
+        continue
+      fi
       dest="$PARENT/$name"
       shown="$name"
       if [ -n "$envvar" ]; then
@@ -174,6 +217,10 @@ while IFS= read -r line || [ -n "$line" ]; do
     board)
       bdir="${2:-board}"
       envvar="${3:-AI_COLLABORATION_DIR}"
+      if reserved_env "$envvar"; then
+        reserved_line board "$envvar" "AI_COLLABORATION_DIR = 既定なので省いてもよい" "$line"
+        continue
+      fi
       engine="$(printenv "$envvar" 2>/dev/null)"
       [ "$engine" = "none" ] && continue
       [ -n "$engine" ] && engine="$(expand_home "$engine")" || engine="$PARENT/ai-collaboration"
