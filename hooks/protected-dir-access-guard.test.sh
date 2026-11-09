@@ -24,7 +24,8 @@ _run() {  # $1=tool $2=json tool_input $3=cwd -> ask / stop (exit 2 + 直し方�
   out=$(jq -n --arg t "$1" --argjson i "$2" --arg c "$3" '{tool_name:$t, tool_input:$i, cwd:$c}' \
     | env -u CLAUDE_PROTECTED_DIRS HOME="$T" python3 "$HOOK" 2>"$err"); rc=$?
   if [ "$rc" = 2 ]; then
-    grep -q 'prune' "$err" && echo stop || echo stop-without-hint
+    # 直し方 = Bash は除外の書き方 (prune)、 Grep は glob の除外、 Glob は起点を絞る行
+    grep -qE 'prune|!\*\*/|起点をその dir の外' "$err" && echo stop || echo stop-without-hint
   elif grep -q '"permissionDecision": "ask"' <<< "$out"; then echo ask
   else echo none; fi
 }
@@ -41,6 +42,15 @@ _bash "実体 path で名指し" "cat \"$F/a.md\"" ask
 _bash "\$HOME 形" 'ls $HOME/Dropbox/部署/機密作業' ask
 _bash "親の直後の glob" 'ls ~/Dropbox/部署/*' ask
 _bash "親の直後の前方一致 glob" 'ls ~/Dropbox/部署/機密*' ask
+_bash "除外を添えても名指しは名指し (tar)" "tar czf o.tgz --exclude='*.tmp' ~/Dropbox/部署/機密作業" ask
+_bash "除外を添えても名指しは名指し (rsync)" 'rsync -a --exclude .git ~/Dropbox/部署/機密作業/ /tmp/x/' ask
+_bash "起点が中の find の -prune" 'find ~/Dropbox/部署/機密作業 -name .git -prune -o -print' ask
+_bash "ls -x の後の名指し" 'ls -x ~/Dropbox/部署/機密作業/' ask
+_bash "cd の後の相対の名指し" 'cd ~/Dropbox/部署 && ls 機密作業' ask
+_bash "echo の向き先が中" 'echo x > ~/Dropbox/部署/機密作業/f.txt' ask
+_bash "代入した path を使う" 'F=~/Dropbox/部署/機密作業; ls "$F"' ask
+_bash "python の heredoc の本文が中の file を開く" $'python3 - <<\'EOF\'\nimport os\nprint(open(os.path.expanduser(\'~/Dropbox/部署/機密作業/a.md\')).read())\nEOF' ask
+_bash "tar の展開先が中" 'tar xzf a.tgz -C ~/Dropbox/部署/機密作業' ask
 
 echo "=== stop: 上位 dir の再帰 (本人に確認を出さず、 直し方を返して止める) ==="
 _bash "Dropbox の根から find (実際に起きた形)" 'cd ~/Library/CloudStorage/Dropbox 2>/dev/null || cd ~/Dropbox; find . -maxdepth 7 -name .git -print' stop
@@ -57,6 +67,40 @@ _bash "mdfind (-onlyin 無し = 全体)" 'mdfind -name 報告' stop
 _bash "mdfind -onlyin 上位" 'mdfind -onlyin ~/Dropbox 報告' stop
 _bash "zsh の再帰 glob" 'ls ~/Dropbox/**/*.pdf' stop
 _bash "sudo + 環境変数 + timeout の後の find" 'LC_ALL=C sudo timeout 30 find ~ -name x' stop
+echo "=== stop: 除外に見えて中身を除かない形・起点の読み方 (照合で見つかった素通り) ==="
+_bash "find -not -name B は dir だけ除く" 'find ~/Dropbox/部署 -not -name 機密作業' stop
+_bash "find -not -path */B は dir だけ除く" "find ~/Dropbox/部署 -not -path '*/機密作業'" stop
+_bash "grep --exclude=B は file の名前" 'grep -r --exclude=機密作業 foo ~/Dropbox/部署' stop
+_bash "名を検索語に + 無関係な --exclude" 'grep -r --exclude=*.log 機密作業 ~/Dropbox' stop
+_bash "find -L (前置きの option)" 'find -L ~/Dropbox -name x' stop
+_bash "find -H -E" 'find -H -E ~/Dropbox -name x' stop
+_bash "\\ 改行で継いだ find" $'find \\\n  ~/Dropbox -name x' stop
+_bash "rg --files (検索語が無い)" 'rg --files ~/Dropbox' stop
+_bash "ag -g (検索語は -g の値)" 'ag -g x ~/Dropbox' stop
+_bash "nice -n の後の find" 'nice -n 10 find ~/Dropbox -name x' stop
+_bash "stdbuf の後の find" 'stdbuf -oL find ~/Dropbox -name x' stop
+_bash "caffeinate の後の find" 'caffeinate -i find ~/Dropbox -name x' stop
+_bash "sudo -u の後の find" 'sudo -u root find ~ -name x' stop
+_bash "du の起点の glob が上位に広がる" 'du -sh ~/Dropbox/*' stop
+_bash "du の glob が D そのものに広がる" 'du -sh ~/Dropbox/*/*' stop
+_bash "cat の glob が名を書かずに中へ" 'cat ~/Dropbox/*/*/x.md' stop
+_bash "for の並びの glob を変数で find" 'for d in ~/Dropbox/*/; do find "$d" -name x; done' stop
+_bash "代入した上位 dir を変数で find" 'r=~/Dropbox; find "$r" -name x' stop
+_bash "\$() の起点" 'find $(echo ~/Dropbox) -name x' stop
+_bash "xargs に流した起点" 'echo ~/Dropbox | xargs find' stop
+_bash "cd に変数で上位 dir、 find ." 'd=~/Dropbox; cd "$d" && find . -name x' stop
+_bash "bash -c の中" 'bash -c "find ~/Dropbox -name x"' stop
+_bash "eval の中" 'eval "find ~/Dropbox -name x"' stop
+_bash "bash に流す heredoc の中" $'bash <<EOF\nfind ~/Dropbox -name x\nEOF' stop
+_bash "ugrep -r" 'ugrep -r foo ~/Dropbox' stop
+_bash "ditto の元が上位" 'ditto ~/Dropbox/部署 /tmp/y' stop
+_bash "scp -r の元が上位" 'scp -r ~/Dropbox host:/tmp/' stop
+_bash "tar -C 上位 + ." 'tar -C ~/Dropbox -czf /tmp/o.tgz .' stop
+_bash "python の copytree" "python3 -c \"import shutil, os; shutil.copytree(os.path.expanduser('~/Dropbox'), '/tmp/z')\"" stop
+_bash "python3.12 の Path.home().rglob" "python3.12 -c \"from pathlib import Path; list(Path.home().rglob('*.pdf'))\"" stop
+_bash "uv run python の heredoc の走査" $'uv run --with x python - <<EOF\nimport os\nos.walk(os.path.expanduser(\'~/Dropbox\'))\nEOF' stop
+_tool "Grep 上位 + 除かない glob" Grep '{"pattern":"x","path":"~/Dropbox","glob":"*.md"}' stop
+_tool "Glob */*/* が名を書かずに中へ" Glob '{"pattern":"*/*/*","path":"~/Dropbox"}' stop
 
 echo "=== cwd ==="
 _bash "cwd が中 (実体)" 'ls' ask "$F/sub"
@@ -83,6 +127,17 @@ _bash "rg -g !" "rg -g '!**/機密作業/**' foo ~/Dropbox" none
 _bash "find -not -path" "find ~/Dropbox -name x -not -path '*機密作業*'" none
 _bash "mdfind -onlyin 外" 'mdfind -onlyin ~/Claude 報告' none
 _bash "除外は片ごと (別の片の走査は止める)" "grep -rn --exclude-dir=機密作業 foo ~/Dropbox; find ~ -name x" stop
+_bash "find -iname -prune" "find ~/Dropbox -iname '機密作業' -prune -o -print" none
+_bash "find -not -path */B/* (中身を除く)" "find ~/Dropbox -not -path '*/機密作業/*' -name x" none
+_bash "ls -R --ignore=B" 'ls -R --ignore=機密作業 ~/Dropbox/部署' none
+_bash "tree -I B" "tree -I '機密作業|x' ~/Dropbox" none
+_bash "du --exclude=B" 'du -sh --exclude=機密作業 ~/Dropbox/部署' none
+_bash "zip -x で中身を除く" "zip -r /tmp/o.zip ~/Dropbox -x '*/機密作業/*'" none
+_bash "rsync --exclude=B" 'rsync -a --exclude=機密作業 ~/Dropbox/部署/ /tmp/y/' none
+_bash "fd -E B" 'fd -E 機密作業 x ~/Dropbox' none
+_bash "python の走査で dirs[:] から B を除く" $'python3 -c "import os\nfor r,d,f in os.walk(os.path.expanduser(\'~/Dropbox\')):\n    d[:] = [x for x in d if x != \'機密作業\']"' none
+_tool "Grep 上位 + glob !**/B/**" Grep '{"pattern":"x","path":"~/Dropbox","glob":"!**/機密作業/**"}' none
+_tool "Grep 上位 + glob !親" Grep '{"pattern":"x","path":"~/Dropbox","glob":"!部署"}' none
 
 echo "=== none: 文中の語・引用符の / (実際に誤検出した形を架空の path で) ==="
 _bash "loop の find \"\$r\" + awk の \"/\"" 'for r in ~/Claude/*/; do command find "$r" -path "$r/.git" -prune -o -name "*.md" -print; done | awk -F/ '"'"'{print $1"/"$2}'"'"' | sort | uniq -c' none
@@ -95,6 +150,21 @@ s = a.split('/')[0]
 EOF" none
 _bash "tr の / と find ~/Claude" "find ~/Claude -name x | tr '/' '_'" none
 _bash "ack の語が文の中" 'echo "ack は送らない / 返事だけ"' none
+_bash "file を書くだけの heredoc の本文の走査" $'cat > /tmp/x.py <<X\nimport os\nfor r in os.walk(os.path.expanduser("~/Dropbox")): pass\nX' none
+_bash "file を書くだけの heredoc の本文の path" $'cat > /tmp/n.md <<\'EOF\'\nsee ~/Dropbox/部署/機密作業/a.md\nEOF' none
+_bash "python の heredoc の規則の文 (P/B が / の後)" $'python3 - <<\'EOF\'\nr = f"Write(/${{HOME}}/{base}/部署/機密作業/**)"\nEOF' none
+_bash "commit message の頭が D の path" "git commit -m '~/Dropbox/部署/機密作業/a.md を直した'" none
+_bash "grep の検索語が D の path" "grep -rn '~/Dropbox/部署/機密作業' ~/Claude/docs" none
+_bash "cp の写し先が上位 dir" 'cp -r ~/Claude/x ~/Dropbox/' none
+_bash "rsync の写し先が上位 dir" 'rsync -a ~/Claude/x/ ~/Dropbox/' none
+_bash "ls の glob が 1 段 (名前だけ)" 'ls ~/Dropbox/*' none
+_bash "親の glob が B に当たらない" 'ls ~/Dropbox/部署/*.pdf' none
+_bash "cd ~ の後の for の並びを変数で find (設定 dir)" 'cd ~ && for d in .claude .claude-x; do find "$d/projects" -name "*.jsonl"; done' none
+_bash "for の並びの glob が上位に届かない" 'cd ~ && for d in ~/.claude*/projects; do find "$d" -name "*.jsonl"; done | xargs grep -l x' none
+_bash "値の読めない変数 + tr の /" 'for r in a/b c/d; do n=$(echo $r | tr "/" "_"); du -sh "$n"; done' none
+_bash "python の Path.home() / 下の dir の走査" $'python3 - <<\'EOF\'\nfrom pathlib import Path\nimport os\nroot = Path.home() / "sandbox"\nfor dp, dn, fn in os.walk(root): pass\nEOF' none
+_tool "Glob * を親で (名前だけ)" Glob '{"pattern":"*","path":"~/Dropbox/部署"}' none
+_tool "Glob */* を上位で (D そのものまで)" Glob '{"pattern":"*/*","path":"~/Dropbox"}' none
 
 echo "=== none: 触れないもの ==="
 _bash "規約を読む grep (語だけ)" 'grep -n "機密作業" CLAUDE.md' none
@@ -112,6 +182,9 @@ _tool "Glob 相対 (cwd ~/Claude)" Glob '{"pattern":"**/*.md"}' none
 _tool "Glob に語だけ (起点が外)" Glob '{"pattern":"**/機密作業/**"}' none
 _tool "Read の file が中" Read "$(jq -n --arg p "$F/a.md" '{file_path:$p}')" ask
 _tool "Edit の file が中" Edit "$(jq -n --arg p "$F/a.md" '{file_path:$p}')" ask
+_tool "NotebookEdit の file が中" NotebookEdit "$(jq -n --arg p "$F/a.ipynb" '{notebook_path:$p}')" ask
+_tool "Grep の glob が名を書く (上位から)" Grep '{"pattern":"x","path":"~/Dropbox","glob":"**/機密作業/**"}' ask
+_tool "Glob の ** に名 (上位から)" Glob '{"pattern":"**/機密作業/**","path":"~/Dropbox"}' ask
 _tool "Read の file が外" Read "$(jq -n --arg p "$T/other/a.md" '{file_path:$p}')" none
 _bash "空 command" '' none
 
@@ -149,6 +222,10 @@ _check "PostToolUse でも session_id 無しは記録しない" "$(_ev PostToolU
 [ ! -e "$T/.claude/protected-dir-unlock/_" ] && _check "空 session の記録を作らない" ok ok || _check "空 session の記録を作った" bad ok
 _check "保護 dir の外は PostToolUse でも記録しない" "$(_ev PostToolUse sess-C Read "$(jq -n --arg p "$T/other/a.md" '{file_path:$p}')")" none
 [ ! -e "$T/.claude/protected-dir-unlock/sess-C" ] && _check "外の file で unlock しない" ok ok || _check "外の file で unlock した" bad ok
+_ev PostToolUse sess-D Bash "$(jq -n '{command:"find ~/Dropbox -name x"}')" >/dev/null
+[ ! -e "$T/.claude/protected-dir-unlock/sess-D" ] && _check "上位からの走査 (止める) で unlock しない" ok ok || _check "走査で unlock した" bad ok
+_ev PostToolUse sess-E Bash "$(jq -n '{command:"git commit -m \"~/Dropbox/部署/機密作業/a.md を直した\""}')" >/dev/null
+[ ! -e "$T/.claude/protected-dir-unlock/sess-E" ] && _check "commit message の path で unlock しない" ok ok || _check "commit message で unlock した" bad ok
 rm -rf "$T/.claude/protected-dir-unlock"
 
 echo "=== カナリア ==="
