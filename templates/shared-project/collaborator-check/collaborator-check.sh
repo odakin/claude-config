@@ -26,7 +26,8 @@
 #     `--venv-check` を聞く (network なし、 何も変えない)。 venv の用意・requirements への追従は入口が初回の実行で
 #     自動でやるので、 ここで出すのは人の手が要るとき (宣言の版の Python がこの機械に無い / 宣言外の venv を使っている) だけ。
 #     規約 = conventions/python-env.md
-#   ⚠️ 上書きの環境変数 (file・repo・board 行) に Claude Code・SDK 自身の変数 (CLAUDE_CONFIG_DIR・CLAUDE_CODE_*・ANTHROPIC_*)
+#   ⚠️ 上書きの環境変数 (file・repo・board 行) に Claude Code・SDK 自身の変数 (CLAUDE_CONFIG_DIR・CLAUDECODE・
+#     CLAUDE_PROJECT_DIR・CLAUDE_ENV_FILE・CLAUDE_EFFORT・CLAUDE_PID・CLAUDE_CODE_*・CLAUDE_AGENT_SDK_*・ANTHROPIC_*)
 #     を使わない。 session がその変数に値を入れていることがあり、 check がその値 (例 = Claude Code の設定フォルダ) を
 #     この行の置き場と取り違える (無ければそこへ clone もする)。 当たる行は読まずに ⚠️ を出す。 名前は
 #     <REPO>_REPO_DIR / <NAME>_FILE の形にする (止める名前の一覧 = 下の RESERVED_ENV_NAMES・RESERVED_ENV_PREFIXES)
@@ -71,8 +72,8 @@ expand_home() {
 }
 
 # 上書きの変数に使えない名前 = Claude Code・SDK が自分で読む変数 (完全一致の名前と、 接頭)。 足すときはここに並べる
-RESERVED_ENV_NAMES="CLAUDE_CONFIG_DIR"
-RESERVED_ENV_PREFIXES="CLAUDE_CODE_ ANTHROPIC_"
+RESERVED_ENV_NAMES="CLAUDE_CONFIG_DIR CLAUDECODE CLAUDE_PROJECT_DIR CLAUDE_ENV_FILE CLAUDE_EFFORT CLAUDE_PID"
+RESERVED_ENV_PREFIXES="CLAUDE_CODE_ CLAUDE_AGENT_SDK_ ANTHROPIC_"
 
 reserved_env() {
   local n

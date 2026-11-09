@@ -439,21 +439,28 @@ def selftest() -> int:
             CONF_HEADER
             + "repo claude-config https://github.com/odakin/claude-config CLAUDE_CONFIG_DIR -- 規約\n"
             + "file ~/.secrets/selftest-token CLAUDE_CODE_TOKEN_FILE -- token を置く\n"
-            + "board board ANTHROPIC_BOARD_DIR -- 掲示板の自分宛て\n")
-        out_r = run(extra=dict(pathenv, CLAUDE_CONFIG_DIR=str(ccdir), CLAUDE_CODE_TOKEN_FILE=str(tok)))
+            + "board board ANTHROPIC_BOARD_DIR -- 掲示板の自分宛て\n"
+            + f"repo toolrepo file://{remote} CLAUDE_PROJECT_DIR -- 道具\n"
+            + "file ~/.secrets/selftest-token CLAUDE_AGENT_SDK_TOKEN_FILE -- token を置く\n")
+        out_r = run(extra=dict(pathenv, CLAUDE_CONFIG_DIR=str(ccdir), CLAUDE_CODE_TOKEN_FILE=str(tok),
+                               CLAUDE_PROJECT_DIR=str(repo), CLAUDE_AGENT_SDK_TOKEN_FILE=str(tok)))
         for var, sug in (("CLAUDE_CONFIG_DIR", "CLAUDE_CONFIG_REPO_DIR"),
                          ("CLAUDE_CODE_TOKEN_FILE", "SELFTEST_TOKEN_FILE"),
-                         ("ANTHROPIC_BOARD_DIR", "AI_COLLABORATION_DIR")):
+                         ("ANTHROPIC_BOARD_DIR", "AI_COLLABORATION_DIR"),
+                         ("CLAUDE_PROJECT_DIR", "TOOLREPO_REPO_DIR"),
+                         ("CLAUDE_AGENT_SDK_TOKEN_FILE", "SELFTEST_TOKEN_FILE")):
             if not any(l.lstrip().startswith("⚠️") and f"変数 {var} は" in l and f"例 {sug}" in l
                        for l in out_r.splitlines()):
                 fails.append(f"{var} の行で ⚠️ と代わりの名前 {sug} が出ない:\n{out_r}")
         if ccdir.exists() or (td / "claude-config").exists():
             fails.append("Claude Code の変数を使った repo 行を読んで clone した")
-        # 同じ行で名前を変えれば止めない (接頭の境目 = CLAUDE_CODEX_ は CLAUDE_CODE_ に当たらない)
+        # 同じ行で名前を変えれば止めない (接頭の境目 = CLAUDE_CODEX_ は CLAUDE_CODE_ に当たらない。
+        # 名前は完全一致 = CLAUDE_PID_FILE は CLAUDE_PID に当たらない)
         (repo / CONF).write_text(
             CONF_HEADER
             + "repo claude-config https://github.com/odakin/claude-config CLAUDE_CONFIG_REPO_DIR -- 規約\n"
             + "file ~/.secrets/selftest-token CLAUDE_CODEX_TOKEN_FILE -- token を置く\n"
+            + "file ~/.secrets/selftest-token CLAUDE_PID_FILE -- pid を置く\n"
             + "board board AI_COLLABORATION_DIR -- 掲示板の自分宛て\n")
         ok_env = dict(pathenv, CLAUDE_CONFIG_DIR=str(ccdir), CLAUDE_CONFIG_REPO_DIR="none")
         out_n = run("--all", extra=ok_env)
