@@ -150,9 +150,23 @@ engine の名前を含む code / 設定 file は全文を `authority:wiring` と
    hook の試験を写しで回すとき、 hook が自分の実の path (`realpath`) から engine を探すなら、 `hooks/` (と Codex の `codex/`) は symlink でなく実体で写す。 symlink のままだと hook の面は今の engine を通り、 試験が通っても候補を試していない (実測)。
 
 掲示板など別sessionから届く作業では、案内文や「続けて」だけを、まだ示していない規則変更の候補の承認へ広げない。
-依頼元が引用した本人の発言も、workerの直接の裁定に置き換えない。裁定が要る差分は対象・候補・失う制約をworkerのchatへまとめて示し、
-このchatの本人の具体的な返事を、既存CLIで各候補へ結び付ける。既にある具体的な許可で通常の実装を進められる部分は進める。
-この運用は、本人発言の照合や最新発言の条件を変更しない。
+依頼元が引用した本人の発言も、そのままworkerの裁定として記録しない = 本人の発言が承認になるのは、 本人が答えた窓の会話記録を
+engine が照らしたときだけ (下の [別の窓の答え](#owner-answer-in-another-window))。 裁定が要る差分は、 対象・候補 (全文と SHA-256)・
+失う制約を依頼元に submit し、 依頼元が自分の窓で本人に示す。 本人の具体的な返事を、 worker が既存の CLI で各候補へ結び付ける。
+既にある具体的な許可で通常の実装を進められる部分は進める。 worker の窓で本人が答えた承認の照合と最新発言の条件は今のまま。
+
+<a id="owner-answer-in-another-window"></a>**別の窓の答え** (実測: 本人が依頼元の窓で答えた後、 worker の窓へ行って同じ答えを打ち直す往復が続いた):
+worker は `apply --file <対象の絶対 path> --candidate <全文の絶対 path> --change '<1 行>' --owner-session claude:<依頼元の session の id の全体> --quote '<本人の発言そのもの>'` で記録して当てる。 engine が照らすもの (1 つでも欠ければ記録しない):
+
+1. 名指すのは Claude の session の id の全体 (当てる窓自身でもよい)。 依頼元の会話記録を、 この機械の `~/.claude` と `~/.claude-*` の projects の下だけから探す (環境変数・`--transcript` の指す記録は読まない)。 見つからなければ記録しない = 別の機械の依頼元なら、 worker の窓で今の形に戻る。
+2. 引用が、 その会話記録の本人の発言に verbatim で在る (この窓の承認と同じ読み方 = 別 session の連絡・背景 task の通知・sub-agent の行は本人の発言でない。 短い引用は発言の全体と一致する時だけ)。
+3. その発言が直前の箱のボタンの文と一字一句同じ (押したボタン) なら、 押した箱までの返事 (下の 4 と同じ範囲) に対象の file の名と候補の SHA-256 の頭 8 字以上が出ているときだけ、 本人の答えとして記録する (記録に押したボタンの文を残す)。 出ていなければ記録しない ([mid-turn-text-visibility.md#button-text-not-user-words](mid-turn-text-visibility.md#button-text-not-user-words))。 この窓の承認 (`--owner-session` なし) でも同じで、 `--candidate` の無い承認 (原稿の保護領域) では押したボタンを引かない。
+4. その発言の前 (1 つ前の本人の発言より後) の依頼元の返事の 1 つ (本文か箱の recap・ask) に、 対象の file の名と候補の全文の SHA-256 の頭 8 字以上が出ている = 本人がこの候補を示されて答えた。 最新の 1 つは求めない (依頼元の窓には本人の別件の発言が続く)。 候補が変われば SHA-256 が変わり、 示されたものと違う候補には効かない。
+5. 規則の文書・hook・道具・設定 (`authority:` / `config` の領域) を `--candidate` の全文で当てる承認だけ。 原稿の保護領域は、 本人が裁定した窓で記録する ([manuscript-claim-ownership.md](manuscript-claim-ownership.md))。 `--latest` とも `--reviewer-approval` とも組まない。 その会話で agent が断った件の印がその file に開いていれば記録しない。
+6. 記録は当てる worker の session の承認に置き、 引いた発言の session・時刻・示された SHA-256 の頭を残す。 そのターンの最後の返事に、 引いた発言と対象の file を書く (上の 3 と同じ。 Stop が確かめる)。
+7. agent の入口の文書 (CLAUDE.md・AGENTS.md・CONVENTIONS.md)・権限の設定 (`.claude/settings*.json`・`.codex/config*.toml`・`.codex/rules`)・配線と守りの設定 (`settings-entries.json`・`.codex/hooks.json`・`reviewer-delegation.json`・`.agent-rule-guard.json`・`manuscript-guard.json`) は、 別の窓の答えでは記録しない。 agent は別の session の依頼でそれらを変えない (実測: worker がその理由で当てるのを断った)。 本人が話している窓で、 `--owner-session` にその窓自身の id を渡して記録する (この窓の答えも 4 の照らしで記録できる = 最新の 1 つの代わり)。
+
+依頼元の側: worker の候補を本人に示す返事に、 file ごとに名と SHA-256 の頭 (12 字ほど) を書き、 本人の答えと自分の session の id を worker に送る。 本人に問いを示す窓は依頼元の 1 つにし、 worker は自分の返事に問いを並べない ([CONTRACT.md#worker-questions-to-requester](../../ai-collaboration/board/CONTRACT.md#worker-questions-to-requester))。
 本人が委任した範囲の変更では、 worker はこの chat で本人に聞かず、 検収の役が掲示板に書いた承認の event を `apply --reviewer-approval` に渡す ([検収の役への委任](#reviewer-delegation))。
 
 CLI の session 検出・対応する transcript 表現・state の保存先の実装は [dispatcher](../scripts/manuscript-claim-guard.py) が所有する。machine-local の本人発言や承認ファイルを公開 repo へ置かない。

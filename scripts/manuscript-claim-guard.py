@@ -57,7 +57,8 @@
   届いた発言 (queued_command) なら引かない (exit 5 = 作業を始めさせた発言より後の発言で、 別の項目への答えのことがある。
   中身を読んで、 この変更の裁定なら --quote で引く)。 短い引用 (SHORT_QUOTE 文字未満) は、 発言の全体 (端の空白・句読点を除く) と一致する時だけ
   照合する (「OK」 が「BOOK」「OK じゃない」「OK?」 に当たらないように。 足りなければ発言の全体か、 それ以上の長さを
-  引く)。 承認は session に束縛され (別 session は使えない)、 machine-local の state に置く
+  引く)。 承認は session に束縛され (別 session は使えない。 例外 = 本人が別の窓で答えた承認を --owner-session で
+  記録する形 = その窓の会話記録で発言を照らし、 記録は当てる session に置く。 照らすものは OWNER_RELAY)、 machine-local の state に置く
   (公開 repo に著者の発言を書かない)。 監査の本体は transcript。 記録したら、 そのターンの最後の返事に引いた発言と対象の
   file を書く (Stop が確かめ、 無ければ 1 回差し戻す = 意味の取り違えを著者がその場で見る。 後から記録を読む前提にしない)。
 
@@ -73,6 +74,8 @@
                                    --reviewer-approval = 本人が任せた範囲 (個人層の reviewer-delegation.json) で、 書いた worker と別の窓の
                                    検収係が掲示板に書いた承認の event (照合 = verify_reviewer_approval、 正本 =
                                    conventions/agent-rule-ownership.md#reviewer-delegation)
+                                   --owner-session claude:<id> --quote '<発言>' = 本人が依頼元の窓で答えた承認 (その窓の会話記録で
+                                   照らす。 規則の文書・hook・道具・設定の --candidate だけ = OWNER_RELAY)
                                    承認の記録 + 書込み + 照合を 1 command で。 置換は Edit と同じ (old は 1 回だけ現れる)
   manuscript-claim-guard.py approvals [--session agent:id]    記録済み承認の一覧
   manuscript-claim-guard.py stop claude|codex      Stop の event を stdin で受け、 記録した承認を最後の返事に書いていなければ差し戻す (fail-open)
@@ -2359,6 +2362,9 @@ def undisclosed_approvals(agent: str, sid: str, msgs: list[tuple[str, str]], rep
     start = _utc(str(ts or ""))
     mine += [a for a in load_approvals(agent, sid) if a.get("source") == "reviewer" and start is not None
              and (_utc(str(a.get("at", ""))) or start) >= start]
+    # 別の窓の本人の答えの承認 (OWNER_RELAY) も、 この窓の本人の発言には結ばない = 最新の発言の後に記録したものを書かせる
+    mine += [a for a in load_approvals(agent, sid) if a.get("source") == "owner-relay" and start is not None
+             and (_utc(str(a.get("at", ""))) or start) >= start and a not in mine]
     return [a for a in mine if not any(disclosed(a, r) for r in replies)]
 
 
@@ -3898,9 +3904,18 @@ def approve_mode(args: argparse.Namespace) -> int:
     else:
         repo = repo_root(p)
         rel, _ = target_identity(p, repo)
-    transcript = find_transcript(session[0], session[1], args.transcript)
+    # 本人が別の窓 (依頼元の指揮役の窓) で答えた承認 = その窓の会話記録の本人の発言を照らす (OWNER_RELAY の docstring)
+    relay, why = owner_relay_session(getattr(args, "owner_session", None), session, args, latest_flag=bool(getattr(args, "latest", False)))
+    if not why and relay and relay != session and harness_bound(rel):
+        why = (f"{rel} は agent の入口の文書・権限の設定・配線 = 別の窓の答えでは当てない (agent は別の session の依頼で"
+               " CLAUDE.md・権限・config を変えない)。 本人が話している窓で、 --owner-session にその窓自身の id を渡して当てる。")
+    if why:
+        print("approve: " + why, file=sys.stderr)
+        return 2
+    transcript = owner_relay_transcript(relay) if relay else find_transcript(session[0], session[1], args.transcript)
     if transcript is None:
-        print(f"approve: session {session[0]}:{session[1]} の transcript が見つからない = 著者の発言を照合できないので記録しない。",
+        who = relay or session
+        print(f"approve: session {who[0]}:{who[1]} の transcript が見つからない = 著者の発言を照合できないので記録しない。",
               file=sys.stderr)
         return 3
     excluded_tags: dict[str, int] = {}
@@ -3960,20 +3975,40 @@ def approve_mode(args: argparse.Namespace) -> int:
     hit = (msgs[idx][0], message_sha(msgs[idx][1]))
     said = collapse_ws(msgs[idx][1])
     said = said if len(said) <= 40 else said[:40] + "…"
-    if idx != len(msgs) - 1:
+    if idx != len(msgs) - 1 and relay is None:
         print(f"approve: --quote が一致したのは著者の最新の発言ではない ({hit[0] or '時刻不明'} 「{said}」、 その後に"
               f"著者が {len(msgs) - 1 - idx} 回発言している。 slash command の起動と選択肢 UI の答えも発言に数える)。 記録しない。\n"
               "  引けるのは記録する時点で最新の著者の発言だけ = 古い発言を別の案の承認に使わない。\n"
               "  この案を著者に示し、 承認の発言を新しく得てから、 その発言を引く。",
               file=sys.stderr)
         return 5
-    pressed = pressed_button(transcript, msg_lines, idx, msgs[idx][1]) if session[0] == "claude" else ""
-    if pressed:
+    pressed = pressed_button(transcript, msg_lines, idx, msgs[idx][1]) if (relay or session)[0] == "claude" else ""
+    shown_sha, bind_why = "", ""
+    if relay or pressed:
+        # 押したボタンの答えも本人の答え。 何に押したかは、 押した箱までの返事が file の名と候補の SHA-256 を示したかで決める
+        # (OWNER_RELAY の 8。 示していなければ、 ボタンの文 = agent が書いた文だけが残り、 何を承認したかが分からない)
+        if getattr(args, "candidate", None):
+            shown_sha, bind_why = owner_relay_binding(transcript, msg_lines, idx, rel, args.candidate)
+        else:
+            bind_why = "候補の全文 (--candidate) が無い = 何に答えたかを SHA-256 で確かめられない。"
+    if pressed and bind_why:
         print(f"approve: 引いた発言「{said}」 は、 直前の箱のボタンの文と一字一句同じ = ボタンが押されたもの (agent が書いた文)。"
-              " 本人の言葉として承認に引かない。 記録しない。\n"
-              "  承認する変更 (file と何を変えるか) を本人に自分の言葉で 1 行打ってもらってから引く"
+              f" 押した箱までの返事から、 何に押したかを確かめられない ({bind_why}) = 記録しない。\n"
+              "  押した答えを承認にするなら、 その返事に当てる file の名と候補の SHA-256 の頭 8 字以上を書いて聞き直す。"
+              " そうでなければ、 承認する変更 (file と何を変えるか) を本人に自分の言葉で 1 行打ってもらってから引く"
               " (conventions/mid-turn-text-visibility.md#button-text-not-user-words)。", file=sys.stderr)
         return 4
+    if relay:
+        why = bind_why
+        if why:
+            print(f"approve: --owner-session {relay[0]}:{relay[1]} の本人の発言 ({hit[0] or '時刻不明'} 「{said}」): {why}"
+                  " 記録しない。\n  その窓で、 当てる file の名と候補の SHA-256 の頭 8 字以上を返事に書いて本人に見せ、"
+                  " その後の本人の返事を引く。", file=sys.stderr)
+            return 5
+        if open_marks(session, rel, str(repo) if repo else ""):
+            print("approve: この file は、 この会話で agent が本人の求めを断った件の規則を締める変更として止めた印がある ="
+                  " 別の窓の発言では記録しない (この窓で差分を本人に見せ、 その後の本人の返事を引く)。", file=sys.stderr)
+            return 5
     proposed: str | None = None
     entry = {
         "v": 1, "repo": str(repo) if repo else "", "file": rel, "regions": args.region,
@@ -3981,6 +4016,10 @@ def approve_mode(args: argparse.Namespace) -> int:
         "quote_time": hit[0], "quote_msg_sha": hit[1], "session": f"{session[0]}:{session[1]}",
         "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
     }
+    if relay:
+        entry.update({"source": "owner-relay", "quote_session": f"{relay[0]}:{relay[1]}", "shown_sha": shown_sha})
+    if pressed:
+        entry.update({"pressed_button": pressed, "shown_sha": shown_sha})
     if any(r.startswith("authority:") or r == "config" for r in args.region):
         candidate = getattr(args, "candidate", None)
         if not candidate:
@@ -4033,7 +4072,8 @@ def approve_mode(args: argparse.Namespace) -> int:
     ap.parent.mkdir(parents=True, exist_ok=True)
     with open(ap, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    print(f"approve: 記録した = {rel} :: {', '.join(args.region)} (著者の発言 {hit[0] or '時刻不明'} 「{said}」)")
+    where = f"、 本人が答えた窓 = {relay[0]}:{relay[1]}、 示された候補の SHA-256 の頭 = {shown_sha}" if relay else ""
+    print(f"approve: 記録した = {rel} :: {', '.join(args.region)} (著者の発言 {hit[0] or '時刻不明'} 「{said}」{where})")
     shown = collapse_ws(quote)
     shown = shown if len(shown) <= 20 else shown[:20] + "…"
     print(f"  このターンの最後の返事に書く (Stop が確かめる、 これだけで足りる): 「{shown}」 を {Path(rel).name} の承認として記録した")
@@ -5441,6 +5481,10 @@ def apply_mode(args: argparse.Namespace) -> int:
               " (止める前の発言は引けない)。", file=sys.stderr)
         return 2
     reviewer =(getattr(args, "reviewer_approval", None) or "").strip()
+    if left and reviewer and getattr(args, "owner_session", None):
+        print("apply: --owner-session と --reviewer-approval は組まない (本人の答えか、 任された範囲の検収係の承認か、"
+              " どちらか 1 つ)。 書かず、 記録もしない。", file=sys.stderr)
+        return 2
     if left and not args.quote and not getattr(args, "latest", False) and not reviewer:
         print("apply: 記録済みの承認が覆わない保護領域がある = 書かず、 記録もしない: " + ", ".join(regions) + "\n"
               "  裁定の発言を --quote で渡して打ち直すか、 approve でこの領域を記録してから打ち直す。", file=sys.stderr)
@@ -5455,7 +5499,8 @@ def apply_mode(args: argparse.Namespace) -> int:
     elif left:
         ns = argparse.Namespace(file=str(p), region=regions, change=args.change, quote=args.quote,
                                 latest=getattr(args, "latest", False), session=args.session,
-                                transcript=getattr(args, "transcript", None), candidate=str(cp), target_mode=target_mode)
+                                transcript=getattr(args, "transcript", None), candidate=str(cp), target_mode=target_mode,
+                                owner_session=getattr(args, "owner_session", None))
         rc = approve_mode(ns)
         if rc:
             return rc
@@ -7628,6 +7673,137 @@ def pressed_button(path: Path | None, lines: list[int], idx: int | None, text: s
     return next((lab for lab in (shown[-1] if shown else []) if lab and lab == said), "")
 
 
+OWNER_RELAY = """本人が別の窓で答えた承認 (approve / apply の --owner-session claude:<その窓の id> と --quote)。
+
+掲示板の依頼の worker (子) の窓で守りの道具に止められた規則の文書・hook・道具・設定の変更を、 本人が依頼元の窓 (指揮役) で
+出した答えで当てる (実測: 本人が指揮役の窓で答えた後、 子の窓へ行って同じ答えを打ち直す往復が続いた)。 記録はこれまでどおり
+当てる session (子) の承認の file に置き、 引いた発言の session と時刻を残す (quote_session / quote_time / shown_sha)。
+照らすもの (1 つでも欠ければ記録しない):
+  1. --owner-session は Claude の session の id の全体 (uuid)。 当てる session 自身でもよい (本人が話している窓 = 「最新の
+     1 つ」 の代わりに下の 4 で、 その答えがこの候補への答えかを確かめる)。 その会話記録は、 この機械の
+     ~/.claude と ~/.claude-* の projects の下だけから探す (MANUSCRIPT_CLAIM_GUARD_HOME・CLAUDE_CONFIG_DIR・--transcript
+     は読まない = 別の記録を読ませない。 検収係の会話記録と同じ探し方)。
+  2. --quote が、 その会話記録の本人の発言 (user_messages と同じ読み方 = 別 session の連絡・背景 task の通知・sub-agent
+     の行は本人の発言でない) に verbatim で在る。 短い引用は発言の全体と一致する時だけ (approve と同じ)。
+  3. その発言が直前の箱のボタンの文と一字一句同じ (= 押したボタン、 pressed_button) なら、 下の 8 のときだけ引く。
+  4. その発言の前 (1 つ前の本人の発言の行より後・その発言の行より前) の agent の返事 (本文、 箱の recap と ask) の同じ
+     1 つに、 当てる file の名 (repo からの path か file 名) と、 候補の全文の SHA-256 の頭 8 字以上が出ている = 本人が
+     この候補を示されて答えた。 最新の 1 つは求めない (依頼元の窓には本人の別件の発言が続き、 「最新」 では取り直しに
+     なる = 実測)。 候補の中身が変われば SHA-256 が変わるので、 示されたものと違う候補には効かない。
+  5. 規則の文書・hook・道具・設定 (authority: / config の領域) を --candidate の全文で当てる承認だけ。 原稿の保護領域は
+     今のとおり本人が裁定した窓で記録する。 --latest とは組まない。 --reviewer-approval とも組まない。
+  6. この会話で agent が断った件の印 (open_marks) がその file に開いていれば記録しない (止めた窓で差分を見せて引く)。
+  7. agent の入口の文書 (CLAUDE.md・AGENTS.md・CONVENTIONS.md)・権限の設定 (.claude/settings*.json・.codex/config*.toml・
+     .codex/rules)・配線と守りの設定 (settings-entries.json・.codex/hooks.json・reviewer-delegation.json・.agent-rule-guard.json・
+     manuscript-guard.json) は、 別の窓の答えでは記録しない = 本人が話している窓 (--owner-session がその窓自身) でだけ。
+     agent は別の session の依頼で CLAUDE.md・権限・config を変えない (実測: worker がその理由で当てるのを断った) ので、
+     道具がその当て方を案内しない。 harness_bound が名を持つ。
+  8. 押したボタンの答え (別の窓でも、 当てる窓自身でも、 --owner-session なしの承認でも) は、 押した箱までの返事 (4 と同じ
+     範囲 = 1 つ前の本人の発言より後) の 1 つに file の名と候補の SHA-256 の頭 8 字以上が出ているときだけ、 本人の答えとして
+     記録する (記録に pressed_button を残す)。 出ていなければ今までどおり引かない = ボタンの文は agent が書いた文で、
+     何に押したかが分からない。 本人の裁定 (実測: 承認の一言をボタンで押して道具に断られ、 打ち直す往復が続いた後)。
+     --candidate の無い承認 (原稿の保護領域) では、 押したボタンは今までどおり引かない。
+正本 = conventions/agent-rule-ownership.md#owner-answer-in-another-window。"""
+
+_FULL_SESSION_ID = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
+_SHA_TOKEN = re.compile(r"(?<![0-9a-f])[0-9a-f]{8,64}(?![0-9a-f])")
+
+
+def owner_relay_session(value: str | None, session: tuple[str, str] | None, args: argparse.Namespace, *,
+                        latest_flag: bool) -> tuple[tuple[str, str] | None, str]:
+    """--owner-session の値を読む (OWNER_RELAY の 1・5)。 (本人が答えた窓, 断る理由)。 値が無ければ (None, "")。"""
+    if not value:
+        return None, ""
+    relay = parse_session(value)
+    if relay is None or relay[0] != "claude" or not _FULL_SESSION_ID.match(relay[1]):
+        return None, "--owner-session は claude:<session の id の全体 (uuid)> の形 (本人が答えた窓。 この窓なら自分の id)。"
+    if latest_flag or not getattr(args, "quote", None):
+        return None, ("--owner-session には --quote '<その窓の本人の発言そのもの>' が要る (別の窓の最新の発言は、"
+                      " その窓の別件のことが多いので --latest と組まない)。")
+    if getattr(args, "reviewer_approval", None):
+        return None, "--owner-session と --reviewer-approval は組まない (本人の答えか、 任された範囲の検収係の承認か、 どちらか 1 つ)。"
+    regions = [str(r) for r in (getattr(args, "region", None) or [])]
+    if not getattr(args, "candidate", None) or not regions or not all(r.startswith("authority:") or r == "config"
+                                                                      for r in regions):
+        return None, ("--owner-session で記録できるのは、 規則の文書・hook・道具・設定 (authority: / config の領域) を"
+                      " --candidate の全文で当てる承認だけ。 原稿の保護領域は、 本人が裁定した窓で記録する。")
+    return relay, ""
+
+
+_HARNESS_BOUND = ("CLAUDE.md", "AGENTS.md", "AGENTS.override.md", "CONVENTIONS.md", ".claude/settings*.json",
+                  ".codex/config*.toml", ".codex/hooks.json", ".codex/rules/*.rules", "*settings-entries.json",
+                  "reviewer-delegation.json", ".agent-rule-guard.json", "*manuscript-guard.json")
+
+
+def harness_bound(rel: str) -> bool:
+    """agent の入口の文書・権限の設定・配線と守りの設定 (OWNER_RELAY の 7)。 別の窓の答えでは当てない。"""
+    rel = rel.replace("\\", "/")
+    name = rel.rsplit("/", 1)[-1]
+    return any(fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(name, pat) or rel.endswith("/" + pat)
+               or fnmatch.fnmatch(rel, "*/" + pat) for pat in _HARNESS_BOUND)
+
+
+def owner_relay_transcript(relay: tuple[str, str]) -> Path | None:
+    """本人が答えた窓の会話記録 (OWNER_RELAY の 1 = 環境変数・hint を読まない)。"""
+    return _reviewer_transcript(relay[1], Path.home())
+
+
+def _reply_texts(path: Path, lo: int, hi: int) -> list[str]:
+    """会話記録の行 lo より後・hi より前の agent の返事の文 (本文の text と、 箱の recap・ask)。 sub-agent の行は除く。"""
+    out: list[str] = []
+    try:
+        handle = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    with handle:
+        for lineno, line in enumerate(handle):
+            if lineno <= lo:
+                continue
+            if lineno >= hi:
+                break
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(row, dict) or row.get("type") != "assistant" or row.get("isSidechain"):
+                continue
+            content = (row.get("message") or {}).get("content") if isinstance(row.get("message"), dict) else None
+            for part in content if isinstance(content, list) else []:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "text":
+                    out.append(str(part.get("text") or ""))
+                elif part.get("type") == "tool_use" and str(part.get("name", "")).endswith("__wrap_up"):
+                    inp = part.get("input") if isinstance(part.get("input"), dict) else {}
+                    out.append(" ".join(str(inp.get(k) or "") for k in ("recap", "ask")))
+    return out
+
+
+def owner_relay_binding(path: Path, lines: list[int], idx: int | None, rel: str,
+                        candidate: str | None) -> tuple[str, str]:
+    """OWNER_RELAY の 4: 本人の発言の前の返事の 1 つに、 file の名と候補の SHA-256 の頭が出ているか。
+    (示された SHA-256 の頭, 断る理由)。"""
+    here = lines[idx] if idx is not None and 0 <= idx < len(lines) else None
+    if here is None:
+        return "", "その発言の会話記録の行が分からない = 何に答えたかを確かめられない。"
+    prev = max((ln for ln in lines[:idx] if ln < here), default=-1)
+    try:
+        cp = Path(str(candidate))
+        proposed = os.readlink(cp) if cp.is_symlink() else cp.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return "", "候補 (--candidate) を読めない。"
+    digest = hashlib.sha256(proposed.encode("utf-8")).hexdigest()
+    names = {n for n in (rel, Path(rel).name) if n}
+    for text in _reply_texts(path, prev, here):
+        if not any(n in text for n in names):
+            continue
+        for tok in _SHA_TOKEN.findall(text.lower()):
+            if digest.startswith(tok):
+                return tok, ""
+    return "", (f"その発言の前の返事 (1 つ前の本人の発言より後) の同じ 1 つに、 当てる file の名 ({Path(rel).name}) と"
+                f" 候補の SHA-256 の頭 8 字以上 ({digest[:8]}…) が出ていない = この候補への答えと読めない。")
+
+
 def button_press_selftests(check) -> None:
     """承認の記録が、 直前の箱のボタンの文と一字一句同じ発言を本人の言葉として引かないことを、 合成の会話記録で確かめる。"""
     import contextlib
@@ -7655,12 +7831,12 @@ def button_press_selftests(check) -> None:
             sid = "fixture-button-press"
 
             def tr(said, labels=("当てて", "まだ直す"), between_user=False, between=None, said_ts="2026-01-01T00:03:00Z",
-                   between_ts="2026-01-01T00:02:00Z", after=None):
+                   between_ts="2026-01-01T00:02:00Z", after=None, recap="候補を作った。"):
                 p = root / f"{sid}.jsonl"
                 rows = [{"type": "user", "timestamp": "2026-01-01T00:00:00Z", "message": {"content": "直して"}},
                         {"type": "assistant", "timestamp": "2026-01-01T00:01:00Z", "message": {"content": [
                             {"type": "tool_use", "id": "w1", "name": "mcp__ccd_turn__wrap_up",
-                             "input": {"recap": "候補を作った。", "ask": "当てますか？",
+                             "input": {"recap": recap, "ask": "当てますか？",
                                        "actions": [{"label": x} for x in labels]}}]}}]
                 if between_user:
                     rows.append({"type": "user", "timestamp": between_ts, "message": {"content": "別の話"}})
@@ -7684,6 +7860,12 @@ def button_press_selftests(check) -> None:
                     return approve_mode(ns)
 
             check("[button-1] 直前の箱のボタンの文と同じ発言は、 承認に引かない (exit 4)", run(tr("当てて")) == 4)
+            sha_c = hashlib.sha256(cand.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+            check("[button-B1] 押した箱が file の名と候補の SHA-256 を示していれば、 押したボタンを本人の答えとして記録する",
+                  run(tr("当てて", recap=f"locked.py の候補 (SHA-256 {sha_c[:12]}) を作った。")) == 0
+                  and load_approvals("claude", sid)[-1].get("pressed_button") == "当てて")
+            check("[button-B1] 箱の SHA-256 が別の候補のものなら、 押したボタンは引かない (exit 4)",
+                  run(tr("当てて", recap=f"locked.py の候補 (SHA-256 {'0' * 12}) を作った。")) == 4)
             check("[button-2] 自分の言葉で打った発言は今までどおり引く", run(tr("当てて。 locked.py の print を b に")) == 0)
             check("[button-3] 前の turn の箱 (その後に本人が打った) のボタンの文は数えない",
                   run(tr("当てて", between_user=True)) == 0)
@@ -7713,6 +7895,205 @@ def button_press_selftests(check) -> None:
                   run(tr("当てて", after=later_box)) == 4)
             check("[button-R3-10] 箱と同じ秒の本人の発言の後に打った文は引く (前の箱はその発言で消えた)",
                   run(tr("当てて", between_user=True, between_ts="2026-01-01T00:01:00Z")) == 0)
+        finally:
+            os.environ.clear()
+            os.environ.update(saved_env)
+            reset_caches()
+
+
+def owner_relay_selftests(check) -> None:
+    """本人が別の窓で答えた承認 (OWNER_RELAY) を、 合成の会話記録 2 つ (本人が答えた窓・当てる窓) で確かめる。
+    鳴る形 (記録する) と黙る形 (記録しない) = 別の session の発言・ボタンの文・本人でない文・示されていない候補を引かない。"""
+    import contextlib
+    import io
+    import tempfile
+    import uuid as _uuid
+    saved_env = dict(os.environ)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td).resolve()
+        home = root / "home"
+        repo = root / "repo"
+        repo.mkdir()
+        proj = home / ".claude" / "projects" / "-fixture"
+        proj.mkdir(parents=True)
+        decoy = root / "decoy"
+        (decoy / ".claude" / "projects" / "-fixture").mkdir(parents=True)
+        env = dict(saved_env, HOME=str(home), GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="f",
+                   GIT_AUTHOR_EMAIL="f@example.invalid", GIT_COMMITTER_NAME="f", GIT_COMMITTER_EMAIL="f@example.invalid",
+                   MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root / "state"), MANUSCRIPT_CLAIM_GUARD_HOME=str(decoy))
+        for key in (*AGENT_ENV_KEYS, "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "CLAUDE_CONFIG_DIR"):
+            env.pop(key, None)
+        os.environ.clear()
+        os.environ.update(env)
+        try:
+            subprocess.run(["git", "init", "-q"], cwd=repo, env=env, check=True)
+            (repo / "locked.py").write_text('# agent-authority:file\nprint("a")\n', encoding="utf-8")
+            (repo / "paper.tex").write_text("\\begin{abstract}A\\end{abstract}\n", encoding="utf-8")
+            (repo / "CLAUDE.md").write_text("# rules\n", encoding="utf-8")
+            (repo / ".claude").mkdir()
+            (repo / ".claude" / "settings.json").write_text("{}\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo, env=env, check=True)
+            subprocess.run(["git", "commit", "-qm", "x"], cwd=repo, env=env, check=True)
+            cand = root / "cand.py"
+            cand.write_text('# agent-authority:file\nprint("b")\n', encoding="utf-8")
+            other = root / "other.py"
+            other.write_text('# agent-authority:file\nprint("c")\n', encoding="utf-8")
+            sha = hashlib.sha256(cand.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+            sha_other = hashlib.sha256(other.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+            worker = str(_uuid.uuid4())
+            conductor = str(_uuid.uuid4())
+            stranger = str(_uuid.uuid4())
+
+            def say(text, ts):
+                return {"type": "user", "timestamp": ts, "message": {"content": text}}
+
+            def reply(text, ts, labels=None):
+                parts = [{"type": "text", "text": text}]
+                if labels is not None:
+                    parts.append({"type": "tool_use", "id": "w", "name": "mcp__ccd_turn__wrap_up",
+                                  "input": {"recap": "候補の確認。", "actions": [{"label": x} for x in labels]}})
+                return {"type": "assistant", "timestamp": ts, "message": {"content": parts}}
+
+            def write(sid, rows, where=proj):
+                p = where / f"{sid}.jsonl"
+                p.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+                return p
+
+            shown = f"子の候補 = locked.py (SHA-256 {sha[:12]})。 当ててよいかを決めてください。"
+
+            def conductor_rows(said="当てて", shown_text=shown, labels=None, after=(), before_reply=()):
+                return [say("作業の続き", "2026-01-01T00:00:00Z"), *before_reply,
+                        reply(shown_text, "2026-01-01T00:01:00Z", labels), say(said, "2026-01-01T00:02:00Z"), *after]
+
+            def run(quote="当てて", relay=None, latest=False, region=("authority:file",), candidate=cand, target="locked.py"):
+                reset_caches()
+                ns = argparse.Namespace(file=str(repo / target), region=list(region), change="fixture", quote=quote,
+                                        latest=latest, session=f"claude:{worker}", transcript=None,
+                                        candidate=str(candidate) if candidate else None, target_mode=None,
+                                        owner_session=f"claude:{conductor}" if relay is None else relay)
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    return approve_mode(ns)
+
+            def last_entry():
+                rows = load_approvals("claude", worker)
+                return rows[-1] if rows else {}
+
+            write(conductor, conductor_rows())
+            check("[relay-1] 依頼元の窓で file の名と候補の SHA-256 を示した後の本人の発言で記録する (鳴る)", run() == 0)
+            e = last_entry()
+            check("[relay-1] 記録は当てる窓の承認の file に置き、 引いた窓・時刻・示された SHA-256 の頭を残す",
+                  e.get("source") == "owner-relay" and e.get("quote_session") == f"claude:{conductor}"
+                  and e.get("quote_time") == "2026-01-01T00:02:00Z" and sha.startswith(str(e.get("shown_sha")))
+                  and e.get("content_sha256") == sha and e.get("session") == f"claude:{worker}")
+            write(conductor, conductor_rows(after=[reply("別件の返事。", "2026-01-01T00:03:00Z"),
+                                                   say("別件: メールは送らなくてよい", "2026-01-01T00:04:00Z")]))
+            check("[relay-2] その後に本人が別件で発言していても記録する (最新の 1 つは求めない)", run() == 0)
+            write(conductor, conductor_rows(labels=("当てて", "まだ直す")))
+            check("[relay-3] 押したボタンも、 押した箱までの返事に file の名と候補の SHA-256 が出ていれば記録する (鳴る)",
+                  run() == 0 and last_entry().get("pressed_button") == "当てて")
+            write(conductor, conductor_rows(shown_text="子の候補 = locked.py。 当ててよいか。", labels=("当てて", "まだ直す")))
+            check("[relay-3] 返事に SHA-256 が無いまま押したボタンは引かない (黙る、 exit 4)", run() == 4)
+            write(conductor, conductor_rows(said="当てて。 locked.py はこれで", labels=("当てて", "まだ直す")))
+            check("[relay-3] ボタンと違う自分の言葉なら記録する", run(quote="当てて。 locked.py はこれで") == 0)
+            write(conductor, conductor_rows(said="別の件の続き"))
+            write(stranger, conductor_rows())
+            check("[relay-4] 名指した窓に無く別の session にだけある発言は引かない (exit 4)", run() == 4)
+            peer = {"type": "user", "isMeta": True, "timestamp": "2026-01-01T00:02:30Z",
+                    "origin": {"kind": "peer", "from": "local_x"}, "message": {"content": "当てて"}}
+            note = {"type": "user", "timestamp": "2026-01-01T00:02:40Z", "turnOrigin": "task-notification",
+                    "message": {"content": "当てて"}}
+            write(conductor, conductor_rows(said="別の件の続き", after=[peer, note]))
+            check("[relay-5] 別の session の連絡・背景の知らせの文 (本人でない文) は引かない (exit 4)", run() == 4)
+            write(conductor, conductor_rows(shown_text="子の候補 = locked.py。 当ててよいか。"))
+            check("[relay-6] 返事に候補の SHA-256 が無ければ引かない (exit 5)", run() == 5)
+            write(conductor, conductor_rows(shown_text=f"子の候補 = locked.py (SHA-256 {sha_other[:12]})。"))
+            check("[relay-6] 示された SHA-256 が別の候補なら引かない (exit 5)", run() == 5)
+            write(conductor, conductor_rows(shown_text=f"候補 (SHA-256 {sha[:12]}) を当ててよいか。"))
+            check("[relay-7] 返事に file の名が無ければ引かない (exit 5)", run() == 5)
+            write(conductor, conductor_rows(shown_text=f"子の候補 = locked.py (SHA-256 {sha[:7]})。"))
+            check("[relay-7] SHA-256 の頭が 8 字未満なら引かない (exit 5)", run() == 5)
+            write(conductor, [say("作業の続き", "2026-01-01T00:00:00Z"), reply(shown, "2026-01-01T00:01:00Z"),
+                              say("別件の話", "2026-01-01T00:01:30Z"), reply("別件の返事。", "2026-01-01T00:01:40Z"),
+                              say("当てて", "2026-01-01T00:02:00Z")])
+            check("[relay-8] 候補を示した返事の後に本人が別件で答えていれば、 次の発言はその候補への答えと読まない (exit 5)",
+                  run() == 5)
+            write(conductor, conductor_rows())
+            check("[relay-9] --latest とは組まない (exit 2)", run(quote=None, latest=True) == 2)
+            check("[relay-9] --quote が無ければ記録しない (exit 2)", run(quote=None) == 2)
+            write(worker, conductor_rows(after=[reply("別件の返事。", "2026-01-01T00:03:00Z"),
+                                                say("別件の話", "2026-01-01T00:04:00Z")]))
+            check("[relay-9] 本人が話している窓自身を名指せば、 最新でなくても示した候補への答えで記録する",
+                  run(relay=f"claude:{worker}") == 0)
+            write(worker, conductor_rows(shown_text="子の候補 = locked.py。 当ててよいか。"))
+            check("[relay-9] その窓自身でも、 返事に SHA-256 が無ければ記録しない (exit 5)", run(relay=f"claude:{worker}") == 5)
+            check("[relay-9] id の全体でない名指し・Codex の窓は記録しない (exit 2)",
+                  run(relay=f"claude:{conductor[:8]}") == 2 and run(relay=f"codex:{conductor}") == 2)
+            check("[relay-10] 原稿の保護領域には使わない (exit 2)",
+                  run(region=("abstract",), candidate=None, target="paper.tex") == 2)
+            check("[relay-10] --candidate の無い承認には使わない (exit 2)", run(candidate=None) == 2)
+            missing = str(_uuid.uuid4())
+            check("[relay-11] 名指した窓の会話記録が無ければ記録しない (exit 3)", run(relay=f"claude:{missing}") == 3)
+            write(missing, conductor_rows(), where=decoy / ".claude" / "projects" / "-fixture")
+            check("[relay-11] MANUSCRIPT_CLAIM_GUARD_HOME の下の会話記録は読まない (exit 3)",
+                  run(relay=f"claude:{missing}") == 3)
+            # 入口の文書・権限の設定は、 別の窓の答えでは記録しない (agent は別の session の依頼でそれらを変えない)。
+            # 本人が話している窓自身なら、 同じ照らしで記録する
+            check("[relay-14] 入口の文書・権限の設定・配線の設定を名で見分ける",
+                  harness_bound("CLAUDE.md") and harness_bound("sub/AGENTS.md") and harness_bound(".claude/settings.local.json")
+                  and harness_bound("hooks/settings-entries.json") and harness_bound("reviewer-delegation.json")
+                  and not harness_bound("scripts/locked.py") and not harness_bound("conventions/rules.md")
+                  and not harness_bound("docs/CLAUDE.md.txt"))
+            md_cand = root / "CLAUDE.cand.md"
+            md_cand.write_text("# rules\nnew line\n", encoding="utf-8")
+            sha_md = hashlib.sha256(md_cand.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+            st_cand = root / "settings.cand.json"
+            st_cand.write_text('{"x": 1}\n', encoding="utf-8")
+            sha_st = hashlib.sha256(st_cand.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+            both = f"子の候補 = CLAUDE.md (SHA-256 {sha_md[:12]}) と settings.json (SHA-256 {sha_st[:12]})。"
+            write(conductor, conductor_rows(shown_text=both))
+            check("[relay-14] CLAUDE.md は別の窓の答えでは記録しない (exit 2)",
+                  run(candidate=md_cand, target="CLAUDE.md") == 2)
+            check("[relay-14] 権限の設定 (.claude/settings.json) も別の窓の答えでは記録しない (exit 2)",
+                  run(candidate=st_cand, target=".claude/settings.json", region=("config",)) == 2)
+            write(worker, conductor_rows(shown_text=both))
+            check("[relay-14] 本人が話している窓自身なら CLAUDE.md も記録する",
+                  run(relay=f"claude:{worker}", candidate=md_cand, target="CLAUDE.md") == 0)
+            write(conductor, conductor_rows())
+            # apply の端から端まで: 記録して写し、 照合が通る。 検収係の承認と組めば止まる
+            write(conductor, conductor_rows())
+            reset_caches()
+            ans = argparse.Namespace(file=str(repo / "locked.py"), candidate=str(cand), old=None, new=None, edits=None,
+                                     dry_run=False, change="fixture", quote="当てて", latest=False, reviewer_approval=None,
+                                     owner_session=f"claude:{conductor}", session=f"claude:{worker}", transcript=None,
+                                     target_mode=None)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = apply_mode(ans)
+            check("[relay-12] apply --owner-session が承認を記録して候補を写す",
+                  rc == 0 and (repo / "locked.py").read_text(encoding="utf-8") == cand.read_text(encoding="utf-8"))
+            (repo / "locked.py").write_text('# agent-authority:file\nprint("a")\n', encoding="utf-8")
+            cand2 = root / "cand2.py"
+            cand2.write_text('# agent-authority:file\nprint("d")\n', encoding="utf-8")
+            reset_caches()
+            ans2 = argparse.Namespace(**dict(vars(ans), candidate=str(cand2), reviewer_approval="20260101T000000Z-claude-x00001"))
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc2 = apply_mode(ans2)
+            check("[relay-12] --owner-session と --reviewer-approval を組むと書かない (exit 2)",
+                  rc2 == 2 and (repo / "locked.py").read_text(encoding="utf-8").endswith('print("a")\n'))
+            reset_caches()
+            ans3 = argparse.Namespace(**dict(vars(ans), candidate=str(cand2)))
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc3 = apply_mode(ans3)
+            check("[relay-12] 示された候補と違う候補は、 同じ発言でも写さない (exit 5)",
+                  rc3 == 5 and (repo / "locked.py").read_text(encoding="utf-8").endswith('print("a")\n'))
+            # Stop の照合: 当てる窓の最新の本人の発言の後に記録した別の窓の承認は、 返事に書かせる
+            relay_e = [a for a in load_approvals("claude", worker)
+                       if a.get("source") == "owner-relay" and a.get("file") == "locked.py"][-1]
+            msgs = [("2025-12-31T23:00:00Z", "依頼の続き")]
+            left = undisclosed_approvals("claude", worker, msgs, ["当てた。"])
+            check("[relay-13] 別の窓の承認を返事に書いていなければ、 Stop が書かせる", relay_e in left)
+            told = f"「{collapse_ws(str(relay_e.get('quote')))[:20]}」 を locked.py の承認として記録した"
+            check("[relay-13] 引いた発言と file 名を書いた返事なら黙る",
+                  relay_e not in undisclosed_approvals("claude", worker, msgs, [told]))
         finally:
             os.environ.clear()
             os.environ.update(saved_env)
@@ -10466,6 +10847,7 @@ def selftest() -> int:
     apply_replacement_selftests(check)
     reviewer_approval_selftests(check)
     button_press_selftests(check)
+    owner_relay_selftests(check)
     refusal_tightening_selftests(check)
 
     print(f"selftest: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
@@ -10488,6 +10870,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="本人の最新の発言そのものを引く (--quote の写しを省く。 引ける発言は今までどおり最新の 1 つだけ)")
     a.add_argument("--session")
     a.add_argument("--transcript")
+    a.add_argument("--owner-session", metavar="claude:SESSION_ID",
+                   help="本人が答えた別の窓 (依頼元の指揮役) の session。 --quote をその窓の会話記録で照らす (OWNER_RELAY)")
     a.add_argument("--candidate", help="権限規約・設定の適用後の全文。承認をこの内容の SHA-256 に束縛する")
     a.add_argument("--target-mode", choices=["000000", "100644", "100755", "120000"],
                    help="保護 file の Git mode/type。省略時は候補 file の属性を使う。000000 は削除")
@@ -10506,6 +10890,9 @@ def main(argv: list[str] | None = None) -> int:
     y.add_argument("--reviewer-approval", metavar="EVENT_ID",
                    help="本人が任せた範囲で、 別の窓の検収係が掲示板に書いた承認の event id (--quote / --latest の代わり。"
                         " conventions/agent-rule-ownership.md#reviewer-delegation)")
+    y.add_argument("--owner-session", metavar="claude:SESSION_ID",
+                   help="本人が答えた別の窓 (依頼元の指揮役) の session。 --quote をその窓の会話記録で照らし、 その発言の前の返事に"
+                        " file の名と候補の SHA-256 の頭 8 字以上が出ていることを確かめる (OWNER_RELAY)")
     y.add_argument("--session")
     y.add_argument("--transcript")
     y.add_argument("--target-mode", choices=["100644", "100755"],
