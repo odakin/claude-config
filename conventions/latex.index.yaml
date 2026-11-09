@@ -88,6 +88,9 @@ sections:
   - id: figure-table-shared-counter
     level: 2
     title: "図と表を 1 本の通し番号にする (jsclasses・ltjsbook)"
+  - id: mark-after-heading-number
+    level: 2
+    title: "選んだ見出しの番号の後ろにだけ印を付ける (飛ばしてよい節など) — 見出しと目次の番号の欄に出し、 参照・柱・しおりに漏らさない (jsclasses・ltjsbook)"
   - id: luatexja-per-command-kanji-weight
     legacy: "1"
     level: 2
