@@ -18,9 +18,13 @@
   数行にまで広げると、 校正で鳴る数が 2 倍強になり、 増えた分に本人が「分からない」 と返した問いは無かった)。
 
 本文の行番号の検査 (2026-11-04、 conventions/concise-output.md#locate-by-quote-not-line-number): Stop で最終の返事の本文 (問いの行に
-  限らない) に原稿の行番号の形 (L540・L1071 = L のあとに数字 2〜5 桁 / l.119 / `.tex:540`) があれば、 節の名・式の番号・文の
-  書き出しに言い直す追記を 1 回求める。 code block の中と「」『』 の中は見ない。 code の場所 (`file.py:42`) は押せる link なので
-  当てない (`.tex` だけ当てる)。 差し戻しの続き (stop_hook_active) では見ない。
+  限らない) に行番号の形があれば、 節の名・式の番号・文の書き出しに言い直す追記を 1 回求める。 形 = 英字の原稿の形 (L540・L1071 =
+  L のあとに数字 2〜5 桁 / l.119 / `.tex:540`) と、 日本語の形 (2026-11-09 に足した = 「の 238 行目」「112〜118 行」「304・306 行」、
+  場所の手がかりつきの単独の「494 行」。 線引きは JA_LINE_* の注釈、 校正 = `calibrate --since` の行番号の段)。 日本語の形は原稿でも
+  code の file でも当てる (本人は code の行番号でも探さない)。 code block の中・「」『』 の中・押せる link ([…](…)) は見ない。
+  英字の code の場所 (`file.py:42`) は押せる形なので当てない (英字の形は `.tex` だけ当てる)。 差し戻しの続き (stop_hook_active) では見ない。
+  見るのは本人に見せる chat の返事だけ = agent 同士の文 (別 session への message・掲示板・依頼書・results の file) は見ない
+  (本人の裁定 2026-11-09 = 人間相手には許さず、 機械同士は `file:行` を積極的に使う = concise-output.md#line-numbers-between-agents)。
 
 箱の承認の検査 (2026-11-04、 conventions/mid-turn-text-visibility.md#turn-closing-question-box): turn 終わりの箱 (wrap_up) の ask の
   欄が、 文面の送信・投稿の承認 (「送ってよいか」「この文面で」) か、 本文にある下書き・案・条件 (「下の案」「推す条件で」) を指す
@@ -200,21 +204,69 @@ LINE_MARK = "🧭 返事の本文に原稿の行番号"   # Stop の差し戻し
 LINE_RULE = "claude-config/conventions/concise-output.md#locate-by-quote-not-line-number"
 LINE_REF_RE = re.compile(r"(?<![A-Za-z0-9_$\\])L\d{2,5}(?![0-9])|(?<![A-Za-z0-9_])l\.\s?\d{2,5}(?![0-9])|\.tex:\d{1,5}(?![0-9])")
 _FENCE_BLOCK = re.compile(r"^\s*```.*?^\s*```[^\n]*$", re.M | re.S)
+_MD_LINK = re.compile(r"\[[^\]\n]*\]\([^)\n]*\)")   # 押せる link (行つきの link も) は見ない
+# 日本語の形 (2026-11-09 に足した。 直近 3 週の最終の返事 4709 turn で校正 = 鳴る 78 turn、 読んだ範囲で誤検出なし):
+#   N 行目・N〜M 行目・N・M 行目 (数のどれかが 2 桁以上。 「返事の 1 行目」「表の 1 行目」 は 1 桁なので外れる) /
+#   N〜M 行 (範囲、 量の語が続けば外す) / N・M 行 (2 桁以上の番号の並び) /
+#   単独の N 行 (2 桁以上) は場所の手がかりがある時だけ: 前が章・注・付録・式・図・file の拡張子・英大文字・外した引用の空き
+#   (「第 1 章 488 行」「付録 A 1126 行」「`a.tex` の 490 行」) / 後ろが前半・後半・あたり・にある・で止ま・名詞の「の」
+#   (「494 行の綴り」) / 箇条の頭の「488 行:」。 量の語が続けば外す (「240 行に漏れは」「13 行とも」「481 行のまま」「113 行から 34 行に」)。
+#   見ない形 (校正で量だった) = 「表の 36 行」「節の 29 行」 (表・節の前置き)、 「止まっている 22 行:」 (箇条の頭でないコロン)。
+JA_LINE_ORD = re.compile(r"(?<![0-9.,])\d{1,5}(?:\s*[〜~\-–・、]\s*\d{1,5})*\s*行目")
+JA_LINE_RANGE = re.compile(r"(?<![0-9.,])(\d{1,5})\s*[〜~\-–]\s*(\d{1,5})\s*行(?!目)"
+                           r"(?!\s*(?:ほど|くらい|ぐらい|程度|分|弱|強|以内|以上|未満|超|を|が|増|減|足|消|ずつ))")
+JA_LINE_LIST = re.compile(r"(?<![0-9.,])\d{2,5}(?:\s*[・、]\s*\d{2,5})+\s*行(?!目)")
+JA_LINE_BARE = re.compile(r"(?<![0-9.,A-Za-z])\d{2,5}\s*行(?!目)")
+_JA_BEFORE_LOC = re.compile(r"(?:[章注録式図]|付録\s*[A-Z]?|\.[A-Za-z]{1,5}|[A-Z]|\s{2,})\s*(?:の)?\s*$")
+_JA_AFTER_LOC = re.compile(r"^\s*(?:前半|後半|あたり|付近|辺り|の前後|にあり|にある|で止ま"
+                           r"|の(?!うち|中|全|すべて|追加|差分|変更|削除|分|合計|計|行|範囲|まま|扱い|file|ファイル|script|コード|段落|文書|表))")
+_JA_AFTER_QTY = re.compile(r"^\s*(?:とも|ほど|くらい|ぐらい|程度|分|弱|強|以内|以上|未満|超|を|が|増|減|足|消|ずつ|すべて|全部|のうち"
+                           r"|に漏れ|で[、。す]|から\s*\d|に縮|出|あり|ある|の(?:行|範囲|まま|扱い))")
+_JA_ITEM_HEAD = re.compile(r"^\s*(?:[-*]\s*)?(?:\d{1,2}[.)]\s*)?(?:\*\*)?\s*$")
+
+
+def _ja_line_refs(body: str) -> list:
+    """日本語の形の行番号 [(位置, 文字列)] (body は code block・引用・link を外した後)。"""
+    out = []
+    for m in JA_LINE_ORD.finditer(body):
+        if max(int(x) for x in re.findall(r"\d+", m.group(0))) >= 10:
+            out.append((m.start(), m.group(0)))
+    for m in JA_LINE_RANGE.finditer(body):
+        if max(int(m.group(1)), int(m.group(2))) >= 10:
+            out.append((m.start(), m.group(0)))
+    for m in JA_LINE_LIST.finditer(body):
+        out.append((m.start(), m.group(0)))
+    taken = [(s, s + len(t)) for s, t in out]
+    for m in JA_LINE_BARE.finditer(body):
+        if any(a <= m.start() < b for a, b in taken):
+            continue
+        before, after = body[max(0, m.start() - 12):m.start()], body[m.end():m.end() + 12]
+        if _JA_AFTER_QTY.match(after):
+            continue
+        head = _JA_ITEM_HEAD.match(body[body.rfind("\n", 0, m.start()) + 1:m.start()])
+        if (head and re.match(r"^\s*(?:\*\*)?\s*[:：]", after)) or _JA_BEFORE_LOC.search(before) or _JA_AFTER_LOC.match(after):
+            out.append((m.start(), m.group(0)))
+    return out
 
 
 def line_refs(text: str) -> list:
-    """返事の本文の原稿の行番号の形 (code block と「」『』 の中を除く)、 出現順に 4 つまで。"""
-    body = QUOTED.sub(" ", _FENCE_BLOCK.sub(" ", text or ""))
+    """返事の本文の行番号の形 (英字の形 = 原稿の L540・l.119・.tex:540 / 日本語の形 = 原稿でも code でも「の 238 行目」 の類)、
+    出現順に 4 つまで。 code block・「」『』 の中・押せる link ([…](…)) は見ない。"""
+    body = _MD_LINK.sub(" ", QUOTED.sub(" ", _FENCE_BLOCK.sub(" ", text or "")))
+    hits = [(m.start(), m.group(0)) for m in LINE_REF_RE.finditer(body)] + _ja_line_refs(body)
     out = []
-    for m in LINE_REF_RE.finditer(body):
-        if m.group(0) not in out:
-            out.append(m.group(0))
+    for _s, t in sorted(hits):
+        t = re.sub(r"\s+", " ", t)
+        if t not in out:
+            out.append(t)
     return out[:4]
 
 
 def line_notice(refs) -> str:
     return (f"{LINE_MARK} ({'、 '.join(refs)}) があります: 読む人の手元に行番号は無い。 節の名・式の番号・文の書き出しで"
-            f"言い直す短い追記を書く (前の返事は出し直さない。 code の場所の file:行 はそのまま。 正本 = {LINE_RULE})")
+            f"言い直す短い追記を書く (前の返事は出し直さない。 code の場所は本文に行番号を書かず、 押せる link"
+            f" [file.py:42](path:42) か `file.py:42` にする。 agent 同士の文 (別 session への message・掲示板・依頼書・results)"
+            f" は `file:行` で書いてよい。 正本 = {LINE_RULE})")
 
 
 BOX_MARK = "📨 箱の問いが文面の承認か本文を指しています"
@@ -363,7 +415,7 @@ def stop_reason(inp: dict, terms, pointer):
                      "短い追記に書く (符号を残すなら、 何の話かの説明を直後に添える)。 どの語にも説明が既に添えてあるなら、 その旨の 1 行で終了してよい。")
     refs = line_refs(final) if (final and not rerun) else []
     if refs:
-        parts.append(line_notice(refs) + "。 原稿の場所でない (code の行・log の行) なら、 その旨の 1 行で終了してよい。")
+        parts.append(line_notice(refs) + "。 場所でない (足した行数などの量・表の行の数) なら、 その旨の 1 行で終了してよい。")
     units = [] if skip_show else unshown_change_questions(
         (question_units(final) if final else []) + asks, (final or "") + "\n" + boxtext)
     if units:
@@ -477,10 +529,11 @@ def calibrate(argv) -> int:
         except Exception:
             return None
 
-    counts = {"stop": [0, 0], "ask": [0, 0], "wrap": [0, 0], "show_stop": [0, 0], "show_tool": [0, 0]}
+    counts = {"stop": [0, 0], "ask": [0, 0], "wrap": [0, 0], "show_stop": [0, 0], "show_tool": [0, 0], "line": [0, 0]}
     per_term = {}
     shown = []
     show_hits = []
+    line_hits = []
     for fp in files:
         try:
             if datetime.fromtimestamp(os.path.getmtime(fp), tz=timezone.utc) < since:
@@ -494,6 +547,12 @@ def calibrate(argv) -> int:
             if ts and ts < since:
                 continue
             final, _ = summarize(turn)
+            if final:
+                counts["line"][0] += 1
+                refs = line_refs(final)
+                if refs:
+                    counts["line"][1] += 1
+                    line_hits.append((sid, ts, refs, final))
             if final and question_units(final):
                 counts["stop"][0] += 1
                 words = find_jargon(final, terms)
@@ -536,7 +595,8 @@ def calibrate(argv) -> int:
                             show_hits.append((kind, sid, ts_of(e) or ts, u))
     print(f"terms={len(terms)} pointer={pointer or '-'} files={len(files)} since={a.since}")
     for k, lab in (("stop", "問いを含む turn (Stop)"), ("ask", "AskUserQuestion"), ("wrap", "turn 終わりの箱 (wrap_up)"),
-                   ("show_stop", "変える文の検査: 問いを含む turn (Stop)"), ("show_tool", "変える文の検査: 箱の ask・選択肢 UI")):
+                   ("show_stop", "変える文の検査: 問いを含む turn (Stop)"), ("show_tool", "変える文の検査: 箱の ask・選択肢 UI"),
+                   ("line", "本文の行番号の検査: 最終の返事 (Stop)")):
         n, h = counts[k]
         print(f"  {lab}: {n} 件中 {h} 件が鳴る" + (f" ({100.0 * h / n:.1f}%)" if n else ""))
     print("  語ごと (鳴った turn の数):")
@@ -556,6 +616,13 @@ def calibrate(argv) -> int:
             print("変える文", kind, sid, ts.isoformat()[:19] if ts else "?")
             for u in units:
                 print("   |", u[:300].replace("\n", " ⏎ "))
+        line_hits.sort(key=lambda r: (r[1].isoformat() if r[1] else ""))
+        for sid, ts, refs, final in line_hits:
+            print("=" * 80)
+            print("行番号", sid, ts.isoformat()[:19] if ts else "?", "・".join(refs))
+            for r in refs:
+                i = final.find(r.split(" ")[0])
+                print("   |", final[max(0, i - 50):i + len(r) + 25].replace("\n", " ⏎ "))
     return 0
 
 
@@ -661,6 +728,21 @@ def selftest() -> int:
     check(line_refs("L2 ノルムと L1 の評価、 `script.py:42` を直した。 L^2 の空間。") == [],
           "行番号: 1 桁の L (ノルム)・code の file:行・L^2 は拾わない")
     check(line_refs("```\nL540: old\n```\n「L540 と言われても」 は例。") == [], "行番号: code block と「」 の中は見ない")
+    # 日本語の形 (2026-11-09 に足した。 文は合成、 形は agent が実際に書いた返事から写した)
+    check(line_refs("定義は main.tex の 526 行目にあります。 注の 9〜10 行目も直しました。") == ["526 行目", "9〜10 行目"],
+          "行番号: 日本語の N 行目と、 2 桁を含む範囲の行目を拾う")
+    check(line_refs("その項目が違います（`notes.tex` の 168 行目あたり）。") == ["168 行目"], "行番号: 引用した file の後の行目")
+    check(line_refs("- 494 行の綴りが違います。\n- 488 行: 条件つきで正しい。\n- 第 1 章 517 行の帯と、 付録 A 1126 行の括弧。")
+          == ["494 行", "488 行", "517 行", "1126 行"], "行番号: 名詞の「の」・箇条の頭・章と付録の後の単独の N 行")
+    check(line_refs("112〜118 行の式と、 (304・306・527 行) を見た。") == ["112〜118 行", "304・306・527 行"], "行番号: 範囲と番号の並び")
+    check(line_refs("`tool.py` の 238 行目を直します。") == ["238 行目"], "行番号: code の file でも本文の「の N 行目」 は拾う")
+    check(line_refs("公開の層に足す 240 行に漏れはありません。 SESSION.md は 113 行から 34 行に縮まった。 13 行とも表にある。"
+                    " 試験の前後で 481 行のまま。 上限 40 行で出す。 返事の 1 行目と表の 1 行目。 STATUS の WP07 行だけ。") == [],
+          "行番号: 量・1 行目・英字に続く番号は拾わない")
+    check(line_refs("ノートの表 36 行と原稿の印。 見た範囲 = 節の 29 行と engine。 - **止まっている 22 行:** 同じ script。") == [],
+          "行番号: 表・節の行の数と、 箇条の頭でないコロンは拾わない (校正で量だった形)")
+    check(line_refs("場所は [main.tex の 526 行目](main.tex#L526) と [tool.py:238](tool.py:238)。") == [],
+          "行番号: 押せる link の中は見ない")
     ln = line_notice(["L1071"])
     check(LINE_MARK in ln and LINE_RULE in ln and "節の名" in ln, "行番号: 注意文に印・正本・言い直し方")
     # 箱の承認 (2026-11-04、 文は合成)
