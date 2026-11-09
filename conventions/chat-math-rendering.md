@@ -93,4 +93,4 @@ python3 scripts/claude-app-bundle.py --app /Applications/ChatGPT.app grep 'rende
 
 ## <a id="where-to-put-the-rule"></a>規則をどこに置くか
 
-規則の本文 (区切り・gate・使えるコマンド) は本 doc だけに置く (同じ本文を複数の file に写すと、片方だけ直る)。CLAUDE.md と template には、読む契機と、[画面ごとの既定](#by-surface) の要点 (どの画面で読む返事を LaTeX で組み、どの画面で Unicode にするか) と、本 doc への参照を書く。参照と契機だけにすると、本 doc を開かない session は既定を知らないまま Unicode で書く (実測)。入口だけを持つ file (repo の薄い AGENTS.md、Codex の kernel [`codex/HOME-AGENTS.md`](../codex/HOME-AGENTS.md)) には、読む契機と本 doc への参照を書く。個人層が [画面別の既定](#by-surface) と違う書き方を決めるときは、違える理由と範囲を個人層の規則に書き、どの画面が何を描くかの事実は本 doc に合わせる。
+規則の本文 (区切り・gate・使えるコマンド) は本 doc だけに置く (同じ本文を複数の file に写すと、片方だけ直る)。CLAUDE.md と template には、読む契機と、[画面ごとの既定](#by-surface) の要点 (どの画面で読む返事を LaTeX で組み、どの画面で Unicode にするか) と、本 doc への参照を書く。要点が無いと、本 doc を開かない session は既定を知らないまま書く。入口だけを持つ file (repo の薄い AGENTS.md、Codex の kernel [`codex/HOME-AGENTS.md`](../codex/HOME-AGENTS.md)) には、読む契機と本 doc への参照を書く。個人層が [画面別の既定](#by-surface) と違う書き方を決めるときは、違える理由と範囲を個人層の規則に書き、どの画面が何を描くかの事実は本 doc に合わせる。
