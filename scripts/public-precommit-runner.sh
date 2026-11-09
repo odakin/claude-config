@@ -341,7 +341,11 @@ fi
 # ----------------------------------------------------------------------
 # 判定
 # ----------------------------------------------------------------------
-if [ -z "$HITS" ]; then
+# Tier D-G = 識別子でない漏洩の段。 1 つの関数にまとめる (止めるときは return 1)。 commit では Tier A-C が空のときだけ
+# 回す (従来どおり)。 tree の棚卸し (CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1) では A-C に当たりがあっても回す = 受理済みの
+# A-C の当たりが D-G を隠さないように (2026-11-09。 それまで棚卸しは、 A-C に受理済みの当たりがある repo を D-G を見ずに
+# 「受理済みのみの 0」 と記録していた = 実測)。 規律 = conventions/confidential-repo-boundary.md#scan-zero-needs-control
+leak_tiers_d_to_g() {
   # Tier D (2026-09-13): 識別子を含まない leak。 D-1 = 未公開文書の逐語 (quoted span / prose run)、
   # D-2 = local-only repo の機密 (指紋 + pattern)。 Tier A-C は識別子しか見ないので、 公開 repo の規約の
   # 「実例」 に未公開原稿の文を写した commit が 1 週間で 3 回 landed した。 D-1 の engine =
@@ -360,7 +364,7 @@ if [ -z "$HITS" ]; then
       [ -n "$uq_out" ] && printf '%s\n' "$uq_out" >&2
       if [ "$uq_rc" -eq 1 ] && grep -q '\[unpublished-quote\] the staged change contains' <<< "$uq_out"; then
         echo "[public-precommit-runner] commit rejected by Tier D (unpublished-quote). bypass once: CLAUDE_UNPUBLISHED_GUARD=0" >&2
-        exit 1
+        return 1
       fi
     fi
     CL_ENGINE="$(dirname "$0")/check-confidential-leak.py"
@@ -370,7 +374,7 @@ if [ -z "$HITS" ]; then
       [ -n "$cl_out" ] && printf '%s\n' "$cl_out" >&2
       if [ "$cl_rc" -eq 1 ] && grep -q '\[confidential-leak\]' <<< "$cl_out"; then
         echo "[public-precommit-runner] commit rejected by Tier D (confidential-leak). bypass once: CLAUDE_LEAK_GUARD=0" >&2
-        exit 1
+        return 1
       fi
     fi
     # Tier E (2026-09-14): owner の非公開の活動の事実 (何に・いつ・何件応募したか、 事務の指摘、 推薦、 固有名)。
@@ -386,7 +390,7 @@ if [ -z "$HITS" ]; then
       [ -n "$af_out" ] && printf '%s\n' "$af_out" >&2
       if [ "$af_rc" -eq 1 ] && grep -q '\[activity-facts\] the staged change contains a literal' <<< "$af_out"; then
         echo "[public-precommit-runner] commit rejected by Tier E (activity-facts). bypass once: CLAUDE_ACTIVITY_FACTS_GUARD=0" >&2
-        exit 1
+        return 1
       fi
     fi
     # Tier F (2026-10-19): owner が暗号化して持つ値 (電話・口座・生年月日・住所) の平文の写し。 A-E は識別子・文・活動の
@@ -401,7 +405,7 @@ if [ -z "$HITS" ]; then
       [ -n "$vi_out" ] && printf '%s\n' "$vi_out" >&2
       if [ "$vi_rc" -eq 1 ] && grep -q '\[value-index\] the staged change contains' <<< "$vi_out"; then
         echo "[public-precommit-runner] commit rejected by Tier F (value-index). bypass once: CLAUDE_VALUE_INDEX_GUARD=0" >&2
-        exit 1
+        return 1
       fi
     fi
     # Tier G (2026-11-05): この session で非公開の source から読んだ値 (額の組・本数・コードの並び) の写し。 A-F は識別子・
@@ -420,10 +424,15 @@ if [ -z "$HITS" ]; then
       [ -n "$sc_out" ] && printf '%s\n' "$sc_out" >&2
       if [ "$sc_rc" -eq 1 ] && grep -q 'check-session-carryover: BLOCK' <<< "$sc_out"; then
         echo "[public-precommit-runner] commit rejected by Tier G (session-carryover). bypass once: CLAUDE_CARRYOVER_GUARD=0" >&2
-        exit 1
+        return 1
       fi
     fi
   fi
+  return 0
+}
+
+if [ -z "$HITS" ]; then
+  leak_tiers_d_to_g || exit 1
   # ----------------------------------------------------------------------
   # 漏洩の段 (Tier A-F) をここまでで全部通った。 漏洩以外の段 (壊れた text・全角の直前の変数・SESSION の形・
   # 履歴の増え方・節参照・AGENTS の入口) はこの後に回す (2026-11-05)。 前に置くと、 それらが止めた commit と
@@ -562,6 +571,16 @@ fi
     exit $?
   fi
   exit 0
+fi
+
+# Tier A-C に当たりがあった。 棚卸しのときだけ D-G の関数も回して結果を出す (commit は下の報告で止めるだけ = 従来どおり)。
+# 棚卸しの印のときは Tier G (この session で読んだ値) は走らない作り = 実際に回るのは D-F。 通れば 1 行を出す =
+# scan-public-tree.sh は「受理済みのみ」 の 0 を「D-F も通った」 と記録できる。 止まれば各段が「commit rejected by Tier …」 を
+# 出す (下の A-C の報告も続けて出す)
+if [ "${CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS:-0}" = "1" ]; then
+  if leak_tiers_d_to_g; then
+    echo "[public-precommit-runner] tiers D-F passed after tier A-C hits" >&2
+  fi
 fi
 
 cat >&2 << EOF
