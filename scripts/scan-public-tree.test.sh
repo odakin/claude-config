@@ -258,6 +258,27 @@ if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$SELF")/check-confiden
   [ "$rc" -eq 0 ] && check ok "T15b: foil: その token の無い tree は 0" || check ng "T15b: foil: その token の無い tree は 0 (rc=$rc: $out)"
 fi
 
+# ---- (16) --all は最新の行が 0 の repo (回し直す古い印の 0) を、 最新の行が finding の repo より先に回す (2026-11-09):
+# finding の残る repo を前に置くと、 それが毎回 --max の枠を使い切り、 後ろの repo に届かない (実測 = 17 本が 9 月から
+# 回し直されていなかった)。 名前の順では a_hit が先 = 変更前の並べ方なら a_hit を回して上限で止まる ----
+ST16="$T/state16"; mkdir -p "$ST16"
+R16="$T/root16"; mkdir -p "$R16"
+for n in a_hit b_old; do
+  mkdir -p "$R16/$n/.claude"
+  printf '# marker\n' > "$R16/$n/.claude/public-repo.marker"
+  printf 'ふつうの文\n' > "$R16/$n/note.md"
+  git -C "$R16/$n" init -q
+  git -C "$R16/$n" add -A >/dev/null 2>&1
+  git -C "$R16/$n" -c user.email=t@example.com -c user.name=t commit -qm init >/dev/null 2>&1
+done
+printf '%s\t%s\t2026-01-01\t1\n%s\t%s\t2026-01-01\t0\tctl\n' "$R16/a_hit" deadbeef "$R16/b_old" deadbeef > "$ST16/public-tree-scan.tsv"
+out="$(CLAUDE_PERSONAL_LAYER="$MOCK_LAYER" CLAUDE_STATE_DIR="$ST16" "$SELF" --all --root "$R16" --max 1 2>/dev/null)"
+if grep -q 'b_old' <<< "$out" && ! grep -q 'a_hit' <<< "$out"; then
+  check ok "T16: 最新の行が 0 の repo を、 最新の行が finding の repo より先に回す"
+else
+  check ng "T16: 最新の行が 0 の repo を、 最新の行が finding の repo より先に回す ($out)"
+fi
+
 echo
 echo "==== RESULT: PASS=$PASS FAIL=$FAIL ===="
 [ "$FAIL" -eq 0 ] || exit 1
