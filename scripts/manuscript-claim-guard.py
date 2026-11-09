@@ -69,7 +69,10 @@
   manuscript-claim-guard.py git-precommit          repo (cwd) の staged 差分を検査 (agent session のみ、 違反 exit 1)
   manuscript-claim-guard.py approve --file F --region R [--region R2 …] --change '<1 行>' --quote '<著者の発言>'
   manuscript-claim-guard.py apply --file F (--candidate 全文 | --old A --new B [--old … --new …] | --edits 置換の file)
-                                   --change '<1 行>' [--quote '<著者の発言>' | --latest] [--dry-run]
+                                   --change '<1 行>' [--quote '<著者の発言>' | --latest | --reviewer-approval <event id>] [--dry-run]
+                                   --reviewer-approval = 本人が任せた範囲 (個人層の reviewer-delegation.json) で、 書いた worker と別の窓の
+                                   検収係が掲示板に書いた承認の event (照合 = verify_reviewer_approval、 正本 =
+                                   conventions/agent-rule-ownership.md#reviewer-delegation)
                                    承認の記録 + 書込み + 照合を 1 command で。 置換は Edit と同じ (old は 1 回だけ現れる)
   manuscript-claim-guard.py approvals [--session agent:id]    記録済み承認の一覧
   manuscript-claim-guard.py stop claude|codex      Stop の event を stdin で受け、 記録した承認を最後の返事に書いていなければ差し戻す (fail-open)
@@ -102,7 +105,7 @@ import stat
 import subprocess
 import sys
 from collections import Counter
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
@@ -973,6 +976,7 @@ def reset_caches() -> None:
     _BLOB_CACHE.clear()
     _GIT_MODE_CACHE.clear()
     _REACH_CACHE.clear()
+    _GRANT_CACHE.clear()
     _TEX_TEXT_CACHE.clear()
 
 
@@ -2136,7 +2140,8 @@ def human_text_segments(text: str, excluded_tags: dict[str, int] | None = None, 
 
 
 def user_messages(path: Path, excluded_tags: dict[str, int] | None = None, *,
-                  choice_answers: bool = False, queued: set[int] | None = None) -> list[tuple[str, str]]:
+                  choice_answers: bool = False, queued: set[int] | None = None,
+                  lines: list[int] | None = None) -> list[tuple[str, str]]:
     """transcript の、 人が書いた user 発言だけ (時刻, 本文)。
 
     choice_answers = 選択肢 UI の答えも引ける文の無い発言として数える (承認の記録だけが使う)。 答えは turn の途中に
@@ -2146,15 +2151,20 @@ def user_messages(path: Path, excluded_tags: dict[str, int] | None = None, *,
     queued = 渡せば、 作業中 (turn の途中) に届いた本人の発言 (Claude の queued_command) の位置 (返す list の index)
     を詰める。 承認の --latest だけが使う (作業中に届いた発言は、 作業を始めさせた発言より後の発言)。 会話記録に入るのは
     agent に渡した時 (次の API の呼び出しの前) = 本人が打っただけでまだ渡っていない発言 (queue-operation の enqueue) は
-    数えない (agent にも見えていない)。"""
+    数えない (agent にも見えていない)。
+
+    lines = 渡せば、 返す発言ごとの会話記録の行の位置 (0 始まり) を詰める (箱のボタンの照合が行の順で前の箱を探す)。"""
     out: list[tuple[str, str]] = []
     ask_ids: set[str] = set()  # Claude の選択肢 UI (AskUserQuestion) の問いの id
+    cur = -1
     try:
         handle = open(path, encoding="utf-8", errors="replace")
     except OSError:
         return out
     with handle:
-        for line in handle:
+        for cur, line in enumerate(handle):
+            if lines is not None and len(lines) < len(out):
+                lines.extend([cur - 1] * (len(out) - len(lines)))  # 前の行で足した発言の位置
             try:
                 e = json.loads(line)
             except ValueError:
@@ -2239,7 +2249,11 @@ def user_messages(path: Path, excluded_tags: dict[str, int] | None = None, *,
                 source = p.get("source") if isinstance(p, dict) else None
                 if isinstance(p, dict) and (p.get("parent_thread_id") or
                         isinstance(source, dict) and "subagent" in source):
+                    if lines is not None:
+                        lines.clear()
                     return []  # Codex の sub-agent = user 役は親 agent
+    if lines is not None and len(lines) < len(out):
+        lines.extend([cur] * (len(out) - len(lines)))
     return out
 
 
@@ -2323,8 +2337,13 @@ def assistant_replies_since(agent: str, path: Path, since: str) -> list[str]:
 
 
 def disclosed(a: dict, reply: str) -> bool:
-    """返事の同じ行に、 引いた発言 (先頭 20 字) と対象の file 名がある。"""
+    """返事の同じ行に、 引いた発言 (先頭 20 字) と対象の file 名がある。 検収係の承認は event id の全体と file 名
+    (先頭 20 字は id の時刻の途中で切れ、 別の承認と見分けられない = 盲検の実測)。"""
     name = Path(str(a.get("file", ""))).name
+    if a.get("reviewer_event"):
+        # 出どころの印「検収係の承認 <id の全体>」 と file 名 (盲検の実測: id だけ・別の出どころの語でも通った)
+        mark = APPROVAL_QUOTE + str(a["reviewer_event"])
+        return bool(name) and any(name in line and mark in collapse_ws(line) for line in reply.splitlines())
     head = collapse_ws(str(a.get("quote", "")))[:20]
     if not name or not head:
         return True
@@ -2336,6 +2355,10 @@ def undisclosed_approvals(agent: str, sid: str, msgs: list[tuple[str, str]], rep
     ts, text = msgs[-1]
     sha = message_sha(text)
     mine = [a for a in load_approvals(agent, sid) if a.get("quote_time") == ts and a.get("quote_msg_sha") == sha]
+    # 検収係の承認 (出どころ = 掲示板の event) は本人の発言に結ばない = 最新の発言の後に記録したものを同じく返事に書かせる
+    start = _utc(str(ts or ""))
+    mine += [a for a in load_approvals(agent, sid) if a.get("source") == "reviewer" and start is not None
+             and (_utc(str(a.get("at", ""))) or start) >= start]
     return [a for a in mine if not any(disclosed(a, r) for r in replies)]
 
 
@@ -2479,11 +2502,18 @@ def stop_check(agent: str, event: dict) -> str | None:
         lines = []
         for q, items in by_quote.items():
             files = sorted({Path(str(a.get("file"))).name for a in items})
-            lines.append(f"- 「{short(q)}」 を {', '.join(files)} の承認として記録した")
-        parts.append("このターンで著者の発言を承認として記録したが、 最後の返事にそれを書いていない"
-                     " (著者が見ないまま記録だけが残る)。 次の行をそのまま書き足す (発言 1 つにつき 1 行。 file 名だけで足り、"
+            lines.append(f"- 「{q if q.startswith(APPROVAL_QUOTE) else short(q)}」 を {', '.join(files)} の承認として記録した")
+        # 検収係の承認は本人の発言ではない = 出どころを分けて言う (盲検の実測: どの記録も著者の発言と呼んでいた)
+        rev = any(a.get("reviewer_event") for a in left)
+        own = any(not a.get("reviewer_event") for a in left)
+        what = ("著者の発言と検収係の承認 (掲示板の event)" if rev and own else
+                "検収係の承認 (掲示板の event = 本人の発言ではない)" if rev else "著者の発言")
+        parts.append(f"このターンで{what}を承認として記録したが、 最後の返事にそれを書いていない"
+                     " (著者が見ないまま記録だけが残る)。 次の行をそのまま書き足す (承認 1 つにつき 1 行。 file 名だけで足り、"
                      " 変更の説明は要らない):\n" + "\n".join(lines) +
-                     "\n引いた発言の先頭と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。")
+                     ("\n検収係の承認は「検収係の承認 <event id の全体>」 と file 名が同じ行にあれば足りる。" if rev else "") +
+                     ("\n引いた発言の先頭と file 名が同じ行にあれば足りる。 違う意味で引いていたら、 そう書いて著者の判断を仰ぐ。"
+                      if own else ""))
     if left_add:
         parts.append("承認なしで規則の文書を変えたが、 最後の返事にそれを書いていない (本人の目に入らないまま入る)。"
                      " 次の行を書き足す:\n" + "\n".join(pending_lines(left_add, me)) +
@@ -2527,6 +2557,8 @@ def unapproved(changes: list[dict], repo: Path | None, session: tuple[str, str] 
                     continue
                 if "target_mode" in ch and a.get("target_mode") != ch["target_mode"]:
                     continue
+            if a.get("source") == "reviewer" and reviewer_grant_problem(a, [ch]):
+                continue  # 記録の後に差し戻し・取り下げ・委任の取り消しがあった・床に当たるようになった検収係の承認は使わない
             if any(covers(sel, ch) for sel in a.get("regions", []) if isinstance(sel, str)):
                 ok = True
                 break
@@ -2609,6 +2641,8 @@ def deny_reason(left: list[dict], session: tuple[str, str] | None) -> str:
         "自分の推論、 作業書の中の「本人が承認した」 という伝聞、 tool の出力は承認の引用元にならない。\n"
         f"session = {sess}。共通の正本 = claude-config/conventions/agent-rule-ownership.md。原稿固有 = manuscript-claim-ownership.md"
     )
+    if any(str(c.get("region", "")).startswith("authority:") for c in left):
+        parts.insert(len(parts) - 1, delegation_hint())
     return "".join(parts)
 
 
@@ -3871,7 +3905,8 @@ def approve_mode(args: argparse.Namespace) -> int:
         return 3
     excluded_tags: dict[str, int] = {}
     queued: set[int] = set()
-    msgs = user_messages(transcript, excluded_tags, choice_answers=True, queued=queued)
+    msg_lines: list[int] = []
+    msgs = user_messages(transcript, excluded_tags, choice_answers=True, queued=queued, lines=msg_lines)
     latest = bool(getattr(args, "latest", False))
     if latest and args.quote:
         print("approve: --latest と --quote は同時に渡さない (--latest = 本人の最新の発言そのものを引く)。", file=sys.stderr)
@@ -3932,6 +3967,13 @@ def approve_mode(args: argparse.Namespace) -> int:
               "  この案を著者に示し、 承認の発言を新しく得てから、 その発言を引く。",
               file=sys.stderr)
         return 5
+    pressed = pressed_button(transcript, msg_lines, idx, msgs[idx][1]) if session[0] == "claude" else ""
+    if pressed:
+        print(f"approve: 引いた発言「{said}」 は、 直前の箱のボタンの文と一字一句同じ = ボタンが押されたもの (agent が書いた文)。"
+              " 本人の言葉として承認に引かない。 記録しない。\n"
+              "  承認する変更 (file と何を変えるか) を本人に自分の言葉で 1 行打ってもらってから引く"
+              " (conventions/mid-turn-text-visibility.md#button-text-not-user-words)。", file=sys.stderr)
+        return 4
     proposed: str | None = None
     entry = {
         "v": 1, "repo": str(repo) if repo else "", "file": rel, "regions": args.region,
@@ -4127,6 +4169,1167 @@ def apply_replacements(args: argparse.Namespace) -> int:
         return apply_mode(ns)
 
 
+_REVIEWER_TEST: dict | None = None  # selftest だけが入れる (作業ルートと会話記録の置き場)。 環境変数では入れない
+
+
+# ---------------------------------------------------------------- reviewer delegation (検収の役への委任)
+# 本人が宣言した委任の範囲で、 書いた worker と別の窓の検収の役が掲示板に書いた承認の event を、 本人の発言の
+# 代わりでなく本人の委任の下の別の出どころとして受け付ける。 委任の設定が無ければ何も変わらない (今までどおり本人の発言)。
+# 正本 = conventions/agent-rule-ownership.md#reviewer-delegation。 受け付けないもの (床) は層1 が持ち、 個人層の設定は
+# それより狭めることしかできない。 照合は掲示板の event (git の HEAD に載ったもの) と検収係の会話記録で行う。
+DELEGATION_REL = _rule_guard.DELEGATION_REL
+APPROVAL_HEAD = "edit-approval: 1"
+APPROVAL_QUOTE = "検収係の承認 "
+_NATIVE_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
+_EVENT_ID_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{5,63}$")
+_DELEGATION_KEYS = {"version", "enabled", "rule", "owner_ruling", "board_root", "reviewer_roles", "repos", "owner_paths"}
+_SETTINGS_JSON = ("*settings*.json", ".codex/hooks.json")
+# 書き込みの形 (検収係が候補・対象を書いていないかの照合)。 path を名指す command は、 読む形と分かるもの (下の一覧)
+# だけを読むと数え、 それ以外は書いたと数える (形の分からない command は書いた側に倒す = 盲検の実測: `env cp` を
+# 知らない command として通していた)。 前に付く包み (env・command・nice …) は外してから見る
+_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+_COPY_CMDS = {"cp", "install", "rsync", "ditto", "gcp"}  # ln は写しでなく別名を作る = 書く形
+_MOVE_CMDS = {"mv", "gmv"}  # 名指した file を動かす = 書く
+# 読む形と数える command。 file に書く option を持つもの (sort -o・rg --pre・less の command 等) は入れない
+_READ_CMDS = {"cat", "head", "tail", "grep", "egrep", "fgrep", "rg", "diff", "cmp", "comm",
+              "shasum", "sha256sum", "sha1sum", "md5", "md5sum", "wc", "ls", "stat", "file", "readlink", "realpath",
+              "nl", "od", "hexdump", "test", "[", "echo", "printf",
+              "cd", "pushd", "popd", "pwd", "true", ":"}  # 後の 6 つは何も書かない組み込み
+_READ_GIT = {"diff", "show", "log", "blame", "status", "ls-files", "ls-tree", "cat-file", "rev-parse", "grep", "check-attr"}
+_WRAPPERS = {"env", "command", "builtin", "exec", "nice", "nohup", "time", "timeout", "sudo", "caffeinate", "xargs",
+             "stdbuf", "ionice", "doas"}
+_KEYWORDS = {"!", "if", "then", "else", "elif", "do", "while", "until", "{"}  # 自分では何も動かさない shell の語
+# shell の記号 (引用の外のものだけ)。 区切り = 単純な command の境目、 出力の redirect = 先の file に書く
+_SHELL_OPS = sorted(["&&", "||", ";;", "|&", "<<<", "<<-", "<<", ">>", "<>", ">|", "<&", ">&", "&>>", "&>", "<(", ">(",
+                     "|", "&", ";", "<", ">", "(", ")", "\n"], key=len, reverse=True)
+_SEP_OPS = {";", "&", "&&", "||", "|", "|&", "\n", "(", ")", ";;"}
+_PIPE_OPS = {"|", "|&"}
+_OUT_REDIRS = {">", ">>", ">|", "&>", "&>>", "<>", ">&"}
+_HEREDOC_OPS = {"<<", "<<-", "<<<"}
+
+
+def delegation_base() -> Path:
+    """委任の設定と掲示板を探す作業ルート = この engine の repo の親 (<base>/claude-config/scripts → <base>)。
+    環境変数では差し替えない (差し替えると、 agent が作った設定・掲示板・会話記録を読ませられる)。"""
+    return Path(__file__).resolve().parents[2]
+
+
+def delegation_layer(base: Path) -> Path | None:
+    """個人層 = base の直下で `.claude-personal-layer` の印と CLAUDE.md を持つ dir がちょうど 1 つ。 0 か 2 つ以上なら
+    None (= 委任なし)。 CLAUDE_PERSONAL_LAYER は読まない (agent が別の dir を個人層にできる = 委任の設定を作れる)。"""
+    try:
+        hits = [d for d in base.iterdir() if d.is_dir() and (d / ".claude-personal-layer").is_file()
+                and (d / "CLAUDE.md").is_file()]
+    except OSError:
+        return None
+    return hits[0] if len(hits) == 1 else None
+
+
+def load_delegation(base: Path | None = None) -> tuple[dict | None, str]:
+    """(設定, 理由)。 設定は個人層の repo の HEAD に commit された DELEGATION_REL だけを読む (作業ツリーの未 commit の
+    書き換えは数えない = 設定の変更は guard の commit の検査で本人の承認を経る)。 欄が足りない・知らない欄がある・
+    enabled が true でない設定は None (= 委任なし、 今までどおり本人の発言)。"""
+    base = base or delegation_base()
+    layer = delegation_layer(base)
+    if layer is None:
+        return None, "個人層が見つからない (作業ルートの直下に印がちょうど 1 つでない)"
+    try:
+        text = read_blob_text(f"HEAD:{DELEGATION_REL}", cwd=layer, timeout=30)
+    except subprocess.SubprocessError:
+        text = None
+    if text is None:
+        return None, f"委任の設定 {layer.name}/{DELEGATION_REL} が HEAD に無い"
+    try:
+        cfg = json.loads(text)
+    except ValueError:
+        return None, f"委任の設定 {layer.name}/{DELEGATION_REL} を JSON として読めない"
+    bad = []
+    if not isinstance(cfg, dict):
+        return None, "委任の設定が object でない"
+    unknown = sorted(set(cfg) - _DELEGATION_KEYS)
+    if unknown:
+        bad.append("知らない欄 " + ", ".join(unknown))
+    if cfg.get("version") != 1:
+        bad.append("version が 1 でない")
+    if cfg.get("enabled") is not True:
+        bad.append("enabled が true でない")
+    roles = cfg.get("reviewer_roles")
+    if not (isinstance(roles, list) and roles and all(isinstance(r, str) and r.startswith("role-") for r in roles)):
+        bad.append("reviewer_roles (role- で始まる役 id の list) が無い")
+    repos = cfg.get("repos")
+    if not (isinstance(repos, list) and repos and all(isinstance(r, str) and r and "/" not in r for r in repos)):
+        bad.append("repos (作業ルートの直下の repo の名の list) が無い")
+    board = cfg.get("board_root")
+    if not (isinstance(board, str) and board and not Path(board).is_absolute() and ".." not in Path(board).parts):
+        bad.append("board_root (作業ルートからの相対 path) が無い")
+    owner = cfg.get("owner_paths", [])
+    if not (isinstance(owner, list) and all(isinstance(x, str) and ":" in x for x in owner)):
+        bad.append("owner_paths は '<repo>:<glob>' の list")
+    if bad:
+        return None, f"委任の設定 {layer.name}/{DELEGATION_REL} が使えない: " + " / ".join(bad)
+    cfg = dict(cfg, _layer=str(layer), _base=str(base))
+    return cfg, ""
+
+
+def delegation_hint() -> str:
+    """止めた表示に足す 1 行 (委任の設定の file が作業ツリーにあるときだけ。 HEAD は読まない = hook の手間を増やさない)。"""
+    layer = delegation_layer(delegation_base())
+    if layer is None or not (layer / DELEGATION_REL).is_file():
+        return ""
+    return ("  掲示板の依頼の worker で、 本人が任せた範囲 (" + f"{layer.name}/{DELEGATION_REL}" + ") の変更なら、 本人に聞く代わりに"
+            " 候補を submit し、 検収係の承認の event を受けてから apply に --reviewer-approval <event id> を渡す (--quote / --latest の"
+            "代わり)。 原稿・緩める変更・守りの線は本人 (conventions/agent-rule-ownership.md#reviewer-delegation)。\n")
+
+
+def _floor_name(rel: str) -> bool:
+    name = PurePosixPath(rel).name
+    return name in _rule_guard.DELEGATION_FLOOR_NAMES or any(
+        name.startswith(stem) for stem in _rule_guard.DELEGATION_FLOOR_STEMS)
+
+
+# hook の event の名 (足してよい hook の entry の置き場)。 settings-entries.json は event → entries の表そのもの、 settings の
+# JSON は hooks の下。 ここに無い名の欄を足す変更は本人 (盲検の実測: event の名を見ずに通すと permissions.allow を足せた)
+HOOK_EVENTS = frozenset({"SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure",
+                         "Stop", "SubagentStart", "SubagentStop", "PreCompact", "Notification"})
+
+
+def _json_growth_ok(rel: str, path: tuple) -> bool:
+    if PurePosixPath(rel).name == "settings-entries.json":
+        return bool(path) and path[0] in HOOK_EVENTS
+    return (len(path) >= 2 and path[0] == "hooks" and path[1] in HOOK_EVENTS) or tuple(path[:2]) == ("permissions", "deny")
+
+
+def _hook_entry_ok(e) -> bool:
+    """hook の event の下の 1 つの entry: object で、 matcher は文字列、 hooks は {type: 文字列, command: 文字列, …} の list。"""
+    if not isinstance(e, dict) or ("matcher" in e and not isinstance(e["matcher"], str)):
+        return False
+    hooks = e.get("hooks", [])
+    return isinstance(hooks, list) and all(
+        isinstance(h, dict) and isinstance(h.get("type"), str) and h.get("type")
+        and ("command" not in h or isinstance(h["command"], str))
+        and ("timeout" not in h or (isinstance(h["timeout"], (int, float)) and not isinstance(h["timeout"], bool)))
+        for h in hooks)
+
+
+def _json_entries_ok(rel: str, path: tuple, value) -> bool:
+    """足してよい所に足す値の型: hook の event の下は hook の entry の list、 permissions.deny は文字列の list (盲検の実測:
+    null や false を entry の欄に置く変更が通った。 5 回目: entry の中の hooks に false を置く変更が通った)。"""
+    if not isinstance(value, list):
+        return False
+    if tuple(path[:2]) == ("permissions", "deny"):
+        return all(isinstance(x, str) and x for x in value)
+    return all(_hook_entry_ok(x) for x in value)
+
+
+def _json_container_ok(rel: str, path: tuple, value) -> bool:
+    """新しく作ってよい入れ物 = 足してよい所へ至る途中の object だけ (settings の hooks・permissions)。 盲検の実測:
+    新しい入れ物を空の入れ物に足したとして下へ辿ると、 空の `permissions.allow` や関係ない欄を足せた。"""
+    if PurePosixPath(rel).name == "settings-entries.json":
+        return False
+    return isinstance(value, dict) and path in (("hooks",), ("permissions",))
+
+
+def _block_bodies(text: str) -> list[tuple[str, str]]:
+    """明示の lock の block (`agent-authority:begin id=…` 〜 `end`) の (id, 中身) を並べる。 領域の名でなく印の位置で見る
+    (盲検の実測: id に file / wiring のような予約の名を付けた block は、 領域の名では lock の block と見分けられなかった)。"""
+    out = []
+    for begin in MARK_BEGIN_RE.finditer(text or ""):
+        rid = begin.group(1)
+        end = re.compile(MARK_END_TMPL.format(id=re.escape(rid)), re.M).search(text, begin.end())
+        out.append((rid, text[begin.end():end.start()] if end else text[begin.end():] + "\n<<unterminated>>"))
+    return out
+
+
+def _head_mode(repo: Path, rel: str) -> str:
+    """HEAD の属性。 その path が無ければ "000000"、 git が読めなければ "unknown" (= 通さない。 盲検の実測: 読めないのを
+    無いと読み、 先に外した実行の bit を外す変更が通った)。"""
+    try:
+        p = subprocess.run(["git", "ls-tree", "HEAD", "--", rel], cwd=repo, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    if p.returncode != 0:
+        return "unknown"
+    line = p.stdout.split("\n", 1)[0]
+    return line.split(" ", 1)[0] if line.strip() else "000000"
+
+
+def _json_additions(rel: str, old, new, path: tuple = ()) -> tuple[bool, list]:
+    """(足すだけか, 足したもの)。 足してよい所は hook の entry と permissions.deny だけ。"""
+    if isinstance(old, dict) and isinstance(new, dict):
+        added = []
+        for k, v in old.items():
+            if k not in new:
+                return False, []
+            ok, more = _json_additions(rel, v, new[k], path + (k,))
+            if not ok:
+                return False, []
+            added += more
+        for k in new:
+            if k not in old:
+                if _json_growth_ok(rel, path + (k,)):
+                    if not _json_entries_ok(rel, path + (k,), new[k]):
+                        return False, []
+                    added.append(new[k])
+                    continue
+                if not _json_container_ok(rel, path + (k,), new[k]):
+                    return False, []
+                # 新しい入れ物 ("hooks" 自体など) は、 空の入れ物に中身を足したとして下まで同じ線で見る (盲検の実測)
+                ok, more = _json_additions(rel, {}, new[k], path + (k,))
+                if not ok:
+                    return False, []
+                added += more
+        return True, added
+    if isinstance(old, list) and isinstance(new, list):
+        # 前からある entry は同じ順で残ること (5 回目の盲検: 入れ替えただけの変更を「足した物なし」 と読んで通した)
+        keys = [json.dumps(x, sort_keys=True, ensure_ascii=False) for x in new]
+        rest, i = [], 0
+        for k in keys:
+            if i < len(old) and k == json.dumps(old[i], sort_keys=True, ensure_ascii=False):
+                i += 1
+            else:
+                rest.append(k)
+        if i != len(old):
+            return False, []
+        if rest and not (_json_growth_ok(rel, path) and _json_entries_ok(rel, path, [json.loads(x) for x in rest])):
+            return False, []
+        return True, [json.loads(x) for x in rest]
+    # 型も比べる (盲検の実測: false → 0 は Python では等しく、 関係ない欄の型の変更が消えた)
+    return json.dumps(old, sort_keys=True) == json.dumps(new, sort_keys=True), []
+
+
+def reviewer_scope_problem(cfg: dict, repo: Path, rel: str, changes: list[dict], old: str, new: str,
+                           target_mode: str, current_mode: str, exists: bool) -> str:
+    """委任の床と設定の範囲に当たる理由 (無ければ "")。 床 = 原稿の保護領域・guard の設定・lock の block・
+    agent-authority:file の file・守りの道具とその正本と委任の設定・断った件・削除と symlink と実行の bit を外す変更・
+    守りの道具を呼ぶ行の変更・設定の足す以外の変更。 設定の owner_paths はそれに足すだけ。"""
+    base = Path(cfg["_base"]).resolve()
+    if repo.resolve().parent != base or repo.name not in cfg["repos"]:
+        return f"{repo.name} は委任の設定の repos に無い (共同研究者と共有する repo の規則は本人)"
+    if rel == ".git" or rel.startswith(".git/"):
+        return f"{rel} は git の外の file (git hook・設定 = 差分を git で見返せない)"
+    if _floor_name(rel):
+        return f"{rel} は守りの線そのもの (守りの道具・その正本・委任の設定)"
+    for spec in cfg.get("owner_paths", []):
+        r, _, pat = spec.partition(":")
+        if r == repo.name and fnmatch.fnmatchcase(rel, pat):
+            return f"{rel} は委任の設定で本人に残した path ({spec})"
+    for c in changes:
+        region = str(c.get("region", "")).split("~", 1)[0]
+        if not region.startswith("authority:"):
+            return f"{region} は委任の外 (原稿の保護領域と guard の設定は本人)"
+        rid = region[len("authority:"):]
+        if rid not in ("file", "rule-ref", "wiring", "mode"):
+            return f"{region} は lock の block の中 (本人)"
+        if c.get("refusal"):
+            return "この会話で agent が断った件の規則 (本人)"
+    if MARK_FILE_RE.search(old or "") or MARK_FILE_RE.search(new or ""):
+        return "agent-authority:file の印を持つ file (本人が file ごと lock した)"
+    if _block_bodies(old) != _block_bodies(new):
+        return "lock の block (agent-authority:begin 〜 end) の中か印を変えた (本人)"
+    if target_mode in ("000000", "120000") or current_mode in ("120000", "unknown"):
+        return "file の削除・symlink (本人)"
+    if exists and current_mode == "100755" and target_mode != "100755":
+        return "実行の bit を外す変更 (hook・検査を止めうる = 本人)"
+    # 字下げも含めて比べる (盲検の実測: 空白を落として比べると、 呼ぶ行を if の中へ字下げした変更が通った)
+    calls = lambda t: Counter(ln.rstrip("\r") for ln in (t or "").splitlines() if any(k in ln for k in ENGINE_TOKENS))
+    if calls(old) != calls(new):
+        return "守りの道具を呼ぶ行を足した・変えた・消した (守りの配線 = 本人)"
+    if Path(rel).suffix.lower() in _rule_guard.DATA_SUFFIXES and changes:
+        if not any(fnmatch.fnmatchcase(rel, p) or fnmatch.fnmatchcase(PurePosixPath(rel).name, p)
+                   for p in _SETTINGS_JSON) and PurePosixPath(rel).name != "settings-entries.json":
+            return f"{rel} の種類の設定は本人 (検収係が任せられる設定は hook の entry と deny の追加だけ)"
+        try:
+            ok, added = _json_additions(rel, json.loads(old or "{}"), json.loads(new or "{}"))
+        except ValueError:
+            return f"{rel} を JSON として読めない (本人)"
+        if not ok:
+            return "設定の変更が hook の entry と permissions.deny の追加だけでない (本人)"
+        text = json.dumps(added, ensure_ascii=False)
+        if any(k in text for k in ENGINE_TOKENS) or any(s in text for s in _rule_guard.DELEGATION_FLOOR_STEMS):
+            return "守りの道具を呼ぶ設定の行 (本人)"
+    return ""
+
+
+def _board_events(board: Path, event_id: str) -> tuple[dict | None, list[dict], str]:
+    """(承認の event, 同じ thread の event, 理由)。 掲示板の repo の commit に載った event だけを読む (作業ツリーの
+    file は読まない = 投稿の道具を通らずに置いた file を数えない)。 HEAD に無ければ fetch 済みの origin の branch を見る。"""
+    # HEAD と fetch 済みの origin の branch の両方の thread を合わせて読む (盲検の実測: 先に見つかった方だけを読むと、
+    # origin にだけ在る後の差し戻しを見落とした)。 どちらかの commit に載った event だけを数える
+    names: dict[str, str] = {}
+    for ref in ("HEAD", "refs/remotes/origin/main"):
+        try:
+            # ref を 1 回だけ commit id に解いて、 その tree と blob を読む (読む間に ref が動いても版が混ざらない)。 ref が
+            # 在るのに tree を読めなければ通さない (盲検の実測: origin の tree の読み失敗を黙って飛ばし、 後の差し戻しを見落とした)
+            # origin の branch は「無い」 と「在るのに読めない」 を分ける (盲検の実測: ref を解く段の失敗を全部「無い」 と読み、
+            # origin にだけ在る後の差し戻しを見落とした)。 無いのは for-each-ref が成功して何も出さないときだけ
+            if ref != "HEAD":
+                fe = subprocess.run(["git", "for-each-ref", "--format=%(refname)", ref], cwd=board,
+                                    capture_output=True, text=True, timeout=30)
+                if fe.returncode != 0 or fe.stderr.strip():  # 壊れた ref は警告を出して黙って飛ばされる
+                    return None, [], f"掲示板の repo の {ref} を読めない"
+                if ref not in fe.stdout.split("\n"):
+                    continue  # fetch した origin の branch が無い = 読む版が無い (名の頭が同じ別の ref は数えない = 盲検の実測)
+            rp = subprocess.run(["git", "rev-parse", "--verify", "-q", ref + "^{commit}"], cwd=board,
+                                capture_output=True, text=True, timeout=30)
+            rev = rp.stdout.strip() if rp.returncode == 0 else ""
+            if not rev:
+                return None, [], f"掲示板の repo の {ref} を読めない"
+            got = subprocess.run(["git", "ls-tree", "-r", "--name-only", rev, "--", "events"], cwd=board,
+                                 capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None, [], f"掲示板の repo の {ref} を読めない"
+        if got.returncode != 0:
+            return None, [], f"掲示板の repo の {ref} の tree を読めない"
+        for n in got.stdout.splitlines():
+            names.setdefault(n, rev)
+    hit = [n for n in names if n.endswith(f"--{event_id}.json")]
+    if len(hit) != 1:
+        return None, [], (f"承認の event {event_id} が掲示板の commit に無い (投稿が push されているか、 id を確かめる)"
+                          if not hit else f"承認の event {event_id} が掲示板に {len(hit)} 個ある")
+    thread_dir = posixpath.dirname(hit[0]) + "/"
+    events = []
+    for n, rev in names.items():
+        if n.startswith(thread_dir) and n.endswith(".json") and "/" not in n[len(thread_dir):]:
+            try:
+                text = read_blob_text(f"{rev}:{n}", cwd=board, timeout=30)
+            except (OSError, subprocess.SubprocessError):  # 時間切れも読めないと同じ (盲検の実測: 例外で外へ出た)
+                return None, [], f"掲示板の event {n} を読めない (時間切れ)"
+            try:
+                e = json.loads(text) if text is not None else None
+            except ValueError:
+                e = None
+            if not isinstance(e, dict):
+                return None, [], f"掲示板の event {n} を読めない (git-crypt の lock を確かめる)"
+            events.append(e)
+    events.sort(key=lambda e: (str(e.get("created_at", "")), str(e.get("event_id", ""))))
+    ev = next((e for e in events if e.get("event_id") == event_id), None)
+    return ev, events, "" if ev else "承認の event の中身が id と合わない"
+
+
+LIFECYCLE_KINDS = ("revise", "abandoned", "accept", "release", "handover", "claim", "submit")
+
+
+def _later_moves(events: list[dict], ev: dict) -> list[str]:
+    """承認の event より後 (同じ秒も後に数える = 盲検の実測: 秒の解像度で同じ時刻の差し戻しを見落とした) に、 依頼を
+    動かした event の種類。 差し戻し・取り下げ・受け取り・手放し・担当の替わり・引き受け直し・出し直し。"""
+    at = str(ev.get("created_at", ""))
+    return sorted({str(e.get("kind")) for e in events if e is not ev and e.get("event_id") != ev.get("event_id")
+                   and str(e.get("created_at", "")) >= at and e.get("kind") in LIFECYCLE_KINDS})
+
+
+def _head_blob(repo: Path, rel: str) -> str | None:
+    """HEAD の blob id。 HEAD にその path が無ければ "none"、 git が読めなければ None (無いと読めないを分ける)。"""
+    try:
+        p = subprocess.run(["git", "ls-tree", "HEAD", "--", rel], cwd=repo, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if p.returncode != 0:
+        return None
+    line = p.stdout.split("\n", 1)[0].split("\t", 1)[0].split()
+    return line[2] if len(line) == 3 else ("none" if not p.stdout.strip() else None)
+
+
+_GRANT_CACHE: dict[str, str] = {}
+
+
+def reviewer_grant_problem(a: dict, changes: list[dict] | None = None) -> str:
+    """下の _grant_problem と _grant_floor_problem を、 読めない・時間切れも「使えない」 として返す (例外で外へ出すと、
+    同じ候補の本人の承認の記録まで確かめられなくなる = 盲検の実測)。"""
+    try:
+        return _grant_problem(a) or _grant_floor_problem(a, changes or [])
+    except Exception as exc:  # noqa: BLE001 (検収係の承認の証拠を読めない = その記録を使わない、 他の記録は見続ける)
+        return f"検収係の承認の証拠を読めない ({exc.__class__.__name__})"
+
+
+def _candidate_store(a: dict) -> Path:
+    """記録した検収係の承認の候補の全文の写し (記録を使うたびに床を当て直すため。 承認の file の隣、 sha256 の名)。"""
+    agent, _, sid = str(a.get("session") or ":").partition(":")
+    return approvals_path(agent, sid).parent / "reviewer-candidates" / f"{a.get('content_sha256')}.txt"
+
+
+def _grant_floor_problem(a: dict, changes: list[dict]) -> str:
+    """記録を使う時点の作業ツリーと HEAD に、 承認の時と同じ床を当て直す (記録の時の写しの候補を新しい側にして)。 3 回目の
+    盲検: 記録の後に作業ツリーで lock の印を足した・実行の bit を付けた file に、 同じ記録の当て直しが印を消し bit を外して
+    通った (記録の照合が設定・掲示板・基準の版・lease だけを見て、 床を見直していなかった)。 候補の写しが無い・hash が
+    合わないときは使わない。 毎回見る (作業ツリーは同じ process の中でも動く)。"""
+    test = _REVIEWER_TEST or {}
+    cfg, why = load_delegation(test.get("base"))
+    if cfg is None:
+        return why
+    try:
+        new = _candidate_store(a).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return "記録した候補の写しを読めない (床を当て直せない)"
+    if hashlib.sha256(new.encode("utf-8")).hexdigest() != a.get("content_sha256"):
+        return "記録した候補の写しが記録の hash と合わない"
+    repo, rel = Path(str(a.get("repo") or "")), str(a.get("file") or "")
+    target = repo / rel
+    head_mode = _head_mode(repo, rel)
+    mode = str(a.get("target_mode") or "100644")
+    exists = target.exists()
+    wt = read_text(target) if exists else ""
+    if wt is None:  # 在るのに読めない file を空と読まない (盲検の実測: 読めない byte を足すと lock の印が見えなくなった)
+        return "作業ツリーの file を UTF-8 の text として読めない (床を当て直せない)"
+    for old, cur_mode, there in ((wt, worktree_mode(target), exists),
+                                 (head_text(repo, rel), head_mode, head_mode != "000000")):
+        problem = reviewer_scope_problem(cfg, repo, rel, changes, old, new, mode, cur_mode, there)
+        if problem:
+            return problem
+    return ""
+
+
+def _grant_problem(a: dict) -> str:
+    """記録済みの検収係の承認が、 今も使えるか (使えなければ理由)。 commit の検査と編集の hook も記録を読むので、 そこで
+    も見る (盲検の実測: 記録の後に差し戻しても、 委任を切っても、 同じ候補の記録が当てと commit を通し続けた)。
+    見るのは委任の設定 (enabled・役・repo・本人に残した path)、 掲示板の承認の event の後に依頼が動いていないこと、
+    基準の版 (HEAD の blob) が承認の時のままであること、 引き受けの lease。 1 process に 1 回 (同じ記録の file × id)。"""
+    eid = str(a.get("reviewer_event") or "")
+    key = f"{eid}|{a.get('repo')}|{a.get('file')}"
+    if key in _GRANT_CACHE:
+        return _GRANT_CACHE[key]
+    test = _REVIEWER_TEST or {}
+    cfg, why = load_delegation(test.get("base"))
+    repo, rel = Path(str(a.get("repo") or "")), str(a.get("file") or "")
+    if cfg is None:
+        problem = why
+    elif a.get("reviewer_role") not in cfg["reviewer_roles"]:
+        problem = "承認した役が委任の設定に無くなった"
+    elif repo.name not in cfg["repos"]:
+        problem = "repo が委任の設定に無くなった"
+    elif any(r == repo.name and fnmatch.fnmatchcase(rel, pat) for r, _, pat in
+             (s.partition(":") for s in cfg.get("owner_paths", []))) or _floor_name(rel):
+        problem = "その path は本人に残すものになった"
+    else:
+        ev, events, why = _board_events(Path(cfg["_base"]) / cfg["board_root"], eid)
+        moved = _later_moves(events, ev) if ev is not None else []
+        f = _approval_fields(str(ev.get("details") or "")) if ev is not None else {}
+        claims = [e for e in events if e.get("kind") == "claim" and e.get("request_id") == (ev or {}).get("request_id")]
+        lease = _utc(str(claims[-1].get("lease_until") or "")) if claims else None
+        if ev is None:
+            problem = why
+        elif moved:
+            problem = "承認の後に依頼が動いた (" + ", ".join(moved) + ")"
+        elif (f.get("base-blob") or [""])[0] != _head_blob(repo, rel):
+            problem = "基準の版 (HEAD の blob) が承認の時から変わった"
+        elif lease is None or lease <= _dt.datetime.now(_dt.timezone.utc):
+            problem = "worker の引き受けの lease が切れた"
+        else:
+            problem = ""
+    _GRANT_CACHE[key] = problem
+    return problem
+
+
+def _approval_fields(details: str) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for line in (details or "").splitlines()[1:]:
+        k, sep, v = line.partition(": ")
+        if sep and re.fullmatch(r"[a-z][a-z0-9-]*", k):
+            out.setdefault(k, []).append(v.strip())
+    return out
+
+
+def _native8(actor: dict) -> str:
+    sid = str((actor or {}).get("session_id") or "")
+    if _NATIVE_RE.match(sid):
+        return sid[:8]
+    head = str((actor or {}).get("task") or "").split(" ")[0]
+    return head[:8] if re.fullmatch(r"[0-9a-f]{8}[0-9a-f-]*", head) else ""
+
+
+def _reviewer_transcript(native: str, home: Path) -> Path | None:
+    """検収係の会話記録 (Claude)。 MANUSCRIPT_CLAIM_GUARD_HOME・CLAUDE_CONFIG_DIR は読まない (別の記録を読ませられる)。"""
+    pats = [os.path.join(r, "projects", "*", f"{native}.jsonl")
+            for r in [str(home / ".claude")] + glob.glob(str(home / ".claude-*"))]
+    hits = [h for p in pats for h in glob.glob(p)]
+    return Path(max(hits, key=os.path.getmtime)) if hits else None
+
+
+def _tool_rows(path: Path) -> tuple[dict[str, dict], dict[str, dict]] | None:
+    """会話記録の tool 呼び出し (id → {name, input, main}) と結果 (id → {text, error})。 main = assistant の行で
+    sidechain でない (subagent や本人の行に見せた tool の形は、 その窓の呼び出しに数えない = 盲検の実測)。
+    読めない行が最後の行 (書きかけ) 以外にあれば None = 「書いていない」 を言えない (盲検の実測: 壊れた行を飛ばすと、
+    その行の書き込みが見えないまま承認が通った)。 1 行ずつ読む (長い会話記録を丸ごと持たない)。"""
+    uses: dict[str, dict] = {}
+    results: dict[str, dict] = {}
+    bad = 0
+    pending_bad = False
+    try:
+        handle = open(path, encoding="utf-8", errors="strict")
+    except OSError:
+        return None
+    try:
+        with handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                if pending_bad:
+                    bad += 1  # 前の読めない行は最後の行ではなかった
+                    pending_bad = False
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    pending_bad = True
+                    continue
+                if not isinstance(row, dict):
+                    pending_bad = True
+                    continue
+                try:
+                    _tool_row(row, uses, results)
+                except (AttributeError, TypeError, KeyError):
+                    pending_bad = True  # 形の違う行 (message が dict でない等) = 読めない行と同じ (盲検の実測)
+    except UnicodeDecodeError:
+        return None
+    return None if bad else (uses, results)
+
+
+_TOOL_FIELDS = {  # 書き込みの証拠に使う tool の欄 (欄の名 → 型)。 無い欄は無いままでよいが、 在る欄は型が合うこと
+    "Bash": {"command": str}, "Write": {"file_path": str, "content": str},
+    "Edit": {"file_path": str, "old_string": str, "new_string": str},
+    "MultiEdit": {"file_path": str, "edits": list}, "NotebookEdit": {"notebook_path": str, "new_source": str},
+}
+_TOOL_REQUIRED = {"Bash": ("command",), "Write": ("file_path",), "Edit": ("file_path",), "MultiEdit": ("file_path", "edits"),
+                  "NotebookEdit": ("notebook_path",)}
+
+
+_CONSUMED = {"command": str, "file_path": str, "notebook_path": str, "content": str, "new_string": str,
+             "new_source": str, "edits": list}  # 照合で読む欄 (どの書く tool でも、 在れば型が合うこと)
+
+
+def _tool_input_ok(name: str, inp: dict) -> bool:
+    """書き込みの証拠に使う tool の input が読める形か: 要る欄は空でない文字列 (null・空は不可 = 5 回目の盲検: null の
+    command と path を「書いていない」 と読んだ)、 照合で読む欄は在れば型が合う (5 回目の盲検: Write の整数の edits で
+    読む側が例外を出した)、 edits は object の list。"""
+    if name not in _TOOL_FIELDS:
+        return True
+    if any(not isinstance(inp.get(k), str) or not inp.get(k) for k in _TOOL_REQUIRED[name]):
+        return False
+    if any(k in inp and not isinstance(inp[k], t) for k, t in _CONSUMED.items()):
+        return False
+    return all(isinstance(e, dict) and isinstance(e.get("new_string", ""), str) for e in inp.get("edits") or [])
+
+
+def _tool_row(row: dict, uses: dict, results: dict) -> None:
+    """1 行の tool の呼び出しと結果を控える。 形の分かる行 (message が無い行・文字列の本文・本文の list) 以外は TypeError =
+    読めない行と同じに数える (盲検の実測: 本文が dict の行を黙って飛ばし、 list の input で読む側が例外を出した)。"""
+    if "message" not in row or row.get("type") not in ("assistant", "user"):
+        return  # 要約・添付・設定の行 (tool の呼び出しを持たない)
+    msg = row.get("message")
+    if not isinstance(msg, dict):
+        raise TypeError("message")
+    content = msg.get("content")
+    if content is None or isinstance(content, str):
+        return
+    if not isinstance(content, list):
+        raise TypeError("content")
+    main = row.get("type") == "assistant" and not row.get("isSidechain")
+    for part in content:
+        if not isinstance(part, dict):
+            raise TypeError("part")
+        if part.get("type") == "tool_use" and row.get("type") == "assistant":
+            # id・名・input (object) が揃い、 書き込みの証拠に使う tool は欄の型も合うこと (盲検の実測: 名の無い呼び出し・
+            # input の無い Write を「書いていない」 と読み、 list の名・整数の edits で読む側が例外を出した)
+            name, inp = part.get("name"), part.get("input")
+            if (not isinstance(part.get("id"), str) or not part.get("id") or not isinstance(name, str) or not name
+                    or not isinstance(inp, dict) or not _tool_input_ok(name, inp)):
+                raise TypeError("tool_use")
+            uses[part["id"]] = {"name": name, "input": inp, "main": main}
+        elif part.get("type") == "tool_result" and row.get("type") == "user":
+            c = part.get("content")
+            if not part.get("tool_use_id") or not (c is None or isinstance(c, (str, list))):
+                raise TypeError("tool_result")
+            text = c if isinstance(c, str) else "".join(
+                str(x.get("text", "")) for x in c if isinstance(x, dict)) if isinstance(c, list) else ""
+            r = results.setdefault(part["tool_use_id"], {"text": "", "error": False})
+            r["text"] += text
+            r["error"] = r["error"] or bool(part.get("is_error"))
+
+
+def _posted_receipt(uses: dict, results: dict, event_id: str, target: Path, cand: Path | None) -> bool:
+    """その窓 (assistant の本筋の行) が、 掲示板の `approve-edit` をその file と候補で打ち、 成功した結果に
+    `posted <event id>` が出ているか (読む command の出力に id が出ただけでは数えない = 盲検の実測)。"""
+    for k, u in uses.items():
+        if u.get("name") != "Bash" or not u.get("main"):
+            continue
+        parsed = _shell_tokens(str((u.get("input") or {}).get("command") or ""))
+        # 記号 (改行・; && | redirect …) も展開 ($ `) も無い 1 つの単純な command だけ。 行の続き (`\` + 改行) は
+        # 空白に数え (盲検の実測: 契約に載せた複数行の形を、 改行で 3 つの command に分けて断った)、 前後の改行は落とす
+        # (盲検の実測: 終わりの改行 1 つで、 正しい 1 つの command を断った)
+        while parsed and parsed[0][:2] == ("op", "\n"):
+            parsed = parsed[1:]
+        while parsed and parsed[-1][:2] == ("op", "\n"):
+            parsed = parsed[:-1]
+        if not parsed or any(kind == "op" or exp for kind, _, exp in parsed):
+            continue
+        toks = [t for _, t, _ in parsed]
+        at = next((i for i, t in enumerate(toks) if PurePosixPath(t).name == "board.py"), None)
+        # 打ったのが掲示板の道具そのもの: 先頭 (代入を除く) が python で、 その次が board.py、 その後の最初の語が approve-edit
+        # (`echo … approve-edit` や読む command の後ろに付けた形を数えない)
+        head = [t for t in toks if not _ASSIGN_RE.fullmatch(t)]
+        if (at is None or not head or not re.fullmatch(r"python[0-9.]*", PurePosixPath(head[0]).name)
+                or head.index(toks[at]) != 1 or next((t for t in toks[at + 1:] if not t.startswith("-")), "") != "approve-edit"):
+            continue
+        r = results.get(k) or {}
+        if r.get("error") or not re.search(rf"^posted {re.escape(event_id)}$", r.get("text", ""), re.M):
+            continue
+        # 欄ごとに結ぶ (--file は当てる file、 --candidate は候補。 盲検の実測: 値を 1 つの集合に混ぜて、 入れ替えた形を通した)
+        opt: dict[str, list[Path]] = {"--file": [], "--candidate": []}
+        for i, t in enumerate(toks):
+            name, eq, val = t.partition("=")
+            if name in opt:
+                v = val if eq else (toks[i + 1] if i + 1 < len(toks) else "")
+                opt[name].append(Path(os.path.expanduser(v)).resolve(strict=False))
+        if opt["--file"] == [target] and (cand is None or opt["--candidate"] == [cand]):
+            return True
+    return False
+
+
+def _added_lines(old: str, new: str) -> list[str]:
+    """候補が足した行 (6 字以上、 空白を潰したもの)。 検収係がそれを書いていないかを見るのに使う。 diff の文でなく行の
+    対応 (SequenceMatcher の opcode) から取る (盲検の実測: `+++` で始まる行を diff の見出しと読んで落とした)。"""
+    import difflib
+    a, b = (old or "").splitlines(), (new or "").splitlines()
+    out = []
+    for tag, _i1, _i2, j1, j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
+        if tag in ("insert", "replace"):
+            for ln in b[j1:j2]:
+                s = collapse_ws(ln).strip()
+                if len(s) >= 6:  # 16 字では短い行 (`echo more`) の下書きを見落とした = 盲検の実測
+                    out.append(s)
+    return out
+
+
+def _names_path(token: str, targets: list[Path], rels: list[str]) -> bool:
+    t = token.strip().strip("'\"")
+    if not t:
+        return False
+    for piece in dict.fromkeys((t, t.split("=", 1)[-1])):  # --file=/abs/path の形も
+        try:
+            p = Path(os.path.expanduser(piece))
+            if p.is_absolute() and any(p.resolve(strict=False) == x for x in targets):
+                return True
+        except (OSError, ValueError):
+            pass
+        if any(piece == r or piece == "./" + r for r in rels):
+            return True
+    return False
+
+
+_ASSIGN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
+
+
+def _unwrap(words: list[str]) -> list[str]:
+    """前の変数の代入・包み (env / command / nice -n 5 / timeout 10 / sudo -u x / xargs …)・shell の語 (if / do / ! …) を
+    外した語の並び。"""
+    i = 0
+    while i < len(words):
+        w = words[i]
+        if _ASSIGN_RE.fullmatch(w) or w in _KEYWORDS:
+            i += 1
+            continue
+        if PurePosixPath(w).name in _WRAPPERS:
+            i += 1
+            while i < len(words) and (words[i].startswith("-") or re.fullmatch(r"[0-9.]+[smhd]?", words[i])
+                                      or _ASSIGN_RE.fullmatch(words[i])):
+                i += 1
+            continue
+        break
+    return words[i:]
+
+
+def _guarded_dirs(targets: list[Path], rels: list[str]) -> set[Path]:
+    """写しの行き先にすると対象か候補を書きうる dir。 対象はその repo の root から対象の dir まで、 候補はその dir
+    (5 回目の盲検: repo の外に置いた候補の dir への cp が候補を書いた)。"""
+    out: set[Path] = set()
+    for x in targets:
+        roots = [Path(str(x)[: -len(r) - 1]) for r in rels if r and str(x).endswith("/" + r)]
+        if roots:
+            out |= {d for d in x.parents if any(d == root or root in d.parents for root in roots)}
+        else:
+            out.add(x.parent)
+    return out
+
+
+def _copy_reads(rest: list[str], targets: list[Path], rels: list[str]) -> bool:
+    """cp・install・rsync・ditto が、 名指した path を写しの元にするだけか。 行き先は絶対 path で、 対象・候補でも、 それを
+    書きうる dir (_guarded_dirs) でもないこと。 相対の行き先・glob と brace の行き先は場所が分からない = 書く形 (5 回目の
+    盲検: `./hooks`・`hooks/.`・`../hooks` を別の file と読んだ)。 link を作る option・行き先を option で渡す形・元を消す形も
+    書く形 (盲検の実測: dir を行き先にした cp と hard link の写しが対象を書いた)。"""
+    if any(w in ("-t", "-l", "-s", "-H") or w.startswith(("--target-directory", "--remove-source-files", "--delete",
+                                                          "--link", "--symbolic-link", "--hard-links"))
+           or (re.fullmatch(r"-[A-Za-z]+", w) and set(w[1:]) & set("lst")) for w in rest):
+        return False
+    args = [w for w in rest if not w.startswith("-")]
+    if len(args) < 2 or _names_path(args[-1], targets, rels):
+        return False
+    dest = args[-1]
+    if any(c in dest for c in "*?[{"):
+        return False
+    p = Path(os.path.expanduser(dest))
+    if not p.is_absolute():
+        return False
+    try:
+        d = p.resolve(strict=False)
+    except (OSError, ValueError):
+        return False
+    return d not in _guarded_dirs(targets, rels)
+
+
+def _glob_root(piece: str) -> Path | None:
+    """glob・brace を含む絶対 path の語の、 特別な字より前の dir (正規化した形)。 相対・特別な字の無い語は None。"""
+    s = os.path.expanduser(piece)
+    i = min((s.find(c) for c in "*?[{" if c in s), default=-1)
+    if i < 0 or not s.startswith("/"):
+        return None
+    head = s[:i]
+    base = head if head.endswith("/") else os.path.dirname(head)
+    return Path(os.path.normpath(base or "/"))
+
+
+def _involves(word: str, targets: list[Path], rels: list[str], dirs: set[Path]) -> bool:
+    """語が対象・候補か、 それを書きうる dir (_guarded_dirs) か、 対象の絶対 path を中に含むか、 相対で対象と同じ名か・
+    対象の repo の中の path を含むか。 字句を解いた後の語で見る (盲検の実測: 逆斜線で空白を書いた path を、 解く前の文の
+    部分一致で探して見落とした)。 glob・brace の絶対 path は、 特別な字より前の dir が対象・候補に至る道の上か中なら名指し
+    (5 回目の盲検: `/./`・`../` を含む glob と入れ子の brace が当たらなかった)。 絶対 path の語は解決した path だけで見る
+    (5 回目の盲検: 写しの dir の `<写し>/hooks/check.py` を、 相対の名の部分一致で対象と読んだ)。"""
+    if _names_path(word, targets, rels):
+        return True
+    piece = word.split("=", 1)[-1]
+    groot = _glob_root(piece)
+    if groot is not None:
+        for d in set(dirs) | {x.parent for x in targets}:
+            if groot == d or groot in d.parents or d in groot.parents:
+                return True
+    try:
+        p = Path(os.path.expanduser(piece))
+        if p.is_absolute():
+            if groot is None and p.resolve(strict=False) in dirs:
+                return True
+            return any(str(x) in word for x in targets)
+        if piece and (PurePosixPath(piece).name in {x.name for x in targets}
+                      or any(fnmatch.fnmatchcase(x.name, PurePosixPath(piece).name) for x in targets
+                             if any(c in piece for c in "*?[{"))):
+            return True  # 別の dir から相対の名で名指す形
+    except (OSError, ValueError):
+        pass
+    return any(str(x) in word for x in targets) or any(r in word for r in rels)
+
+
+def _segment_reads(words: list[str], targets: list[Path], rels: list[str]) -> bool:
+    """包みを外した 1 つの command が、 名指した path を読むだけと分かるか (分からなければ False = 書いたと数える)。"""
+    if not words:
+        return True
+    cmd, rest = PurePosixPath(words[0]).name, words[1:]
+    if cmd == "xxd":  # -r は書き戻す形、 2 つ目の file の名は出力の file
+        return not any(w.startswith("-r") for w in rest) and len([w for w in rest if not w.startswith("-")]) <= 1
+    if cmd == "rg" and any(w.startswith("--pre") for w in rest):
+        return False  # 読む前に別の command を走らせる
+    if cmd == "file" and any(w.startswith("-C") or w == "--compile" for w in rest):
+        return False
+    if cmd in _READ_CMDS:
+        return True
+    if cmd in ("sed", "gsed"):
+        # 読むと数えるのは行を出すだけの script (`-n 1,20p` の形) だけ。 w・W・e・r の命令や -i は書く・動かす形
+        # (盲検の実測: `sed -n 'w <対象>'` を読む形と数えていた)
+        if any(w.startswith(("-i", "--in-place", "-e", "--expression", "-f", "--file")) for w in rest):
+            return False
+        script = next((w for w in rest if not w.startswith("-")), "")
+        return bool(re.fullmatch(r"(?:[0-9$]+(?:,[0-9$]+)?|/[^/\n]*/)?[pq]", script))
+    if cmd in _MOVE_CMDS:
+        return False
+    if cmd in _COPY_CMDS:
+        return _copy_reads(rest, targets, rels)
+    if cmd == "git":
+        i = 0
+        while i < len(rest) and rest[i].startswith("-"):
+            if rest[i] == "-c" or rest[i].startswith(("--config-env", "--exec-path")):
+                return False  # 設定で外の command (pager・diff の外部の道具) を走らせうる
+            i += 2 if rest[i] == "-C" else 1
+        if i >= len(rest) or rest[i] not in _READ_GIT:
+            return False
+        # 出力を file に書く・外の道具を走らせる option (盲検の実測: `git diff --no-index --output=<対象>` が通った)
+        return not any(w.startswith(("--output", "--open-files-in-pager", "-O", "--ext-diff")) for w in rest[i + 1:])
+    if re.fullmatch(r"python[0-9.]*", cmd) and rest:
+        line = " ".join(rest)
+        if PurePosixPath(rest[0]).name == "board.py" and re.search(r"(?<![\w-])(approve-edit|edit-approvals|show|inbox)(?![\w-])", line):
+            return True  # 承認の event を書く・読む掲示板の command (--file / --candidate は読むだけ)
+        if any(k in rest[0] for k in ENGINE_TOKENS):
+            sub = next((w for w in rest[1:] if not w.startswith("-")), "")
+            return sub == "scan" or "--dry-run" in rest  # 守りの道具の空回しと差分の表示は書かない
+    return False
+
+
+def _shell_tokens(command: str) -> list[tuple[str, str, bool]] | None:
+    """(種類, 文, 展開を含むか) の並び。 種類 = "w" 語 / "op" 制御と redirect の記号 (引用の外の記号だけ = 盲検の実測:
+    引用を外した後の語で区切りを判定し、 `grep -n ';' <file>` の ; を区切りと読んだ)。 行の続き (引用の外と二重引用の中の
+    `\\` + 改行) は空白、 注釈 (語の頭の #) は行の終わりまで落として改行を区切りとして残す (盲検の実測: 注釈と一緒に改行を
+    落とし、 次の行の書く command が見えなかった)。 展開 = 引用の外か二重引用の中の $ と `。 引用が閉じなければ None。"""
+    out: list[tuple[str, str, bool]] = []
+    cur: str | None = None
+    exp = False
+    i, n = 0, len(command)
+
+    def flush() -> None:
+        nonlocal cur, exp
+        if cur is not None:
+            out.append(("w", cur, exp))
+        cur, exp = None, False
+
+    while i < n:
+        c = command[i]
+        if c == "\\":
+            if command.startswith("\\\n", i):
+                i += 2
+                continue
+            cur = (cur or "") + command[i + 1:i + 2]
+            i += 2
+            continue
+        if c == "'":
+            j = command.find("'", i + 1)
+            if j < 0:
+                return None
+            cur = (cur or "") + command[i + 1:j]
+            i = j + 1
+            continue
+        if c == '"':
+            j, buf = i + 1, ""
+            while j < n and command[j] != '"':
+                if command[j] == "\\" and j + 1 < n and command[j + 1] in '"\\$`\n':
+                    buf += "" if command[j + 1] == "\n" else command[j + 1]
+                    j += 2
+                    continue
+                if command[j] in "$`":
+                    exp = True
+                buf += command[j]
+                j += 1
+            if j >= n:
+                return None
+            cur = (cur or "") + buf
+            i = j + 1
+            continue
+        if c in " \t\r":
+            flush()
+            i += 1
+            continue
+        if c == "#" and cur is None:
+            j = command.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        op = next((o for o in _SHELL_OPS if command.startswith(o, i)), None)
+        if op:
+            if cur is not None and cur.isdigit() and op[0] in "<>" and not exp:
+                cur = None  # `2>` の fd の数字 (記号の一部)
+            flush()
+            out.append(("op", op, False))
+            i += len(op)
+            continue
+        if c in "$`":
+            exp = True
+        cur = (cur or "") + c
+        i += 1
+    flush()
+    return out
+
+
+def _shell_split(tokens: list[tuple[str, str, bool]]) -> list[dict]:
+    """単純な command ごとの {words, redirs: [(記号, 先の語)], after_pipe} の並び。"""
+    segs: list[dict] = []
+    cur: dict = {"words": [], "redirs": [], "after_pipe": False}
+    pending: str | None = None
+    outer: list[dict] = []  # process substitution (`<(…)` `>(…)`) の外の command (中の command は別の単純な command)
+    for kind, text, _ in tokens:
+        if kind == "op" and text in ("<(", ">("):
+            cur["words"].append(text + "…)")
+            outer.append(cur)
+            cur = {"words": [], "redirs": [], "after_pipe": False}
+            continue
+        if kind == "op" and text == ")" and outer:
+            if pending is not None:
+                cur["redirs"].append((pending, ""))
+                pending = None
+            segs.append(cur)
+            cur = outer.pop()
+            continue
+        if kind == "op" and text in _SEP_OPS:
+            if pending is not None:
+                cur["redirs"].append((pending, ""))
+                pending = None
+            segs.append(cur)
+            # 区切りの後の空の command (`a |` + 改行 + `b`) は pipe を引き継ぐ
+            carry = text in _PIPE_OPS or (cur["after_pipe"] and not cur["words"] and not cur["redirs"])
+            cur = {"words": [], "redirs": [], "after_pipe": carry}
+        elif kind == "op":
+            if pending is not None:
+                cur["redirs"].append((pending, ""))
+            pending = text
+        elif pending is not None:
+            cur["redirs"].append((pending, text))
+            pending = None
+        else:
+            cur["words"].append(text)
+    if pending is not None:
+        cur["redirs"].append((pending, ""))
+    segs.append(cur)
+    segs.extend(outer)  # 閉じない process substitution の外の command も見る
+    return [s for s in segs if s["words"] or s["redirs"]]
+
+
+def _all_read(toks: list[tuple[str, str, bool]], targets: list[Path], rels: list[str]) -> bool:
+    """command の全体が読む形と分かるか: 展開・heredoc・process substitution・出力の redirect を含まず、 どの単純な
+    command も読む形と分かる command (cd などの書かない組み込みを含む)。 pipe・; && || で繋いでよいのは読む command どうし
+    (4 回目の盲検: process substitution の中で候補を読み、 外の bash がその中身を実行して対象を書いた)。"""
+    if any(exp for _, _, exp in toks):
+        return False
+    if any(kind == "op" and (text in _HEREDOC_OPS or text in _OUT_REDIRS or text in ("<(", ">("))
+           for kind, text, _ in toks):
+        return False
+    return all(_segment_reads(_unwrap(s["words"]), targets, rels) for s in _shell_split(toks))
+
+
+def _reads_only(command: str) -> bool:
+    """command の全体が読む形と分かるか (掲示板の approve-edit と守りの道具の --dry-run を含む)。"""
+    toks = _shell_tokens(command)
+    return toks is not None and _all_read(toks, [], [])
+
+
+def shell_writes(command: str, targets: list[Path], rels: list[str]) -> bool:
+    """command がその path を書く形か。 字句を解いた語のどれかが対象・候補・対象を下に持つ dir・相対で同じ名に当たる
+    command は、 全体が読む形と分かる (_all_read) ときだけ書いていないと数え、 それ以外は書いた側に倒す (変数・置換・
+    heredoc・process substitution・出力の redirect・読む形でない command を 1 つでも含む)。 字句に分けられない command は、
+    対象の名を含めば書いた側。 規則の文 = 名指す command は読む形の command だけで、 path を literal で書く。"""
+    toks = _shell_tokens(command)
+    if toks is None:
+        return any(x.name in command for x in targets) or any(r in command for r in rels)
+    dirs = _guarded_dirs(targets, rels)
+    if not any(kind == "w" and _involves(text, targets, rels, dirs) for kind, text, _ in toks):
+        return False
+    return not _all_read(toks, targets, rels)
+
+
+def reviewer_wrote_target(uses: dict[str, dict], targets: list[Path], rels: list[str],
+                          results: dict | None = None, added: list[str] | None = None) -> str:
+    """検収係が対象か候補を書いたか、 候補の足した行を自分で書いたか (下書きを書いて worker に写させた形 = 盲検の実測)。
+    編集 tool は誤りで返った呼び出しを数えない (書けていない)。 shell は結果に依らず数える (途中まで書いたことがある)。"""
+    results = results or {}
+    for k, u in uses.items():
+        inp = u.get("input") or {}
+        if u.get("name") in _WRITE_TOOLS:
+            if (results.get(k) or {}).get("error"):
+                continue
+            fp = str(inp.get("file_path") or inp.get("notebook_path") or "")
+            if fp and _names_path(fp, targets, rels):
+                return f"{u.get('name')} で {fp}"
+            body = " ".join(str(x) for x in (inp.get("content"), inp.get("new_string"), inp.get("new_source"),
+                                             *[e.get("new_string") for e in inp.get("edits") or [] if isinstance(e, dict)])
+                            if x)
+            hit = next((a for a in added or [] if a in collapse_ws(body)), "")
+            if hit:
+                return f"{u.get('name')} で候補の足した行「{hit[:40]}」"
+        if u.get("name") == "Bash":
+            cmd = str(inp.get("command") or "")
+            if shell_writes(cmd, targets, rels):
+                return "shell で「" + collapse_ws(cmd)[:80] + "」"
+            # 候補の足した行を含む command は、 読む形と分かるもの以外を下書きを書いた形と数える (heredoc・redirect に限らない
+            # = 盲検の実測: `python3 -c …write_text(…)` で書いた下書きを見落とした)
+            if any(a in collapse_ws(cmd) for a in added or []) and not _reads_only(cmd):
+                return "shell で候補の足した行を書いた「" + collapse_ws(cmd)[:60] + "」"
+    return ""
+
+
+def _policy_file_problem(base: Path, rd: str) -> str:
+    """依頼の方針の在りか (`policy-ref: <repo>/<path>`) が、 作業ルートの repo の HEAD に commit された file か。"""
+    m = re.search(r"^policy-ref: (.+?)\s*$", rd, re.M)  # 空白を含む path も (掲示板と同じ読み方)
+    if not m:
+        return "依頼が確認済みの方針の file (--policy-ref) を持たない (本人の発言だけの依頼は委任の外 = 本人に聞く)"
+    ref = m.group(1).split("#", 1)[0]
+    repo_name, _, rest = ref.partition("/")
+    repo = base / repo_name
+    # repo の名は作業ルートの直下の名だけ、 path は `..`・空の段・末尾の / を持たない (盲検の実測: `../plans/x.md` で
+    # 作業ルートの外の repo を、 `plans/` で dir の中の 1 つ目の file を方針と読んだ)。 掲示板の approve-edit と同じ読み方
+    if (not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", repo_name) or not rest
+            or any(p in ("", ".", "..") for p in rest.split("/"))
+            or repo.resolve().parent != base.resolve() or not (repo / ".git").exists()):
+        return f"方針の在りか {ref} が作業ルートの直下の repo の file の path でない"
+    try:
+        p = subprocess.run(["git", "ls-tree", "-z", "HEAD", "--", rest], cwd=repo, capture_output=True, text=True,
+                           timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return f"方針の在りか {ref} を git で読めない"
+    if p.returncode != 0:
+        return f"方針の在りか {ref} を git で読めない"
+    entries = [e for e in p.stdout.split("\0") if e]
+    if not entries:
+        return f"方針の file {ref} が {repo_name} の HEAD に無い (無い方針の file は確認済みの方針にならない)"
+    meta, _, path = entries[0].partition("\t")
+    if len(entries) != 1 or path != rest or meta.split()[:2] not in (["100644", "blob"], ["100755", "blob"]):
+        return f"方針の在りか {ref} が普通の file でない (dir・symlink は確認済みの方針にならない)"
+    # 機械が見るのは file が commit されていることだけ。 節 (#…) と本人の確認の中身は検収係が読む (規則の文)
+    return ""
+
+
+def verify_reviewer_approval(event_id: str, session: tuple[str, str], repo: Path, rel: str, target: Path,
+                             new: str, target_mode: str, changes: list[dict], *, base: Path | None = None,
+                             home: Path | None = None) -> tuple[dict | None, str]:
+    """(記録に足す欄, 理由)。 方針の 7 節の門と 4 節の機械で見られる部分を全部見る。 1 つでも外れれば None。"""
+    if not _EVENT_ID_RE.match(event_id or ""):
+        return None, "--reviewer-approval は掲示板の event id"
+    test = _REVIEWER_TEST or {}
+    base, home = base or test.get("base"), home or test.get("home")
+    cfg, why = load_delegation(base)
+    if cfg is None:
+        return None, why + " = 委任なし (本人の発言で記録する)"
+    base_p = Path(cfg["_base"])
+    exists = target.exists()
+    head_mode = _head_mode(repo, rel)
+    # 作業ツリーと HEAD の両方から、 中身と属性を見る (shell で先に書いた途中の版・先に外した実行の bit を基準にして、
+    # HEAD からの変更を見落とさない = 盲検の実測: 先に chmod -x した hook の実行の bit を外す変更が通った)
+    wt = read_text(target) if exists else ""
+    if wt is None:
+        return None, "当てる file を UTF-8 の text として読めない (読めない file を空と読まない)"
+    for old, mode, there in ((wt, worktree_mode(target), exists),
+                             (head_text(repo, rel), head_mode, head_mode != "000000")):
+        problem = reviewer_scope_problem(cfg, repo, rel, changes, old, new, target_mode, mode, there)
+        if problem:
+            return None, problem + " = 検収係の承認では当てない。 本人の発言で記録する"
+    board = base_p / cfg["board_root"]
+    ev, events, why = _board_events(board, event_id)
+    if ev is None:
+        return None, why
+    details = str(ev.get("details") or "")
+    if ev.get("kind") != "note" or details.splitlines()[:1] != [APPROVAL_HEAD]:
+        return None, f"event {event_id} は検収係の承認の event でない (掲示板の approve-edit で書いたもの)"
+    f = _approval_fields(details)
+    one = lambda k: (f.get(k) or [""])[0]
+    req = next((e for e in events if e.get("kind") == "request" and e.get("event_id") == ev.get("request_id")), None)
+    if req is None:
+        return None, "承認の event の依頼が同じ thread に無い"
+    rd = str(req.get("details") or "")
+    if not re.search(r"^policy-stage: implement$", rd, re.M):
+        return None, "依頼が実装の段 (--stage implement) でない"
+    problem = _policy_file_problem(base_p, rd)
+    if problem:
+        return None, problem
+    reviewer = {"agent": (req.get("actor") or {}).get("agent"), "session_id": (req.get("actor") or {}).get("session_id")}
+    assignee = dict(req.get("assignee") or {})
+    for e in events:
+        if e.get("kind") == "handover" and e.get("reply_to") == req.get("event_id"):
+            if e.get("handover_role") == "reviewer":
+                reviewer = dict(e.get("target") or {})
+            elif e.get("handover_role") == "assignee":
+                assignee = dict(e.get("target") or {})
+    actor = ev.get("actor") or {}
+    role = str(actor.get("session_id") or "")
+    # 役 id はどちらの vendor の窓でも同じ役 (掲示板の same_session と同じ)。 書いた窓は Claude (会話記録で確かめる)
+    if actor.get("agent") != "claude" or not role.startswith("role-") or role != reviewer.get("session_id"):
+        return None, f"承認を書いた役 ({role or '?'}) が、 その依頼の検収役 ({reviewer.get('session_id') or '?'}) でない"
+    if role not in cfg["reviewer_roles"]:
+        return None, f"{role} は委任の設定の reviewer_roles に無い (検収係の役は本人が決める)"
+    if role == assignee.get("session_id"):
+        return None, "検収役と worker の役が同じ"
+    native = one("reviewer-native")
+    if not _NATIVE_RE.match(native):
+        return None, "承認の event に検収係の native session が無い"
+    if session[1][:8] == native[:8]:
+        return None, "承認を書いた session と当てる session が同じ (書いた者と確かめる者を別にする)"
+    req8 = _native8(req.get("actor") or {})
+    if not req8:
+        return None, "依頼を出した窓の native session が依頼に無い = 承認を書いた窓と別だと確かめられない (本人に聞く)"
+    if req8 == native[:8]:
+        return None, "承認を書いた session が依頼を出した session (指揮役は守られた file の承認を代わらない = 本人に聞く)"
+    claims = [e for e in events if e.get("kind") == "claim" and e.get("request_id") == req.get("event_id")]
+    worker8 = _native8(claims[-1].get("actor") or {}) if claims else ""
+    if not worker8 or not session[1].startswith(worker8):
+        return None, "当てる session がその依頼を引き受けた worker でない (承認は引き受けた worker の窓で当てる)"
+    lease = _utc(str(claims[-1].get("lease_until") or ""))
+    if lease is None or lease <= _dt.datetime.now(_dt.timezone.utc):
+        return None, "worker の引き受け (claim) の lease が切れている = 引き受け直してから、 検収係に取り直してもらう"
+    sub = next((e for e in events if e.get("event_id") == ev.get("reply_to") and e.get("kind") == "submit"), None)
+    if sub is None:
+        return None, "承認の event が提出 (submit) に返していない"
+    later = _later_moves(events, ev)
+    if later:
+        return None, ("承認の後に依頼が動いた (" + ", ".join(later) + ") = 差し戻し・取り下げ・受け取り・担当の替わりの後の"
+                      "承認は使わない。 検収係に取り直してもらう")
+    if one("repo") != repo.name or one("file") != rel:
+        return None, f"承認の event の file ({one('repo')}/{one('file')}) が当てる file ({repo.name}/{rel}) と違う"
+    sha = hashlib.sha256(new.encode("utf-8")).hexdigest()
+    if one("candidate-sha256") != sha:
+        return None, "候補の SHA-256 が承認の event と違う (候補が変わった = 検収係に取り直してもらう)"
+    if one("mode") != target_mode:
+        return None, f"属性 {target_mode} が承認の event の {one('mode') or '?'} と違う"
+    blob = _head_blob(repo, rel)
+    if blob is None:
+        return None, "当てる file の基準の版 (HEAD の blob) を git で読めない (無いのか読めないのかを分けられない)"
+    if one("base-blob") != blob:
+        return None, "基準の版 (HEAD の blob) が承認の時から変わった = 検収係に取り直してもらう"
+    regions = sorted({str(c["region"]).split("~", 1)[0] for c in changes})
+    seen = set(one("regions").split())
+    if not set(regions) <= seen:
+        return None, "承認の event の領域 (" + " ".join(sorted(seen)) + ") が止まった領域 (" + " ".join(regions) + ") を覆わない"
+    relax = any("緩和の語「" in str(c.get("detail", "")) for c in changes)
+    if relax and not one("relax-why"):
+        return None, "緩めの語で止まった変更なのに、 承認の event に「緩めでない理由」 (relax-why) が無い"
+    if not f.get("check") or not one("nothing-lost"):
+        return None, "承認の event に回した確かめ (check) か失う制約が無い理由 (nothing-lost) が無い"
+    transcript = _reviewer_transcript(native, home or Path.home())
+    if transcript is None:
+        return None, f"検収係 ({native[:8]}) の会話記録がこの機械に無い = 承認を書いた session を確かめられない"
+    rows = _tool_rows(transcript)
+    if rows is None:
+        return None, f"検収係 ({native[:8]}) の会話記録に読めない行がある = 書いていないことを確かめられない"
+    uses, results = rows
+    cand = one("candidate")
+    cand_p = Path(cand).resolve(strict=False) if cand.startswith("/") else None
+    if not _posted_receipt(uses, results, event_id, target.resolve(strict=False), cand_p):
+        return None, ("検収係の会話記録に、 この event を書いた掲示板の approve-edit (その file と候補を名指し、 成功して"
+                      " `posted <event id>` を出したもの) が無い")
+    targets = [target.resolve(strict=False)] + ([cand_p] if cand_p else [])
+    wrote = reviewer_wrote_target(uses, targets, [rel], results, _added_lines(head_text(repo, rel), new))
+    if wrote:
+        return None, f"検収係が候補か対象を書いている ({wrote}) = 書いた者と確かめる者が別でない"
+    return {"source": "reviewer", "reviewer_event": event_id, "reviewer_role": role, "reviewer_native": native,
+            "request": req.get("event_id"), "relax": relax}, ""
+
+
+def record_reviewer_approval(args: argparse.Namespace, session: tuple[str, str] | None, repo: Path, rel: str,
+                             target: Path, new: str, target_mode: str, changes: list[dict], regions: list[str]) -> int:
+    """検収係の承認の event を照合して、 本人の発言の記録と同じ承認の file に 1 件足す (出どころ = reviewer:<id>)。"""
+    if session is None:
+        print("apply: agent の session が分からない = 検収係の承認を当てる worker を確かめられない。", file=sys.stderr)
+        return 2
+    if args.quote or getattr(args, "latest", False):
+        print("apply: --reviewer-approval と --quote / --latest は同時に渡さない (出どころは 1 つ)。", file=sys.stderr)
+        return 2
+    rid = args.reviewer_approval.strip()
+    try:
+        extra, why = verify_reviewer_approval(rid, session, repo, rel, target, new, target_mode, changes)
+    except (OSError, subprocess.SubprocessError) as exc:  # 証拠を読めない = 受け付けない (例外で外へ出さない)
+        extra, why = None, f"検収係の承認の証拠を読めない ({exc.__class__.__name__})"
+    if extra is None:
+        print(f"apply: 検収係の承認 {rid} を受け付けない: {why}。 書かず、 記録もしない。", file=sys.stderr)
+        return 5
+    entry = {"v": 3, "repo": str(repo), "file": rel, "regions": regions, "change": collapse_ws(args.change),
+             "quote": APPROVAL_QUOTE + rid, "session": f"{session[0]}:{session[1]}",
+             "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+             "content_sha256": hashlib.sha256(new.encode("utf-8")).hexdigest(), "target_mode": target_mode, **extra}
+    ap = approvals_path(*session)
+    ap.parent.mkdir(parents=True, exist_ok=True)
+    # 候補の全文の写し (記録を使うたびに床を当て直す = _grant_floor_problem)。 書けなければ記録しない
+    store = _candidate_store(entry)
+    try:
+        store.parent.mkdir(parents=True, exist_ok=True)
+        store.write_text(new, encoding="utf-8")
+    except OSError as exc:
+        print(f"apply: 候補の写しを {store} に書けない ({exc}) = 記録しない。", file=sys.stderr)
+        return 5
+    with open(ap, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    print(f"apply: 検収係の承認として記録した = {rel} :: {', '.join(regions)} (event {rid}、 {extra['reviewer_role']} /"
+          f" {extra['reviewer_native'][:8]}{'、 緩めの語で止まった変更' if extra['relax'] else ''})")
+    print(f"  このターンの最後の返事に書く (Stop が確かめる): 「{APPROVAL_QUOTE}{rid}」 を {Path(rel).name} の承認として記録した")
+    print(f"  commit message に 1 行: Reviewer-Approved: {rid}")
+    return 0
+
+
 def apply_mode(args: argparse.Namespace) -> int:
     """承認の記録 + 候補の書込み + 内容と Git mode の照合を 1 command で行う。
 
@@ -4237,11 +5440,19 @@ def apply_mode(args: argparse.Namespace) -> int:
         print("apply: " + why[:400] + "\n  = 書かず、 記録もしない。 差分を本人に見せ、 その後の本人の返事を引いて打ち直す"
               " (止める前の発言は引けない)。", file=sys.stderr)
         return 2
-    if left and not args.quote and not getattr(args, "latest", False):
+    reviewer =(getattr(args, "reviewer_approval", None) or "").strip()
+    if left and not args.quote and not getattr(args, "latest", False) and not reviewer:
         print("apply: 記録済みの承認が覆わない保護領域がある = 書かず、 記録もしない: " + ", ".join(regions) + "\n"
               "  裁定の発言を --quote で渡して打ち直すか、 approve でこの領域を記録してから打ち直す。", file=sys.stderr)
         return 2
-    if left:
+    if left and reviewer:
+        rc = record_reviewer_approval(args, session, repo, rel, p, new, target_mode, left, regions)
+        if rc:
+            return rc
+        if unapproved(changes, repo, session):
+            print("apply: 記録した承認と候補の内容・属性が一致しない。", file=sys.stderr)
+            return 1
+    elif left:
         ns = argparse.Namespace(file=str(p), region=regions, change=args.change, quote=args.quote,
                                 latest=getattr(args, "latest", False), session=args.session,
                                 transcript=getattr(args, "transcript", None), candidate=str(cp), target_mode=target_mode)
@@ -5641,6 +6852,871 @@ def refusal_tightening_selftests(check) -> None:
         finally:
             os.environ.clear()
             os.environ.update(saved_env)
+
+
+def reviewer_approval_selftests(check) -> None:
+    """検収係の承認 (--reviewer-approval) の門を、 合成の作業ルート (個人層・対象の repo・掲示板)・会話記録で検証する。"""
+    import contextlib
+    import io
+    import shutil
+    import tempfile
+    global _REVIEWER_TEST
+    saved_env = dict(os.environ)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td).resolve()
+        base, home = root / "base", root / "home"
+        prefs, work, board = base / "prefs", base / "work", base / "board"
+        env = dict(saved_env, HOME=str(home), GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                   GIT_AUTHOR_NAME="fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
+                   GIT_COMMITTER_NAME="fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid",
+                   GIT_AUTHOR_DATE="2026-01-01T00:00:00Z", GIT_COMMITTER_DATE="2026-01-01T00:00:00Z",
+                   MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root / "state"), MANUSCRIPT_CLAIM_GUARD_HOME=str(home))
+        for key in (*AGENT_ENV_KEYS, "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+            env.pop(key, None)
+        os.environ.clear()
+        os.environ.update(env)
+        try:
+            def g(repo, *args):
+                return subprocess.run(["git", *args], cwd=repo, env=env, capture_output=True, text=True, check=True)
+
+            def commit(repo, files: dict, msg="fixture"):
+                for rel, body in files.items():
+                    p = repo / rel
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                    p.write_text(body, encoding="utf-8")
+                g(repo, "add", "-A")
+                g(repo, "commit", "-qm", msg)
+
+            for r in (prefs, work, board):
+                r.mkdir(parents=True)
+                g(r, "init", "-q")
+            cfg = {"version": 1, "enabled": True, "rule": "plans/policy.md", "board_root": "board",
+                   "reviewer_roles": ["role-work-chore-reviewer"], "repos": ["work", "prefs"],
+                   "owner_paths": ["work:hooks/committee-*"]}
+            commit(prefs, {".claude-personal-layer": "", "CLAUDE.md": "# prefs\n", "plans/policy.md": "# 方針\n",
+                           DELEGATION_REL: json.dumps(cfg)})
+            doc0 = "# rules\n\n- 検収は検収係が行う。\n"
+            doc1 = doc0 + "- 例外として、 規則の文書の追記は検収係の承認で当てる。\n"   # 緩和の語 (例外) を足す = 止まる変更
+            hook0 = "#!/bin/sh\necho checked\n"
+            hook1 = hook0 + "echo also-checked\n"
+            commit(work, {".agent-rule-guard.json": json.dumps({"version": 1, "protect_paths": ["hooks/*"]}),
+                          "conventions/a.md": doc0, "hooks/check.sh": hook0, "hooks/committee-gate.sh": hook0,
+                          ".claude/settings.json": json.dumps({"permissions": {"allow": ["Read"], "deny": []},
+                                                               "hooks": {}})})
+            (work / "hooks/check.sh").chmod(0o755)
+            g(work, "add", "-A")
+            g(work, "commit", "-qm", "exec")
+            worker = "aaaaaaaa-1111-2222-3333-444444444444"
+            reviewer_sid = "bbbbbbbb-1111-2222-3333-444444444444"
+            requester = "cccccccc-1111-2222-3333-444444444444"
+            cands = root / "cands"
+            cands.mkdir()
+            thread = "events/work/2026-01-01-fix"
+            req_id, claim_id, sub_id = "20260101T000000Z-claude-req001", "20260101T000100Z-claude-clm001", \
+                "20260101T000200Z-claude-sub001"
+
+            def ev(eid, kind, actor, **kw):
+                e = {"schema_version": 2, "event_id": eid, "thread_id": "2026-01-01-fix",
+                     "project": {"key": "work", "repo": None}, "actor": actor, "kind": kind,
+                     "source_policy": "ordinary", "created_at": f"{eid[:4]}-{eid[4:6]}-{eid[6:8]}T{eid[9:11]}:{eid[11:13]}:{eid[13:15]}Z",
+                     "summary": kind, "touches": [], "references": [], "promoted_to": [], "supersedes": [],
+                     "request_id": req_id}
+                e.update(kw)
+                return e
+
+            def post(*events):
+                commit(board, {f"{thread}/{e['created_at'].replace('-', '').replace(':', '')}--{e['event_id']}.json":
+                               json.dumps(e, ensure_ascii=False) for e in events})
+
+            req = ev(req_id, "request", {"agent": "claude", "task": "workflow", "session_id": requester},
+                     assignee={"agent": "claude", "session_id": "role-work-fix"}, acceptance="done",
+                     details="policy-stage: implement\npolicy-ref: prefs/plans/policy.md")
+            hand = ev("20260101T000001Z-claude-hnd001", "handover", {"agent": "claude", "task": "workflow",
+                      "session_id": requester}, reply_to=req_id, handover_role="reviewer",
+                      target={"agent": "claude", "session_id": "role-work-chore-reviewer"})
+            claim = ev(claim_id, "claim", {"agent": "claude", "task": f"{worker[:8]} (opus)", "session_id": "role-work-fix"},
+                       lease_until="2099-01-01T00:00:00Z")
+            sub = ev(sub_id, "submit", {"agent": "claude", "task": f"{worker[:8]} (opus)", "session_id": "role-work-fix"},
+                     reply_to=claim_id, deliverables=["plans/results.md"])
+            post(req, hand, claim, sub)
+            n = [0]
+
+            def approval(rel, cand_text, *, mode="100644", regions="authority:file", relax="", native=reviewer_sid,
+                         role="role-work-chore-reviewer", extra=None, commit_it=True, transcript=True, wrote=None,
+                         wrote_error=False):
+                n[0] += 1
+                eid = f"20260101T0003{n[0]:02d}Z-claude-apr{n[0]:03d}"
+                cp = cands / f"c{n[0]}.txt"
+                cp.write_text(cand_text, encoding="utf-8")
+                blob = subprocess.run(["git", "rev-parse", "--verify", "-q", f"HEAD:{rel}"], cwd=work, env=env,
+                                      capture_output=True, text=True).stdout.strip() or "none"
+                lines = [APPROVAL_HEAD, f"request: {req_id}", f"submit: {sub_id}", f"reviewer-native: {native}",
+                         "worker-role: role-work-fix", "repo: work", f"file: {rel}", f"candidate: {cp}",
+                         f"base-blob: {blob}", f"candidate-sha256: {hashlib.sha256(cand_text.encode()).hexdigest()}",
+                         f"mode: {mode}", f"regions: {regions}", "stopped: fixture",
+                         "check: 止めた例を候補に当て直した → 新しく通るもの 0", "nothing-lost: 足すだけ",
+                         "policy: plans/policy.md"] + ([f"relax-why: {relax}"] if relax else []) + list(extra or [])
+                e = ev(eid, "note", {"agent": "claude", "task": f"{native[:8]} (opus)", "session_id": role},
+                       reply_to=sub_id, details="\n".join(lines))
+                if commit_it:
+                    post(e)
+                else:
+                    p = board / thread / f"{eid}.json"
+                    p.write_text(json.dumps(e), encoding="utf-8")
+                if transcript:
+                    tp = home / ".claude" / "projects" / "p" / f"{native}.jsonl"
+                    tp.parent.mkdir(parents=True, exist_ok=True)
+                    rows = [{"type": "assistant", "message": {"content": [
+                        {"type": "tool_use", "id": f"t{n[0]}", "name": "Bash",
+                         "input": {"command": f"python3 board.py approve-edit --file {work / rel} --candidate {cp}"}}]}},
+                        {"type": "user", "message": {"content": [
+                            {"type": "tool_result", "tool_use_id": f"t{n[0]}", "content": f"event_id={eid}\nposted {eid}"}]}}]
+                    if wrote:
+                        rows.append({"type": "assistant", "message": {"content": [
+                            {"type": "tool_use", "id": f"w{n[0]}", **wrote}]}})
+                        if wrote_error:
+                            rows.append({"type": "user", "message": {"content": [
+                                {"type": "tool_result", "tool_use_id": f"w{n[0]}", "is_error": True,
+                                 "content": "Permission denied"}]}})
+                    with open(tp, "a", encoding="utf-8") as fh:
+                        fh.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+                return eid, cp
+
+            _REVIEWER_TEST = {"base": base, "home": home}
+            session = ("claude", worker)
+            wtr = root / f"{worker}.jsonl"
+            wtr.write_text(json.dumps({"type": "user", "timestamp": "2026-01-01T00:00:00Z",
+                                       "message": {"content": "検収係の承認で当てて"}}, ensure_ascii=False) + "\n")
+
+            def run(rel, cp, eid, **over):
+                reset_caches()
+                ns = dict(file=str(work / rel), candidate=str(cp), change="fixture", quote=None, latest=False,
+                          session=f"claude:{worker}", transcript=str(wtr), target_mode=None, reviewer_approval=eid)
+                ns.update(over)
+                out, err = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    rc = apply_mode(argparse.Namespace(**ns))
+                return rc, out.getvalue() + err.getvalue()
+
+            def restore():
+                g(work, "checkout", "-q", "--", ".")
+                approvals_path(*session).unlink(missing_ok=True)  # 前の試験の承認が同じ候補を覆わないように
+                reset_caches()
+
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-1] 委任の範囲の hook の変更: 検収係の承認で当て、 出どころを記録する",
+                  rc == 0 and (work / "hooks/check.sh").read_text() == hook1
+                  and load_approvals(*session)[-1].get("reviewer_event") == eid
+                  and load_approvals(*session)[-1].get("quote") == APPROVAL_QUOTE + eid)
+            g(work, "add", "-A")
+            def gate_rc():
+                # commit の検査を同じ process で回す (記録の承認が今も使えるかを、 合成の作業ルートで見直すため。 本番の
+                # pre-commit は別 process で、 本物の作業ルートの設定と掲示板を読む)
+                here = os.getcwd()
+                os.environ["CLAUDE_CONFIG_AGENT_SESSION"] = f"claude:{worker}"
+                os.chdir(work)
+                try:
+                    reset_caches()
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        return git_precommit_mode()
+                finally:
+                    os.chdir(here)
+                    os.environ.pop("CLAUDE_CONFIG_AGENT_SESSION", None)
+
+            check("[reviewer-1] 当てた候補は commit の検査も通る (同じ承認の file・同じ候補の hash)", gate_rc() == 0)
+            post(ev("20260101T000396Z-claude-rev003", "revise", {"agent": "claude", "task": "x",
+                    "session_id": "role-work-chore-reviewer"}, reply_to=sub_id))
+            check("[reviewer-O1] 記録の後に差し戻された承認では、 commit の検査も通らない (記録を使い回さない)", gate_rc() != 0)
+            g(work, "reset", "-q")
+            g(work, "checkout", "-q", "--", ".")
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-O1] 記録の後に差し戻された承認で、 同じ候補を当て直すことはできない", rc == 5 and "動いた" in out)
+            g(board, "rm", "-q", f"{thread}/20260101T000396Z--20260101T000396Z-claude-rev003.json")
+            g(board, "commit", "-qm", "drop revise")
+            (work / "hooks/check.sh").write_text(hook1, encoding="utf-8")
+            g(work, "add", "-A")
+            g(work, "reset", "-q")
+            check("[reviewer-1] 返事に書く行が Stop の照合に乗る (書くまで未報告)",
+                  any(a.get("reviewer_event") == eid for a in undisclosed_approvals(
+                      "claude", worker, [("2026-01-01T00:00:00Z", "x")], ["別の返事"]))
+                  and not any(a.get("reviewer_event") == eid for a in undisclosed_approvals(
+                      "claude", worker, [("2026-01-01T00:00:00Z", "x")], [f"「{APPROVAL_QUOTE}{eid}」 を check.sh の承認として記録した"]))
+                  and any(a.get("reviewer_event") == eid for a in undisclosed_approvals(  # 盲検 O3: 頭 20 字だけでは足りない
+                      "claude", worker, [("2026-01-01T00:00:00Z", "x")], [f"「{APPROVAL_QUOTE}{eid[:13]}」 を check.sh の承認"])))
+            restore()
+            rc, out = run("hooks/check.sh", cp, eid, latest=True)
+            check("[reviewer-2] --reviewer-approval と --latest は同時に渡せない", rc == 2)
+
+            def refused(label, rel, cand, eid, cp, needle, **over):
+                rc, out = run(rel, cp, eid, **over)
+                ok = rc == 5 and needle in out and (work / rel).read_text() != cand if (work / rel).exists() else rc == 5
+                check(label, ok)
+                restore()
+
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", role="role-work-other")
+            refused("[reviewer-3] 依頼の検収役でない役の承認は受けない", "hooks/check.sh", hook1, eid, cp, "検収役")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", native=worker)
+            refused("[reviewer-4] 承認を書いた session と当てる session が同じなら受けない", "hooks/check.sh", hook1, eid, cp,
+                    "当てる session が同じ")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", native=requester)
+            refused("[reviewer-5] 依頼を出した session (指揮役) の承認は受けない", "hooks/check.sh", hook1, eid, cp, "指揮役")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            cp.write_text(hook1 + "echo changed\n", encoding="utf-8")
+            refused("[reviewer-6] 候補が承認の後に変わったら受けない (SHA-256)", "hooks/check.sh", hook1 + "echo changed\n",
+                    eid, cp, "SHA-256")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", commit_it=False)
+            refused("[reviewer-7] 掲示板の commit に無い event (作業ツリーに置いただけ) は受けない", "hooks/check.sh", hook1,
+                    eid, cp, "commit に無い")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            (home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl").unlink()
+            refused("[reviewer-8] 検収係の会話記録が無ければ受けない", "hooks/check.sh", hook1, eid, cp, "会話記録")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755",
+                               wrote={"name": "Edit", "input": {"file_path": str(work / "hooks/check.sh")}})
+            refused("[reviewer-9] 検収係が対象を Edit で書いていたら受けない", "hooks/check.sh", hook1, eid, cp, "書いている")
+            (home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl").unlink()
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            commit(work, {"hooks/check.sh": hook0 + "echo moved-on\n"})
+            refused("[reviewer-10] 基準の版 (HEAD) が承認の後に動いたら受けない", "hooks/check.sh", hook1, eid, cp, "基準の版")
+            commit(work, {"hooks/check.sh": hook0})
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            post(ev("20260101T000399Z-claude-rev001", "revise", {"agent": "claude", "task": "x",
+                    "session_id": "role-work-chore-reviewer"}, reply_to=sub_id))
+            refused("[reviewer-11] 承認の後の差し戻しがあれば受けない", "hooks/check.sh", hook1, eid, cp, "差し戻し")
+            g(board, "rm", "-q", f"{thread}/20260101T000399Z--20260101T000399Z-claude-rev001.json")
+            g(board, "commit", "-qm", "drop revise")
+            # 床: 本人に残すもの
+            eid, cp = approval("hooks/committee-gate.sh", hook1, mode="100644")
+            refused("[reviewer-12] 委任の設定で本人に残した path は受けない", "hooks/committee-gate.sh", hook1, eid, cp, "本人に残した")
+            eid, cp = approval("conventions/a.md", doc1)
+            refused("[reviewer-13] 緩めの語で止まった変更は、 緩めでない理由 (relax-why) が無ければ受けない",
+                    "conventions/a.md", doc1, eid, cp, "relax-why")
+            eid, cp = approval("conventions/a.md", doc1, relax="手続きの説明で、 止める文・求める文は減らない")
+            rc, out = run("conventions/a.md", cp, eid)
+            check("[reviewer-13] relax-why があれば当て、 記録に緩めの語の印 (見返しで 1 件ずつ出す)",
+                  rc == 0 and load_approvals(*session)[-1].get("relax") is True)
+            restore()
+            block0 = "# r\n<!-- agent-authority:begin id=core -->\n- 本人が決める。\n<!-- agent-authority:end id=core -->\n"
+            commit(work, {"conventions/b.md": block0})
+            block1 = block0.replace("本人が決める。", "本人が決める。 強める。")
+            eid, cp = approval("conventions/b.md", block1, regions="authority:core")
+            refused("[reviewer-14] lock の block の中は受けない", "conventions/b.md", block1, eid, cp, "lock の block")
+            settings_ok = json.dumps({"permissions": {"allow": ["Read"], "deny": ["Bash(rm -rf *)"]}, "hooks": {}})
+            eid, cp = approval(".claude/settings.json", settings_ok)
+            rc, out = run(".claude/settings.json", cp, eid)
+            check("[reviewer-15] 設定: deny の追加だけなら当てる", rc == 0, )
+            restore()
+            settings_bad = json.dumps({"permissions": {"allow": ["Read", "Bash(*)"], "deny": []}, "hooks": {}})
+            eid, cp = approval(".claude/settings.json", settings_bad)
+            refused("[reviewer-15] 設定: allow の追加は受けない", ".claude/settings.json", settings_bad, eid, cp, "追加だけでない")
+            settings_wire = json.dumps({"permissions": {"allow": ["Read"], "deny": []},
+                                        "hooks": {"Stop": [{"command": "python3 manuscript-claim-guard.py stop claude"}]}})
+            eid, cp = approval(".claude/settings.json", settings_wire)
+            refused("[reviewer-15] 設定: 守りの道具を呼ぶ行の追加は受けない", ".claude/settings.json", settings_wire, eid, cp,
+                    "守りの道具を呼ぶ")
+            commit(work, {"hooks/agent-rule-guard-extra.sh": hook0})
+            eid, cp = approval("hooks/agent-rule-guard-extra.sh", hook1)
+            refused("[reviewer-16] 守りの道具の family の file は受けない", "hooks/agent-rule-guard-extra.sh", hook1, eid, cp,
+                    "守りの線そのもの")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100644")
+            refused("[reviewer-17] 実行の bit を外す変更は受けない", "hooks/check.sh", hook1, eid, cp, "実行の bit",
+                    target_mode="100644")
+            # 盲検 (Codex) の指摘の再現: 直す前はどれも当たり commit も通った形
+            (work / "hooks/check.sh").chmod(0o644)  # 先に shell で実行の bit を外しておく
+            eid, cp = approval("hooks/check.sh", hook1, mode="100644", regions="authority:file authority:mode")
+            refused("[reviewer-B1] 先に chmod -x した hook の実行の bit を外す変更は受けない (HEAD の属性も見る)",
+                    "hooks/check.sh", hook1, eid, cp, "実行の bit", target_mode="100644")
+            (work / "hooks/check.sh").chmod(0o755)
+            res0 = "# r\n<!-- agent-authority:begin id=file -->\n- 本人が決める。\n<!-- agent-authority:end id=file -->\n"
+            commit(work, {"conventions/c.md": res0})
+            res1 = res0.replace("本人が決める。", "本人が決める。 検収係も決める。")
+            eid, cp = approval("conventions/c.md", res1)
+            refused("[reviewer-B2] 予約の名 (id=file) の lock の block の中も受けない (印の位置で見る)", "conventions/c.md",
+                    res1, eid, cp, "lock の block")
+            commit(work, {"hooks/settings-entries.json": json.dumps({"permissions": {"allow": []}, "Stop": []})})
+            se1 = json.dumps({"permissions": {"allow": ["Bash(*)"]}, "Stop": []})
+            eid, cp = approval("hooks/settings-entries.json", se1)
+            refused("[reviewer-B3] settings-entries.json に allow を足す変更は受けない (hook の event の欄だけ)",
+                    "hooks/settings-entries.json", se1, eid, cp, "追加だけでない")
+            se2 = json.dumps({"permissions": {"allow": []}, "Stop": [{"hooks": [{"type": "command", "command": "x.sh"}]}]})
+            eid, cp = approval("hooks/settings-entries.json", se2)
+            rc, out = run("hooks/settings-entries.json", cp, eid)
+            check("[reviewer-B3] settings-entries.json に hook の entry を足すだけなら当てる", rc == 0)
+            restore()
+            hook_call = hook0 + "python3 manuscript-claim-guard.py hook claude\n"
+            eid, cp = approval("hooks/check.sh", hook_call, mode="100755", regions="authority:file authority:wiring")
+            refused("[reviewer-B4] code に守りの道具を呼ぶ行を足す変更も受けない (配線 = 本人)", "hooks/check.sh", hook_call,
+                    eid, cp, "守りの道具を呼ぶ行")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            post(ev("20260101T000398Z-claude-rev002", "revise", {"agent": "claude", "task": "x",
+                    "session_id": "role-work-chore-reviewer"}, reply_to=sub_id))
+            g(board, "update-ref", "refs/remotes/origin/main", "HEAD")
+            g(board, "reset", "-q", "--hard", "HEAD~1")
+            refused("[reviewer-B5] origin の branch にだけ在る後の差し戻しも見る", "hooks/check.sh", hook1, eid, cp, "差し戻し")
+            g(board, "update-ref", "-d", "refs/remotes/origin/main")
+            (home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl").unlink()
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755",
+                               wrote={"name": "Bash", "input": {"command": f"env cp {cands / 'x.txt'} {work / 'hooks/check.sh'}"}})
+            refused("[reviewer-B6] 包み (env) を付けた cp で対象を書いた検収係の承認は受けない", "hooks/check.sh", hook1, eid,
+                    cp, "書いている")
+            (home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl").unlink()
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            same = eid.split("-", 1)[0] + "-claude-revsame"
+            post(ev(same, "revise", {"agent": "claude", "task": "x", "session_id": "role-work-chore-reviewer"}, reply_to=sub_id))
+            refused("[reviewer-O2] 承認と同じ秒の差し戻しも後に数える", "hooks/check.sh", hook1, eid, cp, "依頼が動いた")
+            g(board, "rm", "-q", f"{thread}/{same.split('-', 1)[0]}--{same}.json")
+            g(board, "commit", "-qm", "drop")
+            tpath = home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl"
+            tpath.write_text("{not json\n" + tpath.read_text(encoding="utf-8"), encoding="utf-8")
+            refused("[reviewer-R2] 検収係の会話記録の途中に読めない行があれば受けない (書いていないと言えない)", "hooks/check.sh",
+                    hook1, eid, cp, "読めない行")
+            tpath.unlink()
+            check("[reviewer-R1] HEAD の blob: 無い path は none、 git で読めないときは None (無いと読めないを分ける)",
+                  _head_blob(work, "no/such.file") == "none" and _head_blob(root / "cands", "x") is None
+                  and (_head_blob(work, "hooks/check.sh") or "").isalnum())
+            req_path = f"{thread}/20260101T000000Z--{req_id}.json"
+
+            def set_req(**kw):
+                commit(board, {req_path: json.dumps(dict(req, **kw), ensure_ascii=False)})
+
+            set_req(actor={"agent": "claude", "task": "workflow", "session_id": "role-work-conductor"})
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            refused("[reviewer-B7] 依頼を出した窓の native が分からない依頼は受けない (別の窓だと確かめられない)",
+                    "hooks/check.sh", hook1, eid, cp, "依頼を出した窓")
+            set_req(details="policy-stage: implement\npolicy-ref: prefs/plans/none.md")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            refused("[reviewer-B9] 無い方針の file を指す依頼は受けない", "hooks/check.sh", hook1, eid, cp, "HEAD に無い")
+            set_req(details="policy-stage: implement\npolicy-quote: それで")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            refused("[reviewer-B9] 方針の file の無い (発言だけの) 依頼は受けない", "hooks/check.sh", hook1, eid, cp, "--policy-ref")
+            set_req(details="policy-stage: implement\npolicy-ref: prefs/plans")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            refused("[reviewer-N8] 方針の在りかが dir なら受けない (普通の file だけ)", "hooks/check.sh", hook1, eid, cp, "普通の file")
+            commit(prefs, {"plans/confirmed policy.md": "# 方針\n"})
+            set_req(details="policy-stage: implement\npolicy-ref: prefs/plans/confirmed policy.md")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-N8] 空白を含む方針の file の名も読む (掲示板と同じ読み方)", rc == 0)
+            restore()
+            (home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl").unlink()
+            set_req()
+            wire0 = '#!/bin/sh\nif false; then\n  :\nfi\nrun "manuscript-claim-guard.py"\n'
+            commit(work, {"hooks/wire.sh": wire0})
+            wire1 = '#!/bin/sh\nif false; then\n  :\n  run "manuscript-claim-guard.py"\nfi\n'  # 呼ぶ行を if の中へ
+            eid, cp = approval("hooks/wire.sh", wire1, regions="authority:file authority:wiring")
+            refused("[reviewer-N7] 守りの道具を呼ぶ行の字下げだけの変更も受けない (呼ばれなくなりうる)", "hooks/wire.sh", wire1,
+                    eid, cp, "守りの道具を呼ぶ行")
+            tgt = (work / "hooks/check.sh").resolve()
+            swap_uses = {"s1": {"name": "Bash", "main": True, "input": {"command":
+                        f"python3 /x/board.py approve-edit --file {cp} --candidate {tgt}"}}}
+            echo_uses = {"e1": {"name": "Bash", "main": True, "input": {"command":
+                        f"echo python3 /x/board.py approve-edit --file {tgt} --candidate {cp}"}}}
+            ok_res = {k: {"text": "posted 20260101T000000Z-claude-x00001\n", "error": False} for k in ("s1", "e1")}
+            check("[reviewer-N9] 受け取りの command の --file と --candidate は欄ごとに結ぶ・echo で見せた形は数えない",
+                  not _posted_receipt(swap_uses, ok_res, "20260101T000000Z-claude-x00001", tgt, cp.resolve())
+                  and not _posted_receipt(echo_uses, ok_res, "20260101T000000Z-claude-x00001", tgt, cp.resolve()))
+            tp_n = home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl"
+            tp_n.unlink(missing_ok=True)
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            rc, out = run("hooks/check.sh", cp, eid)
+            commit(prefs, {DELEGATION_REL: json.dumps(dict(cfg, owner_paths=cfg["owner_paths"] + ["work:hooks/check.sh"]))})
+            (work / "hooks/check.sh").write_text(hook1, encoding="utf-8")
+            g(work, "add", "-A")
+            n3 = gate_rc()
+            g(work, "reset", "-q")
+            commit(prefs, {DELEGATION_REL: json.dumps(cfg)})
+            check("[reviewer-N3] 記録の後に本人に残す path に入った file は、 記録済みの承認でも commit の検査を通らない",
+                  rc == 0 and n3 != 0)
+            commit(work, {"hooks/check.sh": hook0 + "echo base-moved\n"})
+            (work / "hooks/check.sh").write_text(hook1, encoding="utf-8")
+            g(work, "add", "-A")
+            n4 = gate_rc()
+            g(work, "reset", "-q")
+            commit(work, {"hooks/check.sh": hook0})
+            check("[reviewer-N4] 記録の後に基準の版が動いたら、 記録済みの承認でも commit の検査を通らない", n4 != 0)
+            restore()
+            tp_n.unlink(missing_ok=True)
+            real_board_events = globals()["_board_events"]
+
+            def _timeout(*_a, **_k):
+                raise subprocess.TimeoutExpired("git", 30)
+
+            globals()["_board_events"] = _timeout
+            _GRANT_CACHE.clear()
+            try:
+                why = reviewer_grant_problem({"reviewer_event": "20260101T000000Z-claude-x00002", "reviewer_role":
+                                              "role-work-chore-reviewer", "repo": str(work), "file": "hooks/check.sh"})
+            finally:
+                globals()["_board_events"] = real_board_events
+                _GRANT_CACHE.clear()
+            check("[reviewer-N14] 掲示板を読めない (時間切れ) ときは、 その検収係の承認を使えないと返す (例外で外へ出さない)",
+                  "読めない" in why)
+            check("[reviewer-N10] 設定: hooks の入れ物ごと hook の entry を足すのは通し、 入れ物の中の別の欄は通さない",
+                  _json_additions(".claude/settings.json", {}, {"hooks": {"PreToolUse": [{"hooks": []}]}})[0]
+                  and not _json_additions(".claude/settings.json", {}, {"hooks": {"Other": 1}})[0])
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755",
+                               wrote={"name": "Write", "input": {"file_path": str(root / "draft.txt"),
+                                                                 "content": "#!/bin/sh\necho checked\necho also-checked\n"}})
+            refused("[reviewer-B8] 検収係が候補の足した行を自分で書いていたら受けない (下書きを写させた形)", "hooks/check.sh",
+                    hook1, eid, cp, "足した行")
+            (home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl").unlink()
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            tp = home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl"
+            tp.write_text(json.dumps({"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "r1", "name": "Bash",
+                 "input": {"command": f"python3 board.py show --request {req_id}  # approve-edit"}}]}}) + "\n" +
+                json.dumps({"type": "user", "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": "r1", "content": f"note {eid} …"}]}}) + "\n", encoding="utf-8")
+            refused("[reviewer-T1] 読む command の出力に id が出ただけでは、 承認を書いた記録に数えない", "hooks/check.sh",
+                    hook1, eid, cp, "posted")
+            tp.unlink()
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            post(ev("20260101T000397Z-claude-abd001", "abandoned", {"agent": "claude", "task": "x",
+                    "session_id": "role-work-chore-reviewer"}))
+            refused("[reviewer-T2] 承認の後に依頼が取り下げられたら受けない", "hooks/check.sh", hook1, eid, cp, "依頼が動いた")
+            g(board, "rm", "-q", f"{thread}/20260101T000397Z--20260101T000397Z-claude-abd001.json")
+            g(board, "commit", "-qm", "drop")
+            tp.unlink()
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755",
+                               wrote={"name": "Edit", "input": {"file_path": str(work / "hooks/check.sh")}}, wrote_error=True)
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-W1] 誤りで返った (書けなかった) 編集 tool の呼び出しは、 書いたことに数えない", rc == 0)
+            restore()
+            tp.unlink()
+            post(ev("20260101T000002Z-claude-hnd003", "handover", {"agent": "claude", "task": "x", "session_id": requester},
+                    reply_to=req_id, handover_role="reviewer", target={"agent": "codex", "session_id": "role-work-chore-reviewer"}))
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-W3] 検収役の宛先の vendor が違っても、 同じ役 id を Claude の窓が書いた承認は受ける", rc == 0)
+            restore()
+            g(board, "rm", "-q", f"{thread}/20260101T000002Z--20260101T000002Z-claude-hnd003.json")
+            g(board, "commit", "-qm", "drop")
+            tp.unlink()
+            # 依頼の段・設定の有無
+            post(ev("20260101T000500Z-claude-hnd002", "handover", {"agent": "claude", "task": "x",
+                    "session_id": "role-work-chore-reviewer"}, reply_to=req_id, handover_role="reviewer",
+                    target={"agent": "claude", "session_id": "role-work-fix"}))
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            refused("[reviewer-18] 検収役が worker の役に渡った依頼では受けない", "hooks/check.sh", hook1, eid, cp, "検収役")
+            g(board, "rm", "-q", f"{thread}/20260101T000500Z--20260101T000500Z-claude-hnd002.json")
+            g(board, "commit", "-qm", "drop")
+            commit(prefs, {DELEGATION_REL: json.dumps(dict(cfg, enabled=False))})
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755")
+            refused("[reviewer-19] 委任の設定が enabled でなければ受けない (今までどおり本人の発言)", "hooks/check.sh", hook1,
+                    eid, cp, "enabled")
+            (prefs / DELEGATION_REL).write_text(json.dumps(cfg), encoding="utf-8")
+            refused("[reviewer-19] 作業ツリーだけで直した設定は数えない (HEAD を読む)", "hooks/check.sh", hook1, eid, cp, "enabled")
+            commit(prefs, {DELEGATION_REL: json.dumps(cfg)})
+            (base / "other").mkdir()
+            (base / "other" / ".claude-personal-layer").write_text("")
+            (base / "other" / "CLAUDE.md").write_text("# x\n")
+            refused("[reviewer-20] 個人層の印が 2 つあれば委任なし", "hooks/check.sh", hook1, eid, cp, "個人層が見つからない")
+            shutil.rmtree(base / "other")
+            loaded, _ = load_delegation(base)
+            check("[reviewer-22] .git の下 (git hook) は床 = git の外の file",
+                  "git の外" in reviewer_scope_problem(loaded, work, ".git/hooks/pre-commit",
+                                                       [{"region": "authority:file"}], "", "x", "100755", "000000", False))
+            # shell の書き込みの判定 (読む形は通す)
+            t = [work / "hooks/check.sh", cp]
+            r = ["hooks/check.sh"]
+            check("[reviewer-21] shell: 読む・写しの元にする形は書いたことにしない",
+                  not shell_writes(f"cat {t[0]}", t, r) and not shell_writes(f"cp {cp} /tmp/m/hooks/check.sh", t, r)
+                  and not shell_writes(f"diff {cp} {t[0]}", t, r) and not shell_writes(f"shasum -a 256 {cp}", t, r))
+            check("[reviewer-21] shell: 書く形は書いたことにする",
+                  shell_writes(f"echo x > {t[0]}", t, r) and shell_writes(f"cp /tmp/x {t[0]}", t, r)
+                  and shell_writes(f"sed -i '' s/a/b/ {t[0]}", t, r) and shell_writes(f"cd {work} && tee hooks/check.sh", t, r)
+                  and shell_writes(f"python3 -c \"open('{t[0]}','w').write('x')\"", t, r)
+                  and shell_writes(f"echo 'unclosed > {t[0]}", t, r))
+            check("[reviewer-21] shell: 包み・知らない command・pipe の先で書く形も書いたことにする",
+                  shell_writes(f"env cp /tmp/x {t[0]}", t, r) and shell_writes(f"command cp /tmp/x {t[0]}", t, r)
+                  and shell_writes(f"timeout 10 cp /tmp/x {t[0]}", t, r) and shell_writes(f"foo {t[0]}", t, r)
+                  and shell_writes(f"cd {work} && git checkout -- hooks/check.sh", t, r)
+                  and shell_writes(f"echo {t[0]} | xargs rm", t, r) and shell_writes(f"cat {cp} | tee {t[0]}", t, r)
+                  and shell_writes(f"python3 - <<'EOF'\nimport pathlib\npathlib.Path('{t[0]}').write_text('x')\nEOF", t, r))
+            check("[reviewer-N1] shell: 改行の後の行の書く command も見る (引用の中の改行は区切りにしない)",
+                  shell_writes(f"cat {cp}\ncp {cp} {t[0]}", t, r) and not shell_writes(f"echo 'a\nb' && cat {t[0]}", t, r))
+            check("[reviewer-N2] shell: 読む command の名の書く形 (sed の w・xxd -r・xxd の出力の file) を書いたことにする",
+                  shell_writes(f"sed -n 'w {t[0]}' {cp}", t, r) and shell_writes(f"xxd -r -p /tmp/h {t[0]}", t, r)
+                  and shell_writes(f"xxd {cp} {t[0]}", t, r) and not shell_writes(f"sed -n 1,20p {t[0]}", t, r)
+                  and not shell_writes(f"xxd {t[0]}", t, r))
+            check("[reviewer-N5] HEAD の属性: git が読めなければ unknown (無いと読まない)", _head_mode(root / "cands", "x") == "unknown"
+                  and _head_mode(work, "no/such") == "000000")
+            draft_uses = {"d1": {"name": "Bash", "main": True, "input": {"command":
+                         f"python3 -c \"import pathlib; pathlib.Path('/tmp/d.txt').write_text('echo also-checked')\""}}}
+            check("[reviewer-N6] 候補の足した行を python -c で書いた下書きも、 検収係が書いた形と数える",
+                  "足した行" in reviewer_wrote_target(draft_uses, t, r, {}, ["echo also-checked"]))
+            check("[reviewer-N6] 候補の足した行を読む command と掲示板の approve-edit で名指すのは書いた形にしない",
+                  reviewer_wrote_target({"g1": {"name": "Bash", "main": True, "input": {"command":
+                                        f"grep -n 'echo also-checked' {cp}"}}}, t, r, {}, ["echo also-checked"]) == "")
+            check("[reviewer-21] shell: 検収係の掲示板の command・守りの道具の空回し・git の読む形は書いたことにしない",
+                  not shell_writes(f"python3 /x/board.py approve-edit --file {t[0]} --candidate {cp}", t, r)
+                  and not shell_writes(f"python3 /x/scripts/agent-rule-guard.py apply --file {t[0]} --candidate {cp}"
+                                       " --change c --dry-run", t, r)
+                  and not shell_writes(f"git -C {work} diff -- hooks/check.sh", t, r)
+                  and not shell_writes(f"git -C {work} show HEAD:hooks/check.sh", t, r))
+            # 盲検 (Codex) の指摘の再現: 直す前はどれも当たり commit も通った形・誤って断った形
+            check("[reviewer-R3-1] shell: 注釈の後の改行も区切り (次の行の書く command を見る)",
+                  shell_writes(f"cat {cp} # inspect candidate\ncp {cp} {t[0]}", t, r)
+                  and not shell_writes(f"cat {cp} # inspect\ncat {t[0]}", t, r))
+            check("[reviewer-R3-2] shell: `<>` の redirect と git の --output も書く形",
+                  shell_writes(f"printf '%s' x 1<> {t[0]}", t, r)
+                  and shell_writes(f"git diff --no-index --output={t[0]} /dev/null {cp}", t, r)
+                  and shell_writes(f"rg --pre=sh x {t[0]}", t, r) and shell_writes(f"mv {cp} /tmp/elsewhere", t, r)
+                  and shell_writes(f"cp -t {t[0].parent} {cp}", t, r))
+            check("[reviewer-R3-2] shell: 変数・置換を含む command は、 path を名指していれば書いた側に倒す",
+                  shell_writes(f"echo \"$(cp {cp} {t[0]})\"", t, r) and shell_writes(f"cat $HOME/x {t[0]}", t, r)
+                  and not shell_writes("echo $HOME", t, r))
+            check("[reviewer-R3-3] shell: 引用の中の ; は区切りでない (読む command を書いた形にしない)",
+                  not shell_writes(f"grep -n ';' {cp}", t, r) and not shell_writes(f"grep -n '|' {t[0]}", t, r)
+                  and shell_writes(f"grep -n x {cp}; cp {cp} {t[0]}", t, r))
+            multi = {"m1": {"name": "Bash", "main": True, "input": {"command":
+                     f"python3 /x/board.py approve-edit \\\n  --file {tgt} \\\n  --candidate {cp.resolve()}"}}}
+            two = {"m1": {"name": "Bash", "main": True, "input": {"command":
+                   f"python3 /x/board.py approve-edit --file {tgt} --candidate {cp.resolve()}\necho done"}}}
+            ok1 = {"m1": {"text": "posted 20260101T000000Z-claude-x00001\n", "error": False}}
+            check("[reviewer-R3-3] 受け取り: 行の続き (`\\` + 改行) の複数行の形は 1 つの command、 改行で繋いだ別の command は数えない",
+                  _posted_receipt(multi, ok1, "20260101T000000Z-claude-x00001", tgt, cp.resolve())
+                  and not _posted_receipt(two, ok1, "20260101T000000Z-claude-x00001", tgt, cp.resolve()))
+            # R3-4: 記録の後に作業ツリーで lock の印を足した / 実行の bit を付けた file に、 同じ記録の当て直しは通らない
+            tp_n.unlink(missing_ok=True)
+            eid, cp4 = approval("hooks/check.sh", hook1, mode="100755")
+            rc1, _ = run("hooks/check.sh", cp4, eid)
+            locked = hook1 + "# agent-authority:file\n"
+            (work / "hooks/check.sh").write_text(locked, encoding="utf-8")
+            rc2, out2 = run("hooks/check.sh", cp4, eid)
+            check("[reviewer-R3-4] 記録の後に作業ツリーで lock の印を足した file には、 記録済みの承認でも当て直せない",
+                  rc1 == 0 and rc2 == 5 and (work / "hooks/check.sh").read_text() == locked)
+            restore()
+            tp_n.unlink(missing_ok=True)
+            eid, cp5 = approval("hooks/new-check.sh", hook1, mode="100644", regions="authority:file authority:mode")
+            rc1, _ = run("hooks/new-check.sh", cp5, eid, target_mode="100644")
+            (work / "hooks/new-check.sh").chmod(0o755)
+            rc2, out2 = run("hooks/new-check.sh", cp5, eid, target_mode="100644")
+            check("[reviewer-R3-4] 記録の後に実行の bit を付けた新しい file から、 記録済みの承認で bit を外せない",
+                  rc1 == 0 and rc2 == 5 and os.access(work / "hooks/new-check.sh", os.X_OK))
+            (work / "hooks/new-check.sh").unlink()
+            restore()
+            tp_n.unlink(missing_ok=True)
+            # R3-5: origin の branch を解く段の失敗は「無い」 でなく「読めない」
+            eid, cp6 = approval("hooks/check.sh", hook1, mode="100755")
+            post(ev("20260101T000395Z-claude-rev005", "revise", {"agent": "claude", "task": "x",
+                    "session_id": "role-work-chore-reviewer"}, reply_to=sub_id))
+            g(board, "update-ref", "refs/remotes/origin/main", "HEAD")
+            g(board, "reset", "-q", "--hard", "HEAD~1")
+            real_run = subprocess.run
+
+            def _fail_origin(cmd, *a, **k):
+                if isinstance(cmd, list) and cmd[:2] == ["git", "rev-parse"] and "refs/remotes/origin/main^{commit}" in cmd:
+                    return subprocess.CompletedProcess(cmd, 128, "", "fatal: injected")
+                return real_run(cmd, *a, **k)
+
+            subprocess.run = _fail_origin
+            try:
+                rc5, out5 = run("hooks/check.sh", cp6, eid)
+            finally:
+                subprocess.run = real_run
+            check("[reviewer-R3-5] origin の branch が在るのに解けなければ通さない (無いと読まない)",
+                  rc5 == 5 and "読めない" in out5)
+            restore()
+            g(board, "update-ref", "-d", "refs/remotes/origin/main")
+            tp_n.unlink(missing_ok=True)
+            # R3-6: 方針の在りかは作業ルートの直下の repo の 1 つの普通の file
+            set_req(details="policy-stage: implement\npolicy-ref: ../base/prefs/plans/policy.md")
+            eid, cp7 = approval("hooks/check.sh", hook1, mode="100755")
+            refused("[reviewer-R3-6] 方針の在りかに `..` の repo の名 (作業ルートの外) は受けない", "hooks/check.sh", hook1,
+                    eid, cp7, "作業ルートの直下")
+            tp_n.unlink(missing_ok=True)
+            set_req(details="policy-stage: implement\npolicy-ref: prefs/plans/")
+            eid, cp7 = approval("hooks/check.sh", hook1, mode="100755")
+            refused("[reviewer-R3-6] 方針の在りかに末尾の / (dir) は受けない", "hooks/check.sh", hook1, eid, cp7, "作業ルートの直下")
+            tp_n.unlink(missing_ok=True)
+            set_req()
+            check("[reviewer-R3-7] 足した行は行の対応から取る (`+++` で始まる行も落とさない)",
+                  "+++candidate_owned_line" in _added_lines("a\n", "a\n+++candidate_owned_line\n"))
+            check("[reviewer-R3-8] 設定: 新しい入れ物は hooks と permissions だけ (空の allow・関係ない欄は足さない)",
+                  not _json_additions(".claude/settings.json", {}, {"permissions": {"allow": []}})[0]
+                  and not _json_additions(".claude/settings.json", {}, {"unrelated": {"empty": {}}})[0]
+                  and _json_additions(".claude/settings.json", {}, {"permissions": {"deny": ["Bash(rm *)"]}})[0])
+            bad_dict = root / "bad-dict.jsonl"
+            bad_dict.write_text(json.dumps({"type": "assistant", "message": {"content": {"type": "tool_use", "id": "x"}}})
+                                + "\n" + json.dumps({"type": "user", "message": {"content": "ok"}}) + "\n", encoding="utf-8")
+            bad_input = root / "bad-input.jsonl"
+            bad_input.write_text(json.dumps({"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": "x", "name": "Bash", "input": ["cp", "a", "b"]}]}})
+                + "\n" + json.dumps({"type": "user", "message": {"content": "ok"}}) + "\n", encoding="utf-8")
+            good = root / "good.jsonl"
+            good.write_text(json.dumps({"type": "assistant", "message": {"content": "文だけの返事"}}) + "\n"
+                            + json.dumps({"type": "summary", "summary": "x"}) + "\n", encoding="utf-8")
+            check("[reviewer-R3-9] 会話記録: 途中の本文が dict の行・input が list の行は読めない行 (文の本文・要約の行は読める)",
+                  _tool_rows(bad_dict) is None and _tool_rows(bad_input) is None and _tool_rows(good) is not None)
+            check("[reviewer-R3-13] 返事の行: 検収係の承認は「検収係の承認 <id の全体>」 と file 名 (id だけ・別の出どころの語は足りない)",
+                  disclosed({"file": "hooks/check.sh", "reviewer_event": eid, "quote": APPROVAL_QUOTE + eid},
+                            f"「{APPROVAL_QUOTE}{eid}」 を check.sh の承認として記録した")
+                  and not disclosed({"file": "hooks/check.sh", "reviewer_event": eid, "quote": APPROVAL_QUOTE + eid},
+                                    f"check.sh: {eid}")
+                  and not disclosed({"file": "hooks/check.sh", "reviewer_event": eid, "quote": APPROVAL_QUOTE + eid},
+                                    f"check.sh: 本人の直接の承認 {eid}"))
+            check("[reviewer-R4-2] shell: 名指した path に触れる process substitution は書いた形 (中身を外の command が実行しうる)",
+                  shell_writes(f"bash <(cat {cp})", t, r) and shell_writes(f"diff {cp} >(tee {t[0]})", t, r)
+                  and shell_writes(f"diff <(cat {t[0]}) {cp}", t, r))
+            # 盲検の指摘の再現 (直す前はどれも当たり commit も通った形・誤って断った形)
+            sp_dir = root / "sp dir"
+            sp_dir.mkdir(exist_ok=True)
+            sp_t = [sp_dir / "check script.sh", sp_dir / "cand.txt"]
+            sp_r = ["check script.sh"]
+            esc = lambda q: str(q).replace(" ", "\\ ")
+            check("[reviewer-R4-1] shell: 逆斜線で空白を書いた path も字句を解いてから探す",
+                  shell_writes(f"cp {esc(sp_t[1])} {esc(sp_t[0])}", sp_t, sp_r)
+                  and shell_writes(f"cp '{sp_t[1]}' '{sp_t[0]}'", sp_t, sp_r)
+                  and not shell_writes(f"cat {esc(sp_t[1])}", sp_t, sp_r))
+            check("[reviewer-R4-1] shell: 対象を下に持つ dir (repo の root から) を行き先にした写しは書いた形",
+                  shell_writes(f"cp /tmp/src/check.sh {work / 'hooks'}/", t, r)
+                  and shell_writes(f"cp -R /tmp/src {work}", t, r) and shell_writes(f"rm -rf {work / 'hooks'}", t, r)
+                  and shell_writes(f"cd {work / 'hooks'} && cp /tmp/x check.sh", t, r)
+                  and not shell_writes(f"cp {cp} /tmp/m/hooks/check.sh", t, r)
+                  and not shell_writes(f"ls {work / 'hooks'}", t, r))
+            check("[reviewer-R4-3] shell: hard link・symlink を作る形は写しにしない (別名から対象を書ける)",
+                  shell_writes(f"ln {t[0]} /tmp/mirror.sh", t, r) and shell_writes(f"cp -l {t[0]} /tmp/mirror.sh", t, r)
+                  and shell_writes(f"cp -al {work / 'hooks'} /tmp/mirror", t, r)
+                  and not shell_writes(f"cp -R {work / 'hooks'} /tmp/mirror", t, r))
+            check("[reviewer-R4-1] shell: glob・brace で対象に当たる語も名指し (写しの行き先の glob は書く形)",
+                  shell_writes(f"cp /tmp/x {work}/hooks/chec*.sh", t, r)
+                  and shell_writes(f"cp /tmp/x {work}/hooks/{{check,y}}.sh", t, r)
+                  and not shell_writes(f"cat {work}/hooks/*.sh", t, r))
+            nl_uses = {"m1": {"name": "Bash", "main": True, "input": {"command":
+                      f"python3 /x/board.py approve-edit --file {tgt} --candidate {cp.resolve()}\n"}}}
+            check("[reviewer-R4-7] 受け取り: 終わりの改行 1 つは 1 つの command のまま",
+                  _posted_receipt(nl_uses, ok1, "20260101T000000Z-claude-x00001", tgt, cp.resolve()))
+            # R4-4: 記録の後に作業ツリーで lock の印を足し、 読めない byte を足しても、 記録済みの承認は使わない
+            tp_n.unlink(missing_ok=True)
+            eid, cp8 = approval("hooks/check.sh", hook1, mode="100755")
+            rc1, _ = run("hooks/check.sh", cp8, eid)
+            g(work, "add", "-A")
+            (work / "hooks/check.sh").write_bytes((hook1 + "# agent-authority:file\n").encode() + b"\xff\n")
+            r44 = gate_rc()
+            g(work, "reset", "-q")
+            check("[reviewer-R4-4] 作業ツリーの file が読めない (UTF-8 でない) とき、 記録済みの承認で commit の検査を通さない",
+                  rc1 == 0 and r44 != 0)
+            restore()
+            tp_n.unlink(missing_ok=True)
+            bad_rows = {
+                "名の無い呼び出し": {"type": "tool_use", "id": "x", "input": {"command": "true"}},
+                "input の無い Write": {"type": "tool_use", "id": "x", "name": "Write"},
+                "list の名": {"type": "tool_use", "id": "x", "name": ["Bash"], "input": {"command": "true"}},
+                "整数の edits": {"type": "tool_use", "id": "x", "name": "MultiEdit", "input": {"file_path": "/x", "edits": 3}},
+            }
+            hits = []
+            for label, part in bad_rows.items():
+                bp = root / "bad-row.jsonl"
+                bp.write_text(json.dumps({"type": "assistant", "message": {"content": [part]}}) + "\n"
+                              + json.dumps({"type": "user", "message": {"content": "ok"}}) + "\n", encoding="utf-8")
+                hits.append(_tool_rows(bp) is None)
+            check("[reviewer-R4-5] 会話記録: 名・input の無い呼び出しと、 書き込みの欄の型が合わない呼び出しは読めない行", all(hits))
+            check("[reviewer-R4-6] 設定: 足してよい所の値は entry の list だけ・primitive は型も比べる",
+                  not _json_additions(".claude/settings.json", {}, {"permissions": {"deny": None}})[0]
+                  and not _json_additions(".claude/settings.json", {}, {"hooks": {"Stop": False}})[0]
+                  and not _json_additions(".claude/settings.json", {"disableAllHooks": False}, {"disableAllHooks": 0})[0]
+                  and _json_additions(".claude/settings.json", {}, {"hooks": {"Stop": [{"hooks": []}]}})[0])
+            # R4-8: 名の頭が同じ別の ref は origin の branch に数えない (在る ref の読めないだけを断る)
+            eid, cp9 = approval("hooks/check.sh", hook1, mode="100755")
+            g(board, "update-ref", "refs/remotes/origin/main/topic", "HEAD")
+            rc8, out8 = run("hooks/check.sh", cp9, eid)
+            g(board, "update-ref", "-d", "refs/remotes/origin/main/topic")
+            check("[reviewer-R4-8] origin/main が無く origin/main/topic だけがあるとき、 読めないと断らない", rc8 == 0)
+            restore()
+            tp_n.unlink(missing_ok=True)
+            # R4-11: 掲示板の blob の読みの時間切れも、 例外でなく「読めない」 で断る
+            eid, cp10 = approval("hooks/check.sh", hook1, mode="100755")
+            real_blob = globals()["read_blob_text"]
+
+            def _blob_timeout(*a, **k):
+                if Path(str(k.get("cwd") or "")).resolve() == board.resolve():
+                    raise subprocess.TimeoutExpired("git", 30)  # 掲示板の repo の読みだけ
+                return real_blob(*a, **k)
+
+            globals()["read_blob_text"] = _blob_timeout
+            try:
+                rc11, out11 = run("hooks/check.sh", cp10, eid)
+            except subprocess.TimeoutExpired:
+                rc11, out11 = -1, "例外"
+            finally:
+                globals()["read_blob_text"] = real_blob
+            check("[reviewer-R4-11] 掲示板の event の読みの時間切れは例外でなく、 受け付けない (exit 5)",
+                  rc11 == 5 and "読めない" in out11)
+            restore()
+            tp_n.unlink(missing_ok=True)
+            # 盲検の指摘の再現 (5 回目): 直す前はどれも当たり commit も通った形・誤って断った形
+            check("[reviewer-R5-1] shell: 相対の行き先の写し (`./hooks`・`hooks/.`・`../hooks`) は書いた形",
+                  shell_writes(f"cd {work} && cp /tmp/s/check.sh ./hooks", t, r)
+                  and shell_writes(f"cd {work} && cp /tmp/s/check.sh hooks/.", t, r)
+                  and shell_writes(f"cd {work / 'hooks'} && cp /tmp/s/check.sh ../hooks", t, r))
+            check("[reviewer-R5-2] shell: `/./`・`../` を含む glob と入れ子の brace も、 対象の repo に当たれば名指し",
+                  shell_writes(f"cp /tmp/s/check.sh {work}/./hooks/chec*.sh", t, r)
+                  and shell_writes(f"cp /tmp/s/check.sh {work}/hooks/../hooks/chec*.sh", t, r)
+                  and shell_writes(f"cat /tmp/s/check.sh | tee {work}/{{hooks,{{bin,lib}}}}/check.sh", t, r))
+            check("[reviewer-R5-3] shell: 名と形を保った写しの dir で回す script は、 対象を名指したことにしない",
+                  not shell_writes("python3 /tmp/mirror/hooks/check.sh", t, r)
+                  and not shell_writes(f"cp -R {work / 'hooks'} /tmp/mirror/hooks", t, r)
+                  and not shell_writes(f"cp {cp} /tmp/mirror/hooks/check.sh", t, r))
+            check("[reviewer-R5-7] shell: 候補の dir を行き先にした写しは書いた形 (同じ名なら候補を書く)",
+                  shell_writes(f"cp /tmp/s/{cp.name} {cp.parent}/", t, r)
+                  and shell_writes(f"cp /tmp/s/{cp.name} {cp.parent}", t, r))
+            r54 = []
+            for part in ({"name": "Bash", "input": {"command": None}},
+                         {"name": "Write", "input": {"file_path": None, "content": "x"}},
+                         {"name": "Write", "input": {"file_path": "", "content": "x"}},
+                         {"name": "Write", "input": {"file_path": "/x", "content": "x", "edits": 4}}):
+                bp = root / "bad-row5.jsonl"
+                bp.write_text(json.dumps({"type": "assistant", "message": {"content": [
+                    dict(part, type="tool_use", id="x")]}}) + "\n"
+                    + json.dumps({"type": "user", "message": {"content": "ok"}}) + "\n", encoding="utf-8")
+                r54.append(_tool_rows(bp) is None)
+            check("[reviewer-R5-4] 会話記録: null・空の command と path、 書く tool の型の合わない edits は読めない行", all(r54))
+            ha = {"hooks": [{"type": "command", "command": "a.sh"}]}
+            hb = {"hooks": [{"type": "command", "command": "b.sh"}]}
+            check("[reviewer-R5-5] 設定: hook の entry の中の形も見る・前からある entry の順を変える変更は足すだけでない",
+                  not _json_additions(".claude/settings.json", {}, {"hooks": {"Stop": [{"hooks": False}]}})[0]
+                  and not _json_additions(".claude/settings.json", {"hooks": {"Stop": [ha, hb]}}, {"hooks": {"Stop": [hb, ha]}})[0]
+                  and _json_additions(".claude/settings.json", {"hooks": {"Stop": [ha]}}, {"hooks": {"Stop": [ha, hb]}})[0])
+        finally:
+            _REVIEWER_TEST = None
+            os.environ.clear()
+            os.environ.update(saved_env)
+            reset_caches()
+
+
+def pressed_button(path: Path | None, lines: list[int], idx: int | None, text: str) -> str:
+    """本人の発言が、 その直前の turn の箱 (turn 終わりの wrap_up) のボタンの文と一字一句同じなら、 その文。 無ければ ""。
+
+    ボタンの文は agent が書いた文で、 押すと本人の発言の形で会話に入り、 記録からは打った文と見分けがつかない
+    (conventions/mid-turn-text-visibility.md#button-text-not-user-words)。 承認に引くのは本人が自分の言葉で打った文だけ
+    (実測: --latest が、 直前の箱のボタンの文と同じ発言を本人の承認として記録した)。 見るのは、 会話記録の行の順で、
+    その発言の 1 つ前の本人の発言の行より後・その発言の行より前の wrap_up のうち最後のもの (前の turn の箱は、 その後に
+    本人が打った時点で消えている。 その発言の後に出た箱は数えない)。 本人の発言の行 (lines = user_messages が返す行の位置)
+    は承認の引用と同じ読み方 (通知・圧縮の要約・作業中に届いた発言の扱いも同じ) で決める。 時刻でなく行の順で決める
+    (盲検の実測: 時刻で比べると、 押した発言と同じ秒の後の箱を見て押したボタンを通し、 同じ秒の前の本人の発言を見落として
+    打った文を断った)。 比べるのは端の空白だけを落とした文 (中の空白・改行も一字に数える)。 その発言の行が分からないときは、
+    会話記録のどこかの箱のボタンの文と同じなら押されたものと読む (確かめられない側に倒す)。"""
+    if path is None:
+        return ""
+    said = (text or "").strip()
+    if not said:
+        return ""
+    here = lines[idx] if idx is not None and 0 <= idx < len(lines) else None
+    prev = max((ln for ln in lines[:idx] if here is not None and ln < here), default=-1) if here is not None else -1
+    boxes: list[tuple[int, list[str]]] = []
+    try:
+        handle = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    with handle:
+        for lineno, line in enumerate(handle):
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(row, dict) or row.get("type") != "assistant":
+                continue
+            content = (row.get("message") or {}).get("content") if isinstance(row.get("message"), dict) else None
+            for part in content if isinstance(content, list) else []:
+                if isinstance(part, dict) and part.get("type") == "tool_use" and str(part.get("name", "")).endswith("__wrap_up"):
+                    acts = (part.get("input") or {}).get("actions") if isinstance(part.get("input"), dict) else None
+                    boxes.append((lineno, [str(a.get("label") or "").strip() for a in acts or [] if isinstance(a, dict)]))
+    if here is None:
+        return next((lab for _, labels in boxes for lab in labels if lab and lab == said), "")
+    shown = [labels for ln, labels in boxes if prev < ln < here]
+    return next((lab for lab in (shown[-1] if shown else []) if lab and lab == said), "")
+
+
+def button_press_selftests(check) -> None:
+    """承認の記録が、 直前の箱のボタンの文と一字一句同じ発言を本人の言葉として引かないことを、 合成の会話記録で確かめる。"""
+    import contextlib
+    import io
+    import tempfile
+    saved_env = dict(os.environ)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td).resolve()
+        repo = root / "repo"
+        repo.mkdir()
+        env = dict(saved_env, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="f",
+                   GIT_AUTHOR_EMAIL="f@example.invalid", GIT_COMMITTER_NAME="f", GIT_COMMITTER_EMAIL="f@example.invalid",
+                   MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root / "state"))
+        for key in (*AGENT_ENV_KEYS, "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
+            env.pop(key, None)
+        os.environ.clear()
+        os.environ.update(env)
+        try:
+            subprocess.run(["git", "init", "-q"], cwd=repo, env=env, check=True)
+            (repo / "locked.py").write_text('# agent-authority:file\nprint("a")\n', encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo, env=env, check=True)
+            subprocess.run(["git", "commit", "-qm", "x"], cwd=repo, env=env, check=True)
+            cand = root / "cand.py"
+            cand.write_text('# agent-authority:file\nprint("b")\n', encoding="utf-8")
+            sid = "fixture-button-press"
+
+            def tr(said, labels=("当てて", "まだ直す"), between_user=False, between=None, said_ts="2026-01-01T00:03:00Z",
+                   between_ts="2026-01-01T00:02:00Z", after=None):
+                p = root / f"{sid}.jsonl"
+                rows = [{"type": "user", "timestamp": "2026-01-01T00:00:00Z", "message": {"content": "直して"}},
+                        {"type": "assistant", "timestamp": "2026-01-01T00:01:00Z", "message": {"content": [
+                            {"type": "tool_use", "id": "w1", "name": "mcp__ccd_turn__wrap_up",
+                             "input": {"recap": "候補を作った。", "ask": "当てますか？",
+                                       "actions": [{"label": x} for x in labels]}}]}}]
+                if between_user:
+                    rows.append({"type": "user", "timestamp": between_ts, "message": {"content": "別の話"}})
+                if between:
+                    rows.append(dict(between, timestamp=between_ts))
+                last = {"type": "user", "message": {"content": said}}
+                if said_ts:
+                    last["timestamp"] = said_ts
+                rows.append(last)
+                if after:
+                    rows.append(after)
+                p.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+                return p
+
+            def run(p):
+                reset_caches()
+                ns = argparse.Namespace(file=str(repo / "locked.py"), region=["authority:file"], change="fixture",
+                                        quote=None, latest=True, session=f"claude:{sid}", transcript=str(p),
+                                        candidate=str(cand), target_mode=None)
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    return approve_mode(ns)
+
+            check("[button-1] 直前の箱のボタンの文と同じ発言は、 承認に引かない (exit 4)", run(tr("当てて")) == 4)
+            check("[button-2] 自分の言葉で打った発言は今までどおり引く", run(tr("当てて。 locked.py の print を b に")) == 0)
+            check("[button-3] 前の turn の箱 (その後に本人が打った) のボタンの文は数えない",
+                  run(tr("当てて", between_user=True)) == 0)
+            check("[button-4] ボタンの無い箱・別の文のボタンは数えない", run(tr("当てて", labels=("推しで",))) == 0)
+            # 盲検 (Codex) の指摘の再現: 通知・圧縮の要約の行を本人の発言と読んで箱を消していた / 時刻の無い発言を素通しした /
+            # 中の空白を潰して打った文をボタンと読んだ / 作業中に届いた本人の発言の後も前の箱を見ていた
+            check("[button-S1] 箱とボタンの間に通知の行 (isMeta) があっても、 押したボタンは引かない",
+                  run(tr("当てて", between={"type": "user", "isMeta": True, "message": {"content": "通知"}})) == 4)
+            check("[button-S1] 箱とボタンの間に圧縮の要約があっても、 押したボタンは引かない",
+                  run(tr("当てて", between={"type": "user", "isCompactSummary": True, "message": {"content": "要約"}})) == 4)
+            check("[button-S2] 時刻の無い発言は、 どこかの箱のボタンの文と同じなら引かない (確かめられない側)",
+                  run(tr("当てて", said_ts="")) == 4)
+            check("[button-S2] 中の空白・改行が違う打った文は、 ボタンの文と別 (一字一句で比べる)",
+                  run(tr("承認\nする", labels=("承認  する",))) == 0)
+            check("[button-N12] 箱と押した発言が同じ秒でも、 押したボタンは引かない (同じ秒は箱が出ていた側に数える)",
+                  run(tr("当てて", said_ts="2026-01-01T00:01:00Z")) == 4)
+            check("[button-S2] 作業中に届いた本人の発言の後は、 前の箱のボタンを見ない",
+                  run(tr("当てて", between={"type": "attachment", "attachment": {
+                      "type": "queued_command", "commandMode": "prompt", "origin": {"kind": "human"},
+                      "prompt": "その前にこれも見て"}})) == 0)
+            # 盲検の指摘の再現: 時刻で比べると、 押した発言と同じ秒の後の箱を見て押したボタンを通し、 同じ秒の前の本人の
+            # 発言を見落として打った文を断った = 行の順で決める
+            later_box = {"type": "assistant", "timestamp": "2026-01-01T00:03:00Z", "message": {"content": [
+                {"type": "tool_use", "id": "w2", "name": "mcp__ccd_turn__wrap_up",
+                 "input": {"recap": "別件。", "ask": "別件は？", "actions": [{"label": "別件"}]}}]}}
+            check("[button-R3-10] 押した発言と同じ秒の後の箱があっても、 押したボタンは引かない (行の順で前の箱を見る)",
+                  run(tr("当てて", after=later_box)) == 4)
+            check("[button-R3-10] 箱と同じ秒の本人の発言の後に打った文は引く (前の箱はその発言で消えた)",
+                  run(tr("当てて", between_user=True, between_ts="2026-01-01T00:01:00Z")) == 0)
+        finally:
+            os.environ.clear()
+            os.environ.update(saved_env)
+            reset_caches()
 
 
 def selftest() -> int:
@@ -8388,6 +10464,8 @@ def selftest() -> int:
 
     apply_mode_selftests(check)
     apply_replacement_selftests(check)
+    reviewer_approval_selftests(check)
+    button_press_selftests(check)
     refusal_tightening_selftests(check)
 
     print(f"selftest: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
@@ -8425,6 +10503,9 @@ def main(argv: list[str] | None = None) -> int:
     y.add_argument("--change", required=True, help="何を変えるか 1 行")
     y.add_argument("--quote", help="本人の発言そのもの")
     y.add_argument("--latest", action="store_true", help="本人の最新の発言そのものを引く")
+    y.add_argument("--reviewer-approval", metavar="EVENT_ID",
+                   help="本人が任せた範囲で、 別の窓の検収係が掲示板に書いた承認の event id (--quote / --latest の代わり。"
+                        " conventions/agent-rule-ownership.md#reviewer-delegation)")
     y.add_argument("--session")
     y.add_argument("--transcript")
     y.add_argument("--target-mode", choices=["100644", "100755"],

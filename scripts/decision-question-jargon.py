@@ -276,7 +276,29 @@ BOX_APPROVAL_RE = re.compile(
     r"|投稿(?:して|しても|します)[^。\n]{0,8}(?:よい|いい|か)"
     r"|この(?:下書き|文面|文章)で"
     r"|(?:下|上|本文|返事)の(?:下書き|文面|案|文|推す|条件|答え)"
-    r"|推す(?:条件|答え|案)で")
+    r"|推す(?:条件|答え|案)で"
+    # 保護された file を当てる承認 (守りの道具が止めた変更の「当ててよいか」 = 差分を読まない承認になる。 2026-11-09、
+    # 箱に出した承認の問いを網が通した実測 = mid-turn-text-visibility.md#box-text-after-not-delivered)
+    # 変更・file を指す語と、 当てる・適用・反映・承認の求めが同じ問いにあるときだけ (盲検の実測: 語だけで拾うと
+    # 「仮の数字を当ててもよいか」「どの部署が承認しますか」 を止め、 「適用してよいか」「反映しますか」 を通した)
+    r"|(?:変更|差分|候補|直し|修正|規則|設定|hook|file|ファイル|守り|\.md|\.py|\.json|\.sh)[^。\n]{0,24}"
+    # 動詞の直後が許しの求め (てよい・てください・ますか …) のときだけ (盲検の実測: 「更新しても何が起きるか」 を止めた)
+    # 許しの語の後は問いの終わり (盲検の実測: 「適用してもいいか判断する基準を」 の情報の問いを止めた)
+    r"(?:当て|適用し|反映し|更新し|変え|入れ)(?:て(?:も)?(?:(?:よい|いい|よろしい|大丈夫|構わない)(?:です|でしょう)?か?"
+    r"(?=[？?。\s]|$)|ください|下さい|もらえ|いただけ)|ます(?:か|？|\?)|ましょうか|る(?:か|？|\?))"
+    # file の名を指して「進めてよいか」 も承認の問い (盲検の実測: 「CLAUDE.md の修正を進めてよいですか」 を通した)
+    r"|[\w.-]+\.(?:md|py|json|sh|ya?ml|toml)[^。\n]{0,24}進め(?:て(?:も)?(?:よい|いい|よろしい|大丈夫|構わない)"
+    r"(?:です|でしょう)?か?(?=[？?。\s]|$)"
+    r"|ます(?:か|？|\?)|ましょうか)"
+    r"|(?:変更|差分|候補|直し|修正|規則|設定|hook|file|ファイル|守り)[^。\n]{0,16}を?承認(?:します|して|でき|を)[^。\n]{0,10}"
+    r"(?:よい|いい|か|ください|下さい)|承認を(?:ください|下さい|お願い)|この(?:差分|候補)で[^。\n]{0,6}(?:よい|いい)"
+    # 英語も、 変更・file を指す語があるときだけ (「Can I apply Bayes theorem?」 は止めない = 盲検の実測)
+    r"|\b(?:may|can|shall|should) (?:I|we) (?:apply|commit|land|merge|push)\b[^.?\n]{0,40}"
+    r"(?:\b(?:change|diff|edit|patch|candidate|fix|rule|hook|setting|file|guard)s?\b|[\w.-]+\.(?:md|py|json|sh|ya?ml|toml)\b)"
+    r"|\b(?:would|will|can|could) you (?:approve|sign off on|okay)\b[^.?\n]{0,40}"
+    r"\b(?:change|diff|edit|patch|candidate|fix|rule|hook|setting|file|guard)s?\b"
+    r"|\bapprove (?:the|this|these|my) [^.?\n]{0,30}\b(?:change|diff|edit|patch|candidate|fix)s?\b",
+    re.I)
 
 
 def box_approval_asks(tool_name: str, tool_input) -> list:
@@ -750,6 +772,24 @@ def selftest() -> int:
         return box_approval_asks("mcp__ccd_turn__wrap_up", {"recap": "下書きを作った。", "ask": ask})
     check(box("この文面で送ってよいですか？") and box("下の案で直しますか？") and box("推す条件で作りますか？")
           and box("返事の下書きを送りますか？"), "箱の承認: 送信の承認・本文の案・推す条件を指す問い")
+    check(box("CLAUDE.md の 1 行を当ててよいですか？") and box("この 3 file を当てますか？") and box("承認をください")
+          and box("この差分でよいですか？") and box("守りの道具の直しを承認しますか？")
+          and box("CLAUDE.md の変更を適用してよいですか？") and box("守りの道具の修正を反映しますか？")
+          and box("この変更を承認できますか？") and box("May I apply the protected rule change?")
+          and box("CLAUDE.md を更新してもよいですか？") and box("この変更を適用してください。")
+          and box("Would you approve this protected edit?") and box("Can I apply this to CLAUDE.md?")
+          and box("CLAUDE.md の修正を進めてよいですか？") and box("この変更を適用してもよろしいですか？")
+          and box("CLAUDE.md の修正を進めてもよいですか？"),
+          "箱の承認: 保護された file を当てる・適用する・反映する・承認する問い")
+    check(not box("どの節から当てはめますか？") and not box("承認された依頼はどれから進めますか？")
+          and not box("仮の数字を当ててもよいですか？") and not box("どの部署が承認しますか？")
+          and not box("この変更で何が変わりますか？") and not box("Can I apply Bayes theorem?")
+          and not box("この設定を更新しても何が起きるか教えてください。")
+          and not box("この変更を適用する前に何を確認すればよいですか？") and not box("この修正で進めてよいですか？")
+          and not box("この変更を適用してもいいか判断する基準を教えてください。")
+          and not box("この変更を適用してもいいか、判断する基準を教えてください。")
+          and not box("CLAUDE.md の修正を進めてもよいか判断する基準を教えてください。"),
+          "箱の承認: 当てる・承認の語を含むだけの別の問いは見ない")
     check(not box("どちらを先に直しますか？") and not box("commit しますか？")
           and box_approval_asks("AskUserQuestion", {"questions": [{"question": "この文面で送ってよいですか？"}]}) == [],
           "箱の承認: 文面を指さない問い・選択肢 UI は見ない")

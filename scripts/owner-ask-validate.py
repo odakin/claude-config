@@ -13,7 +13,9 @@
   --applied = もう入っている変更の追認。 裁定の要らない形 → 問わない。 要る形 → 問いは立てるが、 裁定なしに当てた事故として
   同じ返事で記録し、 戻すかも問うと添える。
 変更の在りか (--evidence): `<repo の dir>@<commit>:<path>` (前 = commit~1、 後 = commit) か `<repo の dir>@worktree:<path>`
-  (前 = HEAD、 後 = 作業ツリーの file)。 前と後が同じ (その commit がその file を変えていない) は誤り。
+  (前 = HEAD、 後 = 作業ツリーの file) か `<repo の dir>@candidate=<候補の全文の絶対 path>:<path>` (前 = HEAD、 後 = 当てる前の
+  候補 = 守りの道具に止められて当てられない worker が、 問いの根拠に候補の写しを指す形。 2026-11-09 実測: 在りかが作業ツリーの
+  差分しか読めず、 承認の問いが台帳を通らずに普通の文で出た)。 前と後が同じ (その commit がその file を変えていない) は誤り。
 
 出力: stdout に JSON 1 行。 {"ok": true|false, "message": "…"} (ok = 問いを立ててよい) で exit 0。 在りかが読めない・変更が
   無い = {"error": "…"} で exit 1 (問いは立たない)。 守りの道具の中の失敗 = {"ok": true, "message": "⚠️ …"} で exit 0
@@ -45,9 +47,35 @@ def _load(name, path):
     return mod
 
 
+class Unreadable(Exception):
+    """在りかの中身を平文で読めない (git-crypt の lock 中・UTF-8 でない) = 判定できない。 問いは立て、 確かめていないと添える。"""
+
+
+def _plain(data, what):
+    if data.startswith(b'\x00GITCRYPT'):
+        raise Unreadable(f'{what} は git-crypt の暗号文のまま (その repo の lock を外すと読める)')
+    try:
+        return data.decode('utf-8')
+    except UnicodeDecodeError:
+        raise Unreadable(f'{what} を UTF-8 として読めない')
+
+
 def _git_text(repo, rev, rel):
-    p = subprocess.run(['git', '-C', str(repo), 'show', f'{rev}:{rel}'], capture_output=True, text=True)
-    return p.stdout if p.returncode == 0 else ''
+    """rev:rel の中身 (その rev に file が無ければ '')。 smudge filter を通して読む (`git cat-file --filters`) = git-crypt で
+    暗号化される path も平文になる (2026-11-09 実測: `git show` を text で読み、 暗号化した blob の bytes で
+    「'utf-8' codec can't decode byte」 と止まった。 同じ読み方の前例 = lib/git_blob.py)。 filter が失敗すれば `git show` に戻す。"""
+    spec = f'{rev}:{rel}'
+    p = subprocess.run(['git', '-C', str(repo), 'cat-file', '--filters', spec], capture_output=True, timeout=30)
+    if p.returncode != 0:
+        p = subprocess.run(['git', '-C', str(repo), 'show', spec], capture_output=True, timeout=30)
+        if p.returncode != 0:
+            # 無いのか読めないのかを分ける (読めないのを無いと読むと、 在る file を新しい file として判定する = 盲検の指摘)
+            t = subprocess.run(['git', '-C', str(repo), 'ls-tree', rev, '--', rel], capture_output=True, text=True,
+                               timeout=30)
+            if t.returncode != 0 or t.stdout.strip():
+                raise Unreadable(f'{rel} ({rev}) を git で読めない')
+            return ''
+    return _plain(p.stdout, f'{rel} ({rev})')
 
 
 def read_change(evidence):
@@ -55,10 +83,19 @@ def read_change(evidence):
     if not m:
         raise ValueError(f'変更の在りかの形が違う (<repo>@<commit>:<path> か <repo>@worktree:<path>): {evidence!r}')
     repo, rev, rel = Path(os.path.expanduser(m.group(1))).resolve(), m.group(2), m.group(3)
-    if rev == 'worktree':
+    if rev.startswith('candidate='):
+        cand = Path(os.path.expanduser(rev[len('candidate='):]))
+        if not cand.is_absolute() or not cand.is_file():
+            raise ValueError(f'候補の写しは絶対 path の file で指す (candidate=<絶対 path>): {rev!r}')
         old = _git_text(repo, 'HEAD', rel)
         try:
-            new = (repo / rel).read_text(encoding='utf-8')
+            new = _plain(cand.read_bytes(), f'候補の写し {cand}')
+        except OSError:
+            raise ValueError(f'候補の写し {cand} を読めない')
+    elif rev == 'worktree':
+        old = _git_text(repo, 'HEAD', rel)
+        try:
+            new = _plain((repo / rel).read_bytes(), f'{rel} (作業ツリー)')
         except OSError:
             new = ''
     else:
@@ -78,13 +115,20 @@ def judge(evidence, applied=False, session=None, guard=None):
     changes = g.protected_changes(rel, old, new, repo, g.load_config(repo), authority=True, session=sess,
                                   refusal_live=bool(session))
     what = '追認' if applied else '変更'
+    # 判定した候補を名指す (候補の写しは後で変えられる = 問いの台帳に、 どの中身を判定したかを残す。 盲検の指摘)。
+    # 裁定の要る・要らないのどちらの答えにも添える
+    import hashlib
+    # hash は守りの道具が当てる時と同じ読み方 (改行を揃えた text) で取る
+    norm = new.replace('\r\n', '\n').replace('\r', '\n')
+    rcpt = (f' [判定した候補 sha256 = {hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]}、 前 = HEAD]'
+            if '@candidate=' in (evidence or '') else '')
     net = '' if session else ' (この会話で断った件の網は、 session が渡されていないので確かめていない)'
     if not changes:
         return {'ok': False, 'message': (f'{rel} の{what}は本人の裁定の要らない形 = 問わずに当てて、 返事に何を変えたかを書く'
-                                         + net)}
+                                         + net + rcpt)}
     regions = sorted({c.get('region', '?') for c in changes})
     reason = next((c.get('detail') for c in changes if c.get('detail')), '')
-    msg = '裁定が要る: ' + ', '.join(regions) + (f' ({reason[:160]})' if reason else '')
+    msg = '裁定が要る: ' + ', '.join(regions) + (f' ({reason[:160]})' if reason else '') + rcpt
     if applied:
         msg = ('⚠️ 裁定の要る変更がもう入っている = 裁定なしに当てた事故。 問いと同じ返事で、 当てた commit を事故として記録し、'
                ' 戻すかも問う。 ' + msg)
@@ -120,6 +164,19 @@ def selftest():
                                         encoding='utf-8')
         r = judge(f'{repo}@worktree:CLAUDE.md')
         check(r['ok'] is True and '裁定が要る' in r['message'], f'緩める語を足す変更は問う {r}')
+        cand = Path(td) / 'cand.md'
+        cand.write_text((repo / 'CLAUDE.md').read_text(encoding='utf-8'), encoding='utf-8')
+        git(repo, 'checkout', '-q', '--', 'CLAUDE.md')
+        r = judge(f'{repo}@candidate={cand}:CLAUDE.md')
+        check(r['ok'] is True and '裁定が要る' in r['message'] and '判定した候補 sha256' in r['message'],
+              f'当てる前の候補の写しを指す在りかも同じ述語で問い、 判定した候補の hash を添える {r}')
+        for bad in (f'{repo}@candidate=cand.md:CLAUDE.md', f'{repo}@candidate={Path(td) / "none.md"}:CLAUDE.md'):
+            try:
+                read_change(bad)
+                check(False, f'相対 path・無い file の候補の写しは断る {bad}')
+            except ValueError:
+                pass
+        (repo / 'CLAUDE.md').write_text(cand.read_text(encoding='utf-8'), encoding='utf-8')
         git(repo, 'commit', '-qam', 'c', '--no-verify')
         r = judge(f'{repo}@HEAD:CLAUDE.md', applied=True)
         check(r['ok'] is True and '事故' in r['message'], f'裁定の要る変更の追認は問い、 事故として記録するよう言う {r}')
@@ -151,6 +208,41 @@ def selftest():
                            capture_output=True, text=True)
         check(p.returncode == 1 and 'error' in json.loads(p.stdout.strip().splitlines()[-1]), f'在りかの誤りは error {p.stdout}')
 
+        # git-crypt の repo の在りか (2026-11-09 実測 = 暗号化した blob を text で読んで止まった)。 直した読み方で判定でき、
+        # 直す前の読み方 (git show を text で) では同じ在りかで止まる (foil)。 lock 中は止まらず確かめていないと添える
+        import shutil
+        if shutil.which('git-crypt'):
+            cr = Path(td) / 'crypt'
+            cr.mkdir()
+            git(cr, 'init', '-q')
+            subprocess.run(['git-crypt', 'init'], cwd=cr, check=True, capture_output=True, env=env)
+            (cr / '.gitattributes').write_text('*.md filter=git-crypt diff=git-crypt\n', encoding='utf-8')
+            (cr / 'CLAUDE.md').write_text('# 規則\n\n- 送る前に確かめる。\n', encoding='utf-8')
+            git(cr, 'add', '-A')
+            git(cr, 'commit', '-qm', 'a', '--no-verify')
+            enc = subprocess.run(['git', '-C', str(cr), 'show', 'HEAD:CLAUDE.md'], capture_output=True).stdout
+            check(enc.startswith(b'\x00GITCRYPT'), 'fixture: HEAD の blob は暗号文')
+            (cr / 'CLAUDE.md').write_text('# 規則\n\n- 送る前に確かめる。\n- ただし急ぎなら確かめなくてよい。\n', encoding='utf-8')
+            r = run(f'{cr}@worktree:CLAUDE.md')
+            check(r.get('ok') is True and '裁定が要る' in r.get('message', ''),
+                  f'git-crypt の repo の在りかも復号して判定する {r}')
+            orig = globals()['_git_text']
+            globals()['_git_text'] = lambda repo, rev, rel: subprocess.run(
+                ['git', '-C', str(repo), 'show', f'{rev}:{rel}'], capture_output=True, text=True).stdout
+            try:
+                rf = run(f'{cr}@worktree:CLAUDE.md')
+            finally:
+                globals()['_git_text'] = orig
+            check("codec can't decode" in rf.get('error', ''),
+                  f'foil: 直す前の読み方では同じ在りかが報告と同じ error で止まる {rf}')
+            git(cr, 'checkout', '-q', '--', 'CLAUDE.md')
+            subprocess.run(['git-crypt', 'lock'], cwd=cr, check=True, capture_output=True, env=env)
+            r = run(f'{cr}@worktree:CLAUDE.md')
+            check(r.get('ok') is True and r['message'].startswith('⚠️') and '確かめていない' in r['message'],
+                  f'lock 中の在りかは止まらず、 確かめていないと添える {r}')
+        else:
+            print('skip: git-crypt が無い = 暗号化の在りかの試験を回していない')
+
         class Broken:
             def note_exemption(self, *a):
                 pass
@@ -169,6 +261,8 @@ def run(evidence, applied=False, session=None, guard=None):
         return judge(evidence, applied, session, guard)
     except ValueError as e:
         return {'error': str(e)}
+    except Unreadable as e:
+        return {'ok': True, 'message': f'⚠️ 変更の在りかを平文で読めない ({e}) = 裁定の要否を確かめていない (問いは立てた)'}
     except Exception as e:   # noqa: BLE001 (判定できない = 問いは立て、 その旨を添える)
         return {'ok': True, 'message': f'⚠️ 判定の道具の中で失敗 ({e.__class__.__name__}: {str(e)[:120]}) = 裁定の要否を確かめずに立てた'}
 

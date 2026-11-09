@@ -54,6 +54,9 @@ import shlex
 import sys
 
 MANIFEST_REL = ".agent-rule-guard.json"
+# The owner's delegation of approvals to a reviewer role (conventions/agent-rule-ownership.md#reviewer-delegation):
+# a control path at the root of any repository, so changing it is a ruling like any other control file.
+DELEGATION_REL = "reviewer-delegation.json"
 RULE_REF_TOKENS = tuple(name + "#rule" for name in (
     "agent-rule-ownership.md", "manuscript-claim-ownership.md",
 ))
@@ -71,7 +74,7 @@ CONTROL_PATTERNS = (
     ".codex/hooks.json", ".codex/rules/*.rules", ".github/workflows/*.yml",
     ".github/workflows/*.yaml", ".pre-commit-config.yaml", ".pre-commit-config.yml",
     ".git/config", ".git/hooks/*", ".claude/hooks/*", ".codex/hooks/*",
-    MANIFEST_REL,
+    MANIFEST_REL, DELEGATION_REL,
 )
 MARK_FILE_RE = re.compile(r"^\s*(?:#|//|%|<!--)\s*agent-authority:file\b", re.M)
 MARK_BEGIN_RE = re.compile(r"^\s*(?:#|//|%|<!--)\s*agent-authority:begin\s+id=([A-Za-z0-9._-]+)", re.M)
@@ -80,6 +83,10 @@ MARK_END_TMPL = r"^\s*(?:#|//|%|<!--)\s*agent-authority:end\s+id={id}\b"
 FREE_BEGIN_RE = re.compile(r"^[ \t]*<!--[ \t]*agent-free:begin[ \t]+id=([A-Za-z0-9._-]+)[ \t]*-->[ \t]*$", re.M)
 FREE_END_TMPL = r"^[ \t]*<!--[ \t]*agent-free:end[ \t]+id={id}[ \t]*-->[ \t]*$"
 GUARD_RULE_DOCS = {"agent-rule-ownership.md", "manuscript-claim-ownership.md"}
+# The floor of the delegation: files a delegated reviewer never approves, whatever the owner's setting lists
+# (the guards and their tests, the two rule documents that own them, the delegation and the guard settings).
+DELEGATION_FLOOR_NAMES = frozenset({*GUARD_RULE_DOCS, DELEGATION_REL, MANIFEST_REL, "manuscript-guard.json"})
+DELEGATION_FLOOR_STEMS = ("agent-rule-guard", "manuscript-claim-guard", "guard-cli-form-guard", "escape-hatch-guard")
 # Inserted text containing any of these falls back to prior approval. Substring match; the list
 # over-matches on purpose (a false hit costs one approval, a miss lets an exception in unread).
 RELAX_TERMS_JA = (
