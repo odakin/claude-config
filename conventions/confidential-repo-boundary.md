@@ -233,6 +233,12 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
   両方にある → 記録の側を規約の節への参照に置き換えた (同じ文を 2 か所に持たない)。 窓を 16 字にすると当たりは約 6 倍になり、
   増えた分は定型句 (挨拶・一般的な言い回し) だった = 24 字を採った。 日本語の窓は markdown の code fence の中も見る (24 字のかな漢字は
   code でなく、 記録の書式の例として fence に貼った 1 件が漏洩の形そのもの)。
+- <a id="leak-tiers-before-approval"></a>**公開 repo の保護された file (検査の engine・runner・hook) の候補は、 本人に承認を頼む前に漏洩の段を通す** —
+  commit の門は最初に承認の guard を回し、 承認の無い候補はそこで止まるので、 漏洩の段 (Tier A〜G) の当たりは承認の後の commit で
+  初めて出る。 そこで候補を直すと、 承認は候補の中身に結びついているので頼み直しになる (実測: 候補に活動の語・非公開 repo 名と同じ綴りの
+  合成の語・源との逐語の一致・pipefail の形が 1 つずつあり、 どれも承認の前に見つかった)。 やり方 = 公開 repo の写しの clone に候補を
+  stage し、 保護された file は保護の外の path (拡張子も配線と読まれない形) に置いて、 本物の個人層を渡して runner を回す。 検査の engine
+  自身の候補は写しの working tree に置いて stage しない (runner は working tree の engine を呼ぶ)。 写しだけの手順で、 本物の repo の path は変えない。
 
 - **捕まえないもの = 言い換え** (上の表どおり)。 未公開の結果を自分の言葉で書いた例示は通るので、
   規律 ([`CLAUDE.md#non-identifier-content-leak`](../CLAUDE.md#non-identifier-content-leak)) はそのまま要る。
