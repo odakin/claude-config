@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""check-template-copies.py — 共有 repo に置いた雛形の写し (collaborator-check・tools/py・pdf-publish) が正本と違わないかを base の全 repo で見て、 古いだけか repo の側で手直しされたかを分けて出す。
+"""check-template-copies.py — 共有 repo に置いた雛形の写し (collaborator-check・tools/py・pdf-publish と、 project に写した利用者の hook) が正本と違わないかを base の全 repo で見て、 古いだけか repo の側で手直しされたかを分けて出す。
 
 ## なぜ
 
@@ -16,8 +16,12 @@ repo ごとに手で打たない限り出ない (実測: 複数の repo の写�
 - conf に `python` の行がある repo = その行の入口 (既定 `tools/py`、 正本 = templates/shared-project/python-env/py)。
   conf に `python` の行が無い repo の `tools/py` は見ない (repo が自分で書いた入口を古い写しと言わない)
 - `tools/pdf-publish/` がある repo = その中の pdf-publish.sh・install-hook.sh (正本 = templates/shared-project/pdf-publish/)
+- `tools/chat-math-render-guard/` がある repo = その中の chat-math-render-guard.py (正本 = hooks/chat-math-render-guard.py。
+  利用者の手元にもある hook を project の hook として写したもの = conventions/shared-repo.md#project-copy-of-user-hook)
 
-置き場と file 名は 2 つの installer (install-collaborator-check.py・install-pdf-publish.py) の定数を読む (二重に書かない)。
+雛形の 3 種類の置き場と file 名は 2 つの installer (install-collaborator-check.py・install-pdf-publish.py) の定数を読む
+(二重に書かない)。 hook の写しは配る installer が無い (手で写す) ので、 置き場と正本の path はこの script の
+`HOOK_COPIES` だけが持つ (installer ができたら、 その定数を読む形に移す)。 見る hook を足すのは `HOOK_COPIES` に 1 行。
 
 ## 分け方
 
@@ -32,6 +36,7 @@ repo ごとに手で打たない限り出ない (実測: 複数の repo の写�
 ## 使い方
 
     check-template-copies.py [--base <dir>] [--footer <text>]
+    check-template-copies.py --watched-paths     # 正本の path (claude-config の root から) を 1 行ずつ = pre-commit が見る path
     check-template-copies.py --selftest
 
 base の既定 = 環境変数 TEMPLATE_COPIES_BASE、 無ければこの claude-config の checkout の親 dir
@@ -39,8 +44,10 @@ base の既定 = 環境変数 TEMPLATE_COPIES_BASE、 無ければこの claude-
 終了値: 0 = 全部同じ (写しを持つ repo が無いときも) / 1 = 古い・手直し・欠けた写しがある / 3 = 検査が走れない
 (base が dir でない・正本の履歴を git で読めない)。 出力は揃っていれば無し。
 
-配線: claude-config の commit で templates/shared-project/ の 3 つの雛形が staged に入ったら `.claude/pre-commit-extra.sh`
-が警告だけで呼ぶ (commit は止めない)。 個人層の一覧の段がもう 1 つの呼び元。
+配線: claude-config の commit で、 見る正本 (`--watched-paths` が出す path) が staged に入ったら `.claude/pre-commit-extra.sh`
+が警告だけで呼ぶ (commit は止めない)。 hook が見る path はこの script の `--watched-paths` に揃える (hook が `--watched-paths`
+を読む形なら、 見る種類を足しても hook は直さない。 path を書き並べた形の hook は雛形の 3 つだけを見る)。
+個人層の一覧の段がもう 1 つの呼び元。
 
 ## 限界
 
@@ -78,8 +85,14 @@ CC_REL = PurePosixPath(CC.TEMPLATE.resolve().relative_to(REPO_ROOT).as_posix())
 PY_REL = PurePosixPath(CC.PY_TEMPLATE.resolve().relative_to(REPO_ROOT).as_posix())
 PP_REL = PurePosixPath(PP.TEMPLATE.resolve().relative_to(REPO_ROOT).as_posix())
 
-# 正本を変えた commit で pre-commit が見る dir (= .claude/pre-commit-extra.sh の検査 6 と同じ 3 つ)
-WATCHED_TEMPLATE_DIRS = (str(CC_REL), str(PY_REL.parent), str(PP_REL))
+# project に写した利用者の hook = (種類の名, 写しの repo 内 path, 正本の claude-config 内 path)。 配る installer は無い (手で写す)
+HOOK_COPIES = (
+    ("chat-math-render-guard", PurePosixPath("tools/chat-math-render-guard/chat-math-render-guard.py"),
+     PurePosixPath("hooks/chat-math-render-guard.py")),
+)
+
+# 正本を変えた commit で pre-commit が見る path (= --watched-paths が出す。 .claude/pre-commit-extra.sh の検査 6 が読む一覧)
+WATCHED_TEMPLATE_DIRS = (str(CC_REL), str(PY_REL.parent), str(PP_REL), *(str(src) for _, _, src in HOOK_COPIES))
 
 
 def blob_sha(data: bytes) -> str:
@@ -88,7 +101,7 @@ def blob_sha(data: bytes) -> str:
 
 
 def targets(repo: Path) -> list[tuple[str, Path, PurePosixPath]]:
-    """repo が持つ写しを (種類, 写しの path, 正本の repo 内 path) で返す。 置き場は installer の定数から。"""
+    """repo が持つ写しを (種類, 写しの path, 正本の repo 内 path) で返す。 置き場は installer の定数と HOOK_COPIES から。"""
     out: list[tuple[str, Path, PurePosixPath]] = []
     conf = repo / CC.CONF
     if conf.is_file():
@@ -99,6 +112,9 @@ def targets(repo: Path) -> list[tuple[str, Path, PurePosixPath]]:
     if (repo / PP.TOOLS).is_dir():
         for f in PP.VENDORED:
             out.append(("pdf-publish", repo / PP.TOOLS / f, PP_REL / f))
+    for kind, copy_rel, src in HOOK_COPIES:
+        if (repo / Path(*copy_rel.parent.parts)).is_dir():
+            out.append((kind, repo / Path(*copy_rel.parts), src))
     return out
 
 
@@ -201,7 +217,7 @@ def run(base: Path, root: Path, footer: str | None) -> int:
         return 3
     if not rows:
         return 0
-    print(f"🧩 共有 repo に置いた雛形の写しが正本と違う {len(rows)} 件 (正本 = {root / 'templates' / 'shared-project'}):")
+    print(f"🧩 共有 repo に置いた雛形・hook の写しが正本と違う {len(rows)} 件 (正本の repo = {root}):")
     for r in rows:
         print(r)
     print("  配り直したら、 その repo で写しの file だけを path 指定で commit + push する (作業中の他人の変更に触らない)")
@@ -244,18 +260,22 @@ def selftest() -> int:
         cc_t = root / Path(*CC_REL.parts) / CC.SCRIPT
         py_t = root / Path(*PY_REL.parts)
         pp_t = {f: root / Path(*PP_REL.parts) / f for f in PP.VENDORED}
-        v1 = {"cc": b"#!/bin/bash\n# cc v1\n", "py": b"#!/bin/bash\n# py v1\n"}
-        v2 = {"cc": b"#!/bin/bash\n# cc v2\n", "py": b"#!/bin/bash\n# py v2\n"}
-        for p in (cc_t, py_t, *pp_t.values()):
+        hk_kind, hk_copy_rel, hk_src = HOOK_COPIES[0]
+        hk_t = root / Path(*hk_src.parts)
+        v1 = {"cc": b"#!/bin/bash\n# cc v1\n", "py": b"#!/bin/bash\n# py v1\n", "hk": b"# hook v1\n"}
+        v2 = {"cc": b"#!/bin/bash\n# cc v2\n", "py": b"#!/bin/bash\n# py v2\n", "hk": b"# hook v2\n"}
+        for p in (cc_t, py_t, hk_t, *pp_t.values()):
             p.parent.mkdir(parents=True, exist_ok=True)
         cc_t.write_bytes(v1["cc"])
         py_t.write_bytes(v1["py"])
+        hk_t.write_bytes(v1["hk"])
         for f, p in pp_t.items():
             p.write_bytes(f"# {f} v1\n".encode())
         git("add", "-A", cwd=root)
         git("commit", "-q", "-m", "v1", cwd=root, date="2026-01-01T00:00:00")
         cc_t.write_bytes(v2["cc"])
         py_t.write_bytes(v2["py"])
+        hk_t.write_bytes(v2["hk"])
         git("commit", "-q", "-am", "v2", cwd=root, date="2026-01-02T00:00:00")
         v1_short = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD~1"],
                                   capture_output=True, text=True, env=env).stdout.strip()[:8]
@@ -274,7 +294,10 @@ def selftest() -> int:
 
         cc_copy = (CC.TOOLS / CC.SCRIPT).as_posix()
         pp_dir = PP.TOOLS.as_posix()
-        mkrepo("r-ok", "# conf\nread README.md -- x\n", {cc_copy: v2["cc"]})
+        hk_copy = hk_copy_rel.as_posix()
+        mkrepo("r-ok", "# conf\nread README.md -- x\n", {cc_copy: v2["cc"], hk_copy: v2["hk"]})
+        mkrepo("r-hook", None, {hk_copy: v1["hk"]})
+        mkrepo("r-hook-other", None, {"tools/other-guard/other-guard.py": b"# not a copy\n"})
         mkrepo("r-stale", "# conf\n", {cc_copy: v1["cc"]})
         mkrepo("r-edited", "# conf\n", {cc_copy: v2["cc"] + "# repo の独自\n".encode()})
         mkrepo("r-missing", "# conf\n")
@@ -305,10 +328,18 @@ def selftest() -> int:
         check("r-own-py" not in out, f"conf に python 行の無い repo の tools/py を古い写しと言った:\n{out}")
         check(f"r-pdf · {pp_dir}/install-hook.sh — どの版とも違う" in out and f"r-pdf · {pp_dir}/pdf-publish.sh" not in out,
               f"pdf-publish の写しの判定が違う (同じ方は黙り、 手直しは出す):\n{out}")
+        check(f"r-hook · {hk_copy} — 古いだけ = 正本の {v1_short} (2026-01-01) の版と同じ → cp {hk_t} " in out,
+              f"古い hook の写しを、 一致した版と cp の 1 行で出していない:\n{out}")
+        check(" r-hook-other ·" not in out, f"HOOK_COPIES に無い tools/ の file を写しと言った:\n{out}")
         check(" r-ok ·" not in out and " not-a-repo ·" not in out and " tmpl-root ·" not in out,
               f"揃った repo・git でない dir・正本の repo 自身を出した:\n{out}")
         check(out.rstrip().endswith("FOOTER-LINE"), f"--footer を最後に出していない:\n{out}")
-        check(out.count("🟠") == 5, f"件数が 5 でない:\n{out}")
+        check(out.count("🟠") == 6, f"件数が 6 でない:\n{out}")
+
+        # pre-commit が読む path の一覧 = 1 行 1 path、 雛形の 3 つと hook の正本
+        rc, out = call("--watched-paths")
+        check(rc == 0 and out.splitlines() == list(WATCHED_TEMPLATE_DIRS) and str(hk_src) in out.splitlines(),
+              f"--watched-paths の出力が違う:\n{out}")
 
         # 揃えば黙る (footer も出さない)
         base2 = td / "base2"
@@ -344,12 +375,16 @@ def selftest() -> int:
             if old is not None:
                 os.environ["TEMPLATE_COPIES_BASE"] = old
 
-    # pre-commit の検査 6 が見る dir の一覧と、 ここが導く正本の dir が食い違わない (shell 側に同じ一覧が書いてある = 二重の一覧の網)
+    # pre-commit の検査 6 が見る path と、 ここが導く正本の path が食い違わない。 検査 6 が --watched-paths で読む形なら
+    # 一覧はここだけにある。 path を書き並べた形 (直す前の版) なら、 雛形の 3 つが並んでいるかを見る
+    # (hook の写しの正本は、 検査 6 が --watched-paths で読む形になってから見る = それまでは一覧の段だけが hook の写しを見る)
     hook = REPO_ROOT / ".claude" / "pre-commit-extra.sh"
     if hook.is_file():
         text = hook.read_text(errors="replace")
-        for d in WATCHED_TEMPLATE_DIRS:
-            check(d in text, f".claude/pre-commit-extra.sh の検査 6 が正本の dir {d} を見ていない (installer の定数と食い違う)")
+        check("check-template-copies.py" in text, ".claude/pre-commit-extra.sh の検査 6 がこの script を呼んでいない")
+        if "--watched-paths" not in text:
+            for d in (str(CC_REL), str(PY_REL.parent), str(PP_REL)):
+                check(d in text, f".claude/pre-commit-extra.sh の検査 6 が正本の dir {d} を見ていない (installer の定数と食い違う)")
 
     for f in fails:
         print(f"FAIL: {f}")
@@ -362,10 +397,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--base", type=Path, help="写しを持つ repo を探す dir (既定 = TEMPLATE_COPIES_BASE、 無ければ claude-config の親)")
     ap.add_argument("--footer", help="古い写しがあるときだけ最後に出す 1 行")
+    ap.add_argument("--watched-paths", action="store_true",
+                    help="正本の path (claude-config の root から) を 1 行ずつ出す = pre-commit が staged を見る path")
     ap.add_argument("--template-root", type=Path, default=REPO_ROOT, help=argparse.SUPPRESS)  # selftest 用
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
+    if a.watched_paths:
+        print("\n".join(WATCHED_TEMPLATE_DIRS))
+        return 0
     root = a.template_root.resolve()
     base = a.base.expanduser() if a.base else default_base(root)
     return run(base, root, a.footer)
