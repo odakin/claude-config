@@ -80,7 +80,7 @@ Dropbox や macOS から来た file 名は、 「ピ」 を「ヒ + 半濁点」
 ## まとめ (reflex)
 
 - shell で非 ASCII を切る時は `cut -c` / `head -c` / byte slice を**使わない** → python の文字単位 truncate。
-- 切った結果を別プロセスに渡す前に valid UTF-8 を検証。
+- 切った結果を別プロセスに渡す前に valid UTF-8 を検証。 file に書くときも同じ = `cut -c` の出力で書いた記録・根拠の file は invalid UTF-8 のまま残り、 規則の守りの道具 (`manuscript-claim-guard.py`) が commit の前に読めず `inspection unavailable (file-unreadable …)` で止める (実測)。
 - daemon (launchd/cron) は `LANG` 空 = C locale 前提で組む。
 - `grep` / `sed` の `[...]` に非 ASCII を入れない (C locale では byte の集合)。Claude Code の Bash tool も `LANG` 空の前提で書く。
 - 変数の直後に非 ASCII の文字を置くときは `${var}` (UTF-8 の locale では文字が変数名に取り込まれる、 [#unbraced-var-before-multibyte](#unbraced-var-before-multibyte))。
