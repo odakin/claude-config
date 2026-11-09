@@ -44,6 +44,16 @@ Claude の Code タブかどうかは、system prompt の記述か、環境変�
 
 最初の表示失敗の原因は未特定で、同じ形での再試行は表示された。画像による回避を標準手順にせず、上の本文表示を使う。
 
+表示の再試験用の入力 = [Codex app の数式見本](../docs/examples/codex-chat-math.md)。文中の式と上の四形式を、**会話の返事として**出して比べる。ファイルのプレビューや、ソースを説明する backtick の表示を会話本文の試験と取り違えない。
+
+アプリ内の描画処理を補助的に読むなら、既存の [claude-app-bundle.py](../scripts/claude-app-bundle.py) の `--app` と `--where asar` を使う (読み取り専用)。Codex の renderer は確認した版では `app.asar` 内の `webview/assets/` に入っている。アプリの場所を確かめてから、例えば次の形で検索する:
+
+```bash
+python3 scripts/claude-app-bundle.py --app /Applications/ChatGPT.app grep 'renderMath' --where asar --context 80 --per-file 1 --max 3
+```
+
+同じ `--app` で `asar-ls` と `slice --where asar` も使える。`renderer`・`i18n`・`engine` の既定の探索や `version` の engine 欄は Claude 向けなので、Codex の情報と見なさない。読んだ処理が実際の返事で使われるかは、上の画面の試験で確かめる。asar を読む使い捨ての code を繰り返し作らず、この道具を再利用する。
+
 ## <a id="code-tab-katex"></a>Claude の Code タブで LaTeX を書くときの規則
 
 実測 (Code タブでの画面の試験と、 アプリ本体 2.26454.2・2.31226.0・2.31226.1 の描画器の code の照合):
