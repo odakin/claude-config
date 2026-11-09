@@ -985,6 +985,10 @@ sections:
     legacy: "8.95"
     level: 3
     title: "8.95 session の役は、 本人の語や session が読む規則の文でなく、 session がしている仕事から機械が決める — 語に結ぶと、 仕事の名前だけで開いた session に効かない"
+  - id: clear-action-must-be-doable
+    legacy: "8.96"
+    level: 3
+    title: "8.96 知らせに「消し方」 を書く検出器は、 消し方の行き先が在るかまで判定に入れる — 別の台帳の id を行き先の名に使うと、 消せない知らせになる"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
