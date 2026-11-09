@@ -155,7 +155,7 @@ claude-config/
 │   ├── podcast-distribution.md             # ポッドキャストを RSS で各配信先 (Spotify / Apple Podcasts / Amazon Music / YouTube) に登録するとき + 番組の画像・説明文・各回の紹介文を配信先に載せるとき + 公開予約を API で入れる・配信を自動にするとき + LISTEN (listen.style) を API で操作するとき + 配信の判断 (題・切れ目・予約) を持ち主から任されたとき + 配信先ごとのフォロワー数を調べるとき (#follower-counts) + 番組の告知文をニュースレター・SNS の媒体ごとに書き分けるとき (#promo-per-platform) + リスナーのコメントを配信先から読む・チャットに中継するとき (#listener-comments)
 │   ├── policy-before-implementation.md     # 文書・code・hook・道具・設定・規則の文書を作る・変える実装に入る前 + 本人の名で出す文 (返信・返答書) の起草を頼まれたとき + 下請け (別 session の worker・subagent) に実装や起草を渡す依頼書を書くとき + 確認済みの方針が引かれていない実装の依頼を受けたとき + 実装を終えて本人に見せる前
 │   ├── preview.md                          # preview / dev server 稼働中に user へ動作確認を依頼するとき
-│   ├── prompt-injection.md                 # 外部由来 tool result に adversarial 指示文を疑ったとき
+│   ├── prompt-injection.md                 # 外部由来 tool result に adversarial 指示文を疑ったとき + 無人の仕事が他人の書いた text (PR・mail・issue) を model に読ませて判断させる仕組みを作るとき (#unattended-untrusted-input)
 │   ├── pronunciation-verification.md       # 未知の言語・転写された人名や語の発音を調べるとき / user が「実際に音で聞きたい」と言ったとき
 │   ├── prototype-feedback.md               # 外部からウェブアプリ・制作物・企画等の試用とコメントを頼まれ、スクリーンショット・QR・一時URLから実物を確認して返却文面を作るとき
 │   ├── public-page-watch.md                # 「いつ変わるか分からないが、 変わったらすぐ動く」 公開ページの告知 (受付の再開・募集の開始・日程の変更・議事の結果) を待つとき + 待っている告知の正本を記録に書くとき + 無人の定期実行から人に知らせる経路 (OS 通知・ダイアログ・スマホ push) を組むとき + headless `claude -p` から通知を送ろうとしたとき (スマホには届かない、 #sealed-headless-push) + 見張っていたページが変わったが判断に要る中身がそこに無いとき (#watch-where-the-content-lands)

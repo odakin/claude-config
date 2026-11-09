@@ -12,7 +12,9 @@ conventions/batch-text-edits.md の先頭の側の罠)。 YAML を load → dump
     python3 yaml-set-top-keys.py <file.yaml> --set status=完了 --set status_context="…" --drop ask --drop ask_default \\
         [--after asked] [--comment status="2026-10-12: …"] [--dry-run]
     python3 yaml-set-top-keys.py --selftest
-    --set key=value   値は YAML の二重引用の文字列として書く (改行は \\n で入る)。 key が無ければ足す (--after <key> の直後、 無ければ末尾)
+    --set key=value   値は YAML の二重引用の文字列として書く。 改行を含む値は block scalar (`|-` / `|`) で書く (読める形を保つ。
+                      block で同じ値に読めない値 = 先頭の行が空白で始まる・行末に空白・tab・改行以外の制御文字・末尾に 2 つ以上の改行、 は
+                      二重引用で改行を \\n で書く)。 key が無ければ足す (--after <key> の直後、 無ければ末尾)
                       ⚠️ 値を自分で引用符に包まない = 引用符は道具が付ける。 shell で `'key="…"'` と書くと値の両端に " が残り、
                       file には `\"…\"` が入る (実測 2 回)。 両端が " の値は止める (本当にその値なら --allow-quoted-value)
                       ⚠️ `--set flag=false` は `flag: "false"` (文字列) になり、 読み手が bool() で読むと真になる (実測 2 回以上)
@@ -24,7 +26,8 @@ conventions/batch-text-edits.md の先頭の側の罠)。 YAML を load → dump
     --append key=text   文字列の key の末尾に text を改行で足す (notes に段落を 1 つ足すとき)。 値が block scalar (`|`) なら
                       形を保ってその字下げで行を足し、 引用・素の文字列なら「旧い値 + 改行 + text」 の二重引用で書き直す。
                       key が無ければ足す (--set と同じ)。 list・mapping・数の key は止める。 書いた後に読み直し、 足した後の値と
-                      ほかの key の不変を確かめる (`--set` で丸ごと書き直すと block の notes が 1 行の引用文字列に変わる = 実測)
+                      ほかの key の不変を確かめる (前は `--set` で丸ごと書き直すと block の notes が 1 行の引用文字列に変わった = 実測 2 回。
+                      今は --set も改行を含む値を block で書く)
     --drop key        その key をまとまりごと消す (無ければ何もしない)
     --dry-run         書かずに差分だけ出す (守る key を失う書き方なら「上書きの鍵」 も出す)
     --replaces key=鍵  守る key の今の値を読んだ印 (dry-run が「上書きの鍵」 として見せる 8 桁)。 守る key が 1 つなら `--replaces 鍵` でも可
@@ -93,6 +96,29 @@ def quote(v) -> str:
     return json.dumps(v, ensure_ascii=False)  # JSON の文字列は YAML の二重引用の文字列として読める
 
 
+_BLOCK_BAD = re.compile(r"[\t\r\x00-\x08\x0b-\x1f\x7f]")
+
+
+def block_ok(v) -> bool:
+    """改行を含む文字列を block scalar で書けるか (書けば読み直して同じ値になる形だけ)。"""
+    if not isinstance(v, str) or "\n" not in v or _BLOCK_BAD.search(v) or v.endswith("\n\n"):
+        return False
+    body = v[:-1] if v.endswith("\n") else v
+    lines = body.split("\n")
+    if not lines[0] or lines[0][0] == " " or any(ln != ln.rstrip(" ") for ln in lines):
+        return False
+    return True
+
+
+def render(k: str, v, c: str = "") -> list[str]:
+    """key の行 (block なら続く字下げの行も)。 改行を含む文字列は block scalar (`|-` = 末尾の改行なし / `|` = 1 つ)、
+    それ以外は quote の 1 行。 書いた後の読み直し (verify) が同じ値かを確かめる。"""
+    if block_ok(v):
+        body = v[:-1] if v.endswith("\n") else v
+        return [f"{k}: {'|' if v.endswith(chr(10)) else '|-'}{c}"] + [("  " + ln) if ln else "" for ln in body.split("\n")]
+    return [f"{k}: {quote(v)}{c}"]
+
+
 def edit(text: str, sets: dict[str, str], drops: list[str], after: str | None, comments: dict[str, str]) -> str:
     lines = text.split("\n")
     bl = blocks(lines)
@@ -107,7 +133,7 @@ def edit(text: str, sets: dict[str, str], drops: list[str], after: str | None, c
             continue
         if k in sets:
             c = f"   # {comments[k]}" if k in comments else ""
-            new.append(f"{k}: {quote(sets[k])}{c}")
+            new.extend(render(k, sets[k], c))
             done.add(k)
         else:
             new.extend(lines[a:b])
@@ -115,7 +141,7 @@ def edit(text: str, sets: dict[str, str], drops: list[str], after: str | None, c
             for nk, nv in sets.items():
                 if nk not in keys and nk not in done:
                     c = f"   # {comments[nk]}" if nk in comments else ""
-                    new.append(f"{nk}: {quote(nv)}{c}")
+                    new.extend(render(nk, nv, c))
                     done.add(nk)
     tail = "" if new and new[-1] == "" else None
     if tail is not None:
@@ -123,7 +149,7 @@ def edit(text: str, sets: dict[str, str], drops: list[str], after: str | None, c
     for nk, nv in sets.items():
         if nk not in done:
             c = f"   # {comments[nk]}" if nk in comments else ""
-            new.append(f"{nk}: {quote(nv)}{c}")
+            new.extend(render(nk, nv, c))
     if tail is not None:
         new.append("")
     return "\n".join(new)
@@ -331,6 +357,17 @@ def selftest() -> int:
         assert main([str(p), "--append", "notes=b"]) == 0
         d = _yaml_safe_load(p.read_text(encoding="utf-8"))
         assert d["notes"] == "a\nb\n" and d["next"] == "n", d
+    # --set の改行を含む値は block で書く (読める形)、 block で同じ値に読めない値は二重引用 (実測 2 回 = block の欄が 1 行の引用に変わった)
+    srcb = 'id: "x"\nhint: |\n  旧い 1\n  旧い 2\nafter: "a"\n'
+    for val, head in (("一\n二\n  字下げ", "hint: |-"), ("一\n二\n", "hint: |"), ("一行", 'hint: "一行"'),
+                      ("  先頭が空白\n二", 'hint: "  先頭が空白\\n二"'), ("tab\tあり\n二", 'hint: "tab\\tあり\\n二"'),
+                      ("行末に空白 \n二", 'hint: "行末に空白 \\n二"'), ("二重\n\n", 'hint: "二重\\n\\n"')):
+        outb = edit(srcb, {"hint": val}, [], None, {"hint": "c"} if head == "hint: |-" else {})
+        assert verify(srcb, outb, {"hint": val}, []) == [], (val, outb)
+        db = _yaml_safe_load(outb)
+        assert db["hint"] == val and db["after"] == "a" and head in outb, (val, outb)
+    assert "hint: |-   # c\n  一\n  二\n    字下げ\nafter:" in edit(srcb, {"hint": "一\n二\n  字下げ"}, [], None, {"hint": "c"})
+    assert edit('a: "x"\n', {"new": "p\nq"}, [], None, {}) == 'a: "x"\nnew: |-\n  p\n  q\n'  # 無い key を足すときも block
     selftest_read_token()
     print("yaml-set-top-keys selftest: ALL PASS (行頭の key だけを置き換え・本文の中の同じ語は触らない・ほかの key は不変を確かめる"
           "・守る key は読んだ印が無いと書かない)")
