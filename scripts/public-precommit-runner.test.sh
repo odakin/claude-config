@@ -567,6 +567,40 @@ if [ -z "$PF_FORM" ]; then PASS=$((PASS+1)); else
   FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [printf|grep -q] gate files still use the SIGPIPE-prone form:\n$PF_FORM\n"; fi
 
 # ====================================================================
+# 棚卸しでは Tier A-C の当たりの後も D-G を回す (2026-11-09): A-C に受理済みの当たりがある repo を、 棚卸しが
+# D-G を見ずに「受理済みのみの 0」 と記録していた。 印 (CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1) のある回だけ回し、
+# commit は従来どおり A-C の報告だけで止める (foil)
+# ====================================================================
+if command -v python3 >/dev/null 2>&1 && [ -f "$(dirname "$RUNNER")/check-unpublished-quote.py" ]; then
+  MOCK_ROOT2="$TMPDIR_TEST/mock-claude-root-2"
+  mkdir -p "$MOCK_ROOT2/mockpriv-paper"
+  printf '%s\n' '\begin{document}' \
+    'We argue that the copper kettle estimator keeps the quiet invariance alive at every order of the toy series.' \
+    '\end{document}' > "$MOCK_ROOT2/mockpriv-paper/draft.tex"
+  printf 'discover: %s .tex\n' "$MOCK_ROOT2" > "$MOCK_LAYER/unpublished-sources.txt"
+  export XDG_CACHE_HOME="$TMPDIR_TEST/cache2"
+  BOTH="see mockpriv-foo for this
+Example: \`the copper kettle estimator keeps the quiet invariance alive\` in a rule."
+  expect_output_has "inventory-runs-tier-d-after-tier-c-hit" "both.txt" "$BOTH" "commit rejected by Tier D (unpublished-quote)"
+  expect_output_has "inventory-still-reports-the-tier-c-hit" "both2.txt" "$BOTH" "[tier-c]"
+  expect_output_has "inventory-pass-line-when-only-tier-c-hits" "only-c.txt" "see mockpriv-foo for this" \
+    "tiers D-F passed after tier A-C hits"
+  printf '%s' "$BOTH" > "$MOCK_REPO/commit-both.txt"
+  commit_out="$(cd "$MOCK_REPO" && git add commit-both.txt && "$RUNNER" 2>&1; git reset -q HEAD commit-both.txt >/dev/null 2>&1)"
+  rm -f "$MOCK_REPO/commit-both.txt"
+  case "$commit_out" in
+    *"[tier-c]"*) case "$commit_out" in
+        *"unpublished-quote"*|*"tiers D-F passed"*) FAIL=$((FAIL+1))
+          FAILED_CASES="${FAILED_CASES}  [commit ran D-G after a tier-c hit] commit-stops-at-tier-c-without-d-g\n" ;;
+        *) PASS=$((PASS+1)) ;;
+      esac ;;
+    *) FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [no tier-c] commit-stops-at-tier-c-without-d-g\n" ;;
+  esac
+  rm -f "$MOCK_LAYER/unpublished-sources.txt"
+  unset XDG_CACHE_HOME
+fi
+
+# ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="
 echo "PASS: $PASS"
