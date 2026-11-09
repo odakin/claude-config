@@ -1,9 +1,9 @@
 #!/bin/bash
-# protected-dir-access-guard.test.sh — 保護 dir の名指し・上位 dir の再帰・cwd・Grep/Glob に確認が出て、 無関係な操作には出ないか + 設定の読み方 + カナリア
+# protected-dir-access-guard.test.sh — 保護 dir の名指し・上位 dir の再帰・cwd・Grep/Glob に確認が出る・止まるか、 除外つき・文中の語・無関係な操作には何もしないか + 設定の読み方 + カナリア
 #
 # 偽の HOME に実体 dir と home 直下の symlink 別名 (Dropbox → Library/CloudStorage/Dropbox) を作り、 保護 dir は
 # 架空の「部署/機密作業」 (保護 dir そのものは作らない = hook が中に触れずに判定することも確かめる)。
-# foil = 実際に起きた 2 形 (上位 dir からの find / loop での名指し)。
+# foil = 実際に起きた形 (上位 dir からの find / loop での名指し / 文中の語・引用符の / の誤検出) を架空の path で。
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/protected-dir-access-guard.py"
@@ -18,9 +18,15 @@ printf '# 作業リポ\n~/Dropbox/部署/機密作業\n' > "$T/.claude/leak-patt
 F="$CS/部署/機密作業"
 PASS=0; FAIL=0
 
-_run() {  # $1=tool $2=json tool_input $3=cwd -> ask / none
-  jq -n --arg t "$1" --argjson i "$2" --arg c "$3" '{tool_name:$t, tool_input:$i, cwd:$c}' \
-    | env -u CLAUDE_PROTECTED_DIRS HOME="$T" python3 "$HOOK" 2>/dev/null | grep -q '"permissionDecision": "ask"' && echo ask || echo none
+_run() {  # $1=tool $2=json tool_input $3=cwd -> ask / stop (exit 2 + 直し方の stderr) / none
+  local out rc err
+  err="$T/.err"
+  out=$(jq -n --arg t "$1" --argjson i "$2" --arg c "$3" '{tool_name:$t, tool_input:$i, cwd:$c}' \
+    | env -u CLAUDE_PROTECTED_DIRS HOME="$T" python3 "$HOOK" 2>"$err"); rc=$?
+  if [ "$rc" = 2 ]; then
+    grep -q 'prune' "$err" && echo stop || echo stop-without-hint
+  elif grep -q '"permissionDecision": "ask"' <<< "$out"; then echo ask
+  else echo none; fi
 }
 _check() {  # $1=label $2=got $3=expect
   if [ "$2" = "$3" ]; then PASS=$((PASS+1)); echo "  ok: $1"; else FAIL=$((FAIL+1)); echo "  NG: $1 (expected $3, got $2)"; fi
@@ -36,31 +42,59 @@ _bash "\$HOME 形" 'ls $HOME/Dropbox/部署/機密作業' ask
 _bash "親の直後の glob" 'ls ~/Dropbox/部署/*' ask
 _bash "親の直後の前方一致 glob" 'ls ~/Dropbox/部署/機密*' ask
 
-echo "=== ask: 上位 dir の再帰 ==="
-_bash "Dropbox の根から find (実際に起きた形)" 'cd ~/Library/CloudStorage/Dropbox 2>/dev/null || cd ~/Dropbox; find . -maxdepth 7 -name .git -print' ask
-_bash "find 実体の根" "find $CS -name .git" ask
-_bash "grep -rn 親" 'grep -rn foo ~/Dropbox/部署' ask
-_bash "rg \$HOME/Dropbox" 'rg foo $HOME/Dropbox' ask
-_bash "find ~" "find ~ -name '*.tex'" ask
-_bash "du -sh ~/Dropbox/" 'du -sh ~/Dropbox/' ask
-_bash "find /" 'find / -name x 2>/dev/null' ask
-_bash "python os.walk" "python3 -c \"import os; [print(r) for r,_,_ in os.walk(os.path.expanduser('~/Dropbox'))]\"" ask
+echo "=== stop: 上位 dir の再帰 (本人に確認を出さず、 直し方を返して止める) ==="
+_bash "Dropbox の根から find (実際に起きた形)" 'cd ~/Library/CloudStorage/Dropbox 2>/dev/null || cd ~/Dropbox; find . -maxdepth 7 -name .git -print' stop
+_bash "find 実体の根" "find $CS -name .git" stop
+_bash "grep -rn 親" 'grep -rn foo ~/Dropbox/部署' stop
+_bash "rg \$HOME/Dropbox" 'rg foo $HOME/Dropbox' stop
+_bash "find ~" "find ~ -name '*.tex'" stop
+_bash "du -sh ~/Dropbox/" 'du -sh ~/Dropbox/' stop
+_bash "find /" 'find / -name x 2>/dev/null' stop
+_bash "python os.walk" "python3 -c \"import os; [print(r) for r,_,_ in os.walk(os.path.expanduser('~/Dropbox'))]\"" stop
+_bash "find ~/Claude ~/Dropbox (2 つ目の起点が上位)" 'find ~/Claude ~/Dropbox -maxdepth 6 -name "x*"' stop
+_bash "xargs の後の grep -r" 'printf "a\0" | xargs -0 -n 1 grep -rl foo ~/Dropbox' stop
+_bash "mdfind (-onlyin 無し = 全体)" 'mdfind -name 報告' stop
+_bash "mdfind -onlyin 上位" 'mdfind -onlyin ~/Dropbox 報告' stop
+_bash "zsh の再帰 glob" 'ls ~/Dropbox/**/*.pdf' stop
+_bash "sudo + 環境変数 + timeout の後の find" 'LC_ALL=C sudo timeout 30 find ~ -name x' stop
 
-echo "=== ask: cwd ==="
+echo "=== cwd ==="
 _bash "cwd が中 (実体)" 'ls' ask "$F/sub"
 _bash "cwd が中 (別名)" 'ls' ask "$T/Dropbox/部署/機密作業/sub"
-_bash "cwd が根 + find ." 'find . -name .git' ask "$CS"
-_bash "cwd が別名の根 + grep -r" 'grep -r foo .' ask "$T/Dropbox"
+_bash "cwd が根 + find ." 'find . -name .git' stop "$CS"
+_bash "cwd が別名の根 + grep -r" 'grep -r foo .' stop "$T/Dropbox"
+_bash "cwd が根 + 引数の無い rg" 'rg foo' stop "$CS"
 _bash "cwd が親 + 名前" 'ls 機密作業' ask "$CS/部署"
 _bash "cwd が親 + glob" 'ls *' ask "$CS/部署"
 
-echo "=== ask: Grep / Glob ==="
-_tool "Grep path=~/Dropbox" Grep '{"pattern":"x","path":"~/Dropbox"}' ask
+echo "=== Grep / Glob ==="
+_tool "Grep path=~/Dropbox" Grep '{"pattern":"x","path":"~/Dropbox"}' stop
 _tool "Grep path=中" Grep "$(jq -n --arg p "$F/review" '{pattern:"x",path:$p}')" ask
-_tool "Grep path 無し + cwd が親" Grep '{"pattern":"x"}' ask "$CS/部署"
-_tool "Glob 絶対 ** from 根" Glob "$(jq -n --arg p "$CS/**/*.py" '{pattern:$p}')" ask
+_tool "Grep path 無し + cwd が親" Grep '{"pattern":"x"}' stop "$CS/部署"
+_tool "Glob 絶対 ** from 根" Glob "$(jq -n --arg p "$CS/**/*.py" '{pattern:$p}')" stop
 _tool "Glob pattern が P/B" Glob '{"pattern":"~/Dropbox/部署/機密作業/**"}' ask
-_tool "Grep path=home" Grep "$(jq -n --arg p "$T" '{pattern:"x",path:$p}')" ask
+_tool "Grep path=home" Grep "$(jq -n --arg p "$T" '{pattern:"x",path:$p}')" stop
+
+echo "=== none: 保護 dir を除く書き方を添えた走査 ==="
+_bash "find -prune で除く" "find ~/Dropbox -path '*/機密作業' -prune -o -name '*.tex' -print" none
+_bash "find の -prune に実体 path" "find ~/Dropbox -path ~/Dropbox/部署/機密作業 -prune -o -name x -print" none
+_bash "grep --exclude-dir=" 'grep -rn --exclude-dir=機密作業 foo ~/Dropbox' none
+_bash "rg -g !" "rg -g '!**/機密作業/**' foo ~/Dropbox" none
+_bash "find -not -path" "find ~/Dropbox -name x -not -path '*機密作業*'" none
+_bash "mdfind -onlyin 外" 'mdfind -onlyin ~/Claude 報告' none
+_bash "除外は片ごと (別の片の走査は止める)" "grep -rn --exclude-dir=機密作業 foo ~/Dropbox; find ~ -name x" stop
+
+echo "=== none: 文中の語・引用符の / (実際に誤検出した形を架空の path で) ==="
+_bash "loop の find \"\$r\" + awk の \"/\"" 'for r in ~/Claude/*/; do command find "$r" -path "$r/.git" -prune -o -name "*.md" -print; done | awk -F/ '"'"'{print $1"/"$2}'"'"' | sort | uniq -c' none
+_bash "commit message の tree と /" 'git commit -m "構造 tree の行を直した。 setup.sh / CLAUDE.md の touch を解放" -- CLAUDE.md' none
+_bash "grep -r の検索語が /" 'grep -rn "/" ~/Claude/x' none
+_bash "python の split(\"/\") (走査は ~/Claude)" "python3 -c \"import os; [print(p.split('/')[-1]) for p,_,_ in os.walk(os.path.expanduser('~/Claude'))]\"" none
+_bash "heredoc の本文の find と /" "python3 - <<'EOF'
+# find omitted text
+s = a.split('/')[0]
+EOF" none
+_bash "tr の / と find ~/Claude" "find ~/Claude -name x | tr '/' '_'" none
+_bash "ack の語が文の中" 'echo "ack は送らない / 返事だけ"' none
 
 echo "=== none: 触れないもの ==="
 _bash "規約を読む grep (語だけ)" 'grep -n "機密作業" CLAUDE.md' none

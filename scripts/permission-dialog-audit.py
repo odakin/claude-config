@@ -65,6 +65,10 @@ mode
   permission-dialog-audit.py --since 2026-07-25
   permission-dialog-audit.py --attribute --since 2026-09-01
   permission-dialog-audit.py --diagnose --latest 10     # 「また聞かれた」 → まずこれ
+  permission-dialog-audit.py --judgeable --since-days 7 --surface \
+      --send-hooks mail-send-guard --judgeable-hooks protected-dir --judgeable-tools run_in_terminal
+      # 本人が dialog の文字だけで決められない確認の件数 (0 件なら沈黙 = dashboard の段)。 決められる = アプリ自身の
+      # 確認 (APP_GATES)・宣言した hook・送信の hook の本送信の形・宣言した tool (claude-code-permissions.md#ask-only-owner-judgeable)
   permission-dialog-audit.py --latest 20
   permission-dialog-audit.py --from-transcripts --since 2026-09-01
 """
@@ -96,6 +100,17 @@ QUEUE_WINDOW = 3600.0
 FAST_TOOLS = ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Glob", "Grep", "Monitor",
               "Skill", "TodoWrite", "ToolSearch")
 PATH_TOOLS = ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit")
+# アプリ自身が出す確認 (permission の設定でも hook でもない = allow で消えない)。 hook を流し直す前に分ける =
+# 流し直すと、 その道具に掛かる今の hook の block (理由の無い高い段を止める類) が「fixed」 と出て、 hook で直った
+# ように見える (実測)。 key = log の tool 名 (mcp__<server>__ を除いた名でも引く)
+APP_GATES = {
+    "set_session_effort": "自分が起こした session を自分の段より上げる・他の session を変えるとアプリが聞く (道具の説明)",
+    "set_session_model": "自分が起こした session を自分の model より上げる・他の session を変えるとアプリが聞く (道具の説明)",
+    "set_session_permission_mode": "permission mode を上げるとアプリが聞く (道具の説明)",
+    "search_session_transcripts": "道具が毎回の承認を求める (always-prompt、 allow に入れても出る)",
+    "browser:open_site": "内蔵ブラウザで初めて開くサイト",
+    "computer:request_access": "画面操作で app を使う許可",
+}
 
 
 def local_epoch(s):
@@ -507,7 +522,77 @@ FIXES = {
                    " (claude-code-permissions.md#always-allow-never-matches-again)",
     "unmatched": "同じ session の transcript に該当 tool 呼び出しが無い (transcript 欠落 / --since の外 /"
                  " 応答より前に終わった呼び出ししか無い)。 --since を広げる。 別 session の呼び出しには付けない",
+    "app": "アプリ自身の確認 = 設定・hook では消えない。 減らすなら呼ぶ形を変える (例 = 上げたい段の session から起こす)"
+           " (claude-code-permissions.md#always-approve-tools)",
 }
+
+
+def app_gate(tool):
+    """アプリ自身の確認の道具なら理由 (違えば None)。"""
+    return APP_GATES.get(tool) or APP_GATES.get(str(tool).split("__")[-1])
+
+
+_SEG_SPLIT = re.compile(r"\n|&&|\|\||;|\||&")
+_SEND_FLAG = re.compile(r"(?:^|\s)--send(?:[\s=]|$)")
+
+
+def has_send_segment(command):
+    """単純 command (改行・&& || ; | & で割った 1 片) のどれかに `--send` がある = 送信の道具の本送信の形
+    (claude-code-permissions.md#ask-pattern-action-anchor = 不可逆の action の flag に anchor)。"""
+    return any(_SEND_FLAG.search(seg) for seg in _SEG_SPLIT.split(str(command or "")))
+
+
+def judge(row, judgeable_hooks=(), send_hooks=(), judgeable_tools=()):
+    """dialog 1 件を、 本人が dialog の文字だけで決められるか (judgeable) / 決められない (not) / 今はもう出ない (gone) に分ける。
+    決められる = アプリ自身の確認 (どの session を何に・どのサイト)、 宣言した hook (judgeable_hooks)、 送信の hook
+    (send_hooks) の本送信の形 (`--send` のある片)、 宣言した tool (judgeable_tools、 例 = 本人の端末の tab に出す道具)。
+    それ以外 (宣言していない hook・hook 無反応の rule・長さ・一意な path・突合できないもの) は決められない側
+    (claude-code-permissions.md#ask-only-owner-judgeable)。"""
+    r, kind, _why, _detail = row
+    if kind == "fixed":
+        return "gone"
+    if kind == "app":
+        return "judgeable"
+    tool = str(r.get("tool", ""))
+    if kind == "hook":
+        h = r.get("_hook", "")
+        if any(s and s in h for s in send_hooks):
+            if tool != "Bash":  # 送信の tool そのもの (MCP の send_email など) = dialog に宛先・件名・本文が出る
+                return "judgeable"
+            inp = r.get("_input") or {}
+            return "judgeable" if has_send_segment(inp.get("command", "")) else "not"
+        if any(s and s in h for s in judgeable_hooks):
+            return "judgeable"
+        return "not"
+    if any(t and (t == tool or tool.endswith("__" + t)) for t in judgeable_tools):
+        return "judgeable"
+    return "not"
+
+
+def print_judgeable(rows, surface=False, **kw):
+    """--judgeable の出力。 surface = 決められない確認が 0 件なら何も出さない (dashboard の段)。"""
+    groups = {}
+    counts = {"judgeable": 0, "not": 0, "gone": 0}
+    for row in rows:
+        v = judge(row, **kw)
+        counts[v] += 1
+        if v != "not":
+            continue
+        r, kind, why, _d = row
+        key = (kind, r.get("_hook") or "", r.get("tool", ""))
+        g = groups.setdefault(key, {"n": 0, "last": 0.0})
+        g["n"] += 1
+        g["last"] = max(g["last"], r["emit"])
+    if surface and not counts["not"]:
+        return
+    print(f"🔐 承認の確認のうち、 本人が dialog の文字だけで決められないもの {counts['not']} 件"
+          f" (決められる {counts['judgeable']} / 今はもう出ない {counts['gone']})"
+          " → 確認を出す側 (hook の述語・書き方) を直す = claude-code-permissions.md#ask-only-owner-judgeable")
+    for (kind, hook, tool), g in sorted(groups.items(), key=lambda x: -x[1]["n"]):
+        src = f"{hook} が ask" if hook else f"[{kind}]"
+        print(f"  {g['n']:3d}  {tool}  {src}  (最後 {fmt_t(g['last'])})")
+    if counts["not"]:
+        print("  1 件ずつの切り分け = permission-dialog-audit.py --diagnose --since <日付> --show-command")
 
 
 def first_line(s, limit=160):
@@ -594,6 +679,12 @@ def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, 
     matched = match_dialogs(reqs_list, uses, results, before, after, session_map, queue_window)
     for r in reqs_list:
         u, how, cli = matched[_rid(r)]
+        gate = app_gate(r.get("tool", ""))
+        if gate:
+            if u is not None:
+                r["_input"] = u["input"] if isinstance(u["input"], dict) else {}
+            rows.append((r, "app", gate, brief_input(u["name"], r.get("_input") or {}) if u is not None else ""))
+            continue
         if u is None:
             why = ("同じ session に対応する tool 呼び出しが無い (transcript 欠落 / 期間の外)" if cli
                    else "session の対応づけ (Mapping 行) が log に無く、 窓の中にも候補が無い")
@@ -601,6 +692,7 @@ def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, 
             continue
         tool = u["name"]
         inp = u["input"] if isinstance(u["input"], dict) else {}
+        r["_input"] = inp
         detail = brief_input(tool, inp)
         if how == "queue":
             detail = (detail + "  " if detail else "") + "(待ち行列: tool_use は dialog より前)"
@@ -617,6 +709,7 @@ def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, 
                 v, msg = run_hook(cmd, payload)
                 if v:
                     hit = (os.path.basename(cmd.split()[0]), v, msg)
+                    r["_hook"] = hit[0]
                     break
         if hit:
             # block (exit 2) は Claude にしか返らない = dialog は出ない。 ∴ 当時 dialog が出た
@@ -660,7 +753,7 @@ def per_call_unique_reason(inp):
     return " + ".join(hits) if hits else None
 
 
-def print_diagnosis(rows, run_hooks, hooks_n):
+def print_diagnosis(rows, run_hooks, hooks_n, only_hooks=""):
     if not rows:
         print("対象の dialog なし")
         return
@@ -670,6 +763,9 @@ def print_diagnosis(rows, run_hooks, hooks_n):
     print(f"permission dialog {len(rows)} 件 — 原因: " + ", ".join(f"{k} {v}" for k, v in sorted(by.items())))
     print(f"  (PreToolUse hook {hooks_n} 本を実際に流し直して判定)" if run_hooks
           else "  (--no-run-hooks: hook を実行していないので hook 由来も rule に混ざる)")
+    if run_hooks and only_hooks:
+        print(f"  ⚠️ --only-hooks {only_hooks} で絞った = 絞りの外の hook の確認は rule (hook 無反応) に入る"
+              " (件数の比べには絞らない run を使う)")
     print("  ⚠️ 判定は「**今の**設定に当時の入力を流した結果」。 その後 hook を直していれば、"
           " 当時 hook 由来だった dialog も今は rule / fixed と出る (= もう出ない、 と読む)")
     print("")
@@ -899,6 +995,50 @@ def selftest():
                           load_pretooluse_hooks([str(st2)]), 3000, run_hooks=True, cwd=tmp)
         check(rows_b[0][1] == "fixed", "block を返す hook は fixed (= 今はもう dialog が出ない) と分類")
 
+        # アプリ自身の確認は hook を流し直す前に分ける (流し直すと今の hook の block で fixed に見える = 実測)
+        st3 = tmp / "settings3.json"
+        st3.write_text(json.dumps({"hooks": {"PreToolUse": [
+            {"matcher": ".*", "hooks": [{"type": "command", "command": f"sh {hd}/block.sh"}]}]}}), encoding="utf-8")
+        du_app = [{"t": 5000.0, "name": "mcp__ccd_session_mgmt__set_session_effort",
+                   "input": {"session_id": "local_x", "effort": "max"}, "id": "a1", "sub": False, "path": tmp}]
+        rows_app = diagnose([req("mcp__ccd_session_mgmt__set_session_effort", 5000.0), req("browser:open_site", 6000.0)],
+                            du_app, 8.0, 2.0, load_pretooluse_hooks([str(st3)]), 3000, run_hooks=True, cwd=tmp)
+        check([k for _r, k, _w, _d in rows_app] == ["app", "app"],
+              f"set_session_effort と内蔵ブラウザのサイトは app (block する hook があっても fixed にしない) (got {[k for _r, k, _w, _d in rows_app]})")
+        check("app" in FIXES, "app に消し方の文言がある")
+
+        # 本人が dialog の文字だけで決められるか (--judgeable)
+        check(has_send_segment("cd x && python3 send_mail.py --to a --send") and not has_send_segment("send_mail.py --to a")
+              and not has_send_segment("python3 x.py --send-later") and not has_send_segment("echo '--send' >> notes.md"),
+              "本送信の形 = 単純 command に `--send` (dry-run・別の flag・引用符の中の見本は数えない)")
+
+        def jr(kind, tool="Bash", hook="", cmd=""):
+            rr = {"emit": 1.0, "tool": tool, "_hook": hook, "_input": {"command": cmd}}
+            return (rr, kind, "", "")
+        kw = dict(judgeable_hooks=("protected-dir",), send_hooks=("mail-send-guard",), judgeable_tools=("run_in_terminal",))
+        got = [judge(jr("hook", hook="mail-send-guard.sh", tool="mcp__gmail-x__send_email"), **kw),
+               judge(jr("hook", hook="mail-send-guard.sh", cmd="send_mail.py --send"), **kw),
+               judge(jr("hook", hook="mail-send-guard.sh", cmd="python3 presend_replay.py"), **kw),
+               judge(jr("hook", hook="protected-dir-access-guard.py"), **kw),
+               judge(jr("hook", hook="ask-user-question-guard.sh", tool="AskUserQuestion"), **kw),
+               judge(jr("rule"), **kw),
+               judge(jr("rule", tool="mcp__terminal__run_in_terminal"), **kw),
+               judge(jr("app", tool="browser:open_site"), **kw),
+               judge(jr("fixed"), **kw)]
+        check(got == ["judgeable", "judgeable", "not", "judgeable", "not", "not", "judgeable", "judgeable", "gone"],
+              f"judge: 送信の tool / 本送信 / 送信でない / 宣言した hook / 宣言していない hook / rule / 宣言した tool / app / fixed (got {got})")
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            print_judgeable([jr("app", tool="browser:open_site"), jr("fixed")], surface=True, **kw)
+        check(buf.getvalue() == "", "--surface は決められない確認が 0 件なら何も出さない")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            print_judgeable([jr("rule"), jr("rule"), jr("app", tool="browser:open_site")], surface=True, **kw)
+        check("決められないもの 2 件" in buf.getvalue() and "決められる 1" in buf.getvalue(),
+              f"--surface は決められない確認の件数と内訳を出す (got {buf.getvalue()[:80]!r})")
+
         # 既定 (projects_dir=None) = この機械の全部の設定フォルダ。 偽の HOME に既定とアカウント固定の 2 つ
         if _ccd is not None:
             fh_home = tmp / "cfg-home"
@@ -964,10 +1104,26 @@ def main():
                          "(例 mail-send-guard,discord-post-guard)")
     ap.add_argument("--show-command", action="store_true",
                     help="--diagnose の hook 由来の行に、 当時の呼び出しの全文 (Bash は command を 1 行に) も出す")
+    ap.add_argument("--judgeable", action="store_true",
+                    help="--diagnose の結果を、 本人が dialog の文字だけで決められるか / 決められないか / もう出ないかで数える")
+    ap.add_argument("--judgeable-hooks", default="",
+                    help="--judgeable で「決められる」 に数える hook (command の部分文字列、 カンマ区切り。 例 = 保護 dir の名指しに確認を出す hook)")
+    ap.add_argument("--send-hooks", default="",
+                    help="--judgeable で、 本送信の形 (`--send` のある片) のときだけ「決められる」 に数える外部発信の hook (カンマ区切り)")
+    ap.add_argument("--judgeable-tools", default="",
+                    help="--judgeable で「決められる」 に数える tool (hook 無反応のもの。 例 = run_in_terminal)")
+    ap.add_argument("--surface", action="store_true",
+                    help="--judgeable で、 決められない確認が 0 件なら何も出さない (dashboard の段)")
+    ap.add_argument("--since-days", type=int, default=0,
+                    help="--since の代わりに「今日から N 日前」 (dashboard の段の直近 7 日など)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
+    if a.since_days and not a.since:
+        a.since = datetime.fromtimestamp(time.time() - a.since_days * 86400).strftime("%Y-%m-%d")
+    if a.judgeable:
+        a.diagnose = True
     home = Path.home()
     projects = Path(a.projects_dir).expanduser() if a.projects_dir else None
     if a.from_transcripts:
@@ -976,6 +1132,8 @@ def main():
         print_from_transcripts(from_transcripts(uses, results, a.wait, tools), home, a.wait)
         return 0
     log_dir = Path(a.log_dir).expanduser()
+    if not log_dir.is_dir() and a.surface:
+        return 0  # dashboard の段: dialog の log を持たない機械 (CLI だけ) では数えるものが無い = 沈黙
     if not log_dir.is_dir():
         print(f"desktop log dir が無い: {log_dir} — CLI 等なら --from-transcripts を使う", file=sys.stderr)
         return 2
@@ -991,7 +1149,13 @@ def main():
                         run_hooks=not a.no_run_hooks, cwd=home / "Claude",
                         results=results, session_map=session_map, queue_window=a.queue_window,
                         show_command=a.show_command)
-        print_diagnosis(rows, not a.no_run_hooks, len(hooks))
+        if a.judgeable:
+            def _csv(s):
+                return tuple(x.strip() for x in s.split(",") if x.strip())
+            print_judgeable(rows, surface=a.surface, judgeable_hooks=_csv(a.judgeable_hooks),
+                            send_hooks=_csv(a.send_hooks), judgeable_tools=_csv(a.judgeable_tools))
+            return 0
+        print_diagnosis(rows, not a.no_run_hooks, len(hooks), a.only_hooks)
         return 0
     if a.latest:
         print_latest(reqs, a.latest)

@@ -57,7 +57,7 @@ claude-config/
 │   ├── claude-ai-routines.md               # claude.ai routines (RemoteTrigger / cloud cron) を作成・管理するとき
 │   ├── claude-app-bundle-reading.md        # Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + Claude Code 本体 (埋込 engine) の挙動 (hook の matcher の当て方・tool の旧名の表など) を確かめるとき + 読んだ結論を user の画面で裏付ける実験を頼むとき
 │   ├── claude-app-cwd-pin.md               # Claude.app の folder picker 起点固定 (launchd) を設定・解除するとき
-│   ├── claude-code-permissions.md          # Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき + tool call が拒否されて原因 (rule / hook / classifier) を切り分けるとき (#hook-masks-deny) + classifier に止められた操作を user に chat で承認してもらうとき・承認したのにまた止まったとき (#chat-approval-reaches-classifier) + 本人の口座番号などを、 本人が印刷して出す様式に印字するとき (#own-numbers-in-local-forms) + git の commit / push を別の dir から打つとき・allow に入れたのに止められたとき (#cd-with-git-goes-to-classifier) + worktree に入った session で Bash の command が拒否されたとき (#worktree-session-refuses-complex-command)
+│   ├── claude-code-permissions.md          # Claude Code の permission prompt 削減・deny/ask/allow 設計を触るとき + tool call が拒否されて原因 (rule / hook / classifier) を切り分けるとき (#hook-masks-deny) + classifier に止められた操作を user に chat で承認してもらうとき・承認したのにまた止まったとき (#chat-approval-reaches-classifier) + 本人の口座番号などを、 本人が印刷して出す様式に印字するとき (#own-numbers-in-local-forms) + git の commit / push を別の dir から打つとき・allow に入れたのに止められたとき (#cd-with-git-goes-to-classifier) + worktree に入った session で Bash の command が拒否されたとき (#worktree-session-refuses-complex-command) + 確認 (ask) を返す hook・rule を足す・直すとき・本人が「中身も分からず押すだけ」 と言ったとき (#ask-only-owner-judgeable)
 │   ├── clipboard-cleaner.md                # PDF コピー由来の段落内改行・RTF 書式をクリップボードで整形したいとき
 │   ├── closing-sweep.md                    # session の終わりに、 その session (と委ねた agent・子 session・別 session) で得た知見・手順・使い捨ての script を正本へ上げ、 正本と参照・SESSION・TODO を整えて commit するとき (= 締めの sweep・仕上げ) + 締めの sweep を個人層の skill や定型の指示にするとき
 │   ├── codex-desktop-triage.md             # ChatGPT app (Codex desktop) の task が 401 / auth error で止まったとき + 「Incorrect API key provided: sk-svcacct…」 が出たとき + Codex の hook が走らない・監査が untrusted と言うとき + app の更新で Codex の binary の path が変わったとき + 承認 CLI が「本人の発言が無い」 と言うとき + task の結果の要約が見当たらず最後の message が完了 gate への返事のとき + ChatGPT desktop の不具合を公式フィードバックへ送るとき + script や別の session から起こした Codex の仕事がアプリの一覧に出ないとき (#thread-not-in-app) + sandbox の中の git が `.git` に書けないとき (#sandbox-git-dir-readonly) + 承認を出さない Codex の worker が作業場所の外の dir に書けずに止まったとき (#writable-root-relaunch) + Codex の worker の sandbox の中から別の Codex の thread (封じた判定役など) を起こせないとき (#launch-from-inside-sandbox) + 端末で `codex` が command not found のとき (#cli-on-path)
@@ -211,7 +211,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (428 file + formcase/ 26 module + lib/ 83 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (429 file + formcase/ 26 module + lib/ 83 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
