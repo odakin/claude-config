@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage) + 外の新着を定期 job で channel に中継するとき (#channel-as-ledger) + bot に人へ DM を送らせる前・bot の持ち主にもやりとりを見せたいとき (#owner-visible-bot-conversation)
+when: Discord Bot を運用・実装するとき + 第三者の bot・連携 service が侵害されたと報じられ、 自分の server・bot への影響を確かめるとき (#third-party-bot-breach-triage) + bot が 403 Missing Access で channel に入れないとき・招待リンクで bot を入れようとしたとき (#missing-access-triage) + 外の新着を定期 job で channel に中継するとき (#channel-as-ledger) + 人が保つ出どころ (担当表・予定表・世話役のメール) から bot が定期の案内を出すとき (#scheduled-reminder-from-sources) + bot に人へ DM を送らせる前・bot の持ち主にもやりとりを見せたいとき (#owner-visible-bot-conversation)
 category: infra
-summary: Discord Bot 運用 (権限ポリシー・private channel 加入・持ち主に見せたいやりとりは 1:1 DM でなく bot が作る非公開 channel で・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック・グループへの呼びかけの個別 mention と user ID の根拠つき引き方・第三者の bot の侵害時の点検と token 漏洩時の @everyone の絞り方)
+summary: Discord Bot 運用 (権限ポリシー・private channel 加入・持ち主に見せたいやりとりは 1:1 DM でなく bot が作る非公開 channel で・per-channel error non-fatal な fetcher・Token 取扱・組織 NW での API ブロック・グループへの呼びかけの個別 mention と user ID の根拠つき引き方・第三者の bot の侵害時の点検と token 漏洩時の @everyone の絞り方・人が保つ出どころからの定期の案内の止める線と二重送りの防ぎ方)
 -->
 # discord-bot: Discord Bot を運用するときの規律
 
@@ -416,6 +416,17 @@ instance (組織図 YAML / ids / 人名) は owner の private layer。 一般�
 - **書き方**: `allowed_mentions: {"parse": []}` で誰も名指ししない (外から来た本文に `@everyone` があっても鳴らない = [#mass-mention-silently-dropped](#mass-mention-silently-dropped) の逆向き)、 `flags: 4` (SUPPRESS_EMBEDS) でリンクの埋め込みを出さない。
   後から分かったこと (別の経路の知らせ) は `PATCH /channels/{c}/messages/{m}` で同じ投稿に足す = 編集は通知を鳴らさない。 本文の行は最初の印の前に足し、 印は最後に足す (実測: 書く → 追記 → 3 回目は何もしない、 を試しの channel で確かめた)
 - bot が channel や category を作るには Manage Channels が要る (標準の posting の権限の組に入っている)
+
+## <a id="scheduled-reminder-from-sources"></a>人が保つ出どころから、 bot が定期の案内 (前日の知らせ) を出すとき
+
+会の担当表・予定表・世話役の案内メール・channel の「次回は…」 の投稿のような、 人が手で保つ出どころを読んで、 bot が開催の前日に案内を出す形。 出どころは人が直すたびに遅れて揃うので、 揃っていない日に送らない線が要る。 [#channel-as-ledger](#channel-as-ledger) との違い = あちらは外の新着の中継で、 書いたかどうかを channel の印に持たせる。 こちらは送るかどうかが人の出どころに依るので、 送った記録と止める線を持つ。
+
+- **送る文は出どころの値を型に入れるだけ** — 人が書いた句は語を変えずに写す。 紹介の 1 文を AI に書かせるなら、 渡す材料 (題・要旨・世話役の文) を決め、 材料に無いことを書かせない指示と形の検査 (1 行・長さ・URL や mention が無い) を通った文だけを使い、 文と材料 (id・hash) を送った記録に残す。 送る日より前に書いて cache すると、 試しの実行で見せた文と送る文が同じになる
+- **止める線 = 休み・変更の語とその日の日付** (M/D、 前日の投稿なら「明日」) が同じ投稿にあれば、 送らずに人に知らせる (送るのは人の「送って」 の後)。 個人の「欠席」 は語に入れない (一人の欠席の連絡で会ごと止めない)。 世話役の台帳に変更の日付が書いてあれば、 その日より前の投稿は反映済みとして止めない (実測: 担当の交換を頼む投稿は、 交換が台帳に入った後も日付と変更の語を持ち続ける = 見ないと交換した 2 回分を止めた)。 1 つの channel に会が 2 つあるなら、 会の名を含む投稿はその会だけに、 含まない投稿は両方に効かせる
+- **出どころどうしの食い違いも止める** (世話役のメールの担当・題・日付と台帳、 「次回」 の投稿の時刻・曜日と予定表、 世話役の返信)。 読めない出どころがあれば送らない
+- **二重に送らない** — 送った記録に加えて、 送る直前に channel を読み、 前日以降にその会の案内 (会の名と日付か「明日」) があれば、 誰の投稿でも出さずに記録する (人が手で出した分を拾う)。 同じ日・同じ channel に会が 2 つあれば 1 通にまとめる (mention を 2 回鳴らさない)
+- **送った後も見る** — 当日の回でもう一度止める線を当て、 送った後に出た休み・変更の知らせを人に出す。 訂正の投稿は自動で出さない
+- **有効にする前に過去の流れに当てる** — 過去の数週間の各日を、 その時刻までの投稿・メールだけを見て空回しし、 送る日・止める日・本文を確かめる。 止める語の一覧と「反映済み」 の扱いは、 実際の流れに当てて、 止めるべき日だけが止まるのを見てから決める
 
 ## <a id="guild-creation-user-only"></a>Bot は server (guild) を作れない = 器は人間が作る
 
