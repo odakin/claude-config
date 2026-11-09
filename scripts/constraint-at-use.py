@@ -12,6 +12,12 @@ key の導出 (= 対応表を別に持たない、 convention-design-principles.
   する。 ② は括弧 (半角・全角) の外だけ = 括弧の中の説明語 (台帳の置き場の repo 名など) は key にしない (実測: repo 名を
   含むだけの command に行が出た)。 括弧の中でも key にしたい名前は backtick で囲む。 `<id>` 等の placeholder は「/ と空白以外の任意」、 `{a,b}` は選択肢に展開。 key は Bash の command と
   file 系 tool (Edit / Write / MultiEdit / Read / NotebookEdit) の path に対して substring (regex) で当てる。
+  英数字で始まる導いた key は、 左に語の境目を要る (直前が英数字・`_` でないか文頭 = LEFT_BOUNDARY)。 実測:
+  key が別の file 名の途中で当たり、 無関係な command に行が出た (合成例 = key `log-export` が `catalog-export.md` の中)。
+  `-` の後は当てる = 道具を包む・入れる file (`session-start-<key>.sh` / `install-<key>.sh`) にも出す (実測: `-` まで
+  境目にすると、 本体が `hooks/session-start-<道具>.sh` の形の道具の行が、 その本体に出なくなった)。
+  `.` `/` placeholder で始まる key と overlay の regex (下の :: / :=) は書いたとおりに当てる (境目が要るなら regex に書く)。
+  表示 (`--check`) は導いた key のまま、 照合だけ境目つき (row の "match")。
   1 列目から key が導けない行 (「Remote Control の auth」 等) は、 表の file の HTML comment で足す:
       <!-- constraint-keys
       - <1 列目の頭 (prefix)> :: <regex>      ← 導いた key に足す
@@ -62,6 +68,8 @@ SEARCH_ARG_OPTS = {"-A", "-B", "-C", "-m", "-d", "-D", "-g", "-t", "-T", "-M", "
                    "--exclude-dir", "--glob", "--type", "--max-count", "--context", "--after-context",
                    "--before-context"}
 SEPARATORS = {";", "|", "||", "&", "&&", "(", ")"}
+# 導いた key の左の語の境目 = 直前が英数字・`_` でない (文頭を含む)。 `-` `.` `/` 空白の後は当たる
+LEFT_BOUNDARY = r"(?<![A-Za-z0-9_])"
 HEADER = "⚠️ 触る前に効く制約 (この session で初めて触る道具の行。 正本 = {table})"
 
 
@@ -128,8 +136,9 @@ def load_table(path: Path) -> list[dict]:
             if len(cells) < 2:
                 continue
             head = cells[0]
+            keys = derive_keys(head)
             rows.append({"id": hashlib.sha1(head.encode("utf-8")).hexdigest()[:12], "head": head, "line": line,
-                         "keys": derive_keys(head), "table": str(path)})
+                         "keys": keys, "derived": set(keys), "table": str(path)})
         elif in_table and rows and line.strip() == "":
             break  # 表の終わり
     for blk in KEY_BLOCK_RE.findall(text):
@@ -144,9 +153,17 @@ def load_table(path: Path) -> list[dict]:
                 continue
             if replace:
                 hits[0]["keys"] = [rx.strip()]
+                hits[0]["derived"] = set()
             elif rx.strip() not in hits[0]["keys"]:
                 hits[0]["keys"].append(rx.strip())
+    for r in rows:
+        r["match"] = [match_regex(k) if k in r["derived"] else k for k in r["keys"]]
     return rows
+
+
+def match_regex(key: str) -> str:
+    """導いた key の照合用の regex: 英数字で始まる key は左に語の境目を要る。"""
+    return LEFT_BOUNDARY + key if key[:1].isascii() and key[:1].isalnum() else key
 
 
 def _command_word(tokens: list[str]) -> tuple[str, int]:
@@ -237,7 +254,7 @@ def haystack(tool_name: str, tool_input: dict) -> str | None:
 def match_rows(rows: list[dict], text: str) -> list[dict]:
     out = []
     for r in rows:
-        for k in r["keys"]:
+        for k in r.get("match", r["keys"]):
             try:
                 if re.search(k, text):
                     out.append(r)
@@ -358,10 +375,12 @@ def selftest() -> int:
                        "| foo-tool (台帳 = some-repo / other-repo の `data/<id>.yaml`、 旧名 old-name.py) | **台帳は道具で書く** |\n"
                        "| bar-tool （全角 = third-repo の中） | **全角の括弧も同じ** |\n"
                        "| baz-check / 層1 pre-hook の gate | **形を守る** |\n"
+                       "| log-tool / log-export (書き出しの dir) | **左の境目** |\n"
+                       "| `.collab-x.conf` | **点で始まる key** |\n"
                        "\n後文\n\n<!-- constraint-keys\n- Remote Control の auth :: claude auth status|remote-control\n- baz-check := baz-check|baz-guard\n-->\n",
                        encoding="utf-8")
         rows = load_table(tbl)
-        check(len(rows) == 7, "table: header / 区切りを除く 7 行を読む")
+        check(len(rows) == 9, "table: header / 区切りを除く 9 行を読む")
         k = {r["head"][:12]: r["keys"] for r in rows}
         check(k["drive-xlsx-s"] == ["drive\\-xlsx\\-set\\-cells"], "key: script 名 (- を含む bare token)")
         check(any("todo/[^/\\s]*\\.yaml" == x for x in k["todo_ledger "]), "key: `<id>` placeholder → [^/\\s]*")
@@ -374,6 +393,23 @@ def selftest() -> int:
         check(k["baz-check / "] == ["baz-check|baz-guard"], "key: := は導いた key を置き換える")
         check(not match_rows(rows, "bash x/pre-hook-scan.sh") and match_rows(rows, "bash baz-guard.sh"),
               "match: := で絞った行は説明の語 (pre-hook) に出ず、 置き換えた key には出る")
+        line_hit = lambda c: [r for r in match_rows(rows, haystack("Bash", {"command": c}))  # noqa: E731
+                              if r["head"].startswith("log-tool")]
+        check(not line_hit("sed -n '1,5p' notes/catalog-export.md"),
+              "boundary: key が長い語の途中に当たっても出ない (cata|log-export)")
+        check(not line_hit("cat x/count_log-tool.py") and not line_hit("cat x/blog-tool.py"),
+              "boundary: 直前が英字や `_` なら別の語 (blog-tool / count_log-tool)")
+        check(line_hit("python3 scripts/log-tool.py --surface") and line_hit("cat repo/log-export/a.md")
+              and line_hit("log-tool --x") and line_hit("cat hooks/session-start-log-tool.sh"),
+              "boundary: 空白・`/`・文頭・`-` の後なら出る (道具を包む file)")
+        k9 = {r["head"][:12]: r for r in rows}
+        check(k9["drive-xlsx-s"]["match"][0].startswith("(?<!") and k9["drive-xlsx-s"]["keys"] == ["drive\\-xlsx\\-set\\-cells"],
+              "boundary: 境目は照合用の regex だけに付け、 表示の key は変えない")
+        check(match_rows(rows, "repo/.collab-x.conf") and match_rows(rows, "cat a.collab-x.conf"),
+              "boundary: 点で始まる key には境目を付けない")
+        check(k9["Remote Contr"]["match"] == ["claude auth status|remote-control"]
+              and k9["baz-check / "]["match"] == ["baz-check|baz-guard"],
+              "boundary: overlay の regex (:: / :=) は書いたとおりに当てる")
         hits = match_rows(rows, "python3 scripts/drive-xlsx-set-cells.py --inspect x.xlsx")
         check([r["head"][:5] for r in hits] == ["drive"], "match: Bash command に script 名")
         hits = match_rows(rows, "repo/todo/2026-10-01-foo.yaml")
@@ -441,7 +477,7 @@ def selftest() -> int:
         r = subprocess.run([sys.executable, __file__, "--table", str(tbl), "--probe", "calendar.sh add"], capture_output=True, text=True)
         check(r.returncode == 0 and "calendar.sh" in r.stdout, "--probe: 出る行を表示")
         r = subprocess.run([sys.executable, __file__, "--table", str(tbl), "--check"], capture_output=True, text=True)
-        check(r.returncode == 0 and "7 行" in r.stdout, "--check: 全行に key があれば rc 0")
+        check(r.returncode == 0 and "9 行" in r.stdout, "--check: 全行に key があれば rc 0")
         t2 = tmp / "shared.md"
         t2.write_text("| 対象 | 制約 |\n|---|---|\n| foo-bar / a.py | x |\n| foo-bar / b.py | y |\n", encoding="utf-8")
         r = subprocess.run([sys.executable, __file__, "--table", str(t2), "--check"], capture_output=True, text=True)
