@@ -19,6 +19,7 @@
   restore  手元の main を upstream に合わせる。 変更は PR の branch と backup の ref (refs/upstream-pr/backup/<時刻>) に残る。
            stash は使わない。 公開しない
   after    出した PR が merge されたら手元の branch を消す。 merge されずに閉じたら 1 回だけ伝える。 公開しない
+  drop     準備したが出さないと決めた PR を捨てる (branch の先は backup の ref に残る)。 公開しない
 
 所有者の判定: GitHub の権限で admin、 または push できて repo の持ち主と同じ login なら所有者 = 何もしない。
 push できるが所有者でない人 (書き込み権限のある第三者) は origin の branch から PR (main には push しない)。
@@ -28,11 +29,11 @@ push できない人は fork から PR。 最後に確かめた結果は .git/up
 
 ## 漏洩の検査 (fork への push の前。 走れなければ出さない)
 
-PR に載る面の全部 = 各 commit の足した行・各 commit の message・branch 名・PR の題と本文・commit の author と
-committer の email。
+PR に載る面の全部 = 各 commit の足した行・各 commit の message・新しく入る file の名前・branch 名・PR の題と本文・
+commit の author と committer の email。
   - 各 commit の足した行に、 公開 repo の pre-commit と同じ runner (public-precommit-runner.sh) を当てる。 PR の題・本文・
-    branch 名・commit の message は 1 つの text にして最後の commit の足した行と一緒に当てる (= 構造の検査 〔email・
-    home の path・IP・token〕 も掛かる)。 runner は tree の棚卸しと同じ印 (CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1) で呼び、
+    branch 名・commit の message・新しく入る file の名前は 1 つの text にして最後の commit の足した行と一緒に当てる
+    (= 構造の検査 〔email・home の path・IP・token〕 も掛かる)。 runner は tree の棚卸しと同じ印 (CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS=1) で呼び、
     「漏洩の段を通った」 の 1 行が出たときだけ通ったとする
   - 各 commit の message と、 PR の題・本文に commit message の検査 (commit-msg-leak-guard-runner.sh) を当てる
   - 隣にある private な repo の文を逐語の検査 (check-unpublished-quote.py) の源にする: 同じ親の dir にある git repo の
@@ -62,6 +63,7 @@ committer の email。
   upstream-pr.py send --repo DIR --slug NAME --yes [--title TITLE] [--body-file F]
   upstream-pr.py restore --repo DIR
   upstream-pr.py after [--repo DIR ...]
+  upstream-pr.py drop --repo DIR --slug NAME
   upstream-pr.py --selftest
 
 手元の設定 (git config、 clone ごと): upstream-pr.disable = true で何も出さない / upstream-pr.base = owner/repo で base の
@@ -492,27 +494,33 @@ def sources_config(repo: Repo):
     """隣の private な repo の文を逐語の検査の源にする config を書く。 (path, private な repo の名前)"""
     parent = repo.root.parent
     cache = repo.load_cache("visibility")
-    private, excludes = [], []
+    private = []
     for d in sorted(parent.iterdir()):
         try:
             if not d.is_dir() or d.name.startswith("."):
                 continue
             if (d / ".claude" / "public-repo.marker").exists() or d.resolve() == repo.root.resolve():
                 continue
-            if not (d / ".git").exists():
-                excludes.append(d)
-                continue
-            if visibility(repo, d, cache) == "public":
-                excludes.append(d)
-            else:
+            if (d / ".git").exists() and visibility(repo, d, cache) != "public":
                 private.append(d)
         except OSError:
             continue
     repo.save_cache("visibility", cache)
-    if any(ch.isspace() for ch in str(parent)):
+    # engine の discover は root の直下の dir を全部たどってから exclude で落とす = 親が home なら ~/Library まで歩く。
+    # private な repo だけへの symlink を並べた dir を root にする (直下の名前 = repo の名前 = 定型文の除外も repo 単位で効く)
+    root = repo.state_dir / "sources"
+    shutil.rmtree(root, ignore_errors=True)  # 中の symlink だけを消す (先は辿らない)
+    use_discover = not any(ch.isspace() for ch in str(root))
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        for d in private:
+            (root / d.name).symlink_to(d, target_is_directory=True)
+    except OSError:
+        use_discover = False
+    if use_discover:
+        lines = [f"discover: {root} {' '.join(SOURCE_SUFFIXES)}"]
+    else:  # path に空白がある・symlink を作れない = repo ごとの glob (定型文の除外は効かない = 止める側に倒れる)
         lines = [f"include: {d}/**/*{suf}" for d in private for suf in SOURCE_SUFFIXES]
-    else:
-        lines = [f"discover: {parent} {' '.join(SOURCE_SUFFIXES)}"] + [f"exclude: {d}/*" for d in excludes]
     path = repo.state_dir / "unpublished-sources.txt"
     path.write_text("# upstream-pr.py が書いた = 隣の private な repo を逐語の検査の源にする (手で直さない)\n"
                     + "\n".join(lines) + "\n", encoding="utf-8")
@@ -603,8 +611,10 @@ def check_message(wt: Path, label: str, text: str, eng: Path, layer: str, source
         os.unlink(msg)
 
 
-def pr_text(branch, title, body, messages):
+def pr_text(branch, title, body, messages, files=()):
     parts = [f"branch: {branch}", f"title: {title}", "", body or "", ""]
+    if files:  # file の名前も公開される面 (名前に人名・案件名が入る形を構造の検査と語の検査に掛ける)
+        parts += ["files:"] + [f"  {f}" for f in files] + [""]
     for i, m in enumerate(messages, 1):
         parts += [f"commit {i}:", m, ""]
     return "\n".join(parts)
@@ -620,6 +630,8 @@ def scan_branch(repo: Repo, slug: str, base_sha: str, title: str, body: str, per
         scan.unavailable.append(f"検査の engine が読めない ({', '.join(missing) or 'bash が無い'}) = 出さない")
         return scan
     layer = personal_layer()
+    # 逐語の検査の索引の cache を .git の中に置く = sandbox (Codex) で ~/.cache に書けなくても走る
+    os.environ["XDG_CACHE_HOME"] = str(repo.state_dir / "cache")
     sources, private_names = sources_config(repo)
     scan.notes.append(f"逐語の検査の源 = 隣の private な repo {len(private_names)} 個")
     commits = git(repo.root, "rev-list", "--reverse", f"{base_sha}..{branch}").stdout.split()
@@ -634,7 +646,8 @@ def scan_branch(repo: Repo, slug: str, base_sha: str, title: str, body: str, per
                                     f"焼き付く。 直し方: {noreply_line(perm)} を打ってから prepare を --reset-author つきで"
                                     f"やり直す")
     messages = [git(repo.root, "log", "-1", "--format=%B", c).stdout for c in commits]
-    text = pr_text(branch, title, body, messages)
+    files = git(repo.root, "diff", "--name-only", "--diff-filter=AR", f"{base_sha}..{branch}").stdout.split("\n")
+    text = pr_text(branch, title, body, messages, [f for f in files if f])
     wt = repo.state_dir / f"scan-{slug}"
     _drop_worktree(repo, wt)
     ho = hooks_off(repo.state_dir)
@@ -1055,6 +1068,28 @@ def cmd_after(a) -> int:
     return rc_all
 
 
+def cmd_drop(a) -> int:
+    repo = Repo(a.repo)
+    ensure_writable(repo, f"準備した PR {a.slug} を捨てる (branch の先は backup の ref に残る)")
+    with repo.lock():
+        st = repo.load_state()
+        e = st.get("prs", {}).get(a.slug)
+        if not e:
+            raise Fail(EXIT_USAGE, f"--slug {a.slug} の PR の記録が無い")
+        if e.get("state") == "sent":
+            raise Fail(EXIT_USAGE, f"{e.get('url')} は出した PR = GitHub で閉じれば after が片付ける")
+        tip = repo.rev(f"refs/heads/{e['branch']}")
+        ref = ""
+        if tip:
+            ref = f"{BACKUP_PREFIX}dropped-{a.slug}-{stamp()}"
+            git(repo.root, "update-ref", ref, tip)
+            git(repo.root, "branch", "-D", e["branch"])
+        st["prs"].pop(a.slug, None)
+        repo.save_state(st)
+    print(f"{repo.name}: 準備した PR {e['branch']} を捨てた" + (f" (中身は {ref} に残る)" if ref else ""))
+    return EXIT_OK
+
+
 def repos_from_args(given):
     if given:
         return given
@@ -1087,7 +1122,8 @@ def status_one(repo: Repo):
     return {"repo": str(repo.root), "name": repo.name, "role": perm.get("role"), "unknown": perm.get("unknown"),
             "login": login, "paths": paths, "commits": [[c, subject(repo, c)] for c in commits], "merges": merges,
             "fork_remote": ("fork" in repo.remotes) or (repo.base_remote == "upstream"),
-            "prepared": [ask_line(repo, e) for e in prepared], "open": [e.get("url") for e in open_prs],
+            "prepared": [[k, ask_line(repo, e)] for k, e in prs.items() if e.get("state") == "prepared"],
+            "open": [e.get("url") for e in open_prs],
             "branch": repo.current_branch(), "base": f"{repo.base_remote}/{repo.base_branch}"}
 
 
@@ -1128,8 +1164,8 @@ def cmd_status(a) -> int:
         else:
             print(f"  gh = 使える (login {b.get('login')}) / "
                   + ("fork の remote = ある" if b["fork_remote"] else "fork の remote = 無い (send が作る)"))
-        for line in b["prepared"]:
-            print(f"  準備済み (まだ出していない): {line}")
+        for slug, line in b["prepared"]:
+            print(f"  準備済み (まだ出していない): {line} (出さないなら {tool_cmd('drop', '--repo', root, '--slug', slug)})")
         if b["open"]:
             print(f"  出して閉じていない PR {len(b['open'])} 本: {', '.join(u for u in b['open'] if u)}"
                   f" (閉じたら {tool_cmd('after', '--repo', root)})")
@@ -1360,6 +1396,11 @@ def selftest() -> int:
                r.returncode == EXIT_BLOCKED and not json.loads(state_file.read_text()).get("created"),
                r.stdout + r.stderr)
         fresh_clone()
+        (clone / f"contact-{addr}.md").write_text("A general paragraph about the checks.\n")
+        r = tool("prepare", "--repo", clone, "--slug", "leak-name", "--title", "Add a paragraph")
+        expect("leak: an e-mail address in a new file's name is stopped",
+               r.returncode == EXIT_BLOCKED and "tier-a/email" in r.stdout, r.stdout + r.stderr)
+        fresh_clone()
         (clone / "ok.md").write_text("A general paragraph about the checks.\n")
         tool("prepare", "--repo", clone, "--slug", "body-leak", "--title", "Add a paragraph")
         home_path = "/" + "Users" + "/someone/work/data"
@@ -1378,6 +1419,23 @@ def selftest() -> int:
         r = tool("prepare", "--repo", clone, "--slug", "copied", "--title", "Add a log")
         expect("leak: a sibling that is public on GitHub is not a source", r.returncode == 0, r.stdout + r.stderr)
         sh("git", "-C", priv, "remote", "remove", "origin")
+        r = run_status()
+        expect("status: a prepared PR offers drop", "準備済み" in r.stdout and " drop " in r.stdout, r.stdout)
+        r = tool("drop", "--repo", clone, "--slug", "copied")
+        dropped = sh("git", "-C", clone, "for-each-ref", "--format=%(refname)", BACKUP_PREFIX + "dropped-*").stdout
+        gone = not sh("git", "-C", clone, "rev-parse", "-q", "--verify", "upstream-pr/copied", check=False).stdout.strip()
+        expect("drop: branch removed, tip kept in a backup ref", r.returncode == 0 and gone and dropped.strip(),
+               r.stdout + r.stderr)
+        loose = parent / "scratch"  # git repo でない dir = 源に入れない
+        loose.mkdir()
+        loose_text = ("Seventeen lantern festivals brightened the harbour district while porters carried "
+                      "copper kettles uphill.")
+        (loose / "draft.md").write_text(loose_text + "\n")
+        fresh_clone()
+        (clone / "loose.md").write_text(loose_text + "\n")
+        r = tool("prepare", "--repo", clone, "--slug", "loose", "--title", "Add a paragraph")
+        expect("sources: a sibling dir that is not a git repo is not a source", r.returncode == 0, r.stdout + r.stderr)
+        shutil.rmtree(loose)
         fresh_clone()
         gh_state()
         sh("git", "-C", clone, "config", "user.email", "contrib" + "@" + "example-lab.ac.jp")
@@ -1481,10 +1539,13 @@ def main() -> int:
     p.add_argument("--repo", required=True)
     p = sub.add_parser("after")
     p.add_argument("--repo", action="append")
+    p = sub.add_parser("drop")
+    p.add_argument("--repo", required=True)
+    p.add_argument("--slug", required=True)
     a = ap.parse_args()
     try:
         return {"status": cmd_status, "prepare": cmd_prepare, "send": cmd_send, "restore": cmd_restore,
-                "after": cmd_after}[a.cmd](a)
+                "after": cmd_after, "drop": cmd_drop}[a.cmd](a)
     except Fail as exc:
         print(exc.msg, file=sys.stderr)
         return exc.code
