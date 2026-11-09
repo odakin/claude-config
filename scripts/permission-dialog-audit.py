@@ -569,28 +569,72 @@ def judge(row, judgeable_hooks=(), send_hooks=(), judgeable_tools=()):
     return "not"
 
 
-def print_judgeable(rows, surface=False, **kw):
-    """--judgeable の出力。 surface = 決められない確認が 0 件なら何も出さない (dashboard の段)。"""
+SESSIONS_DIR = "~/Library/Application Support/Claude/claude-code-sessions"
+
+
+def load_window_kinds(sessions_dir=SESSIONS_DIR):
+    """desktop の session の記録 (local_*.json) → {local id: 'owner' (本人が開いた窓) / 'spawned' (別の session が起こした窓)}。
+    印 = `spawnedFrom` (起こした session の id が入る。 `spawnSeed` は空の dict で印にならない)。 読めなければ空。"""
+    out = {}
+    root = Path(sessions_dir).expanduser()
+    if not root.is_dir():
+        return out
+    for f in root.glob("**/local_*.json"):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(d, dict):
+            out[d.get("sessionId") or f.stem] = "spawned" if d.get("spawnedFrom") else "owner"
+    return out
+
+
+def _shape(row):
+    """束ねた行の「どの形か」 = Bash は先頭の command の語、 hook はその理由の頭 (「…」 の中は伏せる = 保護 dir の名など)。
+    command の全文は出さない (dashboard の段に path が載らないように。 全文 = --diagnose --show-command)。"""
+    r, kind, why, detail = row
+    if kind == "hook" and detail and not first_line(detail).startswith("{"):  # JSON だけを返す hook は command の語で
+        return re.sub(r"「[^」]*」", "「…」", first_line(detail, 70))
+    cmd = str((r.get("_input") or {}).get("command", ""))
+    if cmd:
+        words = [w for w in cmd.split() if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w)][:1]
+        if words:
+            return os.path.basename(words[0])[:24] + " …"
+    return ""
+
+
+def print_judgeable(rows, surface=False, windows=None, **kw):
+    """--judgeable の出力。 surface = 決められない確認が 0 件なら何も出さない (dashboard の段)。
+    windows = load_window_kinds() の対応表 (あれば、 決められない確認を本人が開いた窓 / 別の session が起こした窓で分ける)。"""
     groups = {}
     counts = {"judgeable": 0, "not": 0, "gone": 0}
+    by_window = {"owner": 0, "spawned": 0, "?": 0}
     for row in rows:
         v = judge(row, **kw)
         counts[v] += 1
         if v != "not":
             continue
         r, kind, why, _d = row
+        by_window[(windows or {}).get(r.get("session", ""), "?")] += 1
         key = (kind, r.get("_hook") or "", r.get("tool", ""))
-        g = groups.setdefault(key, {"n": 0, "last": 0.0})
+        g = groups.setdefault(key, {"n": 0, "last": 0.0, "shape": ""})
         g["n"] += 1
-        g["last"] = max(g["last"], r["emit"])
+        if r["emit"] >= g["last"]:
+            g["last"] = r["emit"]
+            g["shape"] = _shape(row) or g["shape"]
     if surface and not counts["not"]:
         return
+    win = ""
+    if windows:
+        win = (f"。 窓 = 本人が開いた窓 {by_window['owner']} / 別の session が起こした窓 {by_window['spawned']}"
+               + (f" / 記録なし {by_window['?']}" if by_window["?"] else ""))
     print(f"🔐 承認の確認のうち、 本人が dialog の文字だけで決められないもの {counts['not']} 件"
-          f" (決められる {counts['judgeable']} / 今はもう出ない {counts['gone']})"
+          f" (決められる {counts['judgeable']} / 今はもう出ない {counts['gone']}{win})"
           " → 確認を出す側 (hook の述語・書き方) を直す = claude-code-permissions.md#ask-only-owner-judgeable")
     for (kind, hook, tool), g in sorted(groups.items(), key=lambda x: -x[1]["n"]):
         src = f"{hook} が ask" if hook else f"[{kind}]"
-        print(f"  {g['n']:3d}  {tool}  {src}  (最後 {fmt_t(g['last'])})")
+        shape = f"  例 = {g['shape']}" if g["shape"] else ""
+        print(f"  {g['n']:3d}  {tool}  {src}  (最後 {fmt_t(g['last'])}){shape}")
     if counts["not"]:
         print("  1 件ずつの切り分け = permission-dialog-audit.py --diagnose --since <日付> --show-command")
 
@@ -624,6 +668,78 @@ def load_pretooluse_hooks(paths):
                     seen.add((m, c))
                     out.append((m, c))
     return out
+
+
+class HookHistory:
+    """hook の file の git の履歴を引き、 dialog が出た時刻の版の hook を一時の写しで起こす。
+    今の版で hook が無反応 (rule) でも、 当時の版が確認を出していたなら、 その dialog は hook を直して出なくなった
+    (= fixed) と読める。 これが無いと、 hook を直した直後の数日は、 直す前の hook が出した確認が rule (hook 無反応 =
+    設定側) に落ちて「決められない」 に数えられる (実測 = 直した日の 7 日の数え直しで決められないが倍になった)。
+    git の外・履歴の読めない hook・当時の版が隣の file を読む hook (写しでは読めず無反応になる) は今の分類のまま。"""
+
+    def __init__(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="pda-hookhist."))
+        self.commits = {}   # 実体の path → [(commit の時刻, sha)] (新しい順)
+        self.copies = {}    # (実体の path, sha) → 写しの path (読めなければ None)
+
+    def close(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    @staticmethod
+    def hook_path(cmd):
+        """hook の command の中の file の語と、 その実体の path (無ければ (None, None))。"""
+        try:
+            import shlex
+            parts = shlex.split(cmd)
+        except ValueError:
+            parts = cmd.split()
+        for p in parts:
+            q = os.path.expanduser(p)
+            if os.path.isfile(q):
+                return p, os.path.realpath(q)
+        return None, None
+
+    def _git(self, real, *args):
+        try:
+            r = subprocess.run(["git", "-C", os.path.dirname(real), *args], capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return r.stdout if r.returncode == 0 else None
+
+    def cmd_at(self, cmd, emit):
+        """emit の時刻の版で同じ hook を起こす command。 その後に変わっていない・読めないなら None。"""
+        tok, real = self.hook_path(cmd)
+        if not real:
+            return None
+        if real not in self.commits:
+            out = self._git(real, "log", "--format=%ct %H", "-n", "50", "--", os.path.basename(real))
+            cs = []
+            for line in (out or "").splitlines():
+                bits = line.split()
+                if len(bits) == 2 and bits[0].isdigit():
+                    cs.append((int(bits[0]), bits[1]))
+            self.commits[real] = cs
+        cs = self.commits[real]
+        if not cs or cs[0][0] <= emit:
+            return None
+        older = [sha for ct, sha in cs if ct <= emit]
+        if not older:
+            return None
+        key = (real, older[0])
+        if key not in self.copies:
+            top = (self._git(real, "rev-parse", "--show-toplevel") or "").strip()
+            body = self._git(real, "show", f"{older[0]}:{os.path.relpath(real, top)}") if top else None
+            if body is None:
+                self.copies[key] = None
+            else:
+                d = self.tmp / older[0][:12]
+                d.mkdir(exist_ok=True)
+                p = d / os.path.basename(real)
+                p.write_text(body, encoding="utf-8")
+                p.chmod(0o755)
+                self.copies[key] = str(p)
+        p = self.copies[key]
+        return cmd.replace(tok, p, 1) if p else None
 
 
 def matcher_hits(matcher, tool):
@@ -670,11 +786,13 @@ def filter_hooks(hooks, only):
 
 
 def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, cwd=None,
-             results=None, session_map=None, queue_window=QUEUE_WINDOW, show_command=False):
+             results=None, session_map=None, queue_window=QUEUE_WINDOW, show_command=False, history=None):
     """dialog ごとに (req, 種別, 理由, 詳細) を返す。 種別 = hook / fixed / length / rule / rule_unique / unmatched。
     突合は match_dialogs (同じ session / 応答より後の tool_result / 待ち行列の順)。
     show_command = hook 由来の行の詳細に、 hook の理由に加えて当時の呼び出しの全文 (Bash は command を 1 行に) を足す
-    (= 外部発信の guard の dialog が実際の送信かを 1 件ずつ読むとき。 既定は理由だけ)。"""
+    (= 外部発信の guard の dialog が実際の送信かを 1 件ずつ読むとき。 既定は理由だけ)。
+    history = HookHistory。 今の hook が無反応なとき、 dialog の時刻の版の hook でも流し、 当時の版が確認を出したなら
+    fixed (hook を直して出なくなった) にする。"""
     rows = []
     matched = match_dialogs(reqs_list, uses, results, before, after, session_map, queue_window)
     for r in reqs_list:
@@ -723,6 +841,23 @@ def diagnose(reqs_list, uses, before, after, hooks, long_limit, run_hooks=True, 
             rows.append((r, "fixed" if hit[1] == "block" else "hook",
                          f"{hit[0]} が {hit[1]}", shown))
             continue
+        if run_hooks and history is not None:
+            old = None
+            for matcher, cmd in hooks:
+                if not matcher_hits(matcher, tool):
+                    continue
+                old_cmd = history.cmd_at(cmd, r["emit"])
+                if not old_cmd:
+                    continue
+                v, _msg = run_hook(old_cmd, payload)
+                if v in ("ask", "deny"):
+                    old = (os.path.basename(cmd.split()[0]), v)
+                    r["_hook"] = old[0]
+                    break
+            if old:
+                rows.append((r, "fixed", f"{old[0]} の当時の版が {old[1]} (今の版は無反応 = hook を直して出なくなった)",
+                             detail))
+                continue
         if tool == "Bash" and len(str(inp.get("command", ""))) > long_limit:
             n = len(str(inp.get("command", "")))
             rows.append((r, "length", f"command が {n:,} 文字 (閾値 {long_limit:,} 超)", detail))
@@ -1039,6 +1174,62 @@ def selftest():
         check("決められないもの 2 件" in buf.getvalue() and "決められる 1" in buf.getvalue(),
               f"--surface は決められない確認の件数と内訳を出す (got {buf.getvalue()[:80]!r})")
 
+        # 束ねた行の「どの形か」 (command の全文は出さない) と、 本人が開いた窓 / 別の session が起こした窓の内訳
+        wk_dir = tmp / "sessions" / "acct"
+        wk_dir.mkdir(parents=True)
+        (wk_dir / "local_o.json").write_text(json.dumps({"sessionId": "local_o", "spawnSeed": {}}), encoding="utf-8")
+        (wk_dir / "local_w.json").write_text(json.dumps({"sessionId": "local_w", "spawnedFrom": "local_o"}),
+                                             encoding="utf-8")
+        wk = load_window_kinds(tmp / "sessions")
+        check(wk == {"local_o": "owner", "local_w": "spawned"},
+              f"窓の種類 = spawnedFrom があれば別の session が起こした窓 (空の spawnSeed は印にならない) (got {wk})")
+
+        def jrs(session, cmd, emit):
+            rr = {"emit": emit, "tool": "Bash", "_hook": "", "_input": {"command": cmd}, "session": session}
+            return (rr, "rule", "", "")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            print_judgeable([jrs("local_o", "FOO=1 find /x/secret -name y", 1.0), jrs("local_w", "ls -la", 2.0),
+                             jrs("local_w", "ls", 3.0)], windows=wk, **kw)
+        out = buf.getvalue()
+        check("本人が開いた窓 1 / 別の session が起こした窓 2" in out and "例 = ls …" in out and "/x/secret" not in out,
+              f"--judgeable は窓の種類の内訳と、 束ねた行の最後の形 (先頭の語だけ) を出す (got {out[:160]!r})")
+
+        # hook を直して出なくなった dialog = dialog の時刻の版の hook で流すと確認を出す → fixed (HookHistory)
+        if shutil.which("git"):
+            gr = tmp / "hookrepo"
+            gr.mkdir()
+            genv = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
+                        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.invalid")
+
+            def g(*args, when=1000):
+                e = dict(genv, GIT_AUTHOR_DATE=f"@{when} +0000", GIT_COMMITTER_DATE=f"@{when} +0000")
+                subprocess.run(["git", "-c", "core.hooksPath=/dev/null", "-C", str(gr), *args], env=e,
+                               capture_output=True, check=True)
+            g("init", "-q")
+            hk = gr / "guard.sh"
+            hk.write_text((hd / "ask.sh").read_text(encoding="utf-8"), encoding="utf-8")
+            hk.chmod(0o755)
+            g("add", "guard.sh", when=1000)
+            g("commit", "-qm", "v1", when=1000)
+            hk.write_text((hd / "quiet.sh").read_text(encoding="utf-8"), encoding="utf-8")
+            g("commit", "-qam", "v2", when=5000)
+            sth = tmp / "settings-hist.json"
+            sth.write_text(json.dumps({"hooks": {"PreToolUse": [
+                {"matcher": "Bash", "hooks": [{"type": "command", "command": f"sh {hk}"}]}]}}), encoding="utf-8")
+            du_h = [{"t": 2000.0, "name": "Bash", "input": {"command": "ls"}, "id": "h1", "sub": False, "path": tmp},
+                    {"t": 6000.0, "name": "Bash", "input": {"command": "ls"}, "id": "h2", "sub": False, "path": tmp}]
+            hh = HookHistory()
+            try:
+                rows_h = diagnose([req("Bash", 2000.0), req("Bash", 6000.0)], du_h, 8.0, 2.0,
+                                  load_pretooluse_hooks([str(sth)]), 3000, run_hooks=True, cwd=tmp, history=hh)
+            finally:
+                hh.close()
+            kh = [k for _r, k, _w, _d in rows_h]
+            check(kh == ["fixed", "rule"] and "当時の版" in rows_h[0][2],
+                  f"直す前の dialog は当時の版の hook が確認を出す = fixed、 直した後の dialog は今の版のまま rule (got {kh})")
+            check(judge(rows_h[0], **kw) == "gone", "hook を直して出なくなった dialog は「もう出ない」 に数える")
+
         # 既定 (projects_dir=None) = この機械の全部の設定フォルダ。 偽の HOME に既定とアカウント固定の 2 つ
         if _ccd is not None:
             fh_home = tmp / "cfg-home"
@@ -1145,14 +1336,23 @@ def main():
         uses, results = load_tool_events(projects, a.since, want_results=True)
         hooks = filter_hooks(load_pretooluse_hooks([s.strip() for s in a.settings.split(",") if s.strip()]),
                              a.only_hooks)
-        rows = diagnose(sel, uses, a.before, a.after, hooks, a.long_limit,
-                        run_hooks=not a.no_run_hooks, cwd=home / "Claude",
-                        results=results, session_map=session_map, queue_window=a.queue_window,
-                        show_command=a.show_command)
+        history = HookHistory() if not a.no_run_hooks else None
+        try:
+            rows = diagnose(sel, uses, a.before, a.after, hooks, a.long_limit,
+                            run_hooks=not a.no_run_hooks, cwd=home / "Claude",
+                            results=results, session_map=session_map, queue_window=a.queue_window,
+                            show_command=a.show_command, history=history)
+        finally:
+            if history is not None:
+                history.close()
         if a.judgeable:
             def _csv(s):
                 return tuple(x.strip() for x in s.split(",") if x.strip())
-            print_judgeable(rows, surface=a.surface, judgeable_hooks=_csv(a.judgeable_hooks),
+            if a.only_hooks and not a.surface:
+                print(f"⚠️ --only-hooks {a.only_hooks} で絞った = 絞りの外の hook の確認は rule (hook 無反応) に入り、"
+                      " 決められない側に数えられる (件数の比べには絞らない run を使う)")
+            print_judgeable(rows, surface=a.surface, windows=load_window_kinds(),
+                            judgeable_hooks=_csv(a.judgeable_hooks),
                             send_hooks=_csv(a.send_hooks), judgeable_tools=_csv(a.judgeable_tools))
             return 0
         print_diagnosis(rows, not a.no_run_hooks, len(hooks), a.only_hooks)
