@@ -15,10 +15,10 @@ export BOARD_ASKS_CONFIG="$T/cfg.json" BOARD_ASKS_ENGINE="$ENGINE" BOARD_ASKS_ST
 fail=0
 check() { if eval "$2"; then :; else echo "FAIL: $1"; fail=1; fi; }
 out="$(BOARD_ASKS_PREFIX=Z python3 "$ENGINE" ask --root "$T/board" --session s1 --text '問い一' --recommend 'はい' --ground choice)"
-check '問いを立てると印つきの段が出る' '[[ "$out" == *"〔問 Z1〕 問い一"* ]]'
+check '問いを立てると印つきの段が出る (中身が先、 印は後ろ)' '[[ "$out" == *"問い一 〔問 Z1〕"* ]]'
 tr="$T/t.jsonl"
 jq -nc '{type:"user",message:{role:"user",content:"見せて"}}' > "$tr"
-jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"### 1. 報告\n〔問 Z1〕 問い一"}]}}' >> "$tr"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"### 1. 報告\n問い一 〔問 Z1〕"}]}}' >> "$tr"
 out="$(jq -nc --arg t "$tr" '{hook_event_name:"Stop",session_id:"s1",transcript_path:$t}' | "$HOOK")"
 check 'Stop: 印つきの問いは差し戻さない' '[ -z "$out" ]'
 out="$(jq -nc --arg t "$tr" '{hook_event_name:"UserPromptSubmit",session_id:"s1",transcript_path:$t,prompt:"１はメールで伝えよう"}' | "$HOOK")"
@@ -44,6 +44,18 @@ out="$(BOARD_ASKS_CONFIG="$T/missing.json" bash -c "jq -nc '{hook_event_name:\"S
 check '設定が無ければ何もしない' '[ -z "$out" ]'
 out="$(env -u BOARD_ASKS_PREFIX python3 "$ENGINE" ask --root "$T/board" --session s4 --text '問い二' --ground fact)"
 check 'hook が渡した字を engine が残し、 手で打つ ask も同じ字' '[[ "$out" == *"〔問 Z2〕"* ]]'
+# 前の Stop の後の返事だけを読む (app が Stop ごとに書く stop_hook_summary の行が区切り): 印の無い問いで 1 回差し戻した後、
+# 背景の作業の知らせで始まる次の turn に問いが無ければ、 前の段を読み直して差し戻さない (直す前の engine はここで鳴った)
+tr2="$T/t2.jsonl"
+jq -nc '{type:"user",message:{role:"user",content:"状況は？"}}' > "$tr2"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"A と B のどちらにするか決めてください。"}]}}' >> "$tr2"
+out="$(jq -nc --arg t "$tr2" '{hook_event_name:"Stop",session_id:"s6",transcript_path:$t}' | "$HOOK")"
+check 'Stop: 印の無い問いは差し戻す (前の Stop の区切りが無い会話記録)' '[ "$(printf "%s" "$out" | jq -r .decision)" = block ]'
+jq -nc '{type:"system",subtype:"stop_hook_summary"}' >> "$tr2"
+jq -nc '{type:"user",message:{role:"user",content:"<task-notification>done</task-notification>"}}' >> "$tr2"
+jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"text",text:"背景の作業が終わりました。"}]}}' >> "$tr2"
+out="$(jq -nc --arg t "$tr2" '{hook_event_name:"Stop",session_id:"s6",transcript_path:$t}' | "$HOOK")"
+check 'Stop: 前の Stop の後の turn に問いが無ければ、 前の段を読み直して差し戻さない' '[ -z "$out" ]'
 printf 'import sys\nsys.stderr.write("boom\\n")\nsys.exit(2)\n' > "$T/broken.py"
 out="$(BOARD_ASKS_ENGINE="$T/broken.py" bash -c "jq -nc '{hook_event_name:\"Stop\",session_id:\"s5\",transcript_path:\"$tr\"}' | '$HOOK'")"
 check 'engine が落ちても何も出さない' '[ -z "$out" ]'
