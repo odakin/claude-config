@@ -30,8 +30,9 @@ scripts/check-ci-red.py の Dependabot 枠)。
 一致しなければ書かない。 書き込みは contents API (= local clone に触らない。 並列 session の
 作業ツリーと衝突しない)。 author は git の global user.name / user.email を noreply のときだけ
 明示する (それ以外は GitHub の既定に任せる = 推測した実 email を公開履歴に焼かない)。
---render OWNER/NAME --template PATH: template から、 その repo に manifest の無い npm / pip の entry を
-落として stdout に出す (github-actions は baseline が workflow を置く前提で常に残す)。
+--render OWNER/NAME --template PATH: template から、 その repo に manifest の無い npm / pip の entry と、
+tree に workflow の無い github-actions の entry を落として stdout に出す (棚卸しと同じ判定。 配置の道具は
+workflow を置いてから呼ぶ)。 残る entry が無ければ何も出さない (= 呼ぶ側は dependabot.yml を置かない)。
 出力: 要修正 / 検査不能 / ℹ️ の一覧 (既定は plan のみ、 --apply で書き込み)。 exit 0。
 """
 from __future__ import annotations
@@ -260,8 +261,8 @@ def apply(row: dict) -> str:
 
 
 def render(repo: str, template_text: str) -> tuple[str | None, str | None]:
-    """template から、 repo に manifest が無い (か暗号化された) npm / pip の entry を落とす。
-    → (text, None) か (None, 理由)。 github-actions は常に残す。"""
+    """template から、 repo に manifest が無い (か暗号化された) npm / pip の entry と、 workflow の無い
+    github-actions の entry を落とす。 → (text, None) か (None, 理由)。 何も残らなければ ("", None)。"""
     info, err = gh([f"repos/{repo}"])
     if err:
         return None, f"repo 情報を取れない ({err})"
@@ -274,7 +275,15 @@ def render(repo: str, template_text: str) -> tuple[str | None, str | None]:
         found = manifests_for(eco, "/", paths)
         if not found or all(encrypted(p) for p in found):
             drop.add(eco)
-    return remove_entries(template_text, drop), None
+    # github-actions も、 tree に workflow が無ければ落とす (棚卸しと同じ判定)。 配置の道具は workflow を
+    # 置いてから呼ぶので、 置けたなら tree にある。 置けなかった (token の workflow scope 不足など) ときに
+    # 「workflow を置く前提」 で行だけ残すと、 update job が毎月 manifest 無しで失敗する (実測)
+    if not manifests_for("github-actions", "/", paths):
+        drop.add("github-actions")
+    text = remove_entries(template_text, drop)
+    if not remaining_ecos(text):
+        return "", None  # 置く ecosystem が無い = 呼ぶ側は dependabot.yml を置かない
+    return text, None
 
 
 def default_repos() -> list[str]:
@@ -416,27 +425,33 @@ def selftest() -> int:
 
     def fake(args, *, raw=False):
         path = args[-1]
-        if path in ("repos/o/web", "repos/o/secret"):
+        if path in ("repos/o/web", "repos/o/secret", "repos/o/noflow"):
             return {"default_branch": "main", "permissions": {"admin": True}}, None
         if path == "repos/o/theirs":
             return {"default_branch": "main", "permissions": {"admin": False}}, None
         if path == "repos/o/web/git/trees/main?recursive=1":
+            return {"tree": [{"path": "package.json", "type": "blob"},
+                             {"path": ".github/workflows/auto-merge.yml", "type": "blob"}]}, None
+        if path == "repos/o/noflow/git/trees/main?recursive=1":
             return {"tree": [{"path": "package.json", "type": "blob"}]}, None
         if path == "repos/o/secret/git/trees/main?recursive=1":
             return {"tree": [{"path": "requirements.txt", "type": "blob"}]}, None
         if path.startswith("repos/o/secret/contents/requirements.txt"):
             return enc, None
-        if path.startswith("repos/o/web/contents/package.json"):
+        if path.startswith(("repos/o/web/contents/package.json", "repos/o/noflow/contents/package.json")):
             return b"{}", None
         return None, "Not Found (HTTP 404)"
 
     gh = fake
     t_web, _ = render("o/web", tpl)
     t_sec, _ = render("o/secret", tpl)
-    ck("render: package.json のある repo は npm + github-actions",
+    t_nof, _ = render("o/noflow", tpl)
+    ck("render: package.json と workflow のある repo は npm + github-actions",
        remaining_ecos(t_web) == ["npm", "github-actions"])
-    ck("render: 暗号化された requirements.txt しか無い repo は github-actions だけ",
-       remaining_ecos(t_sec) == ["github-actions"])
+    ck("render: workflow の無い repo は github-actions を落とす (置けなかった workflow の前提で残さない)",
+       remaining_ecos(t_nof) == ["npm"])
+    ck("render: 暗号化された requirements.txt しか無く workflow も無い repo は何も出さない",
+       t_sec == "")
     ck("inspect: admin でない repo は触らない", inspect("o/theirs")["status"] == "skip")
     ck("inspect: dependabot.yml 無しは skip", inspect("o/web").get("why") == "dependabot.yml 無し")
 
