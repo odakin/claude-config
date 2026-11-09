@@ -135,6 +135,9 @@ class Config:
     cache_dir: Path = Path.home() / ".cache" / "record-reply"
     month_header: str = "# {year}-{month:02d} mail ledger"
     require_replaces: bool = False           # True = 現在地のある項目を書く --apply に、 dry-run が見せた鍵 (--replaces) を求める
+    record_view: object = None               # callable(message dict) -> dict | None。 返した欄 (subject / from / to / cc / body 等) で
+                                             # 上書きした写しで記録・索引・現在地・画面を作る (shim が渡す、 例 = 機微な件名を伏せる)。
+                                             # None を返せばそのまま。 例外は記録ごと止める (伏せずに書くことはしない)
 
     def tzinfo(self):
         if self.tz == "local":
@@ -296,6 +299,27 @@ def answers_other_side(cfg: Config, msgs: list[dict], m: dict) -> bool:
         if owner_from(x.get("from", ""), cfg.owner_tokens) != ours:
             return True
     return False
+
+
+def viewed(cfg: Config, m: dict) -> dict:
+    """cfg.record_view が返した欄で上書きした写し (返さなければ m のまま)。 記録・索引・現在地・画面のどれもこの写しを使う。"""
+    if cfg.record_view is None or not isinstance(m, dict):
+        return m
+    ov = cfg.record_view(m)
+    return {**m, **ov} if ov else m
+
+
+def viewed_all(cfg: Config, msgs: list[dict] | None) -> list[dict] | None:
+    return None if msgs is None else [viewed(cfg, m) for m in msgs]
+
+
+def load_record_view(path: str):
+    """--record-view の file を読み、 その `record_view` 関数を返す (無い・読めない = 例外 = 記録ごと止める)。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("record_view_module", str(Path(path).expanduser()))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return getattr(mod, "record_view")
 
 
 def message_line(cfg: Config, m: dict) -> str:
@@ -903,7 +927,7 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
     plans = []
     seen_roots: set[str] = set()
     for tid, acct in pairs:
-        msgs = gmail.thread(acct, tid, full=True)
+        msgs = viewed_all(cfg, gmail.thread(acct, tid, full=True))
         if msgs is None:
             out(f"\n● thread {tid} ({acct}) — Gmail から引けなかった (auth / 404 / 一時失敗 / この python に client library が無い = stderr の ⚠️ 行)。 未記録扱いにはしない")
             continue
@@ -1077,12 +1101,12 @@ def run_migrate(cfg: Config, name: str, ledger: Ledger, gmail, apply: bool, limi
                         cand_tids.append(t)
                         break
             for t in cand_tids:
-                msgs = gmail.thread(a, t, full=False)
+                msgs = viewed_all(cfg, gmail.thread(a, t, full=False))
                 if msgs:
                     have_lines = {MSG_LINE_RE.match(x).group(1) for x in (e.get("messages") or []) if isinstance(x, str) and MSG_LINE_RE.match(x)}
                     known = {k for k in (msg_ids | have_lines) if HEX_RE.match(k)}
                     if known - {m["id"] for m in msgs}:
-                        msgs = gmail.thread(a, t, full=False, refresh=True) or msgs
+                        msgs = viewed_all(cfg, gmail.thread(a, t, full=False, refresh=True)) or msgs
                     acct = a
                     break
             if msgs:
@@ -1208,7 +1232,7 @@ def _entry_messages(cfg: Config, gmail, e: dict, ids: list[str]) -> dict[str, di
                 if t in seen:
                     continue
                 seen.add(t)
-                for m in gmail.thread(a, t, full=False, include_drafts=True) or []:
+                for m in viewed_all(cfg, gmail.thread(a, t, full=False, include_drafts=True)) or []:
                     found.setdefault(m["id"], m)
         if all(i in found for i in ids):
             break
@@ -1765,6 +1789,33 @@ def _selftest() -> int:
         e21 = next(x for x in _yaml_safe_load(pe.read_text(encoding="utf-8")) if x.get("id") == "2026-09-22-r-thread")
         check(e21["summary"] == "filled by the tool.\n" and any("中身がある" in ln for ln in out_lines),
               "t21 中身が入った後の --summary は使わない (知らせる)")
+        # t22 record_view (shim が渡す上書き): 返した欄で記録・索引・現在地・画面を作る。 None ならそのまま
+        (td / "lv" / "inbox").mkdir(parents=True)
+        (td / "lv" / "todo").mkdir(parents=True)
+        (td / "lv" / "todo" / "2030-04-01-v.yaml").write_text(
+            'id: "2030-04-01-v"\ntask: "v"\nstatus: open\npriority: mid\ncreated: "2030-03-01"\nemail_ref: "threadId:cccc000000000001"\n',
+            encoding="utf-8")
+        hide = lambda m: ({"subject": f"HIDDEN (mid:{m['id']})", "body": "", "from": "c@example.org"}  # noqa: E731
+                          if "SECRET" in (m.get("subject") or "") else None)
+        cfg_v = Config(root=td, ledgers=["lv"], accounts=("acct-a",), owner_tokens=("owner@",), tz="UTC",
+                       cache_dir=td / "cache", record_view=hide)
+        gm_v = FakeGmail({("acct-a", "cccc000000000001"): [msg("cccc000000000001", T, "Secret Sender <c@example.org>",
+                                                                subj="SECRET plan", body="SECRET body text")]})
+        ns_v = argparse.Namespace(target="2030-04-01-v", todo=None, account=None, next="read it", status=None, summary="s.",
+                                  slug="v", id=None, ledger_for_new=None, no_todo=False, apply=False, replaces=None)
+        out_lines.clear()
+        rc = run_record(cfg_v, ns_v, Ledger(cfg_v), gm_v, "2030-04-02", pr)
+        dry = "\n".join(out_lines)
+        out_lines.clear()
+        rc2 = run_record(cfg_v, argparse.Namespace(**{**vars(ns_v), "apply": True}), Ledger(cfg_v), gm_v, "2030-04-02", pr)
+        written = "".join(p.read_text(encoding="utf-8") for p in (td / "lv").rglob("*.yaml"))
+        check(rc == 0 and rc2 == 0 and "SECRET" not in dry and "Secret Sender" not in dry and "HIDDEN (mid:cccc000000000001)" in dry,
+              "t22 record_view: 画面 (dry-run) に元の件名・差出人の名前・本文を出さない")
+        check("SECRET" not in written and "Secret Sender" not in written and "HIDDEN (mid:cccc000000000001)" in written,
+              "t22 record_view: 記録 (inbox の件名・索引の行・項目の現在地) に元の件名・差出人の名前を書かない")
+        check(viewed(Config(root=td, ledgers=["lv"]), {"subject": "SECRET"}) == {"subject": "SECRET"}
+              and viewed(cfg_v, {"subject": "plain"}) == {"subject": "plain"} and viewed_all(cfg_v, None) is None,
+              "t22 record_view が無い・None を返す・thread が引けない (None) ときはそのまま")
     finally:
         shutil.rmtree(td, ignore_errors=True)
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")
@@ -1784,7 +1835,8 @@ def build_config(args) -> Config:
                  ctx_reply=args.ctx_reply, ctx_sent=args.ctx_sent, ctx_new_in=args.ctx_new_in,
                  ctx_new_out=args.ctx_new_out, tz=args.tz,
                  cache_dir=Path(args.cache_dir).expanduser(), month_header=args.month_header,
-                 require_replaces=str(args.require_replaces or "").strip().lower() in ("on", "1", "true", "yes"))
+                 require_replaces=str(args.require_replaces or "").strip().lower() in ("on", "1", "true", "yes"),
+                 record_view=load_record_view(args.record_view) if getattr(args, "record_view", "") else None)
     return cfg
 
 
@@ -1829,6 +1881,8 @@ def main(argv=None) -> int:
     ap.add_argument("--tz", default="local")
     ap.add_argument("--cache-dir", default=str(Path.home() / ".cache" / "record-reply"))
     ap.add_argument("--month-header", default="# {year}-{month:02d} mail ledger")
+    ap.add_argument("--record-view", default="", help="記録に書く・画面に出す前に message の欄を上書きする関数 record_view を持つ"
+                    " python の file (shim が渡す。 例 = 機微な件名を伏せる)")
     ap.add_argument("--require-replaces", default="off", help="on = 現在地のある項目を書く --apply に --replaces を求める (shim が渡す)")
     args = ap.parse_args(argv)
     if args.selftest:
