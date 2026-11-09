@@ -347,7 +347,8 @@ def selftest() -> int:
             fails.append(f"--all は ✅ と読む節を出すはず:\n{out6}")
         if "❌ ~/.secrets/selftest-token" in out4:
             fails.append(f"~ の展開が効いていない:\n{out4}")
-        # repo: 隣に無ければ clone、 あれば 20 時間に 1 回 fast-forward、 作業中の変更があれば触らない
+        # repo: 隣に無ければ clone、 あれば 20 時間に 1 回 fast-forward (重ならない作業中の変更は残して進める)、
+        # 進められず手元の変更があれば PR の道 (層1 の道具が言うときだけ)
         pathenv = {"PATH": f"{td}:{env['PATH']}"}
         remote, seed = td / "remote.git", td / "seed"
         genv = dict(env, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.invalid",
@@ -385,10 +386,25 @@ def selftest() -> int:
         publish("v3")
         os.utime(stamp, (0, 0))
         (sib / "wip.txt").write_text("作業中")
-        run(extra=pathenv)
-        if (sib / "f.txt").read_text() != "v2":
-            fails.append("作業中の変更があるのに pull した")
+        out9 = run(extra=pathenv)
+        if (sib / "f.txt").read_text() != "v3" or (sib / "wip.txt").read_text() != "作業中" or out9.strip():
+            fails.append(f"重ならない作業中の変更は残したまま黙って fast-forward するはず:\n{out9}")
         (sib / "wip.txt").unlink()
+        publish("v4")
+        os.utime(stamp, (0, 0))
+        (sib / "f.txt").write_text("手元の書き換え")
+        out10 = run(extra=pathenv)
+        if (sib / "f.txt").read_text() != "手元の書き換え" or out10.strip():
+            fails.append(f"重なる作業中の変更は触らず、 PR の道具が無ければ黙るはず:\n{out10}")
+        tooldir = sib / "scripts"  # 層1 の PR の道具の stub (= その clone に upstream へ入っていない変更があると言う)
+        tooldir.mkdir()
+        (tooldir / "upstream-pr.py").write_text("print('toolrepo: upstream に入っていない手元の変更')\n")
+        os.utime(stamp, (0, 0))
+        out11 = run(extra=pathenv)
+        if "PR にするか片付ける" not in out11 or "upstream-pr.py" not in out11 or (sib / "f.txt").read_text() != "手元の書き換え":
+            fails.append(f"最新にできず手元の変更があれば、 触らずに PR の道を出すはず:\n{out11}")
+        shutil.rmtree(tooldir)
+        subprocess.run(["git", "-C", str(sib), "checkout", "-q", "--", "f.txt"], check=True, env=env)
         if run(extra=dict(pathenv, TOOLREPO_DIR="none")).strip():
             fails.append("環境変数 = none なのに repo の行を出した")
         bad = subprocess.run([sys.executable, __file__, "install", str(repo), "--item",

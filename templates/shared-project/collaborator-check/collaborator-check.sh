@@ -14,7 +14,9 @@
 #   repo <dir 名> <clone URL> [<上書きの環境変数>] -- <何に使うか>
 #                                                    例: repo tool-repo https://github.com/<owner>/tool-repo TOOL_REPO_DIR -- 道具
 #     この repo の隣 (= 同じ親 dir) の <dir 名> に要る repo。 無ければその場で clone し、 あれば 20 時間に 1 回
-#     fast-forward で最新にする (作業中の変更がある・分岐している時は触らない)。 URL は https:// か file:// だけ。
+#     fast-forward で最新にする (作業中の変更があっても、 重なる file が無ければ進める。 進められず、 その clone に
+#     upstream へ入っていない手元の変更があれば、 PR にする道 = claude-config の scripts/upstream-pr.py status を出す。
+#     merge・rebase・stash はしない)。 URL は https:// か file:// だけ。
 #     別の場所に置いている人は環境変数にその path、 要らない人は none。 人に「隣に clone して」 と頼まない
 #     (人の記憶は carrier でない) ための項目 = 規約 conventions/shared-repo.md#collaborator-check
 #   board <board dir> [<engine の dir の環境変数>] -- <何か>   例: board board AI_COLLABORATION_DIR -- 掲示板の自分宛て
@@ -206,11 +208,27 @@ while IFS= read -r line || [ -n "$line" ]; do
       stamp="$d_git/collaborator-check.pulled"
       if [ -z "$(find "$stamp" -mmin -"$PULL_EVERY_MIN" 2>/dev/null)" ]; then
         : > "$stamp" 2>/dev/null
-        if [ -z "$(git -C "$dest" status --porcelain 2>/dev/null)" ] \
-            && git -C "$dest" rev-parse -q --verify '@{u}' >/dev/null 2>&1; then
+        # 作業中の変更があっても fast-forward は試す (重なる file があれば git は何も変えずに断る = 重ならない変更で
+        # 最新化を止めない)。 断られたら、 その clone に upstream へ入っていない手元の変更があれば PR にする道
+        # (claude-config の scripts/upstream-pr.py status) を出す。 道具は層1 の repo で push できない人にだけ出し、
+        # 所有者・変更の無い clone では黙る = そのときは従来どおり (作業中の変更なら黙る、 分岐なら ⚠️)
+        if git -C "$dest" rev-parse -q --verify '@{u}' >/dev/null 2>&1; then
           if ! git_net -C "$dest" pull -q --ff-only >/dev/null 2>&1; then
-            missing="$missing
+            upr=""
+            for cand in "$dest/scripts/upstream-pr.py" "$PARENT/claude-config/scripts/upstream-pr.py"; do
+              [ -f "$cand" ] && { upr="$cand"; break; }
+            done
+            pr_out=""
+            if [ -n "$upr" ] && command -v python3 >/dev/null 2>&1; then
+              pr_out="$(python3 "$upr" status --quiet-errors --timeout 8 --repo "$dest" 2>/dev/null || true)"
+            fi
+            if [ -n "$pr_out" ]; then
+              missing="$missing
+  ⚠️ $shown を最新にできなかった (upstream に入っていない手元の変更がある) → PR にするか片付ける: python3 \"$upr\" status --repo \"$dest\""
+            elif [ -z "$(git -C "$dest" status --porcelain 2>/dev/null)" ]; then
+              missing="$missing
   ⚠️ $shown を最新にできなかった (network か、 手元の commit が分岐している) → git -C \"$dest\" pull --ff-only"
+            fi
           fi
         fi
       fi
