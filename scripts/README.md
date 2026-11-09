@@ -318,6 +318,7 @@
 - **[podcast-followers.py](podcast-followers.py)** — Read podcast follower counts using owner-supplied sessions, without a browser.
 - **[post-length.py](post-length.py)** — SNS 投稿文の長さを X / Bluesky / Mastodon / Vivaldi Social の数え方で並べて数え、上限を超えるものを示す。--selftest 内蔵。
 - **[pptx-to-pdf.sh](pptx-to-pdf.sh)** — PowerPoint pptx → PDF 変換（fidelity-first = PowerPoint native export 優先 → LibreOffice fallback、HFS path 罠 + 網掛け/pattern fill 潰し回避 + EMF ラスタライズ verify、PowerPoint 経路は事前 grant 済み staging dir 経由、office-automation.md#pptx-to-pdf-powerpoint）
+- **[pr-routine.py](pr-routine.py)** — 毎日の PR の対応: Dependabot の小さな版上げ (patch・minor) で CI が通るものだけを merge し、 大きな版上げ・人の PR・条件の欠けた PR は道具を持たない Claude に判断と返事の文案を作らせて掲示板で持ち主の判断に渡し、 結果を state の file に残す (merge と書き込みはこの script だけが決定的に行う。 --dry-run = 何も書かない空回し、 --selftest 内蔵)。
 - **[pre-commit-bib](pre-commit-bib)** — Git pre-commit hook（上記を呼ぶ）
 - **[pre-commit-bib.test.sh](pre-commit-bib.test.sh)** — pre-commit-bib (全 repo 共通の git pre-commit) の配線 test: SESSION.md の形の gate・変数の直後の全角文字の gate・学生の識別子の gate が commit を止める / 通す / escape hatch で通る + path 指定の commit で .bib を自動修正したら止めて打ち直させる (hermetic)
 - **[pre-commit-google-url-warn.py](pre-commit-google-url-warn.py)** — Warn when staged additions contain unstable account-bound Google URLs.

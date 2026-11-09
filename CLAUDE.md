@@ -82,7 +82,7 @@ claude-config/
 │   ├── flight-search.md                    # 航空券の候補を調べて比べる表を作るとき (内蔵 Browser pane で比較サイト・航空会社サイトを読む) + 出張の申請書に日付・経由地を書く前 + 旅費補助に予約確認を添える段取りを組むとき + 経由地・上空の危険を外務省・EASA・航空会社の運休で読むとき (#route-risk-official-sources)
 │   ├── form-case-pipeline.md               # 同じ様式 (申請書・請求書・届) を人や回ごとに何度も出す作業を仕組みにするとき + 提出した書類を新しい書類の base にしてしまう / 提出済みの file を黙って上書きする事故を止めたいとき + 同じ規則が手順書・案件メモ・README に書き写されて食い違うのを止めたいとき + 様式の一部の頁だけを作り直したいとき
 │   ├── garoon.md                           # Cybozu Garoon (サイボウズ Garoon) の掲示板・ファイル管理・ポータルを読む/探すとき + ワークフローを再利用・作成・申請するとき + 申請した後の承認・差し戻し・コメントを script で確かめるとき (#garoon-workflow-status-read) + login 切れで読めないとき / SSO 保護サイトの login 切れからの復帰を組むとき (#garoon-session-recovery)
-│   ├── github-security-automation.md       # repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき + private repo の workflow が一斉に数秒で red になったとき / private に検査の workflow を置くとき (#private-actions-minutes)
+│   ├── github-security-automation.md       # repo の Dependabot/CodeQL/Semgrep baseline や Dependabot PR を扱うとき + private repo の workflow が一斉に数秒で red になったとき / private に検査の workflow を置くとき (#private-actions-minutes) + Dependabot の PR と人の PR を毎日の定期の仕事で片づける仕組みを作る・直すとき (#daily-pr-routine)
 │   ├── giving-talks.md                     # 講演・セミナー・発表の準備をするとき
 │   ├── giving-talks.ja.md                  # giving-talks.md の日本語版
 │   ├── gmail-mcp-multiaccount.md           # 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
@@ -211,7 +211,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (434 file + formcase/ 26 module + lib/ 83 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (435 file + formcase/ 26 module + lib/ 83 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
