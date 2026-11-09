@@ -1323,6 +1323,14 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 - 操作の command に文字を載せられる経路 (Bash) なら、 本人の言葉の逐語を command の注釈に添えさせて、 本人の最新の発言と照合する形もある (同じ engine の `# stop-ok:`)。
 - 語の読みと時刻の基準は、 それぞれを外した mutant で試験が落ちることを確かめる ([`foil-teeth-per-fix-part`](../../ai-collaboration/conventions/physics-verification-cycle.md#foil-teeth-per-fix-part))。 実装例 = [`../scripts/busy-worker-stop-check.py`](../scripts/busy-worker-stop-check.py) の `consent_after` と [`../scripts/child-wrap-check.py`](../scripts/child-wrap-check.py) の `owner_hold`。
 
+## <a id="trailer-needs-final-newline"></a>§26. commit message に trailer を足す git hook は、 message を改行で終えてから書く
+
+- 形: `git interpret-trailers` (2.39 で実測) は、 末尾に改行の無い 1 段落の message に trailer を足すと、 空行を挟まずに次の行へ続ける = trailer が件名の段落に入る。 `git log --format=%s` はその段落を 1 行につないだ長い件名を出し、 `%(trailers)` も次の `--parse` も trailer と読まない (= 「既に trailer があれば足さない」 の確かめも外れる)。 改行で終わる message なら、 git が空行を挟んで別の段落にする。
+- どこで来るか: `git merge --no-edit` が prepare-commit-msg に渡す MERGE_MSG は改行で終わらない (実測)。 `-m` で渡した message は改行で終わって届く (実測)。
+- 直し方: trailer を書く直前に、 file が空でなく末尾が改行でなければ改行を 1 つ足す (`[ -z "$(tail -c 1 "$f")" ] || printf '\n' >> "$f"`)。 trailer を書く経路が複数あれば全部の前で。 trailer を書かずに終わる経路では足さない (= hook が何もしない時は file を変えない)。 実装例 = [`../scripts/prepare-commit-msg-session.sh`](../scripts/prepare-commit-msg-session.sh) の `ensure_final_newline`。
+- 試験: 鳴る形 = 改行なしの message から、 改行ありと byte 単位で同じ出力が出る / 実際の `git merge --no-ff --no-edit` で、 件名が merge の 1 行のまま trailer を `%(trailers:key=…)` で取り出せる。 鳴らない形 = 改行で終わる message は空行 1 つのまま / trailer を書かない経路は、 改行なしの file を byte 単位で変えない (実装例 = 同じ script の `.test.sh` の 17〜21)。
+- <a id="pre-fix-copy-via-archive"></a>⚠️ **直す前の版で試験が落ちることを見る写しは、 dir ごと `git archive <rev> <dir> | tar -x -C <一時 dir>` で取り、 新しい試験だけを載せる** — `git show <rev>:<file> > <写し>` の写しは実行権を落とす (`exec` で本体を呼ぶ git hook の stub が動かず、 実 commit の case が「commit できない」 の SKIP に見える)。 本体が読む隣の file も無い (隣の module を読む case が、 直しと無関係に落ちる)。 どちらも実測で、 dir ごとの写しでは落ちるのが直しの分の case だけになった。 一般の置き方 = 上の [#live-hook-edit-runs-elsewhere](#live-hook-edit-runs-elsewhere) と [`debugging-discipline.md#side-by-side-before-after`](debugging-discipline.md#side-by-side-before-after)。
+
 ## <a id="related-docs"></a>関連
 
 - `claude-config/setup.sh §Step 2 install_hooks()` — 配信機構の正本 (= delivery 軸 (a) symlink + (b) settings.json を atomic 化する reference implementation。 (c) logic は hook script 側、 (d) invoke 経路は claude-code harness 側で別 layer)

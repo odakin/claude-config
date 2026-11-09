@@ -81,6 +81,7 @@ SOURCE_COMMIT="${3:-}"
 # 空行を挟まずに trailer を続け、 件名の段落に入れる (= %(trailers) で読めず、 次の
 # --parse も既存の trailer と見ない)。 改行で終えれば git が空行を挟んで別段落にする。
 # 空の file と改行で終わる file は触らない (= no-op の経路も含め、 書かない時は変えない)。
+# 一般形 = conventions/hook-authoring.md#trailer-needs-final-newline。
 ensure_final_newline() { [ -z "$(tail -c 1 "$MSG_FILE" 2>/dev/null)" ] || printf '\n' >> "$MSG_FILE"; }
 
 # Message 自体が既に provenance を持つ通常 amend/rebase/cherry-pick はそのまま保つ。
