@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -247,6 +247,25 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - <a id="float-too-large"></a>図を足す・大きくする・caption を伸ばした turn は、 頁より高い float も確かめる: TeX は `LaTeX Warning: Float too large for page by <長さ>` を出して頁に置くだけで、 caption が頁の下端を越えても未定義参照の数にも `Overfull \hbox` の数にも出ない (実測: その 2 つが 0 の確認で通した図の caption が、 頁番号に重なっていた)。 同じ道具が `.log` のこの警告も数え、 あれば exit 1。 直し方 = 図の幅を縮める・panel の並べ方を変える (列を増やして段を減らす)・caption を詰める。
 
 **文献表の位置**: 物理 (特に素粒子) の原稿では 本文 → 謝辞 → 付録 → 文献表 の順が多く、 雛形によっては文献表が付録の前にある。 どちらに置くかは著者の家風と投稿先の指定で決める。 付録の後ろへ移すときは `\bibliographystyle{…}` と `\bibliography{…}` の 2 行を `\end{document}` の直前へ動かす (付録の中の `\cite` も同じ文献表に入る)。 上の道具は source の位置 (付録の前 / 後ろ) も出す。
+
+## <a id="class-conversion-body-check"></a>原稿の型 (document class) を替えたときに、 本文が変わっていないことを確かめる
+
+**場面**: 雑誌の型 (投稿先の class) ⇄ 標準の `article`、 engine を替える、 cleveref を外す。 中身は変えずに、 型・前付け・文献の書式・組み方だけを変える変換。
+
+**class が変える印字** (本文の行が source で同じでも変わる): 前付けと目次、 図の見出しの名前 (Fig. ⇄ Figure)、 付録の式番号の形 (雑誌の型の (A1) ⇄ `article` の本文からの通し番号)、 引用の番号のまとめ方 ([7–9] ⇄ [7, 8, 9])、 見出しの書式、 頁割り。 cleveref を外すと参照の名前 (Section 2 ⇄ Sec. 2)。
+
+**確かめ方**:
+
+- source: 本文の行が変わっていないことを `git diff` で見る (変わるのは前付け・preamble・文献の指定だけのはず)。 数値を照合する script があれば回す。
+- PDF: 頁割りが動くので、 頁ごとに比べる道具 ([`scripts/pdf-rebuild-compare.py`](../scripts/pdf-rebuild-compare.py)) は全頁に差を出す。 全文を英字だけの語にし、 本文の語の多重集合で比べる (数式・頁番号・図の位置の揺れが消える)。 行末のハイフンは pdftotext が自分で繋ぐことがあり、 繋ぎ方が版ごとに揺れる = PyMuPDF で全文を取り、 行の中でも a-b と書く複合語は分けたまま、 複合語でない分割は 2 つの文書のどちらかに繋いだ語があるときに繋ぐ (実測: pdftotext の全文を語の列で比べると差が数百か所に出て、 この形にすると差は上の class が変える印字だけになった)。
+- 文献の並び (= 引用の番号) は、 前後の `.bbl` の `\bibitem` の順を diff で比べる。
+
+**罠**:
+
+- cleveref の `\label[型]{…}` (型の指定) は、 cleveref を外すと `[型]` が本文に印字される = 参照の置き換えと一緒に `\label{…}` に直す。
+- push の hook・Makefile の組み方が `latexmk -pdf` だと、 LuaLaTeX に替えた原稿を pdfLaTeX で組む ([#latexmk-pdf-overrides-rc](#latexmk-pdf-overrides-rc)) = その原稿の行を `latexmk -lualatex` にする。
+- 標準の `article` の `\author` は中で tabular に組むので折り返さない = 長い所属の行は overfull になる (`\\` で割る)。
+- 全文の置き換えの候補を作業ツリーの file から作ると、 他者の未 commit の変更 (本人の editor の保存を含む) を候補が運ぶ = commit 済みの版から作る ([`multi-session-coordination.md#candidate-from-committed-base`](multi-session-coordination.md#candidate-from-committed-base))。
 
 ## <a id="table-caption-position"></a>表の caption を上に置くか下に置くかは、 投稿先の雛形を開いて決める
 
