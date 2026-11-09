@@ -32,6 +32,11 @@ subcommand:
         instructionSources (Codex が読む指示 file) に cwd の外の file があれば止める (global の ~/.codex/AGENTS.md
         だけは sandbox から切れない残余として通し、 申告する)。 検査ができないときは起こさない (入力欄に入れる経路へ落ちない)。
         アプリの turn の network はアプリの既定 (off) なので、 --network との組は止める = 文献は起動の前に sandbox に入れる。
+        書き込み先は sandbox の中だけ: --writable-root と danger-full-access は止める。 workspace-write は既定で /tmp と
+        $TMPDIR にも書ける (実測) ので、 /tmp と $TMPDIR を外し TMPDIR を <cwd>/scratch/tmp にする (reviewer の一時 file が
+        回収に入る)。 これが効くのは daemon が書き手の turn だけ (実測: アプリの turn では /tmp と $TMPDIR に書け、 TMPDIR も
+        元のまま = network と同じくアプリの既定に戻る)。 アプリの turn は sandbox の規則 4 (一時 file も scratch に) と、
+        締めで worker の記録 (codex-wrap-inventory.py --section commands) を見ることで受ける = 起動の出力にそう出す。
       --allow-board-engine: 掲示板の worker 用。 その engine の worker の subcommand を sandbox の外で走らせる Codex の
         規則 (setup-codex-board-rule.py) がこの機械に無ければ入れる。
       --record: 掲示板の launch 記録 (json) に thread id・機械・時刻・書き手を書き足す。
@@ -355,8 +360,13 @@ def open_in_app(url: str) -> bool:
 
 # ---------------------------------------------------------------- launch
 
+def sealed_tmp(cwd: str) -> str:
+    """The temporary directory of a sealed sandbox: inside it, so what the reviewer writes there is collected."""
+    return os.path.join(cwd, "scratch", "tmp")
+
+
 def thread_params(cwd: str, model: str | None, effort: str | None, sandbox: str, approval: str, network: bool,
-                  ephemeral: bool = False, writable: list[str] | None = None) -> dict:
+                  ephemeral: bool = False, writable: list[str] | None = None, sealed: bool = False) -> dict:
     cfg: dict = {}
     if effort:
         cfg["model_reasoning_effort"] = effort
@@ -365,6 +375,12 @@ def thread_params(cwd: str, model: str | None, effort: str | None, sandbox: str,
         sww["network_access"] = True
     if writable and sandbox == "workspace-write":
         sww["writable_roots"] = [os.path.realpath(os.path.expanduser(w)) for w in writable]
+    if sealed and sandbox == "workspace-write":
+        # workspace-write also opens /tmp and $TMPDIR by default (measured): a sealed reviewer's temporary files would
+        # land outside the sandbox and never be collected
+        sww["exclude_slash_tmp"] = True
+        sww["exclude_tmpdir_env_var"] = True
+        cfg["shell_environment_policy"] = {"set": {"TMPDIR": sealed_tmp(cwd)}}
     if sww:
         cfg["sandbox_workspace_write"] = sww
     p = {"cwd": cwd, "sandbox": sandbox, "approvalPolicy": approval, "config": cfg or None}
@@ -424,6 +440,12 @@ def launch(a) -> int:
         print(f"⛔ cwd が無い: {cwd}", file=sys.stderr)
         return 2
     prompt = Path(a.prompt_file).read_text(encoding="utf-8")
+    if a.sealed and (getattr(a, "writable_root", None) or a.sandbox == "danger-full-access"):
+        print("⛔ 封じた sandbox は書き込み先を sandbox の中だけにする = --writable-root と danger-full-access は起こさない"
+              " (sandbox の外に書いた file は回収に入らない)", file=sys.stderr)
+        return 2
+    if a.sealed and a.sandbox == "workspace-write":
+        os.makedirs(sealed_tmp(cwd), exist_ok=True)
     writer, rule = writer_of(a), ""
     if getattr(a, "allow_board_engine", None):
         ok, rule = ensure_board_rule(os.path.realpath(os.path.expanduser(a.allow_board_engine)))
@@ -471,7 +493,7 @@ def launch_app(a, cwd: str, prompt: str, rule: str) -> int:
         s.send({"method": "initialized"})
         if a.sealed:
             pre = s.call("thread/start", thread_params(cwd, a.model, a.effort, a.sandbox, a.approval, a.network, ephemeral=True,
-                                                       writable=a.writable_root))
+                                                       writable=a.writable_root, sealed=a.sealed))
             bad, residual = outside_sources(pre.get("instructionSources"), cwd)
             if bad:
                 print("⛔ 封じた sandbox の外の指示 file を Codex が読む = 起こさない (sandbox を祖先に AGENTS.md・CLAUDE.md の"
@@ -479,7 +501,7 @@ def launch_app(a, cwd: str, prompt: str, rule: str) -> int:
                 s.close()
                 return 5
         res = s.call("thread/start", thread_params(cwd, a.model, a.effort, a.sandbox, a.approval, a.network,
-                                                    writable=a.writable_root))
+                                                    writable=a.writable_root, sealed=a.sealed))
         tid = res["thread"]["id"]
         if a.name:
             try:
@@ -513,6 +535,9 @@ def report(a, tid, cwd, got_model, got_effort, sources, residual, revealed, writ
            "revealed": revealed, "launched_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
     if rule:
         out["board_rule"] = rule
+    if getattr(a, "sealed", False) and a.sandbox == "workspace-write":
+        # measured: the daemon's turn keeps the /tmp and $TMPDIR exclusion and the TMPDIR override, the app's turn does not
+        out["sealed_tmp"] = "excluded" if writer == "daemon" else "not-held-in-app-turn"
     if a.record:
         try:
             rec = json.loads(Path(a.record).read_text(encoding="utf-8"))
@@ -533,6 +558,10 @@ def report(a, tid, cwd, got_model, got_effort, sources, residual, revealed, writ
               f" open '{reveal_url(tid)}'")
         print("  network はアプリの既定 (Codex の設定) = 掲示板の command は許可規則で sandbox の外で走る"
               + (f" ({rule})" if rule else ""))
+        if out.get("sealed_tmp") == "not-held-in-app-turn":
+            print("  ⚠️ 封じた sandbox: アプリの turn では /tmp と $TMPDIR の除外と TMPDIR の付け替えが効かない (実測、 daemon の"
+                  " turn では効く) = reviewer の一時 file は sandbox の規則 4 で受け、 締めで worker の記録を見る"
+                  f" (codex-wrap-inventory.py {tid} --section commands --max-chars 0)")
     else:
         print(f"  アプリ: {'左の「最近の項目」 に載せた (アプリに開かせた)' if revealed else '開かせていない = 本人が見るなら'}"
               f" open '{reveal_url(tid)}'")
@@ -556,13 +585,13 @@ def launch_daemon(a, cwd: str, prompt: str, rule: str) -> int:
         residual: list[str] = []
         if a.sealed:
             pre = w.call("thread/start", thread_params(cwd, a.model, a.effort, a.sandbox, a.approval, a.network, ephemeral=True,
-                                                       writable=a.writable_root))
+                                                       writable=a.writable_root, sealed=a.sealed))
             bad, residual = outside_sources(pre.get("instructionSources"), cwd)
             if bad:
                 print("⛔ 封じた sandbox の外の指示 file を Codex が読む = 起こさない (sandbox を祖先に AGENTS.md・CLAUDE.md の"
                       " 無い場所へ): " + ", ".join(bad), file=sys.stderr)
                 return 5
-        res = w.call("thread/start", thread_params(cwd, a.model, a.effort, a.sandbox, a.approval, a.network, writable=a.writable_root))
+        res = w.call("thread/start", thread_params(cwd, a.model, a.effort, a.sandbox, a.approval, a.network, writable=a.writable_root, sealed=a.sealed))
         tid = res["thread"]["id"]
         if a.name:
             try:
@@ -788,6 +817,8 @@ def _selftest() -> int:
         d = dict(cwd=cwd, prompt_file=pf, model="gpt-x", effort="xhigh", sandbox="workspace-write", approval="never",
                  network=True, name="worker · gpt-x xhigh", host=None, sealed=False, no_reveal=False, record=None, json=True,
                  writable_root=["~/.cache/board-fixture"], writer="daemon", allow_board_engine=None, daemon_reason="selftest")
+        if kw.get("sealed") and "writable_root" not in kw:   # a sealed launch writes only inside the sandbox
+            d["writable_root"] = []
         d.update(kw)
         return argparse.Namespace(**d)
 
@@ -826,6 +857,18 @@ def _selftest() -> int:
         rc = launch(args(sealed=True))
     out = json.loads(buf.getvalue().strip().splitlines()[-1])
     checks.append(("封印: cwd の中と global の AGENTS.md は通し、 global を残余として申告", rc == 0 and len(out["residual_sources"]) == 1))
+    ts_s = [m for m in log if m.get("method") == "thread/start"][-1]["params"]
+    sw_s, rcwd = ts_s["config"].get("sandbox_workspace_write") or {}, os.path.realpath(cwd)
+    checks.append(("封印 (daemon): /tmp と $TMPDIR を外し、 TMPDIR を sandbox の scratch/tmp に (dir も作る)",
+                   sw_s.get("exclude_slash_tmp") is True and sw_s.get("exclude_tmpdir_env_var") is True
+                   and ts_s["config"]["shell_environment_policy"]["set"]["TMPDIR"] == sealed_tmp(rcwd)
+                   and os.path.isdir(sealed_tmp(rcwd)) and out.get("sealed_tmp") == "excluded"))
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        r_w = launch(args(sealed=True, writable_root=["~/.cache/board-fixture"]))
+        r_d = launch(args(sealed=True, sandbox="danger-full-access"))
+    checks.append(("封印: --writable-root と danger-full-access は起こさない (exit 2)", r_w == 2 and r_d == 2))
+    checks.append(("封印でない起動は /tmp を外さない", "exclude_slash_tmp" not in (thread_params(
+        cwd, None, None, "workspace-write", "never", True).get("config") or {}).get("sandbox_workspace_write", {})))
     log.clear()
     with contextlib.redirect_stdout(io.StringIO()):
         rc = continue_thread(argparse.Namespace(thread="01aaaaaa-0000-7000-8000-000000000001", prompt_file=pf, effort="high",
@@ -885,6 +928,8 @@ def _selftest() -> int:
     starts = [m["params"] for m in lines if m.get("method") == "thread/start"]
     checks.append(("封印 + app: 本番の前に ephemeral の thread で指示 file を検査する", rc == 0 and len(starts) == 2
                    and starts[0].get("ephemeral") is True and not starts[1].get("ephemeral") and not log))
+    o_s = json.loads(buf.getvalue().strip().splitlines()[-1])
+    checks.append(("封印 + app: /tmp の除外がアプリの turn では効かないことを返す", o_s.get("sealed_tmp") == "not-held-in-app-turn"))
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         rc = launch(args(writer=None, sealed=True, network=True, daemon_reason=None))
     checks.append(("封印 + app + --network は起こさない", rc == 2))

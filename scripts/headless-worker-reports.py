@@ -14,7 +14,10 @@ worker の報告は端末の log と作業 dir にしか残らず、 起動し�
     会話記録は元 command のままなので、自動注入の判定は updatedInput の文字列に頼らない。
     selected だけ・準備/起動失敗・記録破損は ⚠️。added/present は runner の処理の証拠で、モデル受領は別確認。
   - 作業 dir の成果物候補: HANDOFF.md / REVIEW-RESULTS.md / STAGE*-RESULTS.md / ledger.yaml / DONE /
-    scratch/hoist-candidates.md と script (checks/・scratch/ の *.py) の一覧。作成者は別に確認する。
+    scratch/hoist-candidates.md と script の一覧。作成者は別に確認する。 作業 dir が封じた sandbox なら、 script の一覧は
+    ai-collaboration scripts/make-review-sandbox.py の回収の判定で出し (sandbox の全体・下位の dir・規則の外・.py 以外の
+    code、 第三者・生成物の木と文献を除く)、 その台帳から回収の状態 (未 / 済 / 済の後に増えた) を 1 行出す。 それ以外の
+    作業 dir は checks/・scratch/ の直下の *.py だけ。
   - HANDOFF.md と hoist-candidates.md の本文 (--max-chars、 0 = 全部)
   - worker 自身の会話記録: runner が記録した明示 session UUID に一致し、起動以降に更新された1 file だけ。
     ID が不明なら列挙しない。同じ cwd の他 session を worker の記録と扱わない。
@@ -102,6 +105,58 @@ PERSISTED_RE = re.compile(r"Full output saved to: (\S+\.txt)")
 # command in its wire form (measured: a `cd <dir> &&` the harness had prefixed), so its hash differs from the
 # recorded command: read as a record it counts a tool call twice and finds no receipt for the copy.
 COPY_TYPES = ("api-request-blob",)
+
+
+_SANDBOX = False   # not loaded yet (None = not available)
+
+
+def sandbox_engine():
+    """ai-collaboration scripts/make-review-sandbox.py: the rules that decide what `collect` copies also list a sealed
+    sandbox's scripts here, and its ledger says whether the sandbox was collected (two tools with their own rules drifted
+    apart: measured on a trial sandbox, this list missed most of the code files).  None when the sibling checkout is missing."""
+    global _SANDBOX
+    if _SANDBOX is False:
+        _SANDBOX = None
+        here = Path(__file__).resolve().parents[1]
+        for path in (here.parent / "ai-collaboration" / "scripts" / "make-review-sandbox.py",
+                     Path.home() / "Claude" / "ai-collaboration" / "scripts" / "make-review-sandbox.py"):
+            if not path.is_file():
+                continue
+            try:
+                spec = importlib.util.spec_from_file_location("make_review_sandbox", path)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+            except Exception:
+                continue
+            if hasattr(module, "sandbox_state") and hasattr(module, "is_sealed_sandbox"):
+                _SANDBOX = module
+                break
+    return _SANDBOX
+
+
+def collection_line(st: dict, cwd: Path) -> str:
+    """One line on whether the sandbox was collected, from make-review-sandbox.py sandbox_state()."""
+    s = st.get("state")
+    n_out, trees = len(st.get("outside") or []), st.get("trees") or {}
+    extra = (f"、 規則の外 {n_out} file" if n_out else "") + (f"、 第三者・生成物の木 {len(trees)} 個 (写さない)" if trees else "")
+    again = f"make-review-sandbox.py collect {cwd.name} --into <受領の dir> --root {cwd.parent}"
+    if s == "empty":
+        return "未 (まだ何も書かれていない)"
+    if s == "uncollected":
+        return f"未 (reviewer が書いた file {st.get('written')}{extra}) = {again}"
+    if s == "collected":
+        return f"済 ({st.get('collected_at')}、 先 {st.get('into')})、 その後の変化なし"
+    if s == "changed_after_collect":
+        return (f"済 ({st.get('collected_at')}、 先 {st.get('into')}) の後に {len(st.get('changed') or [])} file が増えた・"
+                f"変わった = もう一度 {again}")
+    if s == "closed":
+        return f"閉じた ({st.get('closed_at')}、 {st.get('reason')})、 その後の変化なし"
+    if s == "changed_after_close":
+        return f"閉じた ({st.get('closed_at')}) の後に {len(st.get('changed') or [])} file が増えた・変わった"
+    if s == "no_ledger":
+        return (f"台帳なし (台帳より前に作った sandbox か、 台帳が別の機械) = 回収したかは道具で分からない"
+                f" (reviewer が書いた file {st.get('written')}{extra}、 file の時刻で判定)")
+    return str(s)
 
 
 def receipt_engine():
@@ -566,8 +621,20 @@ def report(launch: dict, n: int, max_chars: int) -> None:
     if (cwd / "scratch" / "hoist-candidates.md").exists():
         have.append("scratch/hoist-candidates.md")
     print("   作業 dir の成果物候補: " + (", ".join(have) or "なし"))
-    scripts = [str(p.relative_to(cwd)) for sub in ("checks", "scratch") for p in sorted((cwd / sub).glob("*.py"))]
-    print(f"   作業 dir の script 候補・作成者未確認 ({len(scripts)}): " + (", ".join(scripts) or "なし"))
+    eng = sandbox_engine()
+    if eng is not None and eng.is_sealed_sandbox(cwd):
+        st = eng.sandbox_state(cwd.parent, cwd.name)
+        outside = set(st.get("outside") or [])
+        scripts = [r + (" [規則の外]" if r in outside else "") for r in st.get("code") or []]
+        print(f"   作業 dir の script 候補・作成者未確認 ({len(scripts)}、 sandbox の全体 = 下位の dir・規則の外・.py 以外の code"
+              " を含み、 第三者・生成物の木と文献を除く): " + (", ".join(scripts) or "なし"))
+        print(f"   回収: {collection_line(st, cwd)}")
+    else:
+        scripts = [str(p.relative_to(cwd)) for sub in ("checks", "scratch") for p in sorted((cwd / sub).glob("*.py"))]
+        print(f"   作業 dir の script 候補・作成者未確認 ({len(scripts)}): " + (", ".join(scripts) or "なし"))
+        if eng is None and (cwd / "REVIEW-SPEC.md").is_file():
+            print("   ⚠️ ai-collaboration の make-review-sandbox.py を読めない = checks/・scratch/ の直下の *.py だけ"
+                  " (下位の dir・規則の外・.py 以外の code と、 回収したかは出ない)")
     if not app:
         ts = worker_transcripts(launch)
         print(f"   worker の会話記録 ({len(ts)}): " + (", ".join(str(t) for t in ts) or "起動と結び付く session ID / 記録なし (同じ作業 dir の他 session は列挙しない)"))
@@ -1104,6 +1171,42 @@ def compressed_rollout_regression() -> None:
                 os.environ["CODEX_HOME"] = old_home
 
 
+def sandbox_regression(tmp: Path) -> None:
+    """A sealed sandbox is listed by the collect rules: code at any depth and suffix, outside the rule places marked,
+    trees left out, and the collection state from the ledger."""
+    import contextlib
+    import io
+    eng = sandbox_engine()
+    if eng is None:
+        print("  (sandbox の試験は飛ばした: ai-collaboration の make-review-sandbox.py が無い)")
+        return
+    spec = tmp / "sb-spec.md"
+    spec.write_text("# spec\n")
+    with contextlib.redirect_stdout(io.StringIO()):
+        sb = eng.create(tmp / "sroot", "s1", spec, [])
+    for rel, text in (("tools/fit.py", "print(4)"), ("scratch/sub/deep.wl", "x"), ("checks/run.sh", "echo"),
+                      ("scratch/venv/lib/site.py", "x"), ("scratch/a.py", "print(1)")):
+        (sb / rel).parent.mkdir(parents=True, exist_ok=True)
+        (sb / rel).write_text(text + "\n")
+    launch = {"kind": "codex", "ts": "T", "cwd": sb, "model": None, "effort": None, "detection": "exec", "marker": True}
+
+    def shown() -> str:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            report(launch, 1, 0)
+        return buf.getvalue()
+    out = shown()
+    line = next(l for l in out.splitlines() if "script 候補" in l)
+    assert "(4、" in line and "tools/fit.py [規則の外]" in line and "scratch/sub/deep.wl" in line and "checks/run.sh" in line, out
+    assert "venv" not in line, out
+    assert "回収: 未 (reviewer が書いた file 4、 規則の外 1 file、 第三者・生成物の木 1 個" in out, out
+    with contextlib.redirect_stdout(io.StringIO()):
+        eng.collect(tmp / "sroot", "s1", tmp / "receipt")
+    assert "回収: 済 (" in shown()
+    (sb / "scratch" / "b.py").write_text("print(2)\n")
+    assert "の後に 1 file が増えた・変わった = もう一度" in shown()
+
+
 def selftest() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -1149,6 +1252,7 @@ def selftest() -> int:
         assert len(worker_transcripts(ls[0])) == 1
         assert run("abcd1234", [tmp / "cfg" / "projects"], 0) == 0
         assert run("zzzz", [tmp / "cfg" / "projects"], 0) == 1
+        sandbox_regression(tmp)
     app_launch_regression()
     compressed_rollout_regression()
     receipt_regression(Path(__file__).resolve().parents[1])
