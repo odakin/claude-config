@@ -104,7 +104,8 @@
         ]
       ],
       "expect_fail": ["読めない dir が基点の下にあっても次の dir で解決する"],
-      "expect_pass": ["相対の result_path を基点の下で解決する"]
+      "expect_pass": ["相対の result_path を基点の下で解決する"],
+      "only_on": ["Darwin", "Linux"]
     }
   ]
 }
