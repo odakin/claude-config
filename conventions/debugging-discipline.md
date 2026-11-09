@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch) + 直しの前後の CPU・速さを比べて効果を示すとき (= #side-by-side-before-after)
+when: bug fix を提案する前・audit verdict を出す前 (検証規律) + CI が red のとき (= red streak の起点と原因 commit を探す・手元で Linux CI を再現する、 §17) + 外部 GUI app / daemon / browser の復旧で start・open・restart・retry を提案または実行する前 (= #recovery-state-dispatch) + 直しの前後の CPU・速さを比べて効果を示すとき (= #side-by-side-before-after) + 「時間がかかりすぎた」 の原因を調べるとき (= #delay-rca-critical-path)
 category: infra
 summary: Fix 提案の 3 verification (V1 numeric trace + V2 code coverage + V3 algorithm enumeration)、 audit verdict re-evaluation、 multi-commit drift sweep、 sibling violation sweep、 dry-run/introspection facility 優先 (§6)、 Claude 自身を容疑者から外す .jsonl grep 手法 (§7)、 症状 forensics 前に既存 doc を grep (§11)、 再現≠検証 = 決定論的/撤回済 artifact の provenance 確認 (§12)、 性能修復は measure-first + 出力等価性 (= 受け入れ diff の前に noise floor を測る / 旧版は同じ dir に別名で置いて並走) + 決定的並列化 + #run-scoped-cache = 鮮度が価値の検出器 fleet の cache は TTL でなく run に閉じる 〔TTL は新着を silent に隠す〕 (§15)、 機能の回復は調査終了の条件でない = 症状が「余剰」 型だと retry で直った瞬間に原因が再発源に残る + origin 不明の残骸は恒常 noise 化して調査 trigger を失う (§16)、 復旧は起動命令の反復でなく事前状態別 dispatch = healthy は reuse / 接続異常は reconnect / stopped だけ launch / context 不一致は explicit switch / unknown は fail-loud (#recovery-state-dispatch)、 CI の red streak は起点から遡る = 着手前に最新 run を再照会 / 最後の green → 最初の red (run は push 単位) + pickaxe で導入 commit / 使い捨て clone × native・GNU userland × 空 HOME の行列で再現 / 無言の assertion を自己申告型に / 常時 red は情報を運ばない / #flaky-is-a-symptom = 「flaky」 は診断名ではない 〔再実行で緑でも原因を見るまで閉じない。 疑う順 = 値の中身・順序/時刻・環境差・資源。 `--log-failed` は抜粋なので完全ログを取る〕 (§17、 scripts/ci-red-streak.py・scripts/ci-local-repro.sh)
 -->
@@ -691,6 +691,18 @@ Codex の外部 Chromium browser では、公式の profile 選択契約と具�
 - 聞く前に調べるのは、 答えを待たずに分かる事実 (process が居るか・最後に動いた時刻・エラーの行) までにする。
 - 相関から得た仕組みの主張は、 確かめるまで文書に「未確認の疑い」 と書き、 「実測」 と書かない。 確かめ方 (何をすれば白黒が付くか) を添える。
 - 本人が先に答えていた場合 (報告の文面に画面の様子がある) は、 それを最初の証拠にする。
+
+## <a id="delay-rca-critical-path"></a>23. 「時間がかかりすぎた」 の原因は、 一次記録で区間を数え、 全体を延ばした区間から数える
+
+依頼・作業・検収と何人かの手を経た仕事の遅れを調べるときは、 当事者の説明でなく一次記録 (会話記録・投稿・commit の時刻) で区間を並べ、
+区間ごとに「全体の終わりを延ばしたか」 を分けてから原因を数える。
+
+- 同じ時間に並んで進んでいた区間 (別の待ちに隠れていた区間) の失敗は、 目立っても全体を延ばしていない。 原因の順位からは外し、
+  別の害 (取りこぼし・手直し) があればそちらで数える (実測: 投稿の失敗とその手直しは、 受け手が前の仕事の後始末の最中で依頼を読めなかった待ちの中に収まっていた)。
+- 当事者の説明は、 目立つ失敗 (エラーの出た操作・道具の不具合) を主因に挙げ、 黙って過ぎた待ち (turn の途中の相手に送って queue に入った message・前の仕事の後始末) を落としやすい
+  (実測: 説明は確かめの組版を主因にしたが、 記録で最大の区間は queue の待ちだった)。
+- 確かめの段の所要は、 説明や推測でなく、 その段を単独で 1 回回して測る (実測: 「組むだけで数分」 の説明に対し、 組版は 1 本 20 秒ほどで、 長かったのは別の照合だった)。
+- 区間の長さの合計が始点から終点までの長さと合うまで数え直す (合わないなら区間の境の取り方が違う)。
 
 ## <a id="aggregate-check-runtime"></a>集計検査の待ち時間
 
