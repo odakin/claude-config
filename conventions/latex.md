@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check) + TeXShop で保存した原稿の JIS の外の文字が `\UTF{…}` の形に書き換わったとき (#texshop-ptex-utf-output)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check) + 英文だけを直した候補 (今 → 案 の組を当てた写し) の PDF を確かめるとき (#prose-pass-pdf-word-diff) + TeXShop で保存した原稿の JIS の外の文字が `\UTF{…}` の形に書き換わったとき (#texshop-ptex-utf-output)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -259,6 +259,9 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - source: 本文の行が変わっていないことを `git diff` で見る (変わるのは前付け・preamble・文献の指定だけのはず)。 数値を照合する script があれば回す。
 - PDF: 頁割りが動くので、 頁ごとに比べる道具 ([`scripts/pdf-rebuild-compare.py`](../scripts/pdf-rebuild-compare.py)) は全頁に差を出す。 全文を英字だけの語にし、 本文の語の多重集合で比べる (数式・頁番号・図の位置の揺れが消える)。 行末のハイフンは pdftotext が自分で繋ぐことがあり、 繋ぎ方が版ごとに揺れる = PyMuPDF で全文を取り、 行の中でも a-b と書く複合語は分けたまま、 複合語でない分割は 2 つの文書のどちらかに繋いだ語があるときに繋ぐ (実測: pdftotext の全文を語の列で比べると差が数百か所に出て、 この形にすると差は上の class が変える印字だけになった)。
 - 文献の並び (= 引用の番号) は、 前後の `.bbl` の `\bibitem` の順を diff で比べる。
+- <a id="prose-pass-pdf-word-diff"></a>**英文だけを直した候補 (「今 → 案」 の組を写しに当てたもの) の PDF は、 変わるはずの語そのもので確かめる** — 組ごとに、 案の語の多重集合から今の語の多重集合を引き (数式・`\cite`・`\ref` のキーを落とし、 英字だけの語にする)、 全部の組で足し合わせた増減が、 PDF の本文の語の増減とちょうど一致するかを見る。 一致すれば、 組の外で文が動いていない。 語が余れば、 その語の周りが組の外で変わっている。 題・要旨の組は、 本文の始まりの見出しより前 (前付け) で同じように比べる。
+  数字と数式の記号 (英字・空白・句読点・ハイフンを除いた字) の多重集合は、 頁番号と目次の頁番号を除けば前後で同じになる。 頁割りが動けば、 目次の頁番号と最後の頁番号だけが動く (実測)。
+  語の取り方は上の行と同じ (PyMuPDF)。 PyMuPDF を前提にする比べ方は、 無ければ比べずに止める = PyMuPDF の無い python で黙って pdftotext に落ちる道具があり、 行割りの動いた所で語がつながる・割れる差 (wavepacket ↔ wave packet、 数式の隣の 2 文字がつながる) が出て、 本文が変わっていないのに一致しなかった (実測)。
 
 **罠**:
 
