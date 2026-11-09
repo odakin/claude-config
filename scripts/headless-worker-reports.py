@@ -50,7 +50,8 @@ usage:
 --prune-receipts は整理だけを行う。未使用期間中の定期実行は設けない。
 0 件のときは、 見た記録 file を出して終わる (= 使っていない、 と区別できる)。 標準 library だけ。
 既知の限界 (実測): 起動を wrapper で包んだ形 (`caffeinate -i <path>/codex exec …`) や、 作業 dir を変数で与えた形
-(`cd "$SB" && …`) は lexer が実行位置を読めず「文字列候補」 に落ちる = 起動として数えない。 その回は候補の
+(`cd "$SB" && …`) と、 起動の道具を名前の違う写し (live の道具を直すときの `.codex-app-launch.py.<id>.wip` など) で
+走らせた回は、 lexer が実行位置を読めず「文字列候補」 に落ちる = 起動として数えない。 その回は候補の
 元 command を目で確かめる (sandbox の受領は結果 file の有無で判定する)。 lexer の拡張は未着手。
 """
 from __future__ import annotations
