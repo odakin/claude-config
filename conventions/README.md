@@ -116,7 +116,7 @@ layer 1 (public) のドメイン固有規約 155 file をカテゴリ別に列�
 
 ## メール (`mail`)
 
-- **[email-surface-pattern.md](email-surface-pattern.md)** — 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき + 会員サービスからの情報流出のお詫びが網から落ちたとき (#vendor-breach-notice-class) + 止まっている待ちの項目を棚卸しするとき (#waiting-item-answer-elsewhere)
+- **[email-surface-pattern.md](email-surface-pattern.md)** — 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき + 会員サービスからの情報流出のお詫びが網から落ちたとき (#vendor-breach-notice-class) + 止まっている待ちの項目を棚卸しするとき (#waiting-item-answer-elsewhere) + 当番が年ごとに替わる会の案内 (出欠のフォーム) を最初の便で拾う網を作るとき (#recurring-event-invitation)
   - 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止。 別スレッドで届く待ち結果は待ち項目の検索条件で拾う (#new-thread-expected-inbound) / 送り手一括の雑音化は class 別の件数を数えてから (#sender-noise-volume-check) / 決着済み案件への自動督促は本文の案件 ID で畳む (#settled-matter-key) / 「記録済み」 の書式は検出器間で 1 つ (#recorded-id-notation)
 - **[gmail-mcp-multiaccount.md](gmail-mcp-multiaccount.md)** — 複数 Gmail アカウントを Claude Code の MCP として繋ぎたいとき + N 個目のアカウントを追加するとき
   - 多アカウント Gmail MCP の end-to-end runbook — @gongrzhe server を account 数ぶん起動 (1:1)、credential は git-crypt な private repo を canonical に symlink 運用 (1 回認証で全マシン)、reauth / runtime-links エンジンは scripts/gmail-mcp-*.sh (state+PKCE / alias 検証 / permission 矯正込み)、送信は ask gate 必須

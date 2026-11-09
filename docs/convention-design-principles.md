@@ -1089,7 +1089,7 @@ origin: 会議日程調整の broadcast 依頼 (候補日 2 つ + 入力〆切�
 | 表示名 | 公開ページ・ディレクトリでは mask される |
 | 時間窓 | 直近 N 日で切ると案件の**発端側**が落ちる (= 決着だけ見て起点を失う) |
 | 待つと決めたときの呼び名 | 待っているものは、 指示した人や起票した記録が付けた呼び名 (「◯◯の連絡」) で届くとは限らない。 別の件名・別の形 (通知でなく、 記入を求める用紙や問い合わせ) で届くと、 その呼び名での検索は 0 件になり、 届いて処理も済んだ後まで「未着」 の待ちが残る。 待ちの「未着」 を言う前に、 呼び名でなく**送り手**で記録 (受信の台帳・送信済み) を引く (実測) |
-| 年ごとの件名 | 同じ人が毎年送る定期の便 (申請の案内・照会・確定の知らせ) は、 年ごとに件名を書き替える。 1 年分の件名で引くと他の年が落ちる。 **差出人と本文の語**で引き、 毎年の便を待つ項目の検索条件も差出人で書く ([`email-surface-pattern.md#new-thread-expected-inbound`](../conventions/email-surface-pattern.md#new-thread-expected-inbound)) (実測) |
+| 年ごとの件名・差出人 | 毎年の定期の便は、 年を越えて残る軸が便ごとに違う。 同じ人が毎年送る便 (申請の案内・照会・確定の知らせ) は件名を年ごとに書き替える = **差出人と本文の語**で引き、 毎年の便を待つ項目の検索条件も差出人で書く ([`email-surface-pattern.md#new-thread-expected-inbound`](../conventions/email-surface-pattern.md#new-thread-expected-inbound))。 当番が年ごとに替わる会の案内は逆に差出人が替わり、 件名の形が残る = 件名の語で引く ([`email-surface-pattern.md#recurring-event-invitation`](../conventions/email-surface-pattern.md#recurring-event-invitation))。 どちらか決める前に過去の数年分の便を引いて、 残る軸を確かめる (実測) |
 
 **案件 ID は残る**: 発行体が採番した ID (= 原稿番号 / 申請番号 / 課題番号 / ticket ID / 伝票番号) は、 system が件名と本文の両方に literal で刻み、 転送・引用・機械翻訳を越えてそのまま運ばれる。 ∴ **過去の案件記録を掘り起こす第一の key は ID**、 人間可読な属性は補助に落とす。
 
