@@ -60,8 +60,12 @@
 # model context に渡し、必要時に 1 の明示値を git commit command へ付けられるようにする。
 # CODEX_* は現行 local runtime での自動経路を保つ fail-open compatibility probe。
 # model / effort は CLAUDE_CONFIG_AGENT_MODEL / CLAUDE_CONFIG_AGENT_EFFORT の明示値を
-# 最優先し、Claude は machine-local cache を次に読む。Codex の優先順位・validation・
-# cache・exact-session local fallback は session_provenance_cache.py が一括所有する。
+# 最優先する。Claude の model は次に同じ session の会話記録の最後の応答の model
+# (session_provenance_cache.py --resolve-claude)、それも無ければ machine-local cache
+# (SessionStart input を写したもの。desktop の窓の起動などでは SessionStart input に model が無く
+# cache が空 = conventions/hook-authoring.md#sessionstart-model-by-launch-path)。
+# Codex の優先順位・validation・cache・exact-session local fallback は session_provenance_cache.py
+# が一括所有する。
 # Claude effort は公式の Bash env CLAUDE_EFFORT から effective 値を取得する。
 # 両方で取れなければ警告した上で literal `unknown` を書く。config default で
 # 穴埋めせず、provenance の縮退をcommit停止と同一視しない。
@@ -175,6 +179,10 @@ if [ -z "$ORIGINAL_AGENT_SESSION" ] && [ "$AGENT" = "codex" ]; then
     [ -z "$RESOLVED_MODEL" ] || MODEL="$RESOLVED_MODEL"
     [ -z "$RESOLVED_EFFORT" ] || EFFORT="$RESOLVED_EFFORT"
 else
+    if [ -z "$MODEL" ] && [ -z "$ORIGINAL_AGENT_SESSION" ] && [ "$AGENT" = "claude" ]; then
+        MODEL="$(python3 "$SCRIPT_DIR/session_provenance_cache.py" \
+            --resolve-claude "$SESSION_ID" 2>/dev/null | sed -n 's/^model=//p' | sed -n '1p')"
+    fi
     STATE_FILE=""
     if [ -n "${CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR:-}" ]; then
         STATE_FILE="$CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR/$SESSION_ID.env"

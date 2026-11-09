@@ -31,6 +31,10 @@ ng() { FAIL=$((FAIL+1)); echo "  ✗ $1"; [ $# -ge 2 ] && printf '%s\n' "$2" | s
 
 WORK="$(mktemp -d)" || { echo "SKIP: mktemp -d failed"; exit 0; }
 trap 'rm -rf "$WORK"' EXIT
+# Claude の model は会話記録から引く (session_provenance_cache.py --resolve-claude)。 この機械の本物の
+# 会話記録を読まないよう、 全 case で読み先を fixture の dir 1 つに替える (lib/claude_config_dirs.py の override)。
+export CLAUDE_PROJECTS_DIR="$WORK/projects"
+mkdir -p "$CLAUDE_PROJECTS_DIR/-w-p"
 
 SID="0123abcd-4567-89ef-0123-456789abcdef"
 SID2="ffffffff-0000-1111-2222-333333333333"
@@ -224,6 +228,58 @@ if grep -qx 'Agent-Model: unknown' "$f" && grep -qx 'Agent-Effort: unknown' "$f"
     ok "11c. Claude metadata 不明 → 従来どおり field-wise unknown"
 else
     ng "11c. Claude metadata 不明 → 従来どおり field-wise unknown" "$(cat "$f")"
+fi
+
+# Claude の model の順 = 明示値 → 会話記録の最後の応答 → 記録 file (SessionStart の写し) → unknown。
+# desktop の窓の起動の SessionStart には model が無く、 記録 file が空になる (hook-authoring.md#sessionstart-model-by-launch-path)。
+SID3="22222222-3333-4444-5555-666666666666"
+printf '%s\n' \
+  '{"type":"assistant","message":{"model":"claude-first-turn"}}' \
+  '{"type":"user","message":{"content":"x"}}' \
+  '{"type":"assistant","message":{"model":"claude-transcript-last"}}' \
+  '{"type":"assistant","message":{"model":"<synthetic>"}}' > "$CLAUDE_PROJECTS_DIR/-w-p/$SID3.jsonl"
+f="$WORK/m8-transcript"; printf 'subject line\n' > "$f"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_AGENT_EFFORT \
+  CODEX_SESSION_ID CODEX_THREAD_ID CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR; \
+  CLAUDE_CONFIG_DIR="$WORK/no-claude-home" CLAUDE_CODE_SESSION_ID="$SID3" CLAUDE_EFFORT="xhigh" bash "$RUNNER" "$f" )
+if grep -qx 'Agent-Model: claude-transcript-last' "$f" && grep -qx 'Agent-Effort: xhigh' "$f"; then
+    ok "11d. Claude: 記録 file が無くても会話記録の最後の応答の model で埋まる (<synthetic> は飛ばす)"
+else
+    ng "11d. Claude: 記録 file が無くても会話記録の最後の応答の model で埋まる (<synthetic> は飛ばす)" "$(cat "$f")"
+fi
+
+STATE3="$WORK/state3"; mkdir -p "$STATE3"
+printf 'model=claude-sessionstart-cached\neffort=low\n' > "$STATE3/$SID3.env"
+f="$WORK/m8-transcript-vs-cache"; printf 'subject line\n' > "$f"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_AGENT_EFFORT \
+  CODEX_SESSION_ID CODEX_THREAD_ID CLAUDE_EFFORT; \
+  CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$STATE3" CLAUDE_CODE_SESSION_ID="$SID3" bash "$RUNNER" "$f" )
+if grep -qx 'Agent-Model: claude-transcript-last' "$f" && grep -qx 'Agent-Effort: low' "$f"; then
+    ok "11e. Claude: 会話記録と記録 file が違えば会話記録 (= いまの turn の model)、 effort は記録 file のまま"
+else
+    ng "11e. Claude: 会話記録と記録 file が違えば会話記録 (= いまの turn の model)、 effort は記録 file のまま" "$(cat "$f")"
+fi
+
+SID4="33333333-4444-5555-6666-777777777777"
+printf '%s\n' '{"type":"user","message":{"content":"x"}}' > "$CLAUDE_PROJECTS_DIR/-w-p/$SID4.jsonl"
+printf 'model=claude-sessionstart-cached\n' > "$STATE3/$SID4.env"
+f="$WORK/m8-no-assistant"; printf 'subject line\n' > "$f"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CONFIG_AGENT_MODEL CLAUDE_CONFIG_AGENT_EFFORT \
+  CODEX_SESSION_ID CODEX_THREAD_ID CLAUDE_EFFORT; \
+  CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR="$STATE3" CLAUDE_CODE_SESSION_ID="$SID4" bash "$RUNNER" "$f" )
+if grep -qx 'Agent-Model: claude-sessionstart-cached' "$f"; then
+    ok "11f. Claude: 会話記録に応答がまだ無ければ記録 file に落ちる"
+else
+    ng "11f. Claude: 会話記録に応答がまだ無ければ記録 file に落ちる" "$(cat "$f")"
+fi
+
+f="$WORK/m8-explicit"; printf 'subject line\n' > "$f"
+( unset CLAUDE_CONFIG_AGENT_SESSION CODEX_SESSION_ID CODEX_THREAD_ID CLAUDE_CONFIG_SESSION_PROVENANCE_STATE_DIR; \
+  CLAUDE_CONFIG_AGENT_MODEL="claude-explicit" CLAUDE_CODE_SESSION_ID="$SID3" CLAUDE_EFFORT="high" bash "$RUNNER" "$f" )
+if grep -qx 'Agent-Model: claude-explicit' "$f"; then
+    ok "11g. Claude: 明示の CLAUDE_CONFIG_AGENT_MODEL は会話記録より先"
+else
+    ng "11g. Claude: 明示の CLAUDE_CONFIG_AGENT_MODEL は会話記録より先" "$(cat "$f")"
 fi
 
 f="$WORK/m9"

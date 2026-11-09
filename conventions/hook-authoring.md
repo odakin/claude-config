@@ -919,7 +919,7 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 ### <a id="sessionstart-model-by-launch-path"></a>9.4 SessionStart の入力の項目は起動の経路で変わる — `model` が入らない起動がある
 
 - SessionStart の hook の入力は起動の経路ごとに組まれ、 `model` を渡すかが経路で違う。 埋込 engine 2.1.317 を読むと、 `model` が入るのは対話の起動 (端末の REPL)・compact・resume で、 SDK の起動 (desktop の窓が CLI を起こす経路)・print の起動 (`claude -p`)・`/clear` の後は `model` が無い (読み方 = [`claude-app-bundle-reading.md`](claude-app-bundle-reading.md) の道具で `grep 'hook_event_name:"SessionStart"' --where engine` を当て、 入力を組む関数の呼び出し元を辿る)。
-- 実測: SessionStart の `model` を file に記録する hook が、 desktop の窓では起動の時に書かず、 書いていたのはほぼ compact の時だった (compact の起きない窓は記録が最後まで無い)。 CLI の窓は起動時に書いていた。 本 repo の `scripts/prepare-commit-msg-session.sh` の `Agent-Model` が desktop の窓の commit で `unknown` になるのはこれ。
+- 実測: SessionStart の `model` を file に記録する hook が、 desktop の窓では起動の時に書かず、 書いていたのはほぼ compact の時だった (compact の起きない窓は記録が最後まで無い)。 CLI の窓は起動時に書いていた。 本 repo の `scripts/prepare-commit-msg-session.sh` の `Agent-Model` が SessionStart の記録より先に会話記録を読むのはこのため (記録だけでは desktop の窓の commit が `unknown` になった)。
 - hook で model が要るなら、 SessionStart の入力だけに頼らない。 その session の model の記録は会話記録の応答の `message.model` で、 最後の応答がいま走っている turn の model (読む engine = `scripts/lib/session_model.py`)。 effort は Bash の環境変数 `CLAUDE_EFFORT`。
 - 版で変わりうる = 頼る前に、 今の版で同じ grep を 1 回当てる。
 

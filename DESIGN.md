@@ -407,14 +407,18 @@ session は記録されない**。ただし `git commit --amend -m` は message 
 hook に渡さない経路では旧 trailer 自体が入力から消えるため、amending session の新 block になる。
 
 **判断 4: runtime fact と設定既定を混ぜない。** Claude は session id を
-`CLAUDE_CODE_SESSION_ID`、起動時 model を SessionStart input、commit 時の effective effort を公式
-Bash env `CLAUDE_EFFORT` から取る。Codex の公式 Hook contract は全 command hook に `session_id` と
+`CLAUDE_CODE_SESSION_ID`、model を commit 時に同じ session の会話記録の最後の応答の `message.model`
+(= commit を打っている turn の model。 読めなければ SessionStart input を写した machine-local cache)、
+commit 時の effective effort を公式 Bash env `CLAUDE_EFFORT` から取る。 SessionStart input だけに頼らないのは、
+desktop の窓の起動 (SDK の経路)・print・`/clear` の SessionStart input に `model` が無く、 cache が空のまま
+`unknown` になっていたため ([`hook-authoring.md#sessionstart-model-by-launch-path`](conventions/hook-authoring.md#sessionstart-model-by-launch-path))。
+会話記録は Codex の thread row と同じく同じ session id の行だけを読む (他の session の値で埋めない)。 Codex の公式 Hook contract は全 command hook に `session_id` と
 `model` を渡すが effort は渡さない。Codex adapter は SessionStart、UserPromptSubmit、PreToolUse でその値を
 machine-local cache に保存し、Git hook は現行 runtime の `CODEX_SESSION_ID` / `CODEX_THREAD_ID`
 compatibility probe または明示 `CLAUDE_CONFIG_AGENT_*` を読む。cache 不在時だけ、同じ session id の
 local thread row を read-only で schema-probe する。config default は actual と偽らない。2 経路とも欠けた
 Codex active model は warning 付きの `unknown` として記録し、provenance の縮退だけでは commit を止めない。
-Codex effort、Claude の mid-session model switch 等で actual を確定できない値も同じく `unknown` と書く。
+Codex effort 等で actual を確定できない値も同じく `unknown` と書く (Claude の mid-session model switch は会話記録の最後の応答が拾う)。
 
 **fail-open を維持する**: supported session id が無ければ no-op で、model/effort が取れなければ `unknown` を
 残す。active model は健康な現行経路なら取得できるため欠測をwarningするが、hook無効化・未対応経路・local

@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-"""Own shared Codex model/effort resolution and the hook metadata cache."""
+"""Own shared Codex model/effort resolution and the hook metadata cache.
+
+Also owns the Claude transcript model lookup. Claude: SessionStart input carries `model` only on some launch paths (not the SDK launch a desktop window uses,
+not print mode, not after /clear = conventions/hook-authoring.md#sessionstart-model-by-launch-path), so the
+cache written from it is often missing. `--resolve-claude <session-id>` reads the same session's transcript
+instead: the last assistant turn's `message.model` is the model the committing turn runs on (reader =
+scripts/lib/session_model.py). Prints nothing when the transcript is absent or has no assistant turn.
+"""
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -138,6 +146,23 @@ def codex_thread_metadata(
     return {}
 
 
+def claude_transcript_model(session_id: str) -> str:
+    """The last assistant turn's model in this Claude session's transcript ('' when unknown). Never raises."""
+    if not SAFE_SESSION.fullmatch(session_id):
+        return ""
+    try:
+        path = Path(__file__).resolve().parent / "lib" / "session_model.py"
+        spec = importlib.util.spec_from_file_location("session_model", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        model = module.model_of(session_id)
+    except Exception:
+        return ""
+    if isinstance(model, str) and model != "unknown" and SAFE_MODEL.fullmatch(model):
+        return model
+    return ""
+
+
 def first_valid(
     candidates: tuple[object, ...],
     pattern: re.Pattern[str],
@@ -237,9 +262,14 @@ def main(agent: str) -> int:
 
 def cli_main(arguments: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if arguments is None else arguments)
-    if len(arguments) != 2 or arguments[0] != "--resolve-codex":
-        print("usage: session_provenance_cache.py --resolve-codex <session-id>", file=sys.stderr)
+    if len(arguments) != 2 or arguments[0] not in {"--resolve-codex", "--resolve-claude"}:
+        print("usage: session_provenance_cache.py --resolve-codex|--resolve-claude <session-id>", file=sys.stderr)
         return 2
+    if arguments[0] == "--resolve-claude":
+        model = claude_transcript_model(arguments[1])
+        if model:
+            print(f"model={model}")
+        return 0
     for key, value in resolve_codex_metadata(arguments[1]).items():
         print(f"{key}={value}")
     return 0
