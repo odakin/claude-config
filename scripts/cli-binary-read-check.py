@@ -3,11 +3,13 @@
 
 なぜ: 本体の binary は 1 行が MB 級の minified JS を含み、 素の grep -o は時間切れ、 使い捨ての mmap の code は
   毎回書き直しになる。 そのための道具 scripts/claude-app-bundle.py (端末の CLI は `--engine <path>` を subcommand の
-  前に) が在るのに、 知らない session が自前の code で読み直した (実測 2 回: 埋込 engine を 7 回、 端末の CLI の binary を
-  「道具は読めない」 と思い込んで)。 規約 = conventions/claude-app-bundle-reading.md。
+  前に) が在るのに、 知らない session が自前の code で読み直した (実測 3 回: 埋込 engine を 7 回、 端末の CLI の binary を
+  「道具は読めない」 と思い込んで、 harness が Bash に渡す環境変数 CLAUDE_CODE_EXECPATH で埋込 engine を指して = この形は
+  述語が path の文字列だけを見ていて知らせが出なかった)。 規約 = conventions/claude-app-bundle-reading.md。
 述語 (find_issues): command が本体の置き場所 (埋込 engine の claude-code/<版>、 端末の CLI の versions/、 app の
-  app.asar・ion-dist、 `readlink … command -v claude`) を指し、 かつ読む道具 (python・grep・strings・xxd 等) を
-  起動している。 claude-app-bundle.py 自身と、 この engine・hook・test の名前を含む command は除く。
+  app.asar・ion-dist、 `readlink … command -v claude`、 変数の展開 `$CLAUDE_CODE_EXECPATH` / `${CLAUDE_CODE_EXECPATH}`) を
+  指し、 かつ読む道具 (python・grep・strings・xxd 等) を起動している。 変数の名前だけ (`env | grep CLAUDE_CODE_EXECPATH`) は
+  本体を読んでいないので当てない。 claude-app-bundle.py 自身と、 この engine・hook・test の名前を含む command は除く。
 hook mode (stdin = PreToolUse の JSON): 当たれば additionalContext に 1 回だけ知らせる (状態 =
   ~/.claude/state/cli-binary-read-nudge/<session>、 14 日で掃除)。 止めない (exit 0)。 読めない入力は黙る。
 校正 = scripts/calibrate-bash-command-pattern.py --hook scripts/cli-binary-read-check.py
@@ -26,6 +28,7 @@ TARGET_RE = re.compile(
     r"|\.local/share/claude/versions"
     r"|Claude\.app/Contents/Resources/(?:app\.asar|ion-dist)"
     r"|readlink[^|;&\n]*(?:command -v|which) claude"
+    r"|\$\{?CLAUDE_CODE_EXECPATH\b"
 )
 READER_RE = re.compile(
     r"(?:^|[\s;|&(`$])(?:python3?(?:\.\d+)?|strings|xxd|hexdump|od|perl|rg|grep|egrep|awk)(?=\s|$)"
@@ -102,6 +105,10 @@ def selftest() -> int:
         ("grep -a -o 'hook.matcher.{0,80}' \"$(readlink -f \"$(command -v claude)\")\"", True),
         ("strings ~/.local/share/claude/versions/2.1.309 | grep remote-control", True),
         ("LC_ALL=C grep -c Foo /Applications/Claude.app/Contents/Resources/app.asar", True),
+        ("B=\"$CLAUDE_CODE_EXECPATH\"; LC_ALL=C grep -a -o 'hook_event_name:\"SessionStart\"[^;]{0,40}' \"$B\"", True),
+        ("python3 - \"${CLAUDE_CODE_EXECPATH}\" <<'EOF'\nimport mmap, sys\nEOF", True),
+        ("env | grep CLAUDE_CODE_EXECPATH", False),
+        ("ls -la \"$CLAUDE_CODE_EXECPATH\"", False),
         ("python3 ~/Claude/claude-config/scripts/claude-app-bundle.py grep foo --where engine", False),
         ("ls ~/Library/Application\\ Support/Claude/claude-code/", False),
         ("ls \"$HOME/Library/Application Support/Claude/claude-code/2.1.309\"", False),

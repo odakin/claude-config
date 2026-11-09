@@ -916,6 +916,13 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
   - <a id="surface-file-cleanup-ordering"></a>⚠️ **surface file は「最新 findings の写像」 契約 — write-or-delete を空 early-exit より先に置く**: この橋渡しの surface file は「今の findings」 として読まれるため、 findings が空になった beat では **file を削除する** (= 書くか消すか、 必ずどちらかが毎回走る)。 hook の典型形 `[ -z "$out" ] && exit 0` を surface 書込みより**前**に置くと、 findings 解消後に cleanup が dead code 化し、 **解消済みの古い 🔴 finding が file に残留** → 後続 session がそれを現在の障害として誤読する (実 incident 2026-07-17: fleet-heartbeat の解消済み finding が 9 日間残留、 sibling hook 群は write-first で正しく、 1 本だけ ordering が逆だった)。 検査 reflex = surface 書込みを持つ hook を新設 / review する時、 「空 finding の実行で file が消えるか」 を 1 回実走して確認する (`echo '{"hook_event_name":"SessionStart"}' | bash <hook> && ls <surface-file>`)。
 - **介入型 guard** (= tool 引数を見て deny / rewrite。 mail 誤送信確認・calendar reminder 強制・memory 誤書き込み防止 等) は tool-call 境界が必須で git native 化できない → desktop では不能と考えていた (⚠️ 2026-09-11 注: kill switch を除いた desktop では PreToolUse の deny / ask が効いた = 「原理的」 ではなかった。 それでも hook が効くかは前提にせず測り、 frontend 非依存の層に置けるものは置く)。
 
+### <a id="sessionstart-model-by-launch-path"></a>9.4 SessionStart の入力の項目は起動の経路で変わる — `model` が入らない起動がある
+
+- SessionStart の hook の入力は起動の経路ごとに組まれ、 `model` を渡すかが経路で違う。 埋込 engine 2.1.317 を読むと、 `model` が入るのは対話の起動 (端末の REPL)・compact・resume で、 SDK の起動 (desktop の窓が CLI を起こす経路)・print の起動 (`claude -p`)・`/clear` の後は `model` が無い (読み方 = [`claude-app-bundle-reading.md`](claude-app-bundle-reading.md) の道具で `grep 'hook_event_name:"SessionStart"' --where engine` を当て、 入力を組む関数の呼び出し元を辿る)。
+- 実測: SessionStart の `model` を file に記録する hook が、 desktop の窓では compact の時にしか書いていなかった (compact の起きない窓は記録が最後まで無い)。 CLI の窓は起動時に書いていた。 本 repo の `scripts/prepare-commit-msg-session.sh` の `Agent-Model` が desktop の窓の commit で `unknown` になるのはこれ。
+- hook で model が要るなら、 SessionStart の入力だけに頼らない。 その session の model の記録は会話記録の応答の `message.model` で、 最後の応答がいま走っている turn の model (読む engine = `scripts/lib/session_model.py`)。 effort は Bash の環境変数 `CLAUDE_EFFORT`。
+- 版で変わりうる = 頼る前に、 今の版で同じ grep を 1 回当てる。
+
 ---
 
 ## <a id="hook-no-go-judgment"></a>§10. hook を見送る判定 — trigger が「意図」 を識別できないなら chronic false positive が fleet を毀損する
