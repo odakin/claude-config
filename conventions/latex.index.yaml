@@ -79,6 +79,9 @@ sections:
   - id: tcolorbox-footnotes-to-page
     level: 2
     title: "tcolorbox の枠の中の脚注を、 本文と同じ番号で頁の下に出す"
+  - id: footnote-mark-height-shift
+    level: 2
+    title: "脚注の印の形を替えると、 印の高さが行の縦の位置を変える所がある"
   - id: macro-block-name-clashes
     level: 2
     title: "英語の文書の macro の一揃いを和文の文書と tcolorbox の枠に持ち込むときの衝突"
