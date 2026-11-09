@@ -1396,7 +1396,8 @@ def selftest() -> int:
               rc == 0 and "set_session_model" in out and "set_session_effort" in out and "claude-opus-5-5" in out)
         check("ledger records the mismatch", load("launcher-1")[0]["state"] == "mismatch")
         check("post-start: a model mismatch → the watch first, the model setter after the first turn",
-              "model を直すのは worker の最初の turn が終わってから" in out and out.index(WATCH_FLAG) < out.index("set_session_model"))
+              "model を直すのは worker の最初の turn が終わってから" in out and WATCH_FLAG in out and "set_session_model" in out
+              and out.index(WATCH_FLAG) < out.index("set_session_model"))
         # effort only (an xhigh caller asking max = the measured case): the setter first, before the worker's first turn
         lid_e = "local_aaaaaaaa-0000-4000-8000-0000000000e1"
         with open(os.path.join(app, lid_e + ".json"), "w", encoding="utf-8") as fh:
@@ -1500,7 +1501,7 @@ def selftest() -> int:
         rc, out, _ = call("PostToolUse", "mcp__ccd_session__start_session", st, started, sid="launcher-w")
         check("post-start: capped → the background watch line comes first",
               rc == 0 and f"{WATCH_FLAG} {lid} --model claude-fable-5-1 --effort high" in out and "run_in_background" in out
-              and out.index(WATCH_FLAG) < out.index("set_session_model"))
+              and "set_session_model" in out and out.index(WATCH_FLAG) < out.index("set_session_model"))
         rc, out, _ = call("PostToolUse", "mcp__ccd_session_mgmt__set_session_model", {"session_id": lid, "model": "claude-fable-5-1"},
                           "ok", sid="launcher-w")
         check("post-set: a worker that waits for go and no watch → the watch line", rc == 0 and WATCH_FLAG in out)

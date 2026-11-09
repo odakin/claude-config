@@ -1868,7 +1868,8 @@ def selftest() -> int:
         ok("当てますか is the person's to answer: the parent's message does not close it",
            bool(a_held) and a_held["owner_only"])
         ok("the reason names both times when the note landed late (the stop and the landing)",
-           "その知らせが親の窓に着いたのは" in _ask_text(a_held) and _local_hm("2026-01-01T01:08:30Z") in _ask_text(a_held))
+           bool(a_held) and "その知らせが親の窓に着いたのは" in _ask_text(a_held)
+           and _local_hm("2026-01-01T01:08:30Z") in _ask_text(a_held))
         ok("割り当てる / 割当てる is not an approval (a question of judgment)",
            not OWNER_ONLY_ASK.search("この作業を誰に割り当てるか") and not OWNER_ONLY_ASK.search("どれに割当てるか"))
 

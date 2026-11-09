@@ -31,7 +31,7 @@
      "expect_pass": ["an ask to send outside", "a question of judgment answered by another session"]},
     {"name": "本人だけが答えられる問いも依頼元の答えで閉じる",
      "pairs": [["    owner_only = bool(OWNER_ONLY_ASK.search(text))\n", "    owner_only = False\n"]],
-     "expect_fail": ["an ask to send outside", "an approval ask, answered only by the parent"],
+     "expect_fail": ["an ask to send outside", "an approval ask, answered only by the parent", "当てますか is the person's to answer"],
      "expect_pass": ["the parent answered a question of judgment in the child's window"]},
     {"name": "親でない session の答えも数える",
      "pairs": [["    if parent and not owner_only and any(ts > at for ts, frm in ev[\"peers\"] if frm == parent):\n        return None\n", "    if parent and not owner_only and any(ts > at for ts, frm in ev[\"peers\"]):\n        return None\n"]],

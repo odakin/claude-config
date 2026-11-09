@@ -46,7 +46,7 @@ origin: 官製様式の運用で得た知見 (= 様式 1 研究計画調書 xlsx
 | 様式付属の**説明書き・記載例・マスタ・白紙の頁まで紙に出た** (頁数の検査は通っていた) | 生成の単位が様式の file 丸ごと + 頁数の一致は刷る頁の集合を問わない + 刷る段からどの頁を出すかが見えない | 頁の役割を記入 map に・刷る file は提出頁だけ (`pdf-print-preflight.py --pages`)・宣言を file に埋めて刷る直前の gate が読む → [`print-submission-pages-only`](#print-submission-pages-only) |
 | `lp -o media=A4` で送ったのに**別サイズの紙 (B5 等) で出る** | 本体 (操作パネル) の用紙サイズ設定が job の指定より優先された | 刷る前に本体の用紙設定とトレイの紙を user に確認 → [`print-preflight`](#print-preflight) 5. |
 | `lp` の前の hook が**「本体の用紙が PDF と合わない」** で止めた | 本体が IPP で報告するトレイの用紙 (本体の設定) が PDF の寸法と違う | 本体の設定と紙を PDF に合わせてから刷り直す。 意図した縮小・拡大なら command の頭に `PRINT_PREFLIGHT_PRINTER=0` → [本体の用紙を IPP で聞く](#printer-media-ipp) |
-| 頼まれて刷ったら**もう刷ってあった** (同じ紙が何枚も) | 依頼が記録を見ずに期限の知らせから書かれた / 本人の手の印刷が記録に無い / 記録を見たのに依頼の文どおりに刷った | 刷る前に点呼行と送った job を見て、 あれば依頼者に確かめる → [`print-already-done-check`](#print-already-done-check) |
+| 頼まれて刷ったら**もう刷ってあった** (同じ紙が何枚も) | 依頼が記録を見ずに期限の知らせから書かれた / 本人の手の印刷が記録に無い / 記録を見たのに依頼の文どおりに刷った | 刷る前に点呼行と送った job を見て、 あれば依頼者に確かめる → [もう刷ってあるか](#print-already-done-check) |
 | overlay した電話番号・メールが罫線に被る / 隣セルにはみ出す / 数字だけ浮いて見える | ラベル右端基準の配置、 CJK と数字の baseline 差 | 縦罫線 (`get_drawings`) を anchor、 数字は行中心 → [`pdf-overlay-anchoring`](#pdf-overlay-anchoring) |
 | PyMuPDF で追記した日本語/数字が**画面では正常・印刷で文字化け / 位置ずれ** | `japan`/`helv` 組み込み font は glyph 非埋め込み = printer に代替 font が無い | 印刷用は 600dpi **RGB** raster 版を刷る (font 埋め込みでも同 printer で化けた) → [`pymupdf-builtin-font-print-mojibake`](#pymupdf-builtin-font-print-mojibake) |
 | 値を入れた docx 様式の表で、 **長い本文の後半が画面にも PDF にも無い** (頁は増えない・見出しの検査は通る) | 行の高さが固定 (`hRule="exact"`) = 枠を超えた字は描かれない | Word の PDF の文字に書いた値が全部在るかで止める、 行の高さは変えず本文を詰める → [`docx-exact-row-height-clipping`](#docx-exact-row-height-clipping) |

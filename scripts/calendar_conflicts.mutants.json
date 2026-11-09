@@ -11,7 +11,7 @@
     },
     {
       "name": "複数のカレンダーにある同じ予定を 1 つにまとめない",
-      "pairs": [["        if key in seen:\n            continue  # 同じ予定が複数のカレンダーにある\n", ""]],
+      "pairs": [["        key = (s, en, title)\n        if key in seen:\n            continue  # 同じ予定が複数のカレンダーにある\n", "        key = (s, en, title)\n"]],
       "expect_fail": ["T6 同じ日時"],
       "expect_pass": ["T5 終日"]
     },
