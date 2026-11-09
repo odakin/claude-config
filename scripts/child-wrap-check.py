@@ -66,7 +66,9 @@ Usage:
   child-wrap-check.py --wait <local_…> [...] [--since <epoch 秒 か ISO>] [--max-minutes N]
         子のどれか 1 つの turn が、 子の窓に届いた親の最後の wrap の依頼より後に終わって動いていない状態になるまで待ち
         (依頼の時刻は道具が子の会話記録から引く = --since は渡さなくてよい。 渡した --since が依頼より後なら依頼の時刻に
-        下げる = 実測: 呼ぶ側が「今」 や「10 分前」 を渡して依頼が窓の外になり、 wrap 済みの子が ⏸ になった)、 終わった子の
+        下げる = 実測: 呼ぶ側が「今」 や「10 分前」 を渡して依頼が窓の外になり、 wrap 済みの子が ⏸ になった。 依頼より前に子が
+        自分で wrap を済ませ、 その turn の後に何も書いていなければ、 その wrap も数える = 実測: 素の照合は「畳んでよい」、
+        --wait だけが「wrap の記録が無い」 と食い違った)、 終わった子の
         照合と、 残りの子を続けて見張る 1 行を出す (親が Bash の run_in_background で回す = 終わると親が起こされる。
         全部を待つと先に終えた子が残る = 実測。 時間切れ = exit 3)
   child-wrap-check.py <id> --as-of 2026-01-01T00:00:00 照合をその時点までの記録で (RCA の再現。 動きと commit は今の状態)
@@ -796,7 +798,13 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     if wrap_since:  # after --wait: only a wrap run for this request counts, not one from an earlier request
         req = max((ts for ts, frm in ev["peer_wraps"] if frm == c["parent"] and ts > off), default="")
         earlier_wraps = [w for w in ev["wraps"] if w[:19] < wrap_since[:19] and req and w >= req]
+        before = [w for w in ev["wraps"] if w[:19] < wrap_since[:19]]
         ev["wraps"] = [w for w in ev["wraps"] if w[:19] >= wrap_since[:19]]
+        if not ev["wraps"] and before and not late_writes(dict(ev, wraps=[max(before)])):
+            # a wrap the child ran before this request reached it still covers the request when the child wrote nothing
+            # after that wrap's turn (measured: a child that wrapped on its own a turn before the parent asked was "no wrap"
+            # under --wait and "fold" under the plain check). A write after it (a later job) keeps it uncounted, as before.
+            ev["wraps"] = [max(before)]
     notes = parent_wait_notes(c["parent_path"], c["local"], as_of)
     ask = open_ask(ev, notes, c["parent"])
     gw = go_wait(ev, notes, c["parent"])
@@ -1974,9 +1982,15 @@ def selftest() -> int:
         transcript(sf_c, prev_job + new_wrap)
         st = _epoch("2026-01-01T01:06:00")
         req = _epoch("2026-01-01T01:00:00")
-        ok("old behaviour reproduced: --since after the request (10 minutes before 'now') → 'no wrap' ⏸ (+ the hint)",
+        ok("a --since after the wrap: the wrap before it still counts when nothing was written after it (no 'no wrap')",
+           not any(x.startswith("wrap の記録が無い") for x in check_child(sf_l, wrap_since="2026-01-01T01:03:00")["reasons"]))
+        wr_edit = lambda ts: {"type": "assistant", "timestamp": ts, "message": {"content": [  # noqa: E731
+            {"type": "tool_use", "id": "w", "name": "Write", "input": {"file_path": "/y"}}]}}
+        transcript(sf_c, prev_job + new_wrap + [wr_edit("2026-01-01T01:05:30Z"), stop("2026-01-01T01:05:40Z")])
+        ok("old hint kept: --since after the wrap and a write after its turn → 'no wrap' ⏸ (+ the hint)",
            any(x.startswith("wrap の記録が無い") and "--since が wrap の依頼より後" in x
                for x in check_child(sf_l, wrap_since="2026-01-01T01:03:00")["reasons"]))
+        transcript(sf_c, prev_job + new_wrap)
         ok("fix: a --since 3 minutes after the request ('10 分前' case) is lowered to the request", since_for(sf_l, _epoch("2026-01-01T01:03:00"), st) == req)
         ok("fix: a --since seconds after the request ('$(date +%s)' case) is lowered too", since_for(sf_l, req + 5, st) == req)
         ok("fix: no --since → the request time from the child's window", since_for(sf_l, None, st) == req)
@@ -1984,11 +1998,18 @@ def selftest() -> int:
         ok("fix: --wait without --since → done, and the check counts this wrap (not 'no wrap')", rc_s == 0 and got.get(sf_l) == req
            and not any(x.startswith("wrap の記録が無い") for x in check_child(sf_l, wrap_since=_iso(got[sf_l]))["reasons"]))
         ok("a --since earlier than the request is kept", since_for(sf_l, req - 600, st) == req - 600)
-        transcript(sf_c, prev_job + [peer("2026-01-01T01:00:00Z", "wrap して", parent_l)])
+        # a later job after the previous job's wrap: the child wrote (00:58), then the parent asks for the wrap
+        later_job = [peer("2026-01-01T00:57:00Z", "次は表を直して", parent_l), wr_edit("2026-01-01T00:58:00Z"), stop("2026-01-01T00:59:00Z")]
+        transcript(sf_c, prev_job + later_job + [peer("2026-01-01T01:00:00Z", "wrap して", parent_l)])
         ok("previous job: its turn end does not count for the new request (not done yet)",
            not turn_done_after(sf_l, since_for(sf_l, None, st))[0])
-        ok("previous job: its wrap run does not count, and no '--since too late' hint",
+        ok("previous job: its wrap run does not count when the child wrote after it, and no '--since too late' hint",
            [x for x in check_child(sf_l, wrap_since="2026-01-01T01:00:00")["reasons"] if x.startswith("wrap の記録")] == ["wrap の記録が無い"])
+        # the child wrapped on its own a turn before the parent asked, and wrote nothing after (measured, 2026-11-07 ×2)
+        transcript(sf_c, prev_job + [peer("2026-01-01T01:00:00Z", "wrap して", parent_l), reply("2026-01-01T01:01:00Z"),
+                                     stop("2026-01-01T01:01:05Z")])
+        ok("a wrap run before the request, nothing written after it → counted under --wait (no 'no wrap')",
+           not any(x.startswith("wrap の記録") for x in check_child(sf_l, wrap_since="2026-01-01T01:00:00")["reasons"]))
         ok("a request older than the recent window is an earlier job's → the old default", since_for(sf_l, None, _epoch("2026-01-01T02:00:00"))
            == _epoch("2026-01-01T02:00:00") - 60)
         transcript(sf_c, prev_job[:1])
@@ -2027,9 +2048,10 @@ def selftest() -> int:
         out_h = hook_sendmessage(hk, "")
         ok("hook: a wrap request to the child's uds address → the nudge with the child's id and no --since",
            "--wait " + sf_l in out_h and "--since " not in out_h.split("`")[1])
-        ok("after --wait, a wrap from an earlier request does not count",
+        ok("after --wait, an earlier wrap with nothing written after it still counts (as the plain check does); the busy"
+           " child stays kept for being busy (a write after the wrap = the 'previous job' case above = not counted)",
            not check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["ok"]
-           and any(x.startswith("wrap の記録が無い") for x in check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["reasons"]))
+           and not any(x.startswith("wrap の記録が無い") for x in check_child(ids("busy")[0], wrap_since="2026-01-01T02:00:00")["reasons"]))
         talk = [u("2026-01-01T00:00:00Z", "依頼", origin={"kind": "human"}), peer("2026-01-01T01:00:00Z", "wrap して終えて", parent_l),
                 {"type": "attachment", "timestamp": "2026-01-01T01:02:00Z", "attachment": {
                     "type": "queued_command", "origin": {"kind": "human"}, "prompt": "どうやって消すの？"}},
