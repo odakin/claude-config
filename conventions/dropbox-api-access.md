@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload) + 共同編集者から「Dropbox の容量がいっぱい」 と言われ、 自分の共有フォルダが相手の容量をどれだけ使っているかを量るとき + 共有フォルダに大きいデータを足す前 (#shared-folder-quota)
+when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload) + 共同編集者から「Dropbox の容量がいっぱい」 と言われ、 自分の共有フォルダが相手の容量をどれだけ使っているかを量るとき + 共有フォルダに大きいデータを足す前 (#shared-folder-quota) + 共有フォルダの重い中身を自分だけのフォルダへ移すとき・容量のいっぱいな相手から大きい file を受け取るとき (#split-shared-folder-keep-paths)
 category: infra
 summary: Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 共有状態の read recipe = list_folders は cursor 完走まで不在断定しない + get_metadata の sharing_info 直行 + list_folder_members で共同編集者の own-account 検証 + search_v2 は upload 失敗 file に痕跡ゼロ #sharing-read-recipes、 共有フォルダは入っている全員の容量に数えられる・online-only では減らない・大きさは list_folder recursive の size の和・誰が入れたかは sharing_info.modified_by・外す前に他の仕組みが読む file を確かめる #shared-folder-quota、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
 -->
@@ -91,6 +91,14 @@ file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/�
 - 共有フォルダから人を外す案を出す前に、 そのフォルダに**他の仕組みが読む file** (共有 repo の暗号鍵の写し、 setup の手順が path で指す file) が無いかを確かめる。 外すと相手の新しい機械での setup が止まる (実測)。 その repo の共同編集者の一覧と突き合わせる
 - 持ち主の側から外す (`POST /2/sharing/remove_folder_member`) なら `"leave_a_copy": false` = 写しを残すと、 その写しが相手の容量にそのまま数えられる
 - 相手が入れた file を共有の外へ出す案は、 自分の Dropbox からも消える = 自分が要るものは先に共有していないフォルダへ写す。 自分の file を共有していないフォルダへ動かす分には、 自分の容量は変わらない
+
+<a id="split-shared-folder-keep-paths"></a>**減らす形の 1 つ = 重い中身を持ち主だけのフォルダへ移し、 道具の path は変えない**:
+
+- 共有していない新しいフォルダを作って重い下のフォルダを移す → 共有フォルダの名前を**自分の側だけ**変える (共有フォルダの名前の変更は、 変えた人の側だけに効く = [rename-move-shared-folder](https://help.dropbox.com/organize/rename-move-shared-folder)) → 新しいフォルダに元の名前を付ける。 手元の道具・symlink・文書が指す path は元のまま持ち主だけの中身を指し、 相手の側の共有フォルダの名前も元のまま
+- 1 段ごとにサーバーに届いたのを確かめてから次へ (名前を入れ替える途中で同じ名前が 2 つになると衝突する)。 確かめ方 = 新しい path の `files/get_metadata` (届く前は 409 が返る = 実測)、 共有リンクの `path_lower` が新しい path に変わったか
+- 共有リンクは file と一緒に動く = 移した後も開け、 新しい path を指す (実測: 移す前に一覧にしたリンクが全部開けた)。 共有フォルダの頂に付けたリンクは共有フォルダに残る。 ⚠️ 移した先にも「リンクを知る誰でも開ける」 リンクがそのまま付いている = 移す前に `sharing/list_shared_links` で一覧にして、 公開範囲を確かめる
+- **容量のいっぱいな相手から大きい file を受け取る口 = ファイルリクエスト**: 置かれた file は依頼した側の容量に数えられ ([storage-space](https://help.dropbox.com/storage-space/storage-space))、 置く人は Dropbox のアカウントが無くても置ける。 相手が共有フォルダに置くと相手の容量にも数えられる = 容量のいっぱいな相手には共有フォルダに置かせない。 ⚠️ 作るには `file_requests.write` の scope が要る (共有リンクの最小 scope には無い) = その scope を足すか、 持ち主が web の画面で 1 回作る。 リンクの頁からは届け先のフォルダが見えない = 最初の 1 通が届いた場所で確かめる。 届いた物は相手が書いた物として検査してから使う ([`downloaded-file-scan.md`](downloaded-file-scan.md))
+- ⚠️ **形を変えたら、 相手に渡した手順も同じ時に差し替える**: 前に渡した手順 (AI に貼る文面など) が「共有フォルダの X に置く」 と言っていると、 相手はその手順で置き、 X の消えた相手の側では共有フォルダの頂に入る (実測)。 古い手順で置かれた物は持ち主のフォルダに写し、 共有の方を消すのは、 相手が元の file を手元に持っているのを確かめてから
 
 ## <a id="shared-folder-editor-invite"></a>共有フォルダにして相手を編集者として招待する (相手も書き込める)
 
