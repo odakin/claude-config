@@ -279,6 +279,10 @@ sections:
     level: 3
     title: "9.3 frontend 依存 — desktop app の hook 出力 honor は**反転して見えた (主因は root 限定の kill switch)。 前提にせず session ごとに測れ**"
     related: [build-dependent-behavior]
+  - id: sessionstart-model-by-launch-path
+    legacy: "9.4"
+    level: 3
+    title: "9.4 SessionStart の入力の項目は起動の経路で変わる — `model` が入らない起動がある"
   - id: hook-no-go-judgment
     legacy: "10"
     level: 2
