@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + branch が default に入ったかを判定する・依頼書や記録に「未 merge」 と書く前 (#rebased-branch-not-ancestor) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ) + 共著者が主筆の file の既存部分 (計算・文・記号) を直すとき (#primary-author-consent)
+when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + branch が default に入ったかを判定する・依頼書や記録に「未 merge」 と書く前 (#rebased-branch-not-ancestor) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ) + 共著者が主筆の file の既存部分 (計算・文・記号) を直すとき (#primary-author-consent) + 利用者が user 単位でも入れている hook を共有リポの project の hook に写して配るとき (#project-copy-of-user-hook)
 category: infra
 summary: 共有リポ固有規約
 -->
@@ -380,6 +380,16 @@ gh api repos/<owner>/<repo>/invitations
 - <a id="collaborator-check-reserved-env"></a>**上書きの環境変数に Claude Code・SDK 自身の変数を使わない** (`CLAUDE_CONFIG_DIR`・`CLAUDECODE`・`CLAUDE_PROJECT_DIR`・`CLAUDE_ENV_FILE`・`CLAUDE_EFFORT`・`CLAUDE_PID`・`CLAUDE_CODE_*`・`CLAUDE_AGENT_SDK_*`・`ANTHROPIC_*`) — session がその変数に値を入れていることがあり (設定フォルダを固定した session の `CLAUDE_CONFIG_DIR`、 hook の中の `CLAUDE_PROJECT_DIR` など)、 check はその値をその行の置き場と取り違える (無ければそこへ clone もする)。 名前は `<REPO>_REPO_DIR` / `<NAME>_FILE` の形にする。 conf にそういう行があれば、 check はその行を読まずに ⚠️ と代わりの名前の例を出す (止める名前の一覧 = script の `RESERVED_ENV_NAMES`・`RESERVED_ENV_PREFIXES`。 実測)
 - ⚠️ 所有者の global の gitignore が `.claude/*` を落としていると、 hook の設定が共同編集者に届かない。 installer は repo の `.gitignore` に `!.claude/settings.json` を足し、 `check` が ignore されていないことを確かめる
 - `file` と `command` は存在まで確かめる (token が有効かは各 service の検査に任せる)
+
+## <a id="project-copy-of-user-hook"></a>利用者の手元にもある hook を project の hook として配るとき
+
+共同編集者の手元でも効かせたい hook (返事の検査など) を、 共有 repo の project の hook (`.claude/settings.json`) に写して配ることがある。 同じ hook を自分の user 単位の設定 (`~/.claude/settings.json`) にも入れている人 (所有者など) の手元では、 2 つは command の path が違う別の hook として登録される = 両方が走ると見て、 project の側で避ける (2 回鳴ることそのものは測っていない)。
+
+- **形** — project の command の頭で、 利用者の設定に同じ hook があれば何もしない: `grep -qs 'hooks/<file 名>' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" || python3 "$CLAUDE_PROJECT_DIR/tools/<名前>/<file 名>"`。 照合する文字列は、 利用者の設定の command に出る path の一部 (`hooks/<file 名>`) にし、 project の写しの path (`tools/<名前>/<file 名>`) には当たらない形にする。 `CLAUDE_CONFIG_DIR` で設定フォルダを替えている session は、 そのフォルダの設定を見る
+- **見ないもの** — managed settings と `settings.local.json`。 そこにだけ同じ hook がある手元では 2 回鳴る (害は同じ指摘が 2 つ並ぶこと)
+- **写すもの** — 部品を持たない 1 file の hook を、 repo の `tools/<名前>/` に写す (repo 単体で動く = [§「standalone で成立」](#standalone-operational-definition))。 repo の CLAUDE.md に、 何をする hook か・正本の path・配線の場所・どの画面で鳴らないかを書く。 写しの古さは [#template-copy-staleness](#template-copy-staleness) と同じ問題を持つ = その網が見る種類に入れるまでは、 正本を直したら手で写し直す
+- **確かめ方** — 設定に書いた command そのものを `sh -c` で回し、 偽の transcript と Stop の入力で、 鳴る形・黙る形・利用者の設定に同じ hook がある形 (`CLAUDE_CONFIG_DIR` を偽の設定フォルダに向ける)・本物の設定の形を試す (実測: この 4 つで、 写した hook が鳴るのは検査に当たる返事だけ、 所有者の手元では黙る、 と確かめた)
+- 共有 repo の設定の変更は、 守りの道具を持つ環境では本人の承認が要る変更になりやすい = 写しと配線を 1 つの候補にまとめて、 承認の後に一度に当てる ([`agent-rule-ownership.md`](agent-rule-ownership.md))
 
 ## <a id="repo-python-env"></a>repo の Python の版・venv・固定した依存 → [`python-env.md`](python-env.md)
 
