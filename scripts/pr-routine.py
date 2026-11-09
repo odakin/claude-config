@@ -792,7 +792,7 @@ def run_routine(cfg: dict, gh: Gh, sides: Sides, dry_run: bool, judge_limit: int
             prs.append(view_settled(gh, repo, int(it["number"]), cfg, sides))
         except RuntimeError as e:
             res["failed"].append({"pr": f"{repo}#{it.get('number')}", "what": "PR を読めない", "detail": str(e)})
-    open_bases = {pr_base(p) for p in prs}
+    open_bases = {f"{(it.get('repository') or {}).get('nameWithOwner')}#{it.get('number')}" for it in found}
     new_waits = {}
     merges, judges = [], []
     for pr in prs:
@@ -854,10 +854,19 @@ def run_routine(cfg: dict, gh: Gh, sides: Sides, dry_run: bool, judge_limit: int
     for pr, cls, row in merges[int(cfg["max_merges_per_run"]):]:
         res["waiting"].append(dict(row, reason="この回の merge の上限を越えた (次の回)", since=at))
 
-    # 渡した PR が閉じた = 依頼に note を 1 回書いて印を外す
+    # 渡した PR が閉じた = 依頼に note を 1 回書いて印を外す。 検索に出なかった (読み損ね・検索の遅れ・上限) だけでは閉じたと
+    # 見ない = PR を 1 件ずつ読み直し、 OPEN でないと確かめたものだけ (読めなければ印を残して次の回)
     for base in sorted(set(state["handed"]) - open_bases):
         h = state["handed"][base]
-        res["closed"].append({"pr": base, "request": h.get("request"), "url": h.get("url")})
+        repo, _, num = base.rpartition("#")
+        try:
+            st = (gh.view(repo, int(num)).get("state") or "").upper()
+        except (RuntimeError, ValueError, KeyError) as e:
+            res["failed"].append({"pr": base, "what": "渡した PR の状態を読めない (印を残す)", "detail": one_line(str(e), 200)})
+            continue
+        if st == "OPEN":
+            continue
+        res["closed"].append({"pr": base, "request": h.get("request"), "url": h.get("url"), "state": st})
         if dry_run:
             continue
         if h.get("request"):
@@ -1032,7 +1041,7 @@ def _pr(repo, n, title, author="app/dependabot", bot=True, checks=None, mg="MERG
     if commits is None:
         commits = [{"messageHeadline": title, "messageBody": "---\nupdated-dependencies:\n- dependency-name: x\n...",
                     "authors": [{"login": "dependabot[bot]"}]}]
-    return {"repo": repo, "number": n, "title": title, "body": body, "author": {"login": author, "is_bot": bot},
+    return {"repo": repo, "number": n, "title": title, "body": body, "author": {"login": author, "is_bot": bot}, "state": "OPEN",
             "isDraft": draft, "headRefOid": sha or f"{n:040d}", "mergeable": mg, "mergeStateStatus": ms,
             "statusCheckRollup": [{"__typename": "CheckRun", "name": "ci", "status": "COMPLETED", "conclusion": "SUCCESS"}]
             if checks is None else checks, "commits": commits, "files": [], "url": f"https://github.com/{repo}/pull/{n}"}
@@ -1041,11 +1050,17 @@ def _pr(repo, n, title, author="app/dependabot", bot=True, checks=None, mg="MERG
 class FakeGh(Gh):
     def __init__(self, prs, infos):
         self.prs, self.infos, self.calls = {(p["repo"], p["number"]): p for p in prs}, infos, []
+        self.closed = {}      # (repo, n) -> state (検索に出ないが view では読める PR)
+        self.hidden = set()   # 検索に出ないが開いている PR (検索の遅れ)
 
     def search_open(self, owners, limit):
-        return [{"repository": {"nameWithOwner": r}, "number": n} for (r, n) in self.prs]
+        return [{"repository": {"nameWithOwner": r}, "number": n} for (r, n) in self.prs if (r, n) not in self.hidden]
 
     def view(self, repo, number):
+        if (repo, number) in self.closed:
+            return {"repo": repo, "number": number, "state": self.closed[(repo, number)]}
+        if (repo, number) not in self.prs:
+            raise RuntimeError(f"gh pr view {repo}#{number}: not found")
         return json.loads(json.dumps(self.prs[(repo, number)]))
 
     def repo_info(self, repo):
@@ -1199,11 +1214,24 @@ def selftest() -> int:
     s3 = FakeSides(cfg, gh)
     res3, st3, _ = run_routine(cfg, gh, s3, False, 0, None, now=now, state_in=json.loads(json.dumps(st2)))
     check([x[1] for x in s3.log if x[0] == "post"] == ["o/a#3"], f"human re-hand {s3.log}")
+    # 検索に出ないが開いている (検索の遅れ) = 閉じたと見ない
+    gh.hidden.add(("o/a", 2))
+    s4a = FakeSides(cfg, gh)
+    res4a, st4a, _ = run_routine(cfg, gh, s4a, False, 0, None, now=now, state_in=json.loads(json.dumps(st3)))
+    check(not [x for x in s4a.log if x[0] == "note"] and "o/a#2" in st4a["handed"] and not res4a["closed"], f"hidden open PR kept {s4a.log}")
+    gh.hidden.clear()
     # 渡した PR が閉じた = note 1 回・印を外す
     del gh.prs[("o/a", 2)]
+    gh.closed[("o/a", 2)] = "MERGED"
     s4 = FakeSides(cfg, gh)
     res4, st4, _ = run_routine(cfg, gh, s4, False, 0, None, now=now, state_in=json.loads(json.dumps(st3)))
-    check(("note", "REQ-2") in s4.log and "o/a#2" not in st4["handed"], f"closed note {s4.log}")
+    check(("note", "REQ-2") in s4.log and "o/a#2" not in st4["handed"] and res4["closed"][0]["state"] == "MERGED", f"closed note {s4.log}")
+    # 渡した PR を読めない = 印を残して失敗に数える (閉じたと見ない)
+    del gh.closed[("o/a", 2)]
+    s4b = FakeSides(cfg, gh)
+    res4b, st4b, _ = run_routine(cfg, gh, s4b, False, 0, None, now=now, state_in=json.loads(json.dumps(st3)))
+    check("o/a#2" in st4b["handed"] and not [x for x in s4b.log if x[0] == "note"]
+          and any("状態を読めない" in r["what"] for r in res4b["failed"]), f"unreadable handed PR kept {res4b['failed']}")
     # 待ちが wait_stuck_days を越えたら判断へ
     old = empty_state()
     old["waits"]["o/a#9"] = {"first": "2026-01-01T00:00:00Z", "reason": "x"}
