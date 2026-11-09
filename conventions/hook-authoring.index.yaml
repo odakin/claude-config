@@ -371,6 +371,9 @@ sections:
   - id: consent-before-first-stop
     level: 2
     title: "§25. 「止めた後に本人が話せば通す」 関門は、 止めより前に出た本人の言葉も読む"
+  - id: trailer-needs-final-newline
+    level: 2
+    title: "§26. commit message に trailer を足す git hook は、 message を改行で終えてから書く"
   - id: related-docs
     level: 2
     title: "関連"
