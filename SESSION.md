@@ -5,6 +5,7 @@
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+- **層1 の手元の変更を PR に運ぶ道具と入口の配線** — 道具 [`scripts/upstream-pr.py`](scripts/upstream-pr.py) (段・所有者の判定・漏洩の検査の正本 = 冒頭) と、 共同研究者の点検の repo 行 ([`shared-repo.md#collaborator-check`](conventions/shared-repo.md#collaborator-check)) は入った。 turn の終わりの促しと session の開始の hook は保護された file で、 候補のまま当てる窓の手順を待つ。 規約・README の文書と backup の ref の片づけは未着手。
 - **Codex の upstream PR 案内** — 候補の検査を終え、保護対象の適用前で停止。次は提出候補への裁定後に適用・commit・push を行う。入口 = [PR の道具](scripts/upstream-pr.py)・[Codex の終了時検査](codex/PARITY.md#completion-git-gate-hook)・[裁定の手順](conventions/agent-rule-ownership.md#approval)。
 - **Codex app のチャット数式** — 層1の既定と入口・テンプレートの参照を揃え、通常利用へ移る段階。次に表示が崩れたときは、同じ画面で文中・独立式・ソース表示を分けて照合する。正本 = [画面別の既定](conventions/chat-math-rendering.md#by-surface)・[Codex app](conventions/chat-math-rendering.md#codex-app-katex)。
 - **動画の制作と納品前確認** — 描画の手順は [短い動画の制作](conventions/matplotlib-figure-qa.md#short-video-from-frames)、規格確認・全編デコード・静止画抽出は [`scripts/inspect-video.py`](scripts/inspect-video.py)。描画と検証記録の整理を終え、通常利用へ移る段階。次の制作では同じ入口から始め、納品版の検査と目視の記録を参照する。
