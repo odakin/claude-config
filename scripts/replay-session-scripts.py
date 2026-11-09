@@ -14,7 +14,9 @@ subagents/workflows/<run>/)。 時刻順に混ぜて当てる。
 file に書かずに流した code (heredoc・`-c`) は `--bash-match <名前>=<目印>` で、 目印の文字列を含む Bash の command を
 そのまま <名前> に書き出す (冒頭に実行の時刻の注釈。 一致が 2 つ以上なら <名前>.2 …。 実測: 記録の数値の根拠にした heredoc の
 分析が file に無く、 使い捨ての取り出し script を書いた)。 目印は command の中の、 その code にしか無い短い文字列にする
-(引用符・改行を含む目印は記録の escape と合わないことがある = path や変数名のような素の語が確実)。
+(引用符・改行を含む目印は記録の escape と合わないことがある = path や変数名のような素の語が確実。 空白を含む目印は
+`--bash-match=<名前>=<目印>` の 1 語で渡す)。 この道具を起こした command は目印を含んでも一致に数えない (起動の command は
+実行の前に会話記録に書かれるので、 除かないと code に無い目印でも起動の command が「取り出し」 に出る = 実測)。
 
 使い方:
   replay-session-scripts.py <session id か先頭の数文字> --list                 # 戻せる file と、 今あるか (ある / もう無い) の一覧
@@ -123,10 +125,16 @@ def select(files, names, only_gone):
     return out
 
 
+SELF_NAME = os.path.basename(__file__)
+
+
 def bash_matches(timed, needle):
-    """(timestamp, command) の list = 目印を含む Bash の command (記録の順)。"""
+    """(timestamp, command) の list = 目印を含む Bash の command (記録の順)。
+    この道具を起こした command は除く = 起動の command も目印を含むので、 除かないと code に無い目印でも
+    起動の command を「一致」 として書き出し、 取れたように見える (実測)。"""
     return [(ts, inp.get("command", "")) for ts, name, inp in timed
-            if name == "Bash" and needle and needle in inp.get("command", "")]
+            if name == "Bash" and needle and needle in inp.get("command", "")
+            and SELF_NAME not in inp.get("command", "")]
 
 
 def write_bash_matches(timed, specs, out):
@@ -263,9 +271,15 @@ def selftest():
         expect("--bash-match は目印を含む Bash の command をそのまま書き、 冒頭に時刻の注釈",
                rc == 0 and got.endswith(heredoc + "\n") and "2026-01-02T03:04:05Z" in got.splitlines()[0])
         expect("--bash-match だけなら消えた file の一括復元はしない", not (out3 / "gone.py").exists())
+        # 起動の command も目印を含む (会話記録には実行の前に書かれる) = それを一致に数えない
+        invoke = "python3 scripts/replay-session-scripts.py abcd1234 --out x --bash-match none.sh=no-such-marker"
+        (proj / "abcd1234-0000.jsonl").open("a", encoding="utf-8").write(json.dumps(
+            {"type": "assistant", "timestamp": "2026-01-02T03:05:00Z", "message": {"content": [
+                {"type": "tool_use", "id": "7", "name": "Bash", "input": {"command": invoke}}]}}) + "\n")
         rc = main(["abcd1234", "--out", str(out3), "--bash-match", "none.sh=no-such-marker",
                    "--projects-dir", str(Path(d) / "projects")])
-        expect("一致の無い --bash-match は 1 で終わる", rc == 1 and not (out3 / "none.sh").exists())
+        expect("一致の無い --bash-match は 1 で終わる (この道具を起こした command は一致に数えない)",
+               rc == 1 and not (out3 / "none.sh").exists())
     print("selftest: " + ("ALL PASS" if ok else "FAILED"))
     return 0 if ok else 1
 

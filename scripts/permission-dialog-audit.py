@@ -56,7 +56,9 @@ mode
                       `--latest N` と併用で直近 N 件だけ。 ⚠️ hook を**実際に実行する**ので、
                       副作用のある PreToolUse hook を書いているなら `--no-run-hooks`。
                       ⚠️ 判定は「今の設定に当時の入力を流した結果」 であって、 当時の原因の
-                      再生ではない (= hook を直した後は「もう出ない」 と読む)
+                      再生ではない。 今の hook が無反応なら、 hook の file の git の履歴から dialog の
+                      時刻の版を写して流し、 当時の版が確認を出したものは fixed (= もう出ない) にする
+                      (HookHistory)。 履歴の読めない hook は rule と出る (= hook を直した後なら「もう出ない」 と読む)
   --since YYYY-MM-DD  対象期間の開始日 (log / transcript 共通)
   --selftest
 
@@ -901,8 +903,9 @@ def print_diagnosis(rows, run_hooks, hooks_n, only_hooks=""):
     if run_hooks and only_hooks:
         print(f"  ⚠️ --only-hooks {only_hooks} で絞った = 絞りの外の hook の確認は rule (hook 無反応) に入る"
               " (件数の比べには絞らない run を使う)")
-    print("  ⚠️ 判定は「**今の**設定に当時の入力を流した結果」。 その後 hook を直していれば、"
-          " 当時 hook 由来だった dialog も今は rule / fixed と出る (= もう出ない、 と読む)")
+    print("  ⚠️ 判定は「**今の**設定に当時の入力を流した結果」。 今の hook が無反応なら dialog の時刻の版の hook"
+          " (git の履歴) でも流し、 当時の版が確認を出したものは fixed と出す。 履歴の読めない hook を直した後は、"
+          " 当時 hook 由来だった dialog も rule と出る (= もう出ない、 と読む)")
     print("")
     for r, kind, why, detail in rows:
         print(f"{fmt_t(r['emit'])}  {r['tool']}  [{kind}] {why}")
