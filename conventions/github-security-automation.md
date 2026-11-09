@@ -225,7 +225,7 @@ build step を持たない runtime project (= 自作 MCP server、 CLI、 script
 
 ### <a id="local-bump-respects-cooldown"></a>手元でまとめて上げる時も cooldown を守る (2026-10-03)
 
-lockfile が重なる monorepo の PR を手元の `npm install <pkg>@^X` でまとめて当てると、 npm は範囲内の最新を解決するので、 Dependabot が cooldown で見送った公開直後の版が入る (実測: `@modelcontextprotocol/sdk@^1.30.1` が前日公開の 1.32.0 に解決)。 当てた後に、 変わった package の公開日 (`npm view <pkg> time`) を cooldown 日数と突き合わせ、 新しすぎるものは Dependabot の提案した版に固定する。 Dependabot は main に同じ版が入ると元の PR を自分で閉じる。
+手元で版を上げる command (lockfile が重なる monorepo の PR をまとめて当てる `npm install <pkg>@^X`、 PR の出なかった dir の警告を直す `npm update <pkg>` / `npm audit fix` = [§6 の下の節](#security-update-partial-dirs)) は、 どれも npm が範囲内の最新を解決するので、 Dependabot が cooldown で見送った公開直後の版が入る (実測: `@modelcontextprotocol/sdk@^1.30.1` が前日公開の 1.32.0 に解決。 `npm update` でも cooldown より新しい版を引いた)。 当てた後に、 変わった package の公開日 (`npm view <pkg> time`) を cooldown 日数と突き合わせ、 新しすぎるものは Dependabot の提案した版に固定する。 Dependabot は main に同じ版が入ると元の PR を自分で閉じる。
 
 ### <a id="pinned-env-lockfile-major-bump"></a>版を固定した解析環境で、 lock file だけを変える間接の依存の major の上げ (2026-11-09)
 
@@ -236,9 +236,14 @@ lockfile が重なる monorepo の PR を手元の `npm install <pkg>@^X` でま
 
 実測で通った当て方 = PR の merge でなく、 PR の head の lock を main に写して path を明示して commit する (確かめたことを commit message に書ける)。 ⚠️ 警告は GitHub の依存の一覧 (dependency graph = `repos/<r>/dependency-graph/sbom` で読める) が数え直されて初めて閉じる。 uv の lock では、 lock を足したときには走った数え直しの job (Actions の一覧の `Graph Update: uv in <dir>`) が、 直した lock を main に push してから 45 分たっても走らず、 警告も PR も開いたままだった (実測)。 push の後に「閉じた」 と報告せず、 依存の一覧の版を読んで確かめ、 閉じていなければ開いた警告を毎日出す surface に任せる。
 
-### Dependabot security-update PR は monorepo の全 manifest を cover しないことがある
+### <a id="security-update-partial-dirs"></a>Dependabot security-update PR は monorepo の全 manifest を cover しないことがある
 
 `directories:` 設定の monorepo で、 同一脆弱 package が複数 subdir の lockfile に出ても、 Dependabot の **security-update PR は一部 dir のみ生成される** ことがある (= rate-limit / batching)。 partial PR だけ merge すると残 dir の alert を見逃す。 → **全 affected dir 横断の local `npm audit fix` (non-`--force`) の方が完全**。 local fix → push → 残った partial PR は supersede として close、 が確実 (= §10 cascading loop に乗せて PR を 1 件ずつ追う より速い)。
+
+- **残った dir と包みは PR の一覧でなく警告の一覧から読む** (PR の無い dir は PR の一覧に出ない): `gh api --paginate 'repos/<owner>/<repo>/dependabot/alerts?state=open&per_page=100' --jq '.[] | [.dependency.manifest_path, .dependency.package.name, .security_vulnerability.first_patched_version.identifier] | @tsv'`。 lock の版と突き合わせ、 警告の数え直しの遅れでなく直る前の版が残っていることを確かめてから直す。
+- **間接の依存の警告の包みだけを上げる形** = dir ごとに `npm update <警告の包み…> --package-lock-only --ignore-scripts`。 親の依存の semver の範囲で上がるので major は動かず、 package.json は変わらない (実測)。 上げた後に lock の差分の版を数え、 名指さなかった包み (警告の包みの下の依存) が動いていればそれも報告に書く。
+- **当てた後に公開日を cooldown と照らす** ([#local-bump-respects-cooldown](#local-bump-respects-cooldown))。 新しすぎる版は、 警告の直る版のうち同じ repo のほかの lock がすでに使っている版に、 lock の項目 (version・resolved・integrity) を写して戻し、 `npm install --package-lock-only` を回し直しても戻した版が残ることを確かめる。
+- 確かめは PR を当てるときと同じ (自作 MCP server なら [§6 の Tier 4 の節](#dependabot-pr-tier-discipline)、 本番の checkout でなく clone で `npm ci`)。 npm の lock では push から 1 分以内に警告が閉じた (実測。 uv の lock では数え直しが走らなかった実測 = [#pinned-env-lockfile-major-bump](#pinned-env-lockfile-major-bump))。 どちらも push の後に警告の一覧を読み直して確かめる。
 
 ## <a id="esm-migration-normalizer"></a>7. ESM migration backwards-compatible normalizer
 
