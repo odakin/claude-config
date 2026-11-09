@@ -4226,6 +4226,7 @@ _REVIEWER_TEST: dict | None = None  # selftest だけが入れる (作業ルー�
 DELEGATION_REL = _rule_guard.DELEGATION_REL
 APPROVAL_HEAD = "edit-approval: 1"
 APPROVAL_QUOTE = "検収係の承認 "
+PICKUP_HEAD = "引き受けた:"  # 掲示板の pickup が書く note の summary の頭 (ai-collaboration/board/CONTRACT.md#pickup)
 _NATIVE_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
 _EVENT_ID_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{5,63}$")
 _DELEGATION_KEYS = {"version", "enabled", "rule", "owner_ruling", "board_root", "reviewer_roles", "repos", "owner_paths"}
@@ -4699,6 +4700,7 @@ def _tool_rows(path: Path) -> tuple[dict[str, dict], dict[str, dict]] | None:
     results: dict[str, dict] = {}
     bad = 0
     pending_bad = False
+    row_no = 0
     try:
         handle = open(path, encoding="utf-8", errors="strict")
     except OSError:
@@ -4719,8 +4721,9 @@ def _tool_rows(path: Path) -> tuple[dict[str, dict], dict[str, dict]] | None:
                 if not isinstance(row, dict):
                     pending_bad = True
                     continue
+                row_no += 1
                 try:
-                    _tool_row(row, uses, results)
+                    _tool_row(row, uses, results, row_no)
                 except (AttributeError, TypeError, KeyError):
                     pending_bad = True  # 形の違う行 (message が dict でない等) = 読めない行と同じ (盲検の実測)
     except UnicodeDecodeError:
@@ -4754,9 +4757,11 @@ def _tool_input_ok(name: str, inp: dict) -> bool:
     return all(isinstance(e, dict) and isinstance(e.get("new_string", ""), str) for e in inp.get("edits") or [])
 
 
-def _tool_row(row: dict, uses: dict, results: dict) -> None:
+def _tool_row(row: dict, uses: dict, results: dict, row_no: int = 0) -> None:
     """1 行の tool の呼び出しと結果を控える。 形の分かる行 (message が無い行・文字列の本文・本文の list) 以外は TypeError =
-    読めない行と同じに数える (盲検の実測: 本文が dict の行を黙って飛ばし、 list の input で読む側が例外を出した)。"""
+    読めない行と同じに数える (盲検の実測: 本文が dict の行を黙って飛ばし、 list の input で読む側が例外を出した)。
+    呼び出しには、 どの assistant の message の呼び出しか (`msg` = message の id、 無ければ行の番号) を控える (同じ message の
+    呼び出しを引き受けの境の同じ側に数える = _pickup_boundary)。"""
     if "message" not in row or row.get("type") not in ("assistant", "user"):
         return  # 要約・添付・設定の行 (tool の呼び出しを持たない)
     msg = row.get("message")
@@ -4778,7 +4783,11 @@ def _tool_row(row: dict, uses: dict, results: dict) -> None:
             if (not isinstance(part.get("id"), str) or not part.get("id") or not isinstance(name, str) or not name
                     or not isinstance(inp, dict) or not _tool_input_ok(name, inp)):
                 raise TypeError("tool_use")
-            uses[part["id"]] = {"name": name, "input": inp, "main": main}
+            mid = msg.get("id")
+            prev = uses.get(part["id"])  # 同じ呼び出しが後の行にもう一度出たら、 並びの位置と同じく最初の message を保つ
+            uses[part["id"]] = {"name": name, "input": inp, "main": main,
+                                "msg": prev["msg"] if prev and prev.get("msg") else
+                                (mid if isinstance(mid, str) and mid else f"row:{row_no}")}
         elif part.get("type") == "tool_result" and row.get("type") == "user":
             c = part.get("content")
             if not part.get("tool_use_id") or not (c is None or isinstance(c, (str, list))):
@@ -4827,6 +4836,29 @@ def _posted_receipt(uses: dict, results: dict, event_id: str, target: Path, cand
         if opt["--file"] == [target] and (cand is None or opt["--candidate"] == [cand]):
             return True
     return False
+
+
+def _pickup_boundary(uses: dict, results: dict, events: list[dict], request_id: str) -> int | None:
+    """検収係の窓がその依頼を引き受けた位置 (会話記録の tool の呼び出しの並びの番号)。 引き受け = 掲示板の pickup が書く
+    note (summary が `引き受けた:` で始まる、 その依頼の note が掲示板の commit に載ったもの)。 その id が tool の結果の行頭に
+    `posted <id>` で出た最初の呼び出しを境にし、 同じ assistant の message の呼び出しは並びで前に書かれていても境の後に
+    数える (結果を見る前に一緒に打ったもの)。 境を前に寄せる側 (誤りや読む command の出力に出た id も数える) にだけ倒す。
+    見つからなければ None = 会話記録の全部を見る (今までどおり)。 本人の裁定 = 問い H39「絞る」 (対象の repo の側は引き受けた
+    後だけを見る、 承認する候補の側は全部を見る。 長く続く検収係の窓が前の検収で対象の repo の試験を回しただけで、 守られた
+    file を承認できなくなっていた)。"""
+    ids = sorted({str(e.get("event_id")) for e in events
+                  if e.get("kind") == "note" and e.get("request_id") == request_id
+                  and str(e.get("summary") or "").startswith(PICKUP_HEAD) and _EVENT_ID_RE.match(str(e.get("event_id")))})
+    if not ids:
+        return None
+    hit = re.compile(r"^posted (?:" + "|".join(re.escape(i) for i in ids) + r")(?![0-9A-Za-z-])", re.M)
+    order = {k: i for i, k in enumerate(uses)}
+    first: dict[str, int] = {}
+    for k, u in uses.items():
+        first.setdefault(str(u.get("msg") or f"use:{k}"), order[k])
+    found = [first[str(u.get("msg") or f"use:{k}")] for k, u in uses.items()
+             if hit.search(str((results.get(k) or {}).get("text") or ""))]
+    return min(found) if found else None
 
 
 def _added_lines(old: str, new: str) -> list[str]:
@@ -5329,7 +5361,18 @@ def verify_reviewer_approval(event_id: str, session: tuple[str, str], repo: Path
         return None, ("検収係の会話記録に、 この event を書いた掲示板の approve-edit (その file と候補を名指し、 成功して"
                       " `posted <event id>` を出したもの) が無い")
     targets = [target.resolve(strict=False)] + ([cand_p] if cand_p else [])
-    wrote = reviewer_wrote_target(uses, targets, [rel], results, _added_lines(head_text(repo, rel), new))
+    added = _added_lines(head_text(repo, rel), new)
+    start = _pickup_boundary(uses, results, events, str(req.get("event_id") or ""))
+    if start is None:
+        wrote = reviewer_wrote_target(uses, targets, [rel], results, added)
+    else:
+        # 引き受けの前は候補の側だけ (候補の file と候補の足した行)、 後は今までどおり全部 (本人の裁定 H39)。 候補が対象と
+        # 同じ相対の名の位置 (別の木の写し) に在るときは、 相対の名がどちらを指すか分けられない = 前でも相対の名を見る
+        keys = list(uses)
+        cand_rels = [rel] if cand_p and str(cand_p).endswith("/" + rel) else []
+        wrote = (reviewer_wrote_target({k: uses[k] for k in keys[:start]}, [cand_p] if cand_p else [], cand_rels,
+                                       results, added)
+                 or reviewer_wrote_target({k: uses[k] for k in keys[start:]}, targets, [rel], results, added))
     if wrote:
         return None, f"検収係が候補か対象を書いている ({wrote}) = 書いた者と確かめる者が別でない"
     return {"source": "reviewer", "reviewer_event": event_id, "reviewer_role": role, "reviewer_native": native,
@@ -7007,10 +7050,11 @@ def reviewer_approval_selftests(check) -> None:
 
             def approval(rel, cand_text, *, mode="100644", regions="authority:file", relax="", native=reviewer_sid,
                          role="role-work-chore-reviewer", extra=None, commit_it=True, transcript=True, wrote=None,
-                         wrote_error=False):
+                         wrote_error=False, cand_path=None):
                 n[0] += 1
                 eid = f"20260101T0003{n[0]:02d}Z-claude-apr{n[0]:03d}"
-                cp = cands / f"c{n[0]}.txt"
+                cp = cand_path or cands / f"c{n[0]}.txt"
+                cp.parent.mkdir(parents=True, exist_ok=True)
                 cp.write_text(cand_text, encoding="utf-8")
                 blob = subprocess.run(["git", "rev-parse", "--verify", "-q", f"HEAD:{rel}"], cwd=work, env=env,
                                       capture_output=True, text=True).stdout.strip() or "none"
@@ -7356,6 +7400,93 @@ def reviewer_approval_selftests(check) -> None:
             g(board, "rm", "-q", f"{thread}/20260101T000002Z--20260101T000002Z-claude-hnd003.json")
             g(board, "commit", "-qm", "drop")
             tp.unlink()
+            # 引き受けの後だけ対象を見る (本人の裁定 = 問い H39「絞る」: 対象の repo の側は検収係がその依頼を引き受けた後の
+            # 呼び出しだけ、 承認する候補の側は今のとおり全部)。 直す前の版では P1 が断られた (長く続く検収係の窓が前の検収で
+            # 対象の repo の試験を回しただけで、 書いたと数えられた)
+            pick_id, other_pick = "20260101T000250Z-claude-pck001", "20260101T000251Z-claude-pck002"
+            reviewer_actor = {"agent": "claude", "task": f"{reviewer_sid[:8]} (opus)", "session_id": reviewer_sid}
+            post(ev(pick_id, "note", reviewer_actor, summary=PICKUP_HEAD + " 検収する"),
+                 ev(other_pick, "note", reviewer_actor, summary=PICKUP_HEAD + " 検収する",
+                    request_id="20260101T000000Z-claude-other1"))
+            run_test = f"cd {work} && bash hooks/check.sh"  # 前の検収で対象の repo の試験を回した形 (読む形でない)
+            n_call = [0]
+
+            def call(name, inp, out=None, *, msg=None, error=False):
+                n_call[0] += 1
+                cid = f"p{n_call[0]}"
+                rows = [{"type": "assistant", "message": dict({"content": [
+                    {"type": "tool_use", "id": cid, "name": name, "input": inp}]}, **({"id": msg} if msg else {}))}]
+                if out is not None:
+                    rows.append({"type": "user", "message": {"content": [
+                        {"type": "tool_result", "tool_use_id": cid, "content": out, **({"is_error": True} if error else {})}]}})
+                return rows
+
+            def picked(pid=pick_id, **kw):
+                return call("Bash", {"command": f"cd {base} && python3 board.py pickup --root board --agent claude --session"
+                                                f" {reviewer_sid} --request {req_id} --summary '検収する' 2>&1 | tail -2; echo \"rc=$?\""},
+                            f"posted {pid} (引き受けの印)\nrc=0", **kw)
+
+            def window(eid, cp, *steps, rel="hooks/check.sh"):
+                rows = [r for s in steps for r in s] + call(
+                    "Bash", {"command": f"python3 board.py approve-edit --file {work / rel} --candidate {cp}"},
+                    f"event_id={eid}\nposted {eid}")
+                tp.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Bash", {"command": run_test}, "checked"), picked())
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-P1] 長く続く検収係の窓: 引き受けの前に対象の repo で試験を回しただけなら承認できる (H39)",
+                  rc == 0 and (work / "hooks/check.sh").read_text() == hook1)
+            restore()
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Bash", {"command": run_test}, "checked"), picked(),
+                   call("Edit", {"file_path": str(work / "hooks/check.sh"), "old_string": "a", "new_string": "b"}, "ok"))
+            refused("[reviewer-P2] 引き受けの後に対象の file を書いたら断る", "hooks/check.sh", hook1, eid, cp, "書いている")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Bash", {"command": run_test}, "checked"), picked(),
+                   call("Bash", {"command": run_test}, "checked"))
+            refused("[reviewer-P2] 引き受けの後に対象を名指す読む形でない command (写しでない試験) も今のとおり断る",
+                    "hooks/check.sh", hook1, eid, cp, "書いている")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Bash", {"command": f"cp /tmp/x {work / 'hooks/check.sh'}"}, "", msg="msg_same"),
+                   picked(msg="msg_same"))
+            refused("[reviewer-P3] 引き受けと同じ message の呼び出しは、 並びで前でも引き受けの後に数える",
+                    "hooks/check.sh", hook1, eid, cp, "書いている")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Write", {"file_path": str(cp), "content": "#!/bin/sh\n"}, "ok"), picked())  # 足した行は無い
+            refused("[reviewer-P4] 候補を書いた session なら、 引き受けの前の書き込みでも今どおり断る", "hooks/check.sh", hook1,
+                    eid, cp, "書いている")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Write", {"file_path": str(root / "draft-p5.txt"), "content": hook1}, "ok"), picked())
+            refused("[reviewer-P4] 候補の足した行を引き受けの前に自分で書いていても今どおり断る (下書きを写させた形)",
+                    "hooks/check.sh", hook1, eid, cp, "足した行")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Bash", {"command": run_test}, "checked"))
+            refused("[reviewer-P5] 引き受けの印が会話記録に無ければ全部を見る (掲示板にだけ在る印は境にしない)",
+                    "hooks/check.sh", hook1, eid, cp, "書いている")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Bash", {"command": run_test}, "checked"), picked(other_pick))
+            refused("[reviewer-P6] 別の依頼の引き受けの印は境にしない (全部を見る)", "hooks/check.sh", hook1, eid, cp, "書いている")
+            tree2 = root / "tree2"
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False,
+                               cand_path=tree2 / "hooks" / "check.sh")
+            window(eid, cp, call("Bash", {"command": f"cp -R /tmp/fixture-src {tree2}"}, ""), picked())
+            refused("[reviewer-P7] 候補が別の木の対象と同じ相対の位置に在れば、 引き受けの前でもその木の root への写しを"
+                    "候補を書いた形と数える (今のとおり)", "hooks/check.sh", hook1, eid, cp, "書いている")
+            shutil.rmtree(tree2)
+            b_uses = {"u1": {"name": "Bash", "msg": "m1"}, "u2": {"name": "Bash", "msg": "m2"},
+                      "u3": {"name": "Bash", "msg": "m2"}, "u4": {"name": "Bash", "msg": "m3"}}
+            b_evs = [{"kind": "note", "event_id": pick_id, "request_id": req_id, "summary": PICKUP_HEAD + " x"},
+                     {"kind": "note", "event_id": other_pick, "request_id": req_id, "summary": "メモ"}]
+            check("[reviewer-P8] 境: 同じ message の頭の呼び出し・一番前の posted・id の頭が同じ別の id と引き受けでない note は数えない",
+                  _pickup_boundary(b_uses, {"u3": {"text": f"posted {pick_id} (引き受けの印)"},
+                                            "u4": {"text": f"posted {pick_id}"}}, b_evs, req_id) == 1
+                  and _pickup_boundary(b_uses, {"u1": {"text": f"posted {pick_id}9"},
+                                                "u2": {"text": f"posted {other_pick}"}}, b_evs, req_id) is None
+                  and _pickup_boundary(b_uses, {"u4": {"text": f"posted {pick_id}"}}, b_evs, "other") is None)
+            g(board, "rm", "-q", f"{thread}/20260101T000250Z--{pick_id}.json", f"{thread}/20260101T000251Z--{other_pick}.json")
+            g(board, "commit", "-qm", "drop pickups")
+            tp.unlink(missing_ok=True)
             # 依頼の段・設定の有無
             post(ev("20260101T000500Z-claude-hnd002", "handover", {"agent": "claude", "task": "x",
                     "session_id": "role-work-chore-reviewer"}, reply_to=req_id, handover_role="reviewer",

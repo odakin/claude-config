@@ -26,6 +26,11 @@ REPO="$(cd "$HERE/.." && pwd)"
 pass=0; fail=0; results=()
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# 手元の環境から切り離す: HOME は空の dir (部品は transcript の追加フォルダが空だと本物の ~/.claude/settings.json の
+# additionalDirectories を読む) / git は $TMP より上の repo を探さない (一時 dir の祖先に .git が在ると、 git でない
+# 基準フォルダの case の参照が `git ls-files` の末尾一致 1 件として黙り、 A1〜A9 が落ちる = 実測)
+mkdir -p "$TMP/home" && export HOME="$TMP/home"
+export GIT_CEILING_DIRECTORIES="$(cd "$TMP" && pwd -P)"
 
 # 歯の検査 (scripts/chat_file_refs.mutants.json → check-foil-teeth.py) は、 修正の一部を外した部品の写しの dir を渡す。
 # hook は <root>/scripts/lib を読むので、 その形の root を一時 dir に組む。 C6 (symlink 経由) だけは実物の部品を読む。
@@ -65,14 +70,20 @@ mkpayload() { jq -n --arg t "$1" --argjson a "${2:-false}" '{hook_event_name:"St
 assert() {
   local label="$1" expect="$2" input="$3" needle="${4:-}"
   local out actual=0
+  local g1 g2 snip
   out="$(printf '%s' "$input" | CLAUDE_CONFIG_ROOT="$REPO" "$HOOK" 2>&1)" || true
-  if printf '%s' "$out" | grep -qF '"decision"' && printf '%s' "$out" | grep -qF 'chat-file-ref'; then
-    actual=1
-  fi
-  if [ "$actual" = "$expect" ] && { [ -z "$needle" ] || printf '%s' "$out" | grep -qF -- "$needle"; }; then
+  # 判定は here-string で読む (pipefail の下の `printf | grep -q` は、 grep が先に抜けると一致しても偽になりうる
+  # = conventions/shell-env.md#pipefail-grep-q-sigpipe)。 grep の終了値は落ちたときの行に残す
+  grep -qF '"decision"' <<< "$out"; g1=$?
+  grep -qF 'chat-file-ref' <<< "$out"; g2=$?
+  [ "$g1" = 0 ] && [ "$g2" = 0 ] && actual=1
+  if [ "$actual" = "$expect" ] && { [ -z "$needle" ] || grep -qF -- "$needle" <<< "$out"; }; then
     pass=$((pass+1)); results+=("✅ $label")
   else
-    fail=$((fail+1)); results+=("❌ $label (expect=$expect actual=$actual needle=$needle out=${out:0:200})")
+    # 落ちた行は 1 行に畳む (check-foil-teeth.py は FAIL の行の 1 行目しか見せない = 出力が JSON でも判定が偽になった
+    # 落ちの原因が、 前は 1 行目の `out={` の後ろに隠れた)
+    snip="${out:0:300}"; snip="${snip//$'\n'/ ⏎ }"
+    fail=$((fail+1)); results+=("❌ $label (expect=$expect actual=$actual needle=$needle grep=$g1/$g2 len=${#out} out=$snip)")
   fi
 }
 
@@ -228,7 +239,7 @@ out="$(mkpayload "$TMP/c.jsonl" | CLAUDE_CONFIG_ROOT="$TMP/broken" "$HOOK" 2>&1)
 mkdir -p "$TMP/dot-claude-hooks"
 ln -s "$HOOK" "$TMP/dot-claude-hooks/chat-file-ref-enforce.sh"
 out="$(mkpayload "$TMP/c.jsonl" | env -u CLAUDE_CONFIG_ROOT "$TMP/dot-claude-hooks/chat-file-ref-enforce.sh" 2>&1)" || true
-printf '%s' "$out" | grep -qF '"decision"' && { pass=$((pass+1)); results+=("✅ C6: symlink 経由で部品を見つけて fire"); } \
+grep -qF '"decision"' <<< "$out" && { pass=$((pass+1)); results+=("✅ C6: symlink 経由で部品を見つけて fire"); } \
   || { fail=$((fail+1)); results+=("❌ C6: symlink 経由で fire しない (${out:0:120})"); }
 
 echo

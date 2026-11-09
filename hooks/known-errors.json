@@ -188,6 +188,11 @@
       "match": "write error: Broken pipe",
       "doc": "conventions/shell-env.md#pipefail-grep-q-sigpipe",
       "hint": "pipefail の下で grep -q が早く読み終え、 書き手 (printf / echo) が閉じた pipe に書いて一致を黙って落とした疑いなので、 here-string (grep -q … <<< \"$x\") か -q を外して >/dev/null に直す (check-pipefail-grep-q.py --paths <file> で形を探す)"
+    },
+    {
+      "match": "SyntaxWarning: invalid escape sequence",
+      "doc": "conventions/debugging-discipline.md#runner-image-vs-commit",
+      "hint": "python 3.12 以上が無効な escape に出す警告で、 古い python は黙るので、 その文字列を raw にするか、 他の escape を持つならその文字だけを `\\\\` にする"
     }
   ]
 }
