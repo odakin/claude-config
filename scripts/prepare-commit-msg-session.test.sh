@@ -9,6 +9,9 @@
 #   - Claude / Codex / 明示 vendor-neutral source → Agent-Session trailer
 #   - 別 session / 別 vendor / legacy trailer / amend でも最初の carrier を保存
 #   - generic + legacy opt-out、message injection 拒否、comment/trailer 構造
+#   - 末尾に改行の無い message (= `git merge --no-edit` の形) でも trailer は件名と別段落
+#     (鳴る形 = 17・18・21)。 改行で終わる message と、 trailer を書かない経路は byte 単位で
+#     変えない (鳴らない形 = 19・20)
 #   - e2e commit から %(trailers:key=...) で機械抽出できる
 
 set -u
@@ -254,6 +257,72 @@ else
     ng "14. legacy trailer → 新 key を増殖させず最初の session を保存" "$(cat "$f")"
 fi
 
+# ---- 末尾に改行の無い message (git merge --no-edit の MERGE_MSG の形) ----
+# git interpret-trailers は改行で終わらない 1 段落の message だと空行を挟まずに trailer を
+# 続け、 件名の段落に入れる。 hook が改行で終えてから書くことを確かめる。
+
+f="$WORK/m12-nonl"; printf "Merge branch 'side'" > "$f"
+g="$WORK/m12-nl"; printf "Merge branch 'side'\n" > "$g"
+for x in "$f" "$g"; do
+    ( unset CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; \
+      CLAUDE_CONFIG_AGENT_SESSION="worker:$SID" CLAUDE_CONFIG_AGENT_MODEL="model-v1" \
+      CLAUDE_CONFIG_AGENT_EFFORT="low" bash "$RUNNER" "$x" )
+done
+if cmp -s "$f" "$g" && [ "$(sed -n '2p' "$f")" = "" ] \
+   && git interpret-trailers --parse "$f" | grep -qx "Agent-Session: worker:$SID"; then
+    ok "17. 末尾改行なし → 改行ありと同じ出力 (trailer は件名と別段落)"
+else
+    ng "17. 末尾改行なし → 改行ありと同じ出力 (trailer は件名と別段落)" "$(cat -e "$f")"
+fi
+
+# legacy 経路 (= --amend で元 commit の Claude-Session: を運ぶ) も同じ形を通る。
+legacy_src=""
+if ( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; \
+     git commit -q --allow-empty -m "legacy source" -m "Claude-Session: $SID" ) 2>/dev/null; then
+    legacy_src="$(git rev-parse HEAD)"
+fi
+if [ -n "$legacy_src" ]; then
+    f="$WORK/m13"; printf 'amended subject' > "$f"
+    ( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; \
+      bash "$RUNNER" "$f" commit "$legacy_src" )
+    printf 'amended subject\n\nClaude-Session: %s\n' "$SID" > "$WORK/m13.want"
+    if cmp -s "$f" "$WORK/m13.want"; then
+        ok "18. legacy 経路も末尾改行なし → trailer は件名と別段落"
+    else
+        ng "18. legacy 経路も末尾改行なし → trailer は件名と別段落" "$(cat -e "$f")"
+    fi
+else
+    echo "  ~ 18. SKIP: git commit failed in sandbox (identity/signing?)"
+fi
+
+f="$WORK/m14"; printf 'subject line\n' > "$f"
+( unset CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; \
+  CLAUDE_CONFIG_AGENT_SESSION="worker:$SID" CLAUDE_CONFIG_AGENT_MODEL="model-v1" \
+  CLAUDE_CONFIG_AGENT_EFFORT="low" bash "$RUNNER" "$f" )
+printf 'subject line\n\nAgent-Session: worker:%s\nAgent-Model: model-v1\nAgent-Effort: low\n' "$SID" > "$WORK/m14.want"
+if cmp -s "$f" "$WORK/m14.want"; then
+    ok "19. 改行で終わる message → 空行は 1 つのまま (改行を足さない)"
+else
+    ng "19. 改行で終わる message → 空行は 1 つのまま (改行を足さない)" "$(cat -e "$f")"
+fi
+
+silent_fail=""
+f="$WORK/m15"; printf 'no newline subject' > "$f"; cp "$f" "$WORK/m15.want"
+( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; bash "$RUNNER" "$f" )
+cmp -s "$f" "$WORK/m15.want" || silent_fail="$silent_fail [session 未設定]"
+git config agent.sessionTrailer false
+CLAUDE_CODE_SESSION_ID="$SID" bash "$RUNNER" "$f"
+cmp -s "$f" "$WORK/m15.want" || silent_fail="$silent_fail [opt-out]"
+git config --unset agent.sessionTrailer
+f="$WORK/m16"; printf 'subject\n\nAgent-Session: claude:%s' "$SID" > "$f"; cp "$f" "$WORK/m16.want"
+CLAUDE_CODE_SESSION_ID="$SID2" bash "$RUNNER" "$f"
+cmp -s "$f" "$WORK/m16.want" || silent_fail="$silent_fail [既存 trailer]"
+if [ -z "$silent_fail" ]; then
+    ok "20. trailer を書かない経路 → 末尾改行なしでも byte 単位で変えない"
+else
+    ng "20. trailer を書かない経路 → 末尾改行なしでも byte 単位で変えない" "changed:$silent_fail"
+fi
+
 # ---- e2e (stub を .git/hooks に置いて実 commit) ----
 
 mkdir -p "$REPO/.git/hooks"
@@ -286,6 +355,28 @@ if CLAUDE_CONFIG_AGENT_SESSION="codex:$SID" CLAUDE_CONFIG_AGENT_MODEL="gpt-test"
     fi
 else
     echo "  ~ 15/16. SKIP: git commit failed in sandbox (identity/signing?)"
+fi
+
+# 実際の `git merge --no-edit` (= hook に渡る MERGE_MSG が改行で終わらない形)。
+base="$(git symbolic-ref --short HEAD 2>/dev/null)"
+if [ -n "$base" ] && ( unset CLAUDE_CONFIG_AGENT_SESSION CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; \
+       git checkout -q -b side \
+       && echo side > "$REPO/side.txt" && git add side.txt && git commit -q -m "side" \
+       && git checkout -q "$base" \
+       && echo base > "$REPO/base.txt" && git add base.txt && git commit -q -m "base" ) 2>/dev/null \
+   && ( unset CLAUDE_CODE_SESSION_ID CODEX_SESSION_ID CODEX_THREAD_ID; \
+        CLAUDE_CONFIG_AGENT_SESSION="claude:$SID" CLAUDE_CONFIG_AGENT_MODEL="claude-test" \
+        CLAUDE_CONFIG_AGENT_EFFORT="high" git merge -q --no-ff --no-edit side ) >/dev/null 2>&1; then
+    subj="$(git log -1 --format='%s')"
+    got="$(git log -1 --format='%(trailers:key=Agent-Session,valueonly)' | tr -d '\n')"
+    if [ "$subj" = "Merge branch 'side'" ] && [ "$got" = "claude:$SID" ]; then
+        ok "21. e2e: git merge --no-edit → 件名は merge の 1 行、 trailer は機械抽出できる"
+    else
+        ng "21. e2e: git merge --no-edit → 件名は merge の 1 行、 trailer は機械抽出できる" \
+          "subject='$subj' trailer='$got'"$'\n'"$(git log -1 --format='%B' | cat -e)"
+    fi
+else
+    echo "  ~ 21. SKIP: git merge failed in sandbox"
 fi
 
 echo ""

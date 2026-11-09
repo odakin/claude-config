@@ -76,6 +76,13 @@ MSG_FILE="${1:-}"
 [ -f "$MSG_FILE" ] || exit 0
 SOURCE_COMMIT="${3:-}"
 
+# trailer を書く直前に呼ぶ。 git interpret-trailers (2.39 で実測) は末尾に改行の無い
+# message (= `git merge --no-edit` の MERGE_MSG) だと
+# 空行を挟まずに trailer を続け、 件名の段落に入れる (= %(trailers) で読めず、 次の
+# --parse も既存の trailer と見ない)。 改行で終えれば git が空行を挟んで別段落にする。
+# 空の file と改行で終わる file は触らない (= no-op の経路も含め、 書かない時は変えない)。
+ensure_final_newline() { [ -z "$(tail -c 1 "$MSG_FILE" 2>/dev/null)" ] || printf '\n' >> "$MSG_FILE"; }
+
 # Message 自体が既に provenance を持つ通常 amend/rebase/cherry-pick はそのまま保つ。
 if git interpret-trailers --parse "$MSG_FILE" 2>/dev/null \
         | grep -Eq '^(Agent-Session|Claude-Session|Codex-Session):[[:space:]]'; then
@@ -111,6 +118,7 @@ if [ -n "$LEGACY_KEY" ]; then
     case "$LEGACY_VALUE" in
         *[!A-Za-z0-9_-]*) exit 0 ;;
     esac
+    ensure_final_newline
     git interpret-trailers --if-exists doNothing \
         --trailer "$LEGACY_KEY: $LEGACY_VALUE" --in-place "$MSG_FILE" 2>/dev/null || true
     exit 0
@@ -195,6 +203,7 @@ fi
 # --if-exists doNothing = 同 key の trailer が既にあれば git 側で no-op。
 # git は comment 行 (core.commentChar) を認識して trailer block の位置を決めるので、
 # ここで message の構造を自前で parse しない。
+ensure_final_newline
 if git interpret-trailers --if-exists doNothing \
         --trailer "Agent-Session: $SESSION" \
         --trailer "Agent-Model: $MODEL" \
