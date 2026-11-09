@@ -141,7 +141,7 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 
 **聞いて・見てもらうとき** (場所やリンクを渡しても、 音を渡したことにはならない):
 
-- **相手がその Mac の前にいる** = その Mac で流す。 短い切り出しは `afplay <file>` で 1 本ずつ (何を流すかを先に告げる。 続けて流すループの止め方 = [`podcast-audio-finishing.md#bgm-level-listening`](podcast-audio-finishing.md#bgm-level-listening))、 長い file は `open <file>` (既定の再生アプリ。 アプリによっては開いた瞬間に鳴る = 相手が別の音を聞いている最中なら先に聞く)
+- **相手がその Mac の前にいる** = その Mac で流す。 短い切り出し (十数秒まで) は `afplay <file>` で 1 本ずつ (何を流すかを先に告げる。 続けて流すループの止め方 = [`podcast-audio-finishing.md#bgm-level-listening`](podcast-audio-finishing.md#bgm-level-listening))、 それより長い file は `open <file>` (既定の再生アプリ。 アプリによっては開いた瞬間に鳴る = 相手が別の音を聞いている最中なら先に聞く)。 前景の `afplay` は鳴り終わるまで turn を返さないので、 その間に相手が話しかけるには turn を止めるしかない (実測: 数十秒〜1 分の書き出しを前景の `afplay` で流し、 2 回とも途中で止められた)。 `open` なら相手が再生アプリで止め・戻しができ、 turn も返る
 - **右パネルで聞かせたいとき**は、 上の 3 条件を満たす file (切り出し) を session のフォルダか scratchpad に置いて link する
 - **相手が別の端末にいる** = 同期フォルダの中の場所を文で書く (inline code にしない = 押せるのに開かない link になる)。 共有リンクを渡しただけで相手が聞けたことにはならない (実測)
 - **機械の網** = Stop hook `chat-file-ref` が、 聞いて・見てもらう文脈 (参照の前後の「聞」「聴」「試聴」「視聴」「listen」) で音声・動画の file を返事に書き、 その file が session のフォルダの外にあるか 25 MB を超えるとき、 `afplay` / `open` で流すよう差し戻す。 同じ turn にその file を `afplay` / `open` で流していれば差し戻さない (`open -R` は Finder で見せるだけなので流したことにならない)。 実装 = `scripts/lib/chat_file_refs.py` の `media_block`
