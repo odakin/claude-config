@@ -1124,12 +1124,28 @@ def _selftest() -> int:
                         == (b["assigned_to"] or {}).get("session_id") and (a["claim"] is None) == (b["claim"] is None))
                 agree = agree and same
         check("掲示板の reducer と手元の写しが全部の依頼で同じ状態・担当を出す", agree)
+    else:  # e.g. CI, which checks out this repo alone: say so instead of dropping the check silently
+        print("SKIP: 掲示板の reducer と手元の写しの突き合わせ (ai-collaboration の board/board_workflow.py が隣に無い)")
     os.environ["CODEX_THREAD_CLOSE_NO_BOARD_REDUCER"] = "1"
     _BOARD_REDUCER.clear()
     nxt_local = sorted(n["request"] for n in board_links(T, board_threads([root]), unique8=True)["next"])
     del os.environ["CODEX_THREAD_CLOSE_NO_BOARD_REDUCER"]
     _BOARD_REDUCER.clear()
     check("掲示板の reducer が無くても同じ次の依頼を出す", nxt_local == ["R2", "R4", "R5"])
+    # reduce_fallback's own transitions, checked without the board's reducer (CI checks out this repo alone, so the
+    # agreement check above is skipped there and cannot be the only foil of these lines)
+    r6 = [request("R6", "role-y", "2026-11-09T07:00:00Z"),
+          v2("handover", "H-R6", "R6", REQ, "2026-11-09T07:01:00Z", reply_to="R6",
+             target={"agent": "codex", "session_id": "role-w"}, handover_role="reviewer")]
+    check("reduce_fallback: reviewer の handover は担当を動かさない",
+          (reduce_fallback(r6, "R6")["assigned_to"] or {}).get("session_id") == "role-y")
+    check("reduce_fallback: lease の切れた引き受けは stale (掲示板の reducer と同じ読み)", reduce_fallback(
+        [request("X", "role-w", "2026-11-09T00:00:00Z"), claim("X", "role-w", "2026-11-09T00:01:00Z")], "X")["status"]
+          == "stale")
+    check("foil: lease の切れていない引き受けは working のまま", reduce_fallback(
+        [request("X", "role-w", "2026-11-09T00:00:00Z"),
+         v2("claim", "C-X", "X", "role-w", "2026-11-09T00:01:00Z", agent="codex", lease_until="2026-11-11T00:00:00Z")],
+        "X")["status"] == "working")
     check("reduce_fallback: release の後は引受待ちに戻り、 担当は残る", reduce_fallback(
         [request("X", "role-w", "2026-11-09T00:00:00Z"), claim("X", "role-w", "2026-11-09T00:01:00Z"),
          v2("release", "L-X", "X", "role-w", "2026-11-09T00:02:00Z", agent="codex", reply_to="C-X")], "X")

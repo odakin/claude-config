@@ -24,8 +24,11 @@ spec (JSON):
         "pairs": [["old", "new"]],                   # 各 old は target に正確に 1 回
         "expect_fail": ["FAIL するはずの check の label の部分文字列"],
         "expect_pass": ["PASS のまま残るはずの check の label の部分文字列"],   # 省略可
-        "only_on": ["Darwin"]}]}                     # 省略可 = その OS (platform.system()) でしか回らない check を当てる mutant。
+        "only_on": ["Darwin"],                       # 省略可 = その OS (platform.system()) でしか回らない check を当てる mutant。
                                                      # 他の OS では pair の照合だけをして [SKIP] (test 自身がその OS で check を飛ばすとき)
+        "requires": ["{spec_dir}/../../x/engine.py"]}]}  # 省略可 = この path が全部在るときだけ回る check を当てる mutant
+                                                     # (test が隣の repo の engine を読む check など)。 無い場所 (= その repo だけを
+                                                     # checkout する CI) では pair の照合だけをして [SKIP]。 {spec_dir} は run と同じ
 
 unittest の試験に当てるとき: `"run": "python3 <試験の file> -v <Class>.<test>"`、 `"fail_marker": "FAIL: "`、
 `"pass_marker": "test_"`。 `-v` が出す試験名の行は通っても落ちても出るので基準の PASS 行になり、 落ちた版は
@@ -99,6 +102,9 @@ def load_spec(path: Path) -> dict:
         oo = m.get("only_on")
         if oo is not None and (not isinstance(oo, list) or not oo or not all(isinstance(s, str) and s for s in oo)):
             raise SpecError(f"{path}: mutant {m['name']!r}: only_on must be a non-empty list of OS names (platform.system())")
+        rq = m.get("requires")
+        if rq is not None and (not isinstance(rq, list) or not rq or not all(isinstance(s, str) and s for s in rq)):
+            raise SpecError(f"{path}: mutant {m['name']!r}: requires must be a non-empty list of paths")
     return spec
 
 
@@ -106,6 +112,21 @@ def runs_here(m: dict, system: str | None = None) -> bool:
     """mutant の only_on にこの OS が入っているか (only_on が無ければ常に True)。"""
     oo = m.get("only_on")
     return oo is None or (system or platform.system()) in oo
+
+
+def missing_requires(m: dict, spec_dir: Path) -> list[str]:
+    """mutant の requires のうち、 ここに無い path ({spec_dir} を展開した形)。 requires が無ければ空。"""
+    paths = [s.replace("{spec_dir}", str(spec_dir)) for s in m.get("requires") or []]
+    return [p for p in paths if not os.path.exists(p)]
+
+
+def stopped_by_error(rc: int, lines: list[str]) -> str | None:
+    """run が Python の例外で止まったなら、 その最後の行 (例外の型と文)。 止まっていなければ None。
+    落ちるはずの label が出ないとき、 原因が foil の歯ではなく selftest の途中の error だと分かるようにする。"""
+    if rc == 0 or not any(ln.startswith("Traceback (most recent call last):") for ln in lines):
+        return None
+    tail = [ln for ln in lines if ln.strip()]
+    return tail[-1].strip() if tail else "?"
 
 
 def mutate(text: str, pairs: list, name: str) -> str:
@@ -146,16 +167,21 @@ def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print, system: str |
         out(f"[SPEC] {e}")
         return 2
     here = system or platform.system()
-    for m, _ in mutants:
+    spec_dir = Path(os.path.realpath(spec_path.parent))
+    kept = []
+    for m, t in mutants:
         if not runs_here(m, here):
             out(f"[SKIP] {m['name']}: only on {', '.join(m['only_on'])} (this machine: {here})")
-    mutants = [(m, t) for m, t in mutants if runs_here(m, here)]
+        elif missing_requires(m, spec_dir):
+            out(f"[SKIP] {m['name']}: needs {', '.join(missing_requires(m, spec_dir))} (not here)")
+        else:
+            kept.append((m, t))
+    mutants = kept
     if not mutants:
         return 0
     fail_marker = spec.get("fail_marker", DEFAULT_FAIL)
     pass_marker = spec.get("pass_marker", DEFAULT_PASS)
 
-    spec_dir = Path(os.path.realpath(spec_path.parent))
     rc, lines = run_copy(target, base_text, spec["run"], timeout, spec_dir)
     base_fails = [ln for ln in lines if ln.startswith(fail_marker)]
     if rc != 0 or base_fails:
@@ -188,6 +214,9 @@ def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print, system: str |
                 out(f"    expected FAIL not seen: {s!r}")
             for s in broken_pass:
                 out(f"    expected to stay PASS but did not (a foil depends on another, or the check was not reached): {s!r}")
+            err = stopped_by_error(rc, lines) if (missing_fail or broken_pass) else None
+            if err:
+                out(f"    selftest が途中で error で止まった (最後の行 = {err})")
             for ln in fails[:8]:
                 out("      " + ln)
         else:
@@ -310,6 +339,39 @@ def selftest() -> int:
         rc = check_spec(spec_file("onlyon-here", [dict(kill, only_on=["NoSuchOS"])]), out=log.append, system="NoSuchOS")
         expect("on the OS it names, an only_on mutant runs as usual",
                rc == 0 and any(ln.startswith("[KILLED]") for ln in log))
+
+        log.clear()
+        absent_engine = dict(kill, expect_fail=["only with the engine"], requires=["{spec_dir}/no-such-engine.py"])
+        rc = check_spec(spec_file("requires", [kill, absent_engine]), out=log.append)
+        expect("a mutant whose requires path is absent is [SKIP] here: its labels are not required, the rest still run",
+               rc == 0 and any(ln.startswith("[SKIP]") and "no-such-engine.py" in ln for ln in log)
+               and any(ln.startswith("[KILLED]") for ln in log))
+        log.clear()
+        rc = check_spec(spec_file("requires-drift", [dict(absent_engine, pairs=[["no such line\n", ""]])]),
+                        out=log.append)
+        expect("a mutant skipped for a missing path whose pair no longer matches is still a spec error (exit 2)",
+               rc == 2 and any("matches 0 times" in ln for ln in log))
+        log.clear()
+        rc = check_spec(spec_file("requires-here", [dict(kill, requires=["{spec_dir}/helper.py"])]), out=log.append)
+        expect("with every requires path present ({spec_dir} expanded), the mutant runs as usual",
+               rc == 0 and any(ln.startswith("[KILLED]") for ln in log))
+        for p in pkg.glob("requires*.mutants.json"):
+            p.unlink()
+
+        log.clear()
+        boom = {"name": "raises", "pairs": [["def clamp(x):\n", "def clamp(x):\n    raise RuntimeError('boom')\n"]],
+                "expect_fail": ["clamped to the floor"]}
+        rc = check_spec(spec_file("boom", [boom]), out=log.append)
+        expect("a mutant run that stops on a Python exception says so under [UNEXPECTED] (the verdict stays exit 1)",
+               rc == 1 and any(ln.startswith("[UNEXPECTED]") for ln in log)
+               and any("error で止まった" in ln and "RuntimeError: boom" in ln for ln in log))
+        log.clear()
+        rc = check_spec(spec_file("both-noerror", [both]), out=log.append)
+        expect("foil: a mutant that fails without an exception gets no error note",
+               rc == 1 and not any("error で止まった" in ln for ln in log))
+        for p in pkg.glob("both-noerror.mutants.json"):
+            p.unlink()
+        (pkg / "boom.mutants.json").unlink()
 
         log.clear()
         (pkg / "helper.py").write_text("LOW = 10\n", encoding="utf-8")

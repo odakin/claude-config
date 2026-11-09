@@ -1,5 +1,5 @@
 {
-  "_comment": "codex-thread-close.py の selftest の掲示板の foil に歯があることを、 次の依頼の読み方の直しの一部を外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 mutant 1 は直す前の形 (request の target を宛先と読み、 v2 の assignee を見ない = 次の依頼のある thread を畳める側に出した)。",
+  "_comment": "codex-thread-close.py の selftest の掲示板の foil に歯があることを、 次の依頼の読み方の直しの一部を外した mutant 6 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 mutant 1 は直す前の形 (request の target を宛先と読み、 v2 の assignee を見ない = 次の依頼のある thread を畳める側に出した)。 掲示板の reducer との突き合わせの check は ai-collaboration が隣に在るときだけ回る (CI は本 repo だけを checkout する) ので、 それを当てる mutant は requires で engine の在る場所だけに限り、 ほかの mutant は reducer に依らない check で落とす。",
   "target": "codex-thread-close.py",
   "run": "env AI_COLLABORATION_DIR={spec_dir}/../../ai-collaboration python3 {} --selftest",
   "fail_marker": "FAIL: ",
@@ -27,7 +27,7 @@
         ["elif k == \"handover\" and e.get(\"handover_role\") == \"assignee\":", "elif k == \"handover\":"]
       ],
       "expect_fail": [
-        "掲示板の reducer と手元の写しが全部の依頼で同じ状態・担当を出す",
+        "reduce_fallback: reviewer の handover は担当を動かさない",
         "掲示板の reducer が無くても同じ次の依頼を出す"
       ],
       "expect_pass": [
@@ -65,10 +65,26 @@
         ["                s[\"status\"] = \"stale\"  # the board's reducer: an expired claim on work in progress\n", "                pass\n"]
       ],
       "expect_fail": [
+        "reduce_fallback: lease の切れた引き受けは stale"
+      ],
+      "expect_pass": [
+        "foil: lease の切れていない引き受けは working のまま",
+        "掲示板の reducer が無くても同じ次の依頼を出す"
+      ]
+    },
+    {
+      "name": "手元の写しが lease の切れた claim を stale と読まない (掲示板の reducer との突き合わせが拾う)",
+      "pairs": [
+        ["                s[\"status\"] = \"stale\"  # the board's reducer: an expired claim on work in progress\n", "                pass\n"]
+      ],
+      "expect_fail": [
         "掲示板の reducer と手元の写しが全部の依頼で同じ状態・担当を出す"
       ],
       "expect_pass": [
         "掲示板の reducer が無くても同じ次の依頼を出す"
+      ],
+      "requires": [
+        "{spec_dir}/../../ai-collaboration/board/board_workflow.py"
       ]
     }
   ]
