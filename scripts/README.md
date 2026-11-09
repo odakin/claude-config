@@ -280,6 +280,7 @@
 - **[manuscript-candidate-regions.py](manuscript-candidate-regions.py)** — 候補の全文が原稿のどの保護領域に当たるかを、 書く前に engine の述語で出す。
 - **[manuscript-claim-guard.py](manuscript-claim-guard.py)** — 原稿の保護領域 (表題・概要・序論・結論・数式環境) と agent の権限規約を、 著者の項目ごとの承認 (著者の発言の verbatim を transcript で照合) なしに AI agent が書き換える変更を止める engine (Claude / Codex の PreToolUse と git pre-commit が同じ述語で呼ぶ)
 - **[mark-handled-read.py](mark-handled-read.py)** — 見張っている Gmail ラベルの未読のうち、 「対応済み」 と記録で言えるものだけを既読にする engine。
+- **[mcp-stdio-smoke.py](mcp-stdio-smoke.py)** — stdio の MCP サーバを 1 回起動し、 initialize と tools/list を送って tool の一覧が返るかを確かめる。--selftest 内蔵。
 - **[md-note-to-tex.py](md-note-to-tex.py)** — Markdown のノートを、 手元の TeX preamble に載る骨格 (raw/) へ機械で変える (正本が md、 TeX が写しのときの写し作りの前半。 構造だけ)。
 - **[measure-pdf-layout.py](measure-pdf-layout.py)** — 組版された PDF の版面を実測する — 「指定したのに効いていない」 を目視でなく数値で捕まえる.
 - **[memory-budget-pay.py](memory-budget-pay.py)** — 予算 gate に止められた memory file (CLAUDE.md) の「払い」 を 1 コマンドにする (余裕の表示 / 候補の順位 / 1 行の退避 / entry の graduate)
