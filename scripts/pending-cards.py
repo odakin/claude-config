@@ -70,6 +70,10 @@ def stop_main() -> int:
     if not path or not os.path.isfile(path):
         return 0
     try:
+        # card を 1 枚も出していない session (ほぼ全部) は JSON を読まずに戻る (毎 turn の費用を文字列の検索 1 回にする)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            if "(task_id: task_" not in fh.read():
+                return 0
         entries = pc.load_entries(path)
         final = _final_text(entries)
         if not final.strip():
