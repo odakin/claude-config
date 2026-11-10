@@ -315,6 +315,7 @@
 - **[pdf-side-by-side.py](pdf-side-by-side.py)** — 2 つの PDF の同じ箇所を左右に並べた比較頁を作る: 案を決めるのは source でなく組版された姿。
 - **[pdf-to-text.py](pdf-to-text.py)** — PDF の本文を grep できる plain text にする — 合字・行末ハイフン・柱・頁番号を直し、直した数を報告する。--selftest 内蔵 (network 不要)。
 - **[pdf_form_fill.py](pdf_form_fill.py)** — 雛形 PDF への直接印字エンジン（library。anchor 印字 / NFKC 照合 / #+ redact / font subset / 内蔵検証 / 600dpi ラスタ化、office-automation.md#pdf-prefill-direct の汎用実装。単票向け — 派生 sheet 数式導出付き workbook は excel-osascript 経路）
+- **[pending-cards.py](pending-cards.py)** — この session が出した card のうち押されていないものを数え、 本人がまだ見ていない間は最新の返事に点呼の 1 行を書かせる (Stop hook の本体)。 見張りが card を出した依頼を拾い直さないための照会と、 過去の会話記録での流し直しも持つ
 - **[permission-dialog-audit.py](permission-dialog-audit.py)** — Claude desktop の承認 dialog を app log から集計し、 transcript と突合して main / sub-agent に振り分け、 1 件ごとに原因を切り分ける
 - **[photos_picker.mutants.json](photos_picker.mutants.json)** — lib/photos_picker.py の selftest の foil に歯があることを、 要所を 1 か所ずつ外した mutant 3 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[pin-claude-cwd.sh](pin-claude-cwd.sh)** — Claude.app folder picker 起点固定 (= NSNavLastRootDirectory を `$1` に固定、 read-first で drift 時のみ write、 setup.sh Step 2b2 の launchd から 1 秒間隔で呼ばれる、 macOS 限定、 conventions/claude-app-cwd-pin.md)
@@ -522,6 +523,7 @@
 - **[lib/office_census.py](lib/office_census.py)** — OOXML package (xlsx / docx / pptx) が「紙に出すもの」 を、 道具に依らず zip の XML から数える。
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/output_numbers.py](lib/output_numbers.py)** — 実行出力の数値と追跡済みの記録を照合する共通規則。--selftest。
+- **[lib/pending_cards.py](lib/pending_cards.py)** — この session が出した card (`start_session` の提案) のうち、 押されていないものと、 本人がまだ見ていないものを、 会話記録と desktop app の記録から数える部品 (点呼の Stop hook と、 card を出した依頼を拾い直す見張りが、 同じ述語で読む)
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
 - **[lib/photos_picker.py](lib/photos_picker.py)** — Google Photos Picker API の client (session を作る → 本人が URL を開いて写真を選ぶ → 選ばれた写真を列挙・download。 python3 photos_picker.py で selftest)
 - **[lib/pick-python.sh](lib/pick-python.sh)** — 無人ジョブ (launchd / cron) の wrapper が使う python3 を、 PATH の順でなく「必要な module を import できるか」 で選ぶ (source して pick_python を呼ぶ)
