@@ -261,6 +261,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - 文献の並び (= 引用の番号) は、 前後の `.bbl` の `\bibitem` の順を diff で比べる。
 - <a id="prose-pass-pdf-word-diff"></a>**英文だけを直した候補 (「今 → 案」 の組を写しに当てたもの) の PDF は、 変わるはずの語そのもので確かめる** — 組ごとに、 案の語の多重集合から今の語の多重集合を引き (数式・`\cite`・`\ref` のキーを落とし、 英字だけの語にする)、 全部の組で足し合わせた増減が、 PDF の本文の語の増減とちょうど一致するかを見る。 一致すれば、 組の外で文が動いていない。 語が余れば、 その語の周りが組の外で変わっている。 題・要旨の組は、 本文の始まりの見出しより前 (前付け) で同じように比べる。
   数字と数式の記号 (英字・空白・句読点・ハイフンを除いた字) の多重集合は、 頁番号と目次の頁番号を除けば前後で同じになる。 頁割りが動けば、 目次の頁番号と最後の頁番号だけが動く (実測)。
+  <a id="numbered-display-shift"></a>番号つきの display を足す・消す・別の場所へ動かす組を含む候補では、 その間の式番号が 1 つずつずれ、 本文の参照の番号もずれるので、 この多重集合は同じにならない。 基準の側の本文の式番号 `(N)` を、 ずれの範囲 (`.aux` の label→番号を前後で比べて決める = [`#symbol-width-repagination`](#symbol-width-repagination) の道具) で読み替えてから比べる。 外部文献の式番号 (`Eq. (N) of Ref. [k]`) は読み替えない = 読み替えると、 その番号だけが違いとして残る (実測)。 行の多重集合で比べると、 頁送りで並びの入れ替わった脚注・表・段落は違いに出ず、 残るのは足した・消した行と読み替えで残った番号だけになる (実測)。
   語の取り方は上の行と同じ (PyMuPDF)。 PyMuPDF を前提にする比べ方は、 無ければ比べずに止める = PyMuPDF の無い python で黙って pdftotext に落ちる道具があり、 行割りの動いた所で語がつながる・割れる差 (wavepacket ↔ wave packet、 数式の隣の 2 文字がつながる) が出て、 本文が変わっていないのに一致しなかった (実測)。
 
 **罠**:
@@ -674,6 +675,8 @@ grep -nE '\\(newcommand|renewcommand|providecommand|nc|def|NewDocumentCommand|De
 3. **CI**（`.github/workflows/*.yml` で push/PR ごとに 1. を実行）— pre-commit hook を install していない clone（= 制御できない共著者）でも server 側で必ず検出する最終防衛線。pure-script なので LaTeX build 不要・高速。
 
 ⚠️ **mechanize の限界を明示する**: 微分の `d` のように「regex で raw と正用を判別できない」 category は lint 不能 → discipline に残す（noisy rule を足すと false positive で linter の信頼を失う）。mechanize できる subset とできない subset を分け、後者は doc に明記する。
+
+⚠️ <a id="raw-form-through-alias"></a>**本文が生の形を別の alias で書いていると、 engine は拾わない** — engine は定義の側を段階展開して raw 形にするが、 本文の token は展開しない。 新しい macro の本体が primitive で書いてあり (`\newcommand{\X}{\text{X}}`)、 本文が同じ形を別の alias で書いている (`\tx X`、 `\tx` = `\text`) と、 macro を定義した後も本文の旧い形は PASS する (実測。 本文に `\text{X}` と書けば拾う)。 既存の書き方を新しい macro に置き換える変更では、 置き換える前後で旧い形を grep で数え、 置き換えた後の再混入は repo の config の `extra_hard` にその綴り (例 `\\tx\\s*(\\{X\\}|X(?![A-Za-z]))`) を足して止める。 engine が本文の alias の token を本体に読み替えるようになれば、 この行は要らない。
 
 ⚠️ **未採用の alias を drift と読み違えない**: 導出は「preamble に定義がある」しか見ないので、**定義だけして誰も使っていない alias**（昔の名残・別概念の semantic alias）も raw 形を大量に告発する。gate に入れる前に engine の `[alias N×]` 表示で仕分ける — alias 側が 0 回なら drift ではなく「採用されなかった macro」なので、**採る（sweep する）か `ignore_macros` に入れるかを 1 度決める**。既存原稿に初めて当てる時はこれが finding の大半を占める（実測: 手入れ済みの 3 原稿で adopted 174 / unused 628）。
 
