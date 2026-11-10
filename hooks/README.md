@@ -75,6 +75,8 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[pasted-command-comment-guard.sh](pasted-command-comment-guard.sh)** — user に貼らせるコマンドに `#` コメントが混ざっていたら Stop で書き直させる (対話 zsh は # をコメントにしない)
 - **[pasted-command-comment-guard.test.sh](pasted-command-comment-guard.test.sh)** — logic + incident-replay selftest
 - **[pdf-read-fallback-nudge.sh](pdf-read-fallback-nudge.sh)** — PostToolUse(Read): Read tool が .pdf を `pdftoppm is not installed` で fail した時に PyMuPDF 1-liner を system reminder で injection (= 2026-05-18 RCA、 規律 wording に依存しない機械的 enforcement layer)
+- **[pending-card-rollcall.py](pending-card-rollcall.py)** — Stop: この session が出した card のうち押されておらず本人がまだ見ていないものがあるのに、 最新の返事に点呼の 1 行 (「🃏 押されていない card N 枚」) が無ければ、 書く 1 行を添えて 1 回だけ止める
+- **[pending-card-rollcall.test.sh](pending-card-rollcall.test.sh)** — 点呼の Stop hook の鳴る形と黙る形を、 本体の selftest と、 hook の file を直接呼ぶ形の両方で確かめる
 - **[protected-dir-access-guard.py](protected-dir-access-guard.py)** — PreToolUse(Bash / Grep / Glob / Read / Edit / Write): 保護を宣言した dir を名指す操作に確認を出し (ask)、 上位 dir から再帰して中に届く操作は止める (exit 2)
 - **[protected-dir-access-guard.test.sh](protected-dir-access-guard.test.sh)** — 保護 dir の名指し・上位 dir の再帰・cwd・Grep/Glob に確認が出る・止まるか、 除外つき・文中の語・無関係な操作には何もしないか + 設定の読み方 + カナリア
 - **[public-leak-guard.sh](public-leak-guard.sh)** — 公開リポ leak 防止 — PreToolUse(Edit|Write|MultiEdit) Tier A 構造制約 regex
