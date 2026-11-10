@@ -65,6 +65,8 @@ HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location("ssr", HERE / "session-scripts-report.py")
 ssr = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ssr)
+sys.path.insert(0, str(HERE / "lib"))
+from git_blob import read_blob  # noqa: E402  (版を作業 tree の形で読む共通の道具 = conventions/hook-authoring.md#blob-read-git-crypt)
 
 QUESTION = re.compile(r"[？?]|なぜ|なんで|何で|どうして|って(何|なに|なん)|だっけ|とは\s*$|\bwhy\b|\bwhat\b|\bhow come\b", re.I)
 OPEN_HEAD = re.compile(r"未記録|未決|未解決|未確認|未検証|未検算|未導出|残る|残り|やり残し|保留|pending|remaining|open (items|questions)|\btodo\b", re.I)
@@ -368,11 +370,16 @@ def _repo_rel(f):
 
 
 def version_text(f, rev):
-    """rev の時点の f を作業 tree と同じ形 (filter を通した形 = 暗号化なら復号した形) で読む。 読めない = None。"""
+    """rev の時点の f を作業 tree と同じ形 (filter を通した形 = 暗号化なら復号した形) で読む = lib/git_blob.py の read_blob。
+    (その版に f があるか, 文字列)。 文字列 = UTF-8 で読めなければ None (暗号化が解けていない版)。 git の外 = (False, None)。"""
     top, rel = _repo_rel(f)
     if not top:
-        return None
-    return _strict_utf8(_git_bytes(["cat-file", "--filters", "%s:%s" % (rev, rel)], top))
+        return False, None
+    try:
+        rc, data = read_blob("%s:%s" % (rev, rel), cwd=top, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return False, None
+    return (True, _strict_utf8(data)) if rc == 0 else (False, None)
 
 
 def last_commit_time(path):
@@ -406,9 +413,9 @@ def resolve_evidence(ev, base):
         top, rel = _repo_rel(f)
         if not top:
             return False, "git の repo の外の file には commit を固定できない: %s" % m.group(1)
-        if _git_bytes(["cat-file", "-e", "%s:%s" % (m.group(3), rel)], top) is None:
+        found, text = version_text(f, m.group(3))
+        if not found:
             return False, "その commit にその file が無い: %s" % ev
-        text = version_text(f, m.group(3))
         if text is None:
             return False, "その commit の版を読めない (暗号化が解けていないなど): %s" % ev
         lines = text.splitlines()
@@ -471,9 +478,10 @@ def filtered_line_moved(f, n, since):
     if not top:
         return ""
     rev = (_git_out(["rev-list", "-1", "--until=%d" % since, "HEAD", "--", rel], top) or "").strip()
-    if not rev:
+    found, then = version_text(f, rev) if rev else (False, None)
+    if not found:
         return MOVED % "処分の file の commit の時に根拠の file が無かった"
-    then, now = version_text(f, rev), _strict_utf8(f.read_bytes())
+    now = _strict_utf8(f.read_bytes())
     if then is None or now is None:
         return ("根拠の行が処分の後に動いたか分からない (暗号化などの filter のある file の、 処分の時の版か今の file を読めない) "
                 "= 同じ話を指しているか読み直す")
