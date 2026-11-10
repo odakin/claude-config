@@ -13,7 +13,7 @@ layer 1 (public) のドメイン固有規約 155 file をカテゴリ別に列�
 - **[ask-user-question.md](ask-user-question.md)** — AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
   - AskUserQuestion (選択肢 UI) の使い所 — turn 同期 block + user 入力中 text との UI 競合という機構 fact と、 平文質問との使い分け表 (使用頻度の選好は個人層 override)
 - **[chat-math-rendering.md](chat-math-rendering.md)** — チャットの返事に数式を書くとき (読ませる数式・コピペ用の LaTeX の両方) + 返事の数式が生の TeX のまま表示されたとき + 数式の書き方の規則を CLAUDE.md や template に置くとき
-  - 読む画面ごとの数式表示の正本。 Codex app と Claude desktop の Code タブでは LaTeX の組版表示を既定にし、ソースを渡す場合と分ける。 Codex の文中・複数行の独立式、Claude 固有の区切り・inline gate と Stop hook、非描画・未測定の画面での Unicode を、それぞれの節で扱う
+  - 読む画面ごとの数式表示の正本。 Codex app と Claude desktop の Code タブでは LaTeX の組版表示を既定にし、ソースを渡す場合と分ける。 Codex の文中・複数行の独立式、Claude 固有の既定の書き方 (3 行)・区切り・inline gate と Stop hook、非描画・未測定の画面での Unicode を、それぞれの節で扱う
 - **[claude-ai-routines.md](claude-ai-routines.md)** — claude.ai routines (RemoteTrigger / cloud cron) を作成・管理するとき
   - claude.ai routines (= RemoteTrigger API、 旧「scheduled remote agents」) の知識集 — cloud 側に CCR session を spawn する cron / one-time trigger、 local 機構の scheduled-tasks.md との区別、 操作は RemoteTrigger tool / /schedule skill 経由
 - **[claude-app-bundle-reading.md](claude-app-bundle-reading.md)** — Claude desktop app (Code タブ等) の画面の挙動・文言の原因を、 docs や推測でなく app 本体で確かめたいとき + hook や規約が desktop の挙動を前提にする前 + Claude Code 本体 (埋込 engine) の挙動 (hook の matcher の当て方・tool の旧名の表など) を確かめるとき + 読んだ結論を user の画面で裏付ける実験を頼むとき

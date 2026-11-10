@@ -33,7 +33,7 @@
 
 ## チャット応答での数式の書き方
 
-数式を含む返事を書く前に、`<base>/claude-config/conventions/chat-math-rendering.md#by-surface` を読み、読む画面の既定を適用する。Codex app と Claude の Code タブでは組版表示を使い、区切り・制約はそれぞれの節で確認する。ターミナル・読む画面が分からないときは Unicode で書く。ソースを転記する場合の扱いも同じ正本に従う。
+数式を含む返事を書く前に、`<base>/claude-config/conventions/chat-math-rendering.md#by-surface` を読み、読む画面の既定を適用する。Codex app と Claude の Code タブでは組版表示を使い、区切り・制約はそれぞれの節で確認する。Claude の Code タブでは、`\` を含む式は直前に半角空白を置いた ` \( … \)` で書き、添字と上付きは `{}` で包み、数・区間は地の文で書く (同じ正本の `#code-tab-default-form`)。ターミナル・読む画面が分からないときは Unicode で書く。ソースを転記する場合の扱いも同じ正本に従う。
 
 ## Projects
 

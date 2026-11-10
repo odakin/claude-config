@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: チャットの返事に数式を書くとき (読ませる数式・コピペ用の LaTeX の両方) + 返事の数式が生の TeX のまま表示されたとき + 数式の書き方の規則を CLAUDE.md や template に置くとき
 category: harness-core
-summary: 読む画面ごとの数式表示の正本。 Codex app と Claude desktop の Code タブでは LaTeX の組版表示を既定にし、ソースを渡す場合と分ける。 Codex の文中・複数行の独立式、Claude 固有の区切り・inline gate と Stop hook、非描画・未測定の画面での Unicode を、それぞれの節で扱う
+summary: 読む画面ごとの数式表示の正本。 Codex app と Claude desktop の Code タブでは LaTeX の組版表示を既定にし、ソースを渡す場合と分ける。 Codex の文中・複数行の独立式、Claude 固有の既定の書き方 (3 行)・区切り・inline gate と Stop hook、非描画・未測定の画面での Unicode を、それぞれの節で扱う
 -->
 # チャットでの数式の書き方
 
@@ -56,6 +56,14 @@ python3 scripts/claude-app-bundle.py --app /Applications/ChatGPT.app grep 'rende
 
 ## <a id="code-tab-katex"></a>Claude の Code タブで LaTeX を書くときの規則
 
+<a id="code-tab-default-form"></a>**既定の書き方 (3 行)** — 書くときはこの形を使う。 下の関門のどれにも当たらない形で、 描かれ方は標準の LaTeX と同じ:
+
+1. `\` を含む式は、 直前に半角空白を置いた ` \( … \)` で書く (`$…$` の 60 文字の制限が無い。 中身 200 文字まで、 1 行に収める)。
+2. 添字と上付きは必ず `{}` で包む (`E_{I}`、 `m_{I}^{2}`)。 1 文字の添字 `E_I` は、 `$…$` でも `\(…\)` でも記号の無い式と見なされて落ちる。
+3. `\` を含まない式は `$…$` で短く (英字 1 文字・`$E_{I}$`・`$x-y$`)。 数・金額・区間 (`30`・`0.35`・`[0,1]`) は数式にせず地の文で書く。 文字の並んだ積は `x\,y`・`\mathrm{d}x` と書いて 1. の形にする。
+
+実測: 過去の返事で崩れた式をこの 3 行で機械的に書き換えると、 数式として書いた式はすべて描ける形になった。 添字に `{}` を付けるだけでは、 長くなった `$…$` が 60 文字を越えて、 落ちる式がかえって増えた = 1 と 2 は組で使う。 関門の細目 (下の箇条) は、 この 3 行から外れる式を書くときと、 生で出た式の原因を読むときに使う。
+
 実測 (Code タブでの画面の試験と、 アプリ本体 2.26454.2・2.31226.0・2.31226.1 の描画器の code の照合):
 
 - 区切りは `$…$` (インライン)・`$$…$$` (ディスプレイ)・`\(…\)` (インライン) だけ。 **`\[…\]` は描かれず生のまま出る**。 生で出た文字列はそのまま Markdown に渡るので、 `_{…}` の `_` が強調に取られて添字まで消える。
@@ -66,8 +74,8 @@ python3 scripts/claude-app-bundle.py --app /Applications/ChatGPT.app grep 'rende
   - **空白か文頭の直後の `-x` / `--x` (CLI の flag の形) を含む中身は、 `\英字` か `^` も含まないと落ちる** (実測: `\(-i\,d/dx\)` が生表示になった真因はこれで、 `\,` ではない。 空白の後の `\( a\,\mathrm d^{N}x \)` は描かれた)。 `\( {-}i\,\mathrm d/\mathrm dx \)` のように書く。
   - 中身に `$`・backtick・`\(`・`\|` `\.` `\+` `\*` `\?` `\数字` を入れない (ノルムは `\lVert v\rVert`)。 `\,` `\;` `\!` は通る。 中身は 200 文字以内、 `\)` は同じ行に置く。
   - `$…$` の gate にある 60 文字制限・英字 4 連続・括弧の釣り合いの判定は `\(…\)` には無い。
-- **`$…$` には「数式らしさ」 の gate がある** ([#dollar-inline-gate](#dollar-inline-gate))。 60 文字を超える・数式記号を含まない (`$[0,1]$` `$xy$` `$P_D$`)・英字 4 文字以上が裸で続く、 などで生表示になる。 **落ちた `$` の閉じは次の式の開きになる** (本体は `$` を 1 文字進めるだけ) ので、 1 箇所の失敗が後続の `$…$` を道連れにする。 使い分け = 1 文字と短く単純な式は `$…$`、 長い式・散文の混じる式で数式記号を含むものは `\(…\)` (直前に空白)、 記号の無い式は地の文、 `$$…$$` にはどちらの gate も無い。
-- **数式を含む返事は Stop hook が機械で検査する** = [`hooks/chat-math-render-guard.py`](../hooks/chat-math-render-guard.py) (desktop の session の最終発話を本体と同じ判定式で走査し、 落ちる式を行番号・理由・直し方つきで block → 直して出し直す)。 規則を知っているだけでは防げない (実測: 規則を確定した後も、 読点の直後の `\(` と記号の無い `\(g\)` で 1 つの返事の大半の式が生表示になった)。 自己点検に頼らず hook に任せる。 下書きを file にして `python3 hooks/chat-math-render-guard.py --check FILE` で先に見てもよい。 hook が写していないもの = `$$` block の判定 (見ない。 `\\0` を含む 1 行の pmatrix が描かれたので止めない)。 LaTeX を使わずに Unicode の地の文で書いた式も見ない (描けない形ではない) = Code タブで LaTeX に替えさせるのは、 CLAUDE.md・雛形に書く既定の語 ([#where-to-put-the-rule](#where-to-put-the-rule))。 共有 repo の project の hook として写して配る形 = [shared-repo.md#project-copy-of-user-hook](shared-repo.md#project-copy-of-user-hook)。
+- **`$…$` には「数式らしさ」 の gate がある** ([#dollar-inline-gate](#dollar-inline-gate))。 60 文字を超える・数式記号を含まない (`$[0,1]$` `$xy$` `$P_D$`)・英字 4 文字以上が裸で続く、 などで生表示になる。 **落ちた `$` の閉じは次の式の開きになる** (本体は `$` を 1 文字進めるだけ) ので、 1 箇所の失敗が後続の `$…$` を道連れにする。 使い分け = [既定の書き方の 3 行](#code-tab-default-form) (`\` を含む式は直前に空白の `\(…\)`、 添字は `{}`、 `\` の無い短い式は `$…$`、 記号の無い式と数は地の文)。 `$$…$$` にはどちらの gate も無い。
+- **数式を含む返事は Stop hook が機械で検査する** = [`hooks/chat-math-render-guard.py`](../hooks/chat-math-render-guard.py) (desktop の session の最終発話を本体と同じ判定式で走査し、 落ちる式を行番号・理由・直し方つきで block → 直して出し直す)。 規則を知っているだけでは防げない (実測: 規則を確定した後も、 読点の直後の `\(` と記号の無い `\(g\)` で 1 つの返事の大半の式が生表示になった)。 書くときは上の 3 行の形で書き、 細目の自己点検には頼らず hook に任せる。 下書きを file にして `python3 hooks/chat-math-render-guard.py --check FILE` で先に見てもよい。 hook が写していないもの = `$$` block の判定 (見ない。 `\\0` を含む 1 行の pmatrix が描かれたので止めない)。 LaTeX を使わずに Unicode の地の文で書いた式も見ない (描けない形ではない) = Code タブで LaTeX に替えさせるのは、 CLAUDE.md・雛形に書く既定の語 ([#where-to-put-the-rule](#where-to-put-the-rule))。 共有 repo の project の hook として写して配る形 = [shared-repo.md#project-copy-of-user-hook](shared-repo.md#project-copy-of-user-hook)。
 - 表のセルに `|` や `\|` を含む数式を書かない (`$\langle\psi|\phi\rangle$` はセルの区切りに取られる)。 `\mid` / `\vert` / `\lVert` で代えるか、 表の外に出す。
 - コマンドは KaTeX にあるものだけ。 **physics パッケージは不可** (`\dd` `\dv` `\pdv` `\abs` `\norm` `\ev` `\mel` `\comm` `\tr` `\Tr`) → `\mathrm{d}x`, `\frac{\partial f}{\partial x}`, `|x|`, `\lVert v\rVert`, `\langle A\rangle`, `\operatorname{Tr}` で書く (`\|v\|` は `$…$` の gate が正規表現と見なして生表示にする)。 `\mathbb{1}` `\mathds{1}` `\id` も不可 (→ `\mathbb{I}` か `\mathbf{1}`)。 repo のプリアンブル固有のマクロも不可。
 - 使えるもの (実測): `\ket` `\bra` `\braket` `\mathscr` `\mathfrak` `\bm` `\boldsymbol` `\operatorname` `\dfrac` `\tfrac` `\lVert` `\coloneqq` `\hbar` `\bmod`。
@@ -93,4 +101,4 @@ python3 scripts/claude-app-bundle.py --app /Applications/ChatGPT.app grep 'rende
 
 ## <a id="where-to-put-the-rule"></a>規則をどこに置くか
 
-規則の本文 (区切り・gate・使えるコマンド) は本 doc だけに置く (同じ本文を複数の file に写すと、片方だけ直る)。CLAUDE.md と template には、読む契機と、[画面ごとの既定](#by-surface) の要点 (どの画面で読む返事を LaTeX で組み、どの画面で Unicode にするか) と、本 doc への参照を書く。要点が無いと、本 doc を開かない session は既定を知らないまま書く。入口だけを持つ file (repo の薄い AGENTS.md、Codex の kernel [`codex/HOME-AGENTS.md`](../codex/HOME-AGENTS.md)) には、読む契機と本 doc への参照を書く。個人層が [画面別の既定](#by-surface) と違う書き方を決めるときは、違える理由と範囲を個人層の規則に書き、どの画面が何を描くかの事実は本 doc に合わせる。
+規則の本文 (区切り・gate・使えるコマンド) は本 doc だけに置く (同じ本文を複数の file に写すと、片方だけ直る)。CLAUDE.md と template には、読む契機と、[画面ごとの既定](#by-surface) の要点 (どの画面で読む返事を LaTeX で組み、どの画面で Unicode にするか) と、Code タブの [既定の書き方の 3 行](#code-tab-default-form) と、本 doc への参照を書く (関門の細目は書かない)。要点が無いと、本 doc を開かない session は既定を知らないまま書く。入口だけを持つ file (repo の薄い AGENTS.md、Codex の kernel [`codex/HOME-AGENTS.md`](../codex/HOME-AGENTS.md)) には、読む契機と本 doc への参照を書く。個人層が [画面別の既定](#by-surface) と違う書き方を決めるときは、違える理由と範囲を個人層の規則に書き、どの画面が何を描くかの事実は本 doc に合わせる。

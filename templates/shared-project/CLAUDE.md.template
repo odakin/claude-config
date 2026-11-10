@@ -60,7 +60,7 @@ SETUP.md (= `templates/shared-project/SETUP.md.template` を埋めて生成し�
 
 数式を含む返事を書く前に、[チャットの数式表示の正本](https://github.com/<owner>/claude-config/blob/main/conventions/chat-math-rendering.md#by-surface)を読み、Codex app・Claude の Code タブ・端末など、読む画面の既定を適用する。
 
-Claude の desktop app の Code タブで読む返事では、 数式を LaTeX で書く (上の正本の表の既定。 区切り・使えるコマンドは同じ正本の [#code-tab-katex](https://github.com/<owner>/claude-config/blob/main/conventions/chat-math-rendering.md#code-tab-katex))。 ターミナルで読む返事は Unicode。
+Claude の desktop app の Code タブで読む返事では、 数式を LaTeX で書く (上の正本の表の既定。 区切り・使えるコマンドは同じ正本の [#code-tab-katex](https://github.com/<owner>/claude-config/blob/main/conventions/chat-math-rendering.md#code-tab-katex))。 書き方は同じ正本の [既定の 3 行](https://github.com/<owner>/claude-config/blob/main/conventions/chat-math-rendering.md#code-tab-default-form) = `\` を含む式は直前に半角空白を置いた ` \( … \)`、 添字と上付きは必ず `{}` で包む、 数・区間は地の文。 ターミナルで読む返事は Unicode。
 
 ## 公開前 audit
 
