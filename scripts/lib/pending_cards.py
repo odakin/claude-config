@@ -40,9 +40,6 @@ TAG = re.compile(r"^\s*\[[^\]]*\]\s*")
 EXPIRE_SECONDS = 7 * 86400
 ROLLCALL_MARK = "🃏 押されていない card"
 LATER_WORDS = {"あとで", "あとで押す", "後で", "後で押す", "あとでおす"}
-AUTOMATED_PREFIXES = ("<task-notification>", "<system-reminder>", "Another Claude session sent a message",
-                      "Stop hook feedback", "Background (from the session", "This session is being continued",
-                      "[Request interrupted", "[Cross-session", "Base directory for this skill")
 SESSION_TOOLS = ("start_session", "spawn_task")
 DISMISS_TOOLS = ("dismiss_task",)
 
@@ -96,31 +93,59 @@ def starter_rows(entries: list[dict]) -> list[int]:
     return out
 
 
-def owner_rows(entries: list[dict]) -> list[int]:
-    """本人の発言で始まった turn の行の添字。"""
-    users = [i for i in starter_rows(entries)]
-    has_origin = any(isinstance(entries[i].get("origin"), dict) for i in users)
-    out = []
-    for i in users:
-        e = entries[i]
-        o = e.get("origin")
-        if has_origin:
-            if isinstance(o, dict) and o.get("kind") == "human":
-                out.append(i)
-            continue
-        if e.get("isMeta"):
-            continue
-        if _text_of(e).lstrip().startswith(AUTOMATED_PREFIXES):
-            continue
-        out.append(i)
-    return out
+REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
+NOT_OWNER = ("<task-notification", "<cross-session-message", "Another Claude session sent a message", "Stop hook feedback",
+             "Background (from the session", "This session is being continued", "[Request interrupted",
+             "[Cross-session", "Base directory for this skill")
 
 
 def _owner_words(e: dict) -> str:
-    """本人の発言から system-reminder の塊を除いた本文。"""
-    t = _text_of(e)
-    t = re.sub(r"<system-reminder>.*?</system-reminder>", "", t, flags=re.S)
-    return t.strip()
+    """本人の発言の本文 (system-reminder の塊を除く)。 turn の途中に打った発言 (queued_command の attachment) も読む。"""
+    a = e.get("attachment")
+    if isinstance(a, dict):
+        p = a.get("prompt")
+        if isinstance(p, list):
+            p = " ".join(x.get("text", "") for x in p if isinstance(x, dict) and x.get("type") == "text")
+        return REMINDER.sub("", str(p or "")).strip()
+    return REMINDER.sub("", _text_of(e)).strip()
+
+
+def owner_rows(entries: list[dict]) -> list[int]:
+    """本人の発言の行の添字 (turn を始めた user の行と、 turn の途中に打った発言の attachment)。
+    見分け方 = conventions/hook-authoring.md#transcript-human-vs-peer-message: origin.kind == "human" を持つ行。
+    origin が human でも、 起動文 (「Background (from the session …」) と別 session の message の形の本文は外す。
+    API の誤りの直後の「Try again」 (app の再試行) も外す。 origin をどの行も持たない古い記録では、 isMeta でなく
+    自動の知らせの書き出しで始まらない user の行を本人の発言と見る。"""
+    has_origin = any(isinstance(e.get("origin"), dict) or isinstance((e.get("attachment") or {}).get("origin"), dict)
+                     for e in entries if e.get("type") in ("user", "attachment"))
+    out = []
+    prev_api_error = False
+    for i, e in enumerate(entries):
+        if e.get("type") == "assistant":
+            prev_api_error = bool(e.get("isApiErrorMessage"))
+            continue
+        a = e.get("attachment")
+        if isinstance(a, dict):
+            if a.get("type") == "queued_command" and (a.get("origin") or {}).get("kind") == "human":
+                t = _owner_words(e)
+                if t and not any(t.startswith(x) or x in t[:200] for x in NOT_OWNER):
+                    out.append(i)
+            continue
+        if e.get("type") != "user" or _is_tool_result_row(e) or e.get("isCompactSummary"):
+            continue
+        o = e.get("origin")
+        if has_origin:
+            if not (isinstance(o, dict) and o.get("kind") == "human"):
+                continue
+        elif e.get("isMeta"):
+            continue
+        t = _owner_words(e)
+        if not t or any(t.startswith(x) or x in t[:200] for x in NOT_OWNER):
+            continue
+        if prev_api_error and t.startswith("Try again"):
+            continue
+        out.append(i)
+    return out
 
 
 def short_name(title: str) -> str:
@@ -278,15 +303,16 @@ def unseen_pending(entries: list[dict], now: float | None = None, use_app_record
     owners = owner_rows(entries)
     starters = starter_rows(entries)
     current = starters[-1] if starters else -1
-    current_is_owner = bool(owners) and owners[-1] == current
-    later = current_is_owner and _owner_words(entries[current]) in LATER_WORDS
+    now_owner = [o for o in owners if o >= current]  # 今の turn の本人の発言 (turn を始めた発言と、 途中に打った発言)
     out = []
     for c in pend:
-        after = [o for o in owners if o > c["row"]]
-        if not after:
-            out.append(c)
-        elif len(after) == 1 and after[0] == current and not later:
-            out.append(c)
+        # card の後に本人が話し、 その turn がもう終わっている = 本人はその返事で点呼を見た (繰り返さない)
+        if any(c["row"] < o < current for o in owners):
+            continue
+        # 今の turn で、 card の後に本人が「あとで」 と答えた = その場で止める
+        if any(o > c["row"] and _owner_words(entries[o]) in LATER_WORDS for o in now_owner):
+            continue
+        out.append(c)
     return out
 
 

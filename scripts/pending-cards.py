@@ -366,6 +366,43 @@ def selftest() -> int:
         t9.say("追記です。")
         check("Stop hook の差し戻しの後の追記 → 点呼が無ければ止める", '"block"' in _run_stop(t9.write(d)))
 
+        # 17. turn の途中に本人が打った発言 (queued_command) も本人の発言: その turn の返事が最後、 次の自動の turn は黙る
+        tq = _T(now - 3600)
+        tq.event()
+        tq.card("task_kkk1", "[local推奨] 途中の発言", None)
+        tq.rows.append({"type": "attachment", "timestamp": _iso(tq.t + 5), "attachment": {
+            "type": "queued_command", "origin": {"kind": "human"},
+            "prompt": [{"type": "text", "text": "<system-reminder>x</system-reminder>"}, {"type": "text", "text": "続けて"}]}})
+        tq.say("続けます。")
+        check("途中の本人の発言の turn の返事 → まだ止める (最後の点呼)", '"block"' in _run_stop(tq.write(d)))
+        tq.say(f"{line_mark} 1 枚: 途中の発言")
+        tq.event()
+        tq.say("見張りです。")
+        check("途中の本人の発言の turn が終わった後 → 黙る", _run_stop(tq.write(d)) == "")
+
+        # 18. origin が human でも別 session の message の形・起動文の形は本人の発言にしない
+        tc = _T(now - 3600)
+        tc.event()
+        tc.card("task_lll1", "[local推奨] 本人でない human", None)
+        tc.say("card を出しました。")
+        tc.human('<cross-session-message from="local_x" encoded="1">頼み</cross-session-message>')
+        tc.say("受けました。")
+        tc.event()
+        tc.say("見張りです。")
+        check("origin が human の別 session の message の後 → まだ止める", '"block"' in _run_stop(tc.write(d)))
+
+        # 19. API の誤りの直後の「Try again」 (app の再試行) は本人の発言にしない
+        tr = _T(now - 3600)
+        tr.event()
+        tr.card("task_mmm1", "[local推奨] 再試行", None)
+        tr.rows.append({"type": "assistant", "timestamp": tr._tick(), "isApiErrorMessage": True,
+                        "message": {"role": "assistant", "content": [{"type": "text", "text": "API Error"}]}})
+        tr.human("Try again")
+        tr.say("再開しました。")
+        tr.event()
+        tr.say("見張りです。")
+        check("API の誤りの後の「Try again」 の後 → まだ止める", '"block"' in _run_stop(tr.write(d)))
+
     print(f"{'PASS' if fails == 0 else 'FAIL'} ({fails} fail)")
     return 1 if fails else 0
 
