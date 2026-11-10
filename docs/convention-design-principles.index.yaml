@@ -989,6 +989,10 @@ sections:
     legacy: "8.96"
     level: 3
     title: "8.96 知らせに「消し方」 を書く検出器は、 消し方の行き先が在るかまで判定に入れる — 別の台帳の id を行き先の名に使うと、 消せない知らせになる"
+  - id: fail-open-names-the-duty
+    legacy: "8.97"
+    level: 3
+    title: "8.97 規則の務めを肩代わりする道具が落ちたら、 知らせは残った務めとそれを果たす 1 行を言う — 「今までどおりで出す」 は、 読んだ側の計画になる"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
