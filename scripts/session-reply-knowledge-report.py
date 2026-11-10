@@ -23,7 +23,9 @@
 処分の file (--check FILE) — 1 行 1 候補、 空白区切り、 # から行末は注記:
   <id> 記録済み|recorded <根拠>      既に記録にある。 根拠 = path:行 / path:行@commit (行を commit に固定 = 後で同じ file を
                                     別の worker が書いても行がずれない) / path#anchor / <git repo の dir>@<commit>。 素の path:行 は、
-                                    処分の file を commit した後にその行が変わると ⚠️ (実測: 根拠の行がずれて無関係な文を指したまま通った)
+                                    処分の file を commit した後にその行が変わると ⚠️ (実測: 根拠の行がずれて無関係な文を指したまま通った)。
+                                    暗号化などの filter のある file (git-crypt) は git blame が暗号文の行を数えるので、 処分の file の
+                                    commit の時の版を復号して同じ行の文を今と比べる。 その版を読めなければ「動いたか分からない」 の ⚠️
   <id> 足した|added <根拠>          この締めで記録した。 根拠は同じ形
   <id> 記録しない|不要|skip <理由>   記録しない (知見を含まない・教科書の内容・本人が記録しないと決めた など)
   path は --base (既定 = 今の dir) から。 照合の出力は根拠の行 (commit なら題) を候補の文の隣に出す = 「直していない」 の項目に
@@ -325,12 +327,52 @@ def read_dispositions(path):
     return disp
 
 
-def _git_out(args, cwd):
+def _git_bytes(args, cwd):
     try:
-        r = subprocess.run(["git"] + args, cwd=str(cwd), capture_output=True, text=True, timeout=30)
+        r = subprocess.run(["git"] + args, cwd=str(cwd), capture_output=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return r.stdout if r.returncode == 0 else None
+
+
+def _git_out(args, cwd):
+    """git の出力の文字列。 UTF-8 でない byte は置き換える = 落ちない (実測: 暗号化された file の git blame の行が暗号文の
+    byte のまま出て、 text=True の strict な解読で --check ごと落ちた)。"""
+    out = _git_bytes(args, cwd)
+    return None if out is None else out.decode("utf-8", errors="replace")
+
+
+def _strict_utf8(data):
+    """UTF-8 として読めれば文字列、 読めなければ None (暗号化が解けていない版・UTF-8 でない file)。"""
+    try:
+        return None if data is None else data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def has_filter(f):
+    """f に clean / smudge の filter (git-crypt の暗号化など) が掛かるか。 掛かると git blame は repo の中の形 (暗号文) の
+    行を数える = 行の番号も時刻も作業 tree の行と合わない (実測: 平文と暗号文で行の数が違った)。"""
+    out = _git_out(["check-attr", "filter", "--", f.name], f.parent)
+    value = out.strip().rsplit(": ", 1)[-1] if out else ""
+    return value not in ("", "unspecified", "unset")
+
+
+def _repo_rel(f):
+    """(repo の top, top からの path を / で区切ったもの)。 git の外 = (None, None)。"""
+    top = _git_out(["rev-parse", "--show-toplevel"], f.parent)
+    if not top:
+        return None, None
+    top = top.strip()
+    return top, Path(os.path.relpath(str(f), top)).as_posix()
+
+
+def version_text(f, rev):
+    """rev の時点の f を作業 tree と同じ形 (filter を通した形 = 暗号化なら復号した形) で読む。 読めない = None。"""
+    top, rel = _repo_rel(f)
+    if not top:
+        return None
+    return _strict_utf8(_git_bytes(["cat-file", "--filters", "%s:%s" % (rev, rel)], top))
 
 
 def last_commit_time(path):
@@ -341,7 +383,8 @@ def last_commit_time(path):
 
 
 def line_changed_time(f, n):
-    """f の n 行目を最後に変えた時刻 (epoch)。 未 commit の変更 = 今。 git の外 = None。"""
+    """f の n 行目を最後に変えた時刻 (epoch)。 未 commit の変更 = 今。 git の外 = None。 filter の掛かった file には使わない
+    (git blame が暗号文の行を数える = moved_since が filtered_line_moved に分ける)。"""
     f = Path(f).resolve()
     out = _git_out(["blame", "-L", "%d,%d" % (n, n), "--porcelain", "--", f.name], f.parent)
     if not out:
@@ -360,13 +403,14 @@ def resolve_evidence(ev, base):
         f = (base / os.path.expanduser(m.group(1))).resolve()
         if not f.is_file():
             return False, "file が無い: %s" % m.group(1)
-        top = _git_out(["rev-parse", "--show-toplevel"], f.parent)
+        top, rel = _repo_rel(f)
         if not top:
             return False, "git の repo の外の file には commit を固定できない: %s" % m.group(1)
-        rel = os.path.relpath(str(f), top.strip())
-        text = _git_out(["show", "%s:%s" % (m.group(3), rel)], top.strip())
-        if text is None:
+        if _git_bytes(["cat-file", "-e", "%s:%s" % (m.group(3), rel)], top) is None:
             return False, "その commit にその file が無い: %s" % ev
+        text = version_text(f, m.group(3))
+        if text is None:
+            return False, "その commit の版を読めない (暗号化が解けていないなど): %s" % ev
         lines = text.splitlines()
         n = int(m.group(2))
         if not 1 <= n <= len(lines):
@@ -384,10 +428,10 @@ def resolve_evidence(ev, base):
     m = re.match(r"^(.+)@([0-9a-fA-F]{7,40})$", ev)
     if m:
         repo = (base / os.path.expanduser(m.group(1))).resolve()
-        r = subprocess.run(["git", "-C", str(repo), "log", "-1", "--format=%s", m.group(2)], capture_output=True, text=True)
-        if r.returncode != 0:
+        subject = _git_out(["log", "-1", "--format=%s", m.group(2)], repo) if repo.is_dir() else None
+        if subject is None:
             return False, "commit が無い: %s" % ev
-        return True, "commit: " + _one_line(r.stdout, 150)
+        return True, "commit: " + _one_line(subject, 150)
     m = re.match(r"^(.+):(\d+)$", ev)
     if m:
         f = (base / os.path.expanduser(m.group(1))).resolve()
@@ -407,11 +451,36 @@ def moved_since(ev, base, since):
     m = re.match(r"^(.+):(\d+)$", ev or "")
     if not m or since is None:
         return ""
-    when = line_changed_time((base / os.path.expanduser(m.group(1))).resolve(), int(m.group(2)))
+    f, n = (base / os.path.expanduser(m.group(1))).resolve(), int(m.group(2))
+    if f.is_file() and has_filter(f):
+        return filtered_line_moved(f, n, since)
+    when = line_changed_time(f, n)
     if when is None or when <= since:
         return ""
-    return ("根拠の行が処分の file の commit より後に変わった (%s) = 同じ話を指しているか読み直す。 固定するなら path:行@commit"
-            % time.strftime("%m-%d %H:%M", time.localtime(when)))
+    return MOVED % time.strftime("%m-%d %H:%M", time.localtime(when))
+
+
+MOVED = "根拠の行が処分の file の commit より後に変わった (%s) = 同じ話を指しているか読み直す。 固定するなら path:行@commit"
+
+
+def filtered_line_moved(f, n, since):
+    """filter (暗号化など) の掛かった file の n 行目が since の後に変わったか → 知らせの文 ('' = 変わっていない)。 git blame は
+    暗号文の行を数えるので使わず、 since の時点の版を filter を通して読み (git cat-file --filters = 暗号化なら復号)、
+    同じ行の文を今の file と比べる。 その版を読めない (暗号化が解けていない) なら「動いたか分からない」。"""
+    top, rel = _repo_rel(f)
+    if not top:
+        return ""
+    rev = (_git_out(["rev-list", "-1", "--until=%d" % since, "HEAD", "--", rel], top) or "").strip()
+    if not rev:
+        return MOVED % "処分の file の commit の時に根拠の file が無かった"
+    then, now = version_text(f, rev), _strict_utf8(f.read_bytes())
+    if then is None or now is None:
+        return ("根拠の行が処分の後に動いたか分からない (暗号化などの filter のある file の、 処分の時の版か今の file を読めない) "
+                "= 同じ話を指しているか読み直す")
+    then, now = then.splitlines(), now.splitlines()
+    if n <= len(then) and n <= len(now) and then[n - 1] == now[n - 1]:
+        return ""
+    return MOVED % "暗号化などの filter のある file = 処分の時の版の同じ行と文が違う"
 
 
 def check(cands, disp, base, since=None):
@@ -594,15 +663,31 @@ def selftest():
                 subprocess.run(["git", "-C", str(rp), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
                                 "commit", "-q", "-m", msg], capture_output=True, env=env)
             (rp / "notes.md").write_text("見出し\n<a id=\"sym-rule\"></a>対称性の理由を書いた行\n三行目\n", encoding="utf-8")
-            commit_at("notes", "2026-01-01T00:00:00+00:00", "notes.md")
+            # 暗号化された file の代わり: repo の中の形を byte ごとに反転する filter (UTF-8 でない byte・改行も消えて行の数が違う)
+            flip = base / "flip.py"
+            flip.write_text("import sys\nsys.stdout.buffer.write(bytes(b ^ 0x80 for b in sys.stdin.buffer.read()))\n", encoding="utf-8")
+            for k in ("clean", "smudge"):
+                subprocess.run(["git", "-C", str(rp), "config", "filter.flip." + k,
+                                '"%s" "%s"' % (Path(sys.executable).as_posix(), flip.as_posix())], capture_output=True)
+            (rp / ".gitattributes").write_text("secret.md filter=flip\n", encoding="utf-8")
+            (rp / "secret.md").write_text("見出し\n暗号化された file の根拠の行\n三行目\n", encoding="utf-8")
+            commit_at("notes", "2026-01-01T00:00:00+00:00", "notes.md", ".gitattributes", "secret.md")
             sha1 = subprocess.run(["git", "-C", str(rp), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
             (rp / "d.txt").write_text("x\n", encoding="utf-8")
             commit_at("disp", "2026-01-02T00:00:00+00:00", "d.txt")
             since = last_commit_time(rp / "d.txt")
             expect("書き換わる前は知らせない", moved_since("repo/notes.md:2", base, since), "")
+            expect("git の出力が UTF-8 でない byte (filter のある file の blame) でも落ちない",
+                   isinstance(line_changed_time(rp / "secret.md", 1), int), True)
+            expect("filter のある file は書き換わる前は知らせない", moved_since("repo/secret.md:1", base, since), "")
             (rp / "notes.md").write_text("見出し\n別の worker が足した無関係な行\n<a id=\"sym-rule\"></a>対称性の理由を書いた行\n三行目\n",
                                          encoding="utf-8")
-            commit_at("other worker", "2026-01-03T00:00:00+00:00", "notes.md")
+            (rp / "secret.md").write_text("見出し\n別の worker が足した行\n暗号化された file の根拠の行\n三行目\n", encoding="utf-8")
+            commit_at("other worker", "2026-01-03T00:00:00+00:00", "notes.md", "secret.md")
+            expect("filter のある file: 処分の後にずれた行は知らせる", "後に変わった" in moved_since("repo/secret.md:2", base, since), True)
+            expect("filter のある file: 同じ file の変わっていない行は知らせない", moved_since("repo/secret.md:1", base, since), "")
+            expect("filter のある file: commit に固定した行は復号した文", resolve_evidence("repo/secret.md:2@" + sha1[:10], base),
+                   (True, "行: 暗号化された file の根拠の行"))
             expect("処分の後に行が変わった素の path:行 は知らせる", "後に変わった" in moved_since("repo/notes.md:2", base, since), True)
             expect("変わっていない行は知らせない", moved_since("repo/notes.md:4", base, since), "")
             expect("commit に固定した行は後の書き換えでずれない", resolve_evidence("repo/notes.md:2@" + sha1[:10], base),
@@ -612,6 +697,10 @@ def selftest():
                    "行: <a id=\"sym-rule\"></a>対称性の理由を書いた行")
             expect("無い anchor は通らない", resolve_evidence("repo/notes.md#no-such", base)[0], False)
             expect("固定の形は commit の根拠と取り違えない", resolve_evidence("repo/notes.md:2@" + sha1[:10], base)[1].startswith("行: "), True)
+            # 暗号化が解けていない状態の代わり: smudge を外すと、 前の版は repo の中の形 (UTF-8 でない byte) のまま出る
+            subprocess.run(["git", "-C", str(rp), "config", "--unset", "filter.flip.smudge"], capture_output=True)
+            expect("filter のある file: 前の版を読めなければ「動いたか分からない」", "分からない" in moved_since("repo/secret.md:1", base, since), True)
+            expect("filter のある file: 読めない版に固定した根拠は通らない", resolve_evidence("repo/secret.md:2@" + sha1[:10], base)[0], False)
 
     def bash(cmd, tid):
         return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": tid, "name": "Bash", "input": {"command": cmd}}]}}
