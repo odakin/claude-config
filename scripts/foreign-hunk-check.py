@@ -483,8 +483,13 @@ def _transcript_files(transcript: str) -> list[str]:
     return files
 
 
+# API 送信の写しの行 = 前の tool call を時刻なしで繰り返す (読むと同じ呼び出しを 2 回数え、 時刻で切る再生に後の呼び出しが
+# 混ざる = 実測。 conventions/hook-authoring.md#transcript-request-copy-lines)
+COPY_TYPES = ("api-request-blob",)
+
+
 def iter_tool_uses(path: str, with_cwd: bool = False):
-    """(timestamp, id, name, input) を記録の順に (with_cwd なら 5 つめにその行の cwd)。 読めない行は飛ばす。"""
+    """(timestamp, id, name, input) を記録の順に (with_cwd なら 5 つめにその行の cwd)。 読めない行と API 送信の写しの行は飛ばす。"""
     try:
         f = open(path, encoding="utf-8", errors="replace")
     except OSError:
@@ -497,7 +502,9 @@ def iter_tool_uses(path: str, with_cwd: bool = False):
                 e = json.loads(line)
             except ValueError:
                 continue
-            msg = e.get("message") if isinstance(e, dict) else None
+            if not isinstance(e, dict) or e.get("type") in COPY_TYPES:
+                continue
+            msg = e.get("message")
             content = msg.get("content") if isinstance(msg, dict) else None
             if not isinstance(content, list):
                 continue
@@ -505,6 +512,29 @@ def iter_tool_uses(path: str, with_cwd: bool = False):
                 if isinstance(b, dict) and b.get("type") == "tool_use" and isinstance(b.get("input"), dict):
                     row = (e.get("timestamp") or "", b.get("id") or "", b.get("name") or "", b["input"])
                     yield row + (e.get("cwd"),) if with_cwd else row
+
+
+def error_result_ids(path: str) -> set:
+    """結果が error の tool call の id (hook に止められて走らなかった command を含む)。 再生で外す = live の hook は走る
+    command しか見ない (外さないと再生の発火が live より多く出る、 実測)。"""
+    out: set = set()
+    try:
+        f = open(path, encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    with f:
+        for line in f:
+            if '"is_error":true' not in line.replace(" ", ""):
+                continue
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            msg = e.get("message") if isinstance(e, dict) else None
+            for b in (msg.get("content") if isinstance(msg, dict) else None) or []:
+                if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("is_error") is True:
+                    out.add(b.get("tool_use_id") or "")
+    return out
 
 
 def session_corpus(transcript: str | None, before: str | None = None, skip_id: str | None = None) -> Corpus:
@@ -814,10 +844,12 @@ def replay(projects: list[str], since: str, roots: list[str], verbose: bool = Fa
                 if sid not in d or (ts or "") < d[sid]:
                     d[sid] = ts or ""
 
+    errors_of: dict[str, set] = {}
     for sid, p in sid_of.items():
         files = _transcript_files(p)
         main_of[sid] = list(iter_tool_uses(files[0], with_cwd=True))
         sub_of[sid] = [r for f in files[1:] for r in iter_tool_uses(f, with_cwd=True)]
+        errors_of[sid] = set().union(*(error_result_ids(f) for f in files))
         for ts, _uid, name, inp, _cwd in main_of[sid] + sub_of[sid]:
             if name not in WRITE_TOOLS:
                 continue
@@ -851,11 +883,14 @@ def replay(projects: list[str], since: str, roots: list[str], verbose: bool = Fa
             continue
         stats["sessions"] += 1
         bash = sorted(((ts, uid, inp.get("command") or "", cwd) for ts, uid, name, inp, cwd in main_of[sid] + sub_of[sid]
-                       if name == "Bash" and ts and "commit" in (inp.get("command") or "")), key=lambda x: x[0])
+                       if name == "Bash" and ts and "commit" in (inp.get("command") or "") and uid not in errors_of[sid]),
+                      key=lambda x: x[0])
         for repo, h, ct in cl:
             stats["commits"] += 1
             # commit の時刻の直前 (5 分以内) の、 この repo への git commit の部分を持つ Bash (時刻は秒の丸めに 3 秒の余裕)。
-            # git commit を内側で打つ道具の commit は当たらない = hook の射程外
+            # 結果が error の呼び出し (他の hook に止められて走らなかった command) は外した。 git commit を内側で打つ道具の
+            # commit は当たらない = hook の射程外。 行の cwd は同じ message の単独の cd を映さない
+            # (conventions/hook-authoring.md#calibrate-with-cwd) = cwd に依る当て違いは残る
             hit = None
             for ts, uid, cmd, cwd in bash:
                 if not (_iso(ct - 300) <= ts[:19] <= _iso(ct + 3)):
@@ -874,8 +909,8 @@ def replay(projects: list[str], since: str, roots: list[str], verbose: bool = Fa
             mode = live[-1].mode
             stats["by_mode"][mode] = stats["by_mode"].get(mode, 0) + 1
             c = Corpus()
-            # 本体の記録は順に読み、 commit の呼び出しで切る (時刻の欄が空の行がある = 時刻で切ると後の呼び出しが混ざる、
-            # 実測)。 subagent の記録は時刻で切る
+            # 本体の記録は順に読み、 commit の呼び出しで切る (時刻で切らない = 時刻の無い行に後の呼び出しが混ざる形を
+            # 二度と持ち込まない。 写しの行は iter_tool_uses が飛ばす)。 subagent の記録は時刻で切る
             for ts2, uid2, name, inp, _cwd in main_of[sid]:
                 if uid2 == uid:
                     break
@@ -1116,6 +1151,16 @@ def selftest() -> int:
         check("the transcript and its subagents are read", find_issues("git commit -m m -- doc.md", repo, transcript=tr) == [])
         check("before= keeps only the calls up to the time",
               "line by a subagent of this session" not in "\n".join(session_corpus(tr, before="2000-01-01T00:00:01Z").texts))
+        tr2 = os.path.join(tmp, "s2.jsonl")
+        with open(tr2, "w") as f:
+            f.write(json.dumps({"type": "api-request-blob", "message": {"content": [
+                {"type": "tool_use", "id": "t9", "name": "Edit", "input": {"file_path": doc, "old_string": "a", "new_string": "a line only in a request copy"}}]}}) + "\n")
+            f.write(json.dumps({"type": "assistant", "timestamp": "2000-01-01T00:00:03Z", "message": {"content": [
+                {"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "git commit -m m -- doc.md"}}]}}) + "\n")
+            f.write('{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t3","is_error":true,"content":"hook error"}]}}\n')
+        check("a request-copy line (api-request-blob) is not read as a call",
+              "a line only in a request copy" not in "\n".join(session_corpus(tr2).texts) and len(list(iter_tool_uses(tr2))) == 1)
+        check("a call whose result is an error is listed (the replay leaves it out)", error_result_ids(tr2) == {"t3"})
         # hook の入出力
         payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "git commit -m m -- doc.md"}, "cwd": repo, "transcript_path": tr})
         with open(doc, "w") as f:
