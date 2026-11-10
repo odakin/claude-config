@@ -107,6 +107,9 @@ sections:
   - id: variant-comparison-images
     level: 2
     title: "記法・体裁の案は、 組版した姿を左右に並べて決める (source の diff では決められない) (2026-09-12)"
+  - id: typeface-candidate
+    level: 2
+    title: "数式の書体 (math alphabet) を替える候補を作る — 今の font を PDF で確かめ、 使う所を全部数え、 行の折れまで見る"
   - id: stash-roundtrip-build-artifacts
     level: 2
     title: "baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)"
