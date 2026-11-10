@@ -193,6 +193,11 @@
       "match": "SyntaxWarning: invalid escape sequence",
       "doc": "conventions/debugging-discipline.md#runner-image-vs-commit",
       "hint": "python 3.12 以上が無効な escape に出す警告で、 古い python は黙るので、 その文字列を raw にするか、 他の escape を持つならその文字だけを `\\\\` にする"
+    },
+    {
+      "match": "in _translate_newlines",
+      "doc": "conventions/hook-authoring.md#blob-read-git-crypt",
+      "hint": "subprocess の text=True が出力を UTF-8 として厳しく読んで落ちた。 git の blame・show の出力なら暗号化された file の暗号文なので、 bytes で受け、 版は scripts/lib/git_blob.py の read_blob で読む"
     }
   ]
 }
