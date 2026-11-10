@@ -9,7 +9,8 @@
   数だけの式 → 地の文、 で直し、 直した行が同じ判定式を通るときだけ差し替える。 直せない式と数式でない `$` (金額・shell の変数) は触らない。
 fire = 環境変数 CLAUDE_CODE_ENTRYPOINT が claude-desktop / claude-desktop-3p。 desktop は engine を SDK の形で動かすので、 hook は
   返事 1 つにつき書き終えた後に全文で 1 回呼ばれ、 差し替えた文が書き終えた返事として desktop に届く。 書いている途中の小分けの
-  文は元のまま届く (実測 = 埋込 engine 2.1.317 を同じ flag で動かした出力。 画面が最後にどちらを描くかは画面の試験で決める)。
+  文は元のまま届く (実測 = 埋込 engine 2.1.317 を同じ flag で動かした出力)。 画面の試験 (desktop app 4.23118.0) = 書き終えた返事は
+  差し替えた文で描かれ、 session を離れて戻ってもそのまま (正本 = conventions/chat-math-rendering.md#code-tab-display-fix)。
   CHAT_MATH_DISPLAY_FIX_ANY=1 なら entrypoint を問わない (試験用)。
 挙動: 書き換えたときだけ hookSpecificOutput.displayContent を出す。 走るたびに session ごとの印を $TMPDIR/chat-math-display-fix/
   に置く (Stop の hook が「この session では画面に出たのは直した文」 と読む)。 直した数を計器 (~/.claude/state/chat-math-events.jsonl)

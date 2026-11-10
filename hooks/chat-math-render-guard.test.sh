@@ -5,7 +5,8 @@
 #     `\(-i\,d/dx\)` (CLI flag 形) / `$P_D$` / `$ x $` / `\[…\]` / `\|` / 60 文字超の `$…$` / 表のセルの `|`。
 # §B 誤検出の regression: 空白の後の `\(…\)` (`\,` 入りを含む) / `$t$` / `$x-y$` / `$1/N^2$` / 1 行と複数行の `$$` /
 #     inline code と fenced block の中 / 強調で包んだ式 / `{-}i` / 通貨の `$5` / CLI の session。
-# §C fail-open: stop_hook_active / transcript 不在 / 空入力 = 沈黙。
+# §C fail-open: stop_hook_active で続きの形が分からない / transcript 不在 / 空入力 = 沈黙。
+#    (差し戻しの後の判定・追記の文・数式でない `$`・表示の hook は chat-math-display-fix.test.sh)
 
 set -uo pipefail
 
@@ -18,6 +19,9 @@ command -v jq >/dev/null 2>&1 || { echo "SKIP: jq not found"; exit 0; }
 pass=0; fail=0; results=()
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+# 計器 (~/.claude/state/chat-math-events.jsonl) と表示の印 ($TMPDIR) を本物に書かない
+export CHAT_MATH_STATE_DIR="$TMP/state" TMPDIR="$TMP/tmpdir"
+mkdir -p "$CHAT_MATH_STATE_DIR" "$TMPDIR"
 
 # mktranscript path entrypoint final_text
 mktranscript() {
@@ -96,7 +100,7 @@ case_ "B16 \$\\hat T\$ と \$T_{D}\$" $D 0 "" '演算子 $\hat T$ と $T_{D}$ �
 
 # ---- §C fail-open ---------------------------------------------------------------------------------
 t="$TMP/c1.jsonl"; mktranscript "$t" $D '関数 \( g \) に対して'
-assert "C1 stop_hook_active は沈黙" 0 "$(mkpayload "$t" true)"
+assert "C1 stop_hook_active で差し戻しの行が無い (続きの形が分からない) は沈黙" 0 "$(mkpayload "$t" true)"
 assert "C2 transcript 不在は沈黙" 0 "$(mkpayload "$TMP/nope.jsonl")"
 assert "C3 空入力は沈黙" 0 ""
 assert "C4 壊れた JSON は沈黙" 0 "{not json"
