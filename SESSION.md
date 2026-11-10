@@ -1,10 +1,11 @@
 # SESSION — claude-config
 
-最終更新: 2026-11-09
+最終更新: 2026-11-10
 
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+- **Git の版の本文を読む処理** — 各呼出しの判定と修正方針を検収する段階。実装の適用前で停止し、次は方針の確認後に対象の読取を修正する。対象と再現の境界 = [棚卸しと方針](docs/git-blob-read-sweep.md)。
 - **Codex のチャットの wrap と archive** — 道具と規則を入れ、 試運転で済んだチャットを閉じた段階。 次はアプリが開いたままの盲検の窓を、 アプリが手放した後に `archive` で閉じる (雑用の指揮役)。 入口 = [`scripts/codex-thread-close.py`](scripts/codex-thread-close.py)・[規則と実測](conventions/multi-session-coordination.md#codex-thread-close)。
 - **層1 の手元の変更を PR に運ぶ道具と入口の配線** — 道具 [`scripts/upstream-pr.py`](scripts/upstream-pr.py) (段・所有者の判定・漏洩の検査の正本 = 冒頭) と、 共同研究者の点検の repo 行 ([`shared-repo.md#collaborator-check`](conventions/shared-repo.md#collaborator-check)) は入った。 turn の終わりの促しと session の開始の hook は保護された file で、 候補のまま当てる窓の手順を待つ。 規約・README の文書と backup の ref の片づけは未着手。
 - **Codex の upstream PR 案内** — 候補の検査を終え、保護対象の適用前で停止。次は提出候補への裁定後に適用・commit・push を行う。入口 = [PR の道具](scripts/upstream-pr.py)・[Codex の終了時検査](codex/PARITY.md#completion-git-gate-hook)・[裁定の手順](conventions/agent-rule-ownership.md#approval)。
