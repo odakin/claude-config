@@ -1208,6 +1208,9 @@ Stop hook が「この行が無い → 返事の全文を出し直す」 と止�
 - **書式の差し戻し (問いの印・番号の振り方) は追記では直らない** (実測): 前の返事は本人の画面に残るので、 追記が同じ項目を新しい書式で
   並べ直すと、 1 画面に同じ項目が 2 系統で並ぶ (番号つきの問い 3 つの下に、 同じ 3 つを印つきで)。 書式の要求は返事の前に出す
   (開始の出力・項目を立てる道具の出力)。 Stop の追記には「上の項目をこの印で立てた」 という対応の 1 行を書き、 項目を並べ直さない。 追記の中で本人に新しい書式で答えるよう頼まない。
+- <a id="verify-fix-hint"></a>**差し戻しに書く「直し方」 は、 hook 自身が直した形を同じ判定に通してから出す** — 判定の条件が複数あると、 案内どおりに直した形が別の条件で同じく落ちる
+  (実測: 「記号の無い `$…$` は `\(…\)` にする」 という案内に従った出し直しが、 `\(…\)` 側にもある記号の条件で毎回落ち、 しかも差し戻しの直後の返事を判定しない hook だったので、 崩れた 2 通目がそのまま画面に出た)。
+  直す部品を hook に持たせ、 落ちた箇所ごとに「直した形」 を添える。 部品が直せない箇所には直した形を出さない。 差し戻しの直後の返事も判定し (下の `stop_hook_active` の行)、 自分の差し戻しの後に残った分は止めずに数える。
 - **Stop で受理した行は同じ turn で処理済みに書く**。 次の turn・次の session で同じ行を再要求したら、 それは処理済み判定の欠陥で、
   本人に何度も同じ行を読ませる。 selftest に「1 度受理した行は再要求されない」 を入れる。
 - 本人に読ませる量に上限を置く (件数 or file 単位の集約)。 chat の返事は本人が読む面で、 台帳ではない = 一覧が長いなら file に
@@ -1343,6 +1346,16 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 - 直し方: trailer を書く直前に、 file が空でなく末尾が改行でなければ改行を 1 つ足す (`[ -z "$(tail -c 1 "$f")" ] || printf '\n' >> "$f"`)。 trailer を書く経路が複数あれば全部の前で。 trailer を書かずに終わる経路では足さない (= hook が何もしない時は file を変えない)。 実装例 = [`../scripts/prepare-commit-msg-session.sh`](../scripts/prepare-commit-msg-session.sh) の `ensure_final_newline`。
 - 試験: 鳴る形 = 改行なしの message から、 改行ありと byte 単位で同じ出力が出る / 実際の `git merge --no-ff --no-edit` で、 件名が merge の 1 行のまま trailer を `%(trailers:key=…)` で取り出せる。 鳴らない形 = 改行で終わる message は空行 1 つのまま / trailer を書かない経路は、 改行なしの file を byte 単位で変えない (実装例 = 同じ script の `.test.sh` の 17〜21)。
 - <a id="pre-fix-copy-via-archive"></a>⚠️ **直す前の版で試験が落ちることを見る写しは、 dir ごと `git archive <rev> <dir> | tar -x -C <一時 dir>` で取り、 新しい試験だけを載せる** — `git show <rev>:<file> > <写し>` の写しは実行権を落とす (`exec` で本体を呼ぶ git hook の stub が動かず、 実 commit の case が「commit できない」 の SKIP に見える)。 本体が読む隣の file も無い (隣の module を読む case が、 直しと無関係に落ちる)。 どちらも実測で、 dir ごとの写しでは落ちるのが直しの分の case だけになった。 一般の置き方 = 上の [#live-hook-edit-runs-elsewhere](#live-hook-edit-runs-elsewhere) と [`debugging-discipline.md#side-by-side-before-after`](debugging-discipline.md#side-by-side-before-after)。
+
+## <a id="message-display-hook"></a>§27. 表示だけを差し替える hook (MessageDisplay) — 返事の文を画面に出す前に書き換える
+
+- 何か: hook の種類 `MessageDisplay` は返事の文を画面に出す前に呼ばれ、 `hookSpecificOutput.displayContent` を返すと元の文の代わりに出る。 会話記録と Claude が読む文は元のまま (公式の hooks の説明)。 返事を止める力は無く、 失敗・時間切れ (既定 10 秒) では元の文が出る。
+- 使いどころ = Stop では消せない崩れ (描けない書式・画面に出したくない文字列) を、 画面に出る前に直す。 Stop の網と組で使う: 会話記録は元のままなので Stop は崩れた形を見続ける = 表示の hook が同じ session で走った印を置き、 Stop はその印があれば画面に出た文 (同じ部品で直した文) で判定する。 書き換えの部品は両方の hook で 1 つにする (写さない)。
+- desktop app (Code タブ) は engine を SDK の形 (`--output-format stream-json --include-partial-messages`) で動かすので、 hook は返事 1 つにつき書き終えた後に 1 回、 全文で呼ばれる (`index` 0・`final` true)。 書き終えた返事として desktop に届く文は差し替わり、 書いている途中の小分けの文 (partial の delta) は元のまま届く (実測 = 埋込 engine を同じ flag で動かした出力)。 画面は書き終えた返事を差し替えた文で描き、 session を離れて戻ってもそのまま (実測。 app の再起動の後は未確認)。 対話の端末 (CLI) では行のまとまりごとに呼ばれる = code block の開閉のような状態は `message_id` ごとに引き継ぐ。
+- 差し替えた文は、 その session の turn の終わりに起こした側の session へ届く報告の文にも乗る (実測) = 書き換えは本人の画面だけのものではない。 意味を変える書き換えをしない。
+- 入力に entrypoint は無い = desktop だけで動かすなら環境変数 `CLAUDE_CODE_ENTRYPOINT` (`claude-desktop` / `claude-desktop-3p`) で絞る。 hook の process の `python3` は system の 3.9 のことがある = 型注釈の新しい書き方 (`str | None`) は `from __future__ import annotations` を付けて使う。
+- 試し方: (1) SDK の形の出力は、 埋込 engine を desktop と同じ flag と `--setting-sources project` で `-p` 実行し、 project の `.claude/settings.json` だけに試験の hook を置けば、 本人の hook と設定を読まずに見られる (`type` = `assistant` の文が差し替わり、 `stream_event` の delta と会話記録は元のまま)。 desktop が engine に渡す flag は、 動いている engine の process の引数で読む。 (2) 画面は、 同じく project の設定だけに hook を置いた folder で desktop の session を 1 つ開き、 数式に依らない目印の語を書かせて、 書いている途中・書き終えた後・離れて戻った後を見る。 hook が呼ばれたかは hook 自身に記録を書かせて機械側で確かめる (本人の全体の設定は触らない)。
+- 実例 = [`../hooks/chat-math-display-fix.py`](../hooks/chat-math-display-fix.py) (Code タブが生の TeX で出す式を描ける形へ直す = [chat-math-rendering.md#code-tab-display-fix](chat-math-rendering.md#code-tab-display-fix))。
 
 ## <a id="related-docs"></a>関連
 
