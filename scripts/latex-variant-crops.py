@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""同じ LaTeX 原稿を組み替えた版 (書体・macro・版面の候補) から、 同じ source の範囲を synctex で切り出して版ごとに縦に並べ、 見比べの 1 枚の PNG にする。--selftest 内蔵、規律 = conventions/latex.md#typeface-candidate
+"""同じ LaTeX 原稿を組み替えた版 (書体・macro・版面の候補) から、 同じ source の範囲を synctex で切り出して版ごとに縦に並べ、 見比べの 1 枚の PNG にする。--selftest 内蔵、規律 = conventions/latex.md#variant-comparison-images
 
 使い方 (各版の dir に、 写した .tex と、 それを `-synctex=1` で組んだ PDF と .synctex.gz がある):
 
