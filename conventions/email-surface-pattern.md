@@ -151,6 +151,10 @@ opt-out list の両方 — 後者にしか痕跡が無い決着もある (= clas
   入っていた)。 迷惑メールから見つけたら API で `SPAM` ラベルを外して `INBOX` を付ければ受信トレイに戻るが、
   これが画面の「迷惑メールではない」 と同じ学習の合図になるかは公開文書に書かれていない = 確実にしたいなら
   「迷惑メールにしない」 フィルタ (残る設定なので本人の OK を取ってから)
+- <a id="watch-query-sender-wide"></a>**差出人だけの条件 (`from:<人>`) は、 その人の別件のメールにも当たる**: 同じ相手と別の案件を並行して持つと、
+  別件の新しいスレッドがこの項目の返事として出る = 結ぶ項目は本文を読んで決める (実測: 網が結んだ項目と本文の案件が違った)。
+  網は記録した mail を出さないが、 項目の行に「最終更新より新しい返事」 を記録済みも含めて添える表示を持つ環境では、 項目を更新するまで添え続ける
+  = 別件として記録する turn で条件を持つ項目にも結び、 現在地に「別件 (どの項目の話か)」 と書く。 続くなら条件に件名の語を足して絞る
 - 実装 = [`scripts/lib/mail_watch.py`](../scripts/lib/mail_watch.py) の `watch_queries` / `unrecorded_threads`。
   一般則 = [`convention-design-principles.md#retrieval-key-choice`](../docs/convention-design-principles.md#retrieval-key-choice)
   (thread ID でなく送り手・件名という別の鍵で引く)、 予告された inbound の時計は
