@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check) + 英文だけを直した候補 (今 → 案 の組を当てた写し) の PDF を確かめるとき (#prose-pass-pdf-word-diff) + TeXShop で保存した原稿の JIS の外の文字が `\UTF{…}` の形に書き換わったとき (#texshop-ptex-utf-output)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check) + 英文だけを直した候補 (今 → 案 の組を当てた写し) の PDF を確かめるとき (#prose-pass-pdf-word-diff) + TeXShop で保存した原稿の JIS の外の文字が `\UTF{…}` の形に書き換わったとき (#texshop-ptex-utf-output) + 数式の書体 (math alphabet) を替える候補を作って見せるとき (#typeface-candidate)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -495,6 +495,10 @@ source の断片や置換規則を提示して「どちらにしますか」 と
 **道具**: [`claude-config/scripts/pdf-side-by-side.py`](../scripts/pdf-side-by-side.py) — 2 つの PDF の同じ語句の周りを
 左右に並べた比較頁 (`compare.pdf` + `cmp-NN.png`) を作る。 anchor は両版で変わらない語句を選ぶ (案で語句自体が変わる箇所は
 その直前の文を anchor に)。 `--diff-pages` で本文が違う頁を頁ごと並べる。
+案が 3 つ以上のとき、 または見せたい所が display の式 (PDF の文字で anchor を探せない) のときは
+[`claude-config/scripts/latex-variant-crops.py`](../scripts/latex-variant-crops.py) — 範囲を **.tex の中の文字列** (始まりと終わり) で指し、
+各版の .tex で行を探して synctex で PDF の位置を引き、 版ごとに縦に並べた 1 枚の PNG にする (preamble に行を足した版でも同じ範囲が取れる。
+各版は `-synctex=1` で組んでおく)。 範囲を行番号で指すと版ごとにずれ、 `\al{` のような行は前の段落の箱に当たって範囲が上へ広がる (実測)。
 組版が壊れていないかの機械比較 (error / 未定義参照 / overfull / label→頁 の drift) は別の道具 =
 [`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py)。
 一括置換の純粋性は [`check-rename-purity.py`](../../ai-collaboration/scripts/check-rename-purity.py)。
@@ -503,6 +507,30 @@ source の断片や置換規則を提示して「どちらにしますか」 と
 mode 切替で作り、 各案を組んで数箇所ずつの左右比較を渡した。 決め手は紙の上にしか無かった = 下付きは同じ論文の
 別の量の添字と label の位置が割れる、 次数なしの肩は別の次数の量に見える、 縦棒は制限の用法と衝突する
 ([`paper-audit.md#notation-rename-sweep`](paper-audit.md#notation-rename-sweep) の 3 番)。
+
+## <a id="typeface-candidate"></a>数式の書体 (math alphabet) を替える候補を作る — 今の font を PDF で確かめ、 使う所を全部数え、 行の折れまで見る
+
+ある量の書体 (サンセリフを斜体に、 等) を替える候補を作るときの手順。 見せ方は前節。
+
+- **今の font は PDF で確かめてから名前で呼ぶ**。 LuaLaTeX で `fontenc`・`lmodern` を読まない原稿は、 本文が Latin Modern でも
+  数式の alphabet は LaTeX の既定の OT1 の Computer Modern のまま (`\mathsf` = cmss = PDF では `CMSS10`)。
+  見本を「今 = Latin Modern Sans」 と呼んでいたものが PDF では CMSS だった (実測、 形はほぼ同じ)。
+- **使う所を全部数える** — macro の定義、 直接の `\mathsf X`、 `\input` する file の中まで。 `\textsf` は文字の font (`\sfdefault`) を使う
+  別の仕組みで、 math alphabet の宣言し直しは届かない。 ⚠️ 数える正規表現で macro 名の後に `\b` を置かない: `_` は単語の文字なので
+  `\vmag_I` の `\vmag` を数え落とす (実測) = `\\vmag(?![A-Za-z])` (`grep -E` なら `\\vmag([^A-Za-z]|$)`)。
+- **宣言の形** — その alphabet をその量だけに使っているなら、 preamble に `\DeclareMathAlphabet{\mathsf}{<enc>}{<family>}{<series>}{<shape>}`
+  を 1 行足して宣言し直す (本文に触らない = 当てる組が preamble の 1 行で済む)。 他の用途にも使っているなら、 専用の alphabet を宣言して
+  macro の定義をそれに替える (他の用途を変えない)。 宣言し直しは log に `LaTeX Font Info: Redeclaring math alphabet` と出る (情報、 警告ではない)。
+  `\DeclareMathAlphabet` は太字の版 (`\boldmath`) にも同じ font を当てる。 太字を分けるなら `\SetMathAlphabet{\mathsf}{bold}{…}` で、
+  その family に太字の形があるかを `.fd` で見る (CM Bright の OT1 版に太字の斜体は無い)。
+- **斜体は段落の折れを動かしうる** — 斜体の text font を数式に使うと、 字の送り幅は同じでも、 次に置く上付き・下付きが italic correction の分だけ
+  右へずれる (PDF の字の位置で 0.3〜0.5 pt、 実測)。 文中の式の幅が増えて段落が折れ直す (頁数は同じまま)。 確かめは
+  [`compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py) の `--lines` (頁ごとの行の折れ、 空白だけの違いは別に数える) と
+  `--fonts` (替わったのが狙った font だけか・埋め込み・Type 3)。 頁数・overfull の数の一致では見えない。
+- **当てる組の確かめ** — 原稿の守りの道具があるなら、 その空回し (書き込まない形、 例 = `manuscript-claim-guard.py apply --edits <組> --dry-run`) で
+  今の作業ツリーにちょうど 1 か所当たることを見る。 作業ツリーに他の人の未 commit の変更があると、 空回しが出す「触る保護領域」 にその変更の領域も並ぶ
+  (道具は HEAD と比べる) = 組の 1 行の分か、 他の変更の分かを分けて報告する (実測: preamble の 1 行は保護領域に入らず、 並んだ領域は全部、
+  作業ツリーの別の書き換えの分だった)。
 
 ## <a id="stash-roundtrip-build-artifacts"></a>baseline 比較に git stash round-trip を使わない (tracked 生成物と衝突する)
 

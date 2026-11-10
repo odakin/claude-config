@@ -249,6 +249,7 @@
 - **[latex-pdf-audit.py](latex-pdf-audit.py)** — Audit a LaTeX log and PDF, and optionally render numbered pages for visual review.
 - **[latex-sandbox-cache-probe.py](latex-sandbox-cache-probe.py)** — Compare LuaLaTeX cache layouts in an isolated, synthetic document build.
 - **[latex-split-deps.py](latex-split-deps.py)** — 原稿の一部 (節・\input の file) を別の文書へ移す前に、 移すと切れる参照・引用と、 移した文の中で旧い入れ物を指す語を列挙する (読むだけ)。
+- **[latex-variant-crops.py](latex-variant-crops.py)** — 同じ LaTeX 原稿を組み替えた版 (書体・macro・版面の候補) から、 同じ source の範囲を synctex で切り出して版ごとに縦に並べ、 見比べの 1 枚の PNG にする。--selftest 内蔵、規律 = conventions/latex.md#typeface-candidate
 - **[latexdiff-changed-pages.py](latexdiff-changed-pages.py)** — latexdiff の PDF から、 差分の色 (追加・削除) が出ている頁だけを残す: 変わった頁を印でなく差分そのもので選ぶ。
 - **[latexdiff-eqtree.py](latexdiff-eqtree.py)** — latexdiff for the text, a tree comparison for the equations: only the changed symbols are marked.
 - **[latexdiff-expand-env-macros.py](latexdiff-expand-env-macros.py)** — Expand one-argument macros whose body wraps a paragraph-level environment (quote, center, itemize, ...) before latexdiff.
