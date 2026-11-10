@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: チャットの返事に数式を書くとき (読ませる数式・コピペ用の LaTeX の両方) + 返事の数式が生の TeX のまま表示されたとき + 数式の書き方の規則を CLAUDE.md や template に置くとき
 category: harness-core
-summary: 読む画面ごとの数式表示の正本。 Codex app と Claude desktop の Code タブでは LaTeX の組版表示を既定にし、ソースを渡す場合と分ける。 Codex の文中・複数行の独立式、Claude 固有の既定の書き方 (3 行)・区切り・inline gate と Stop hook、非描画・未測定の画面での Unicode を、それぞれの節で扱う
+summary: 読む画面ごとの数式表示の正本。 Codex app と Claude desktop の Code タブでは LaTeX の組版表示を既定にし、ソースを渡す場合と分ける。 Codex の文中・複数行の独立式、Claude 固有の既定の書き方 (3 行)・区切り・inline gate・表示の前に直す hook (MessageDisplay) と Stop hook、非描画・未測定の画面での Unicode を、それぞれの節で扱う
 -->
 # チャットでの数式の書き方
 
@@ -75,7 +75,7 @@ python3 scripts/claude-app-bundle.py --app /Applications/ChatGPT.app grep 'rende
   - 中身に `$`・backtick・`\(`・`\|` `\.` `\+` `\*` `\?` `\数字` を入れない (ノルムは `\lVert v\rVert`)。 `\,` `\;` `\!` は通る。 中身は 200 文字以内、 `\)` は同じ行に置く。
   - `$…$` の gate にある 60 文字制限・英字 4 連続・括弧の釣り合いの判定は `\(…\)` には無い。
 - **`$…$` には「数式らしさ」 の gate がある** ([#dollar-inline-gate](#dollar-inline-gate))。 60 文字を超える・数式記号を含まない (`$[0,1]$` `$xy$` `$P_D$`)・英字 4 文字以上が裸で続く、 などで生表示になる。 **落ちた `$` の閉じは次の式の開きになる** (本体は `$` を 1 文字進めるだけ) ので、 1 箇所の失敗が後続の `$…$` を道連れにする。 使い分け = [既定の書き方の 3 行](#code-tab-default-form) (`\` を含む式は直前に空白の `\(…\)`、 添字は `{}`、 `\` の無い短い式は `$…$`、 記号の無い式と数は地の文)。 `$$…$$` にはどちらの gate も無い。
-- **数式を含む返事は Stop hook が機械で検査する** = [`hooks/chat-math-render-guard.py`](../hooks/chat-math-render-guard.py) (desktop の session の最終発話を本体と同じ判定式で走査し、 落ちる式を行番号・理由・直し方つきで block → 直して出し直す)。 規則を知っているだけでは防げない (実測: 規則を確定した後も、 読点の直後の `\(` と記号の無い `\(g\)` で 1 つの返事の大半の式が生表示になった)。 書くときは上の 3 行の形で書き、 細目の自己点検には頼らず hook に任せる。 下書きを file にして `python3 hooks/chat-math-render-guard.py --check FILE` で先に見てもよい。 hook が写していないもの = `$$` block の判定 (見ない。 `\\0` を含む 1 行の pmatrix が描かれたので止めない)。 LaTeX を使わずに Unicode の地の文で書いた式も見ない (描けない形ではない) = Code タブで LaTeX に替えさせるのは、 CLAUDE.md・雛形に書く既定の語 ([#where-to-put-the-rule](#where-to-put-the-rule))。 共有 repo の project の hook として写して配る形 = [shared-repo.md#project-copy-of-user-hook](shared-repo.md#project-copy-of-user-hook)。
+- **数式を含む返事は Stop hook が機械で検査する** = [`hooks/chat-math-render-guard.py`](../hooks/chat-math-render-guard.py) (desktop の session の最終発話を本体と同じ判定式で走査し、 落ちる式を行番号・理由・直した形つきで block → 崩れた式だけを直した形で並べる短い追記を書く。 返事の全文は出し直さない = [hook-authoring.md#stop-hook-addendum-not-reemission](hook-authoring.md#stop-hook-addendum-not-reemission)。 金額・shell の変数・地の文の `$$` のような数式でない `$` は止めない。 他の hook の差し戻しの後に書いた返事も判定し、 自分が差し戻した後の返事では止めずに数だけ残す)。 規則を知っているだけでは防げない (実測: 規則を確定した後も、 読点の直後の `\(` と記号の無い `\(g\)` で 1 つの返事の大半の式が生表示になった)。 書くときは上の 3 行の形で書き、 細目の自己点検には頼らず hook に任せる。 Stop は返事が画面に出た後に走るので、 崩れた版は画面に残る = 表示の前に直す hook ([#code-tab-display-fix](#code-tab-display-fix)) と組で使う。 下書きを file にして `python3 hooks/chat-math-render-guard.py --check FILE` で先に見てもよい。 hook が写していないもの = `$$` block の判定 (見ない。 `\\0` を含む 1 行の pmatrix が描かれたので止めない)。 LaTeX を使わずに Unicode の地の文で書いた式も見ない (描けない形ではない) = Code タブで LaTeX に替えさせるのは、 CLAUDE.md・雛形に書く既定の語 ([#where-to-put-the-rule](#where-to-put-the-rule))。 共有 repo の project の hook として写して配る形 = [shared-repo.md#project-copy-of-user-hook](shared-repo.md#project-copy-of-user-hook)。
 - 表のセルに `|` や `\|` を含む数式を書かない (`$\langle\psi|\phi\rangle$` はセルの区切りに取られる)。 `\mid` / `\vert` / `\lVert` で代えるか、 表の外に出す。
 - コマンドは KaTeX にあるものだけ。 **physics パッケージは不可** (`\dd` `\dv` `\pdv` `\abs` `\norm` `\ev` `\mel` `\comm` `\tr` `\Tr`) → `\mathrm{d}x`, `\frac{\partial f}{\partial x}`, `|x|`, `\lVert v\rVert`, `\langle A\rangle`, `\operatorname{Tr}` で書く (`\|v\|` は `$…$` の gate が正規表現と見なして生表示にする)。 `\mathbb{1}` `\mathds{1}` `\id` も不可 (→ `\mathbb{I}` か `\mathbf{1}`)。 repo のプリアンブル固有のマクロも不可。
 - 使えるもの (実測): `\ket` `\bra` `\braket` `\mathscr` `\mathfrak` `\bm` `\boldsymbol` `\operatorname` `\dfrac` `\tfrac` `\lVert` `\coloneqq` `\hbar` `\bmod`。
@@ -98,6 +98,16 @@ python3 scripts/claude-app-bundle.py --app /Applications/ChatGPT.app grep 'rende
 - **閉じ `$` の直後が数字** は不可 (通貨の形)。 `(` は code 上は通るはずだが、 同じ行に後続の `$…$` があると生表示になった (実測 3 回、 原因は未特定)。 空白を入れるか `\(…\)` にする。
 
 **版で変わる**: 上は 2.26454.2 (macOS)・2.31226.0 (Windows)・2.31226.1 (macOS) での挙動 (`\(` の guard は 2.31226.1 の code から。 読んだ chunk 名と関数名は hook の header に記録)。 描画器はアプリの中でも画面ごとに設定が違う (ドル記号 1 個の数式を切っている描画器もある)。 規則が合わなくなったら、 [claude-app-bundle-reading.md](claude-app-bundle-reading.md) の手順で本体を読み直すか、 画面で 1 回試す。 gate の判定は `inlineGuard` を持つ chunk にあり、 `It=60` (文字数)・`\p{L}{4}` (散文)・`[\\^{}=<>|!+]` (数式記号) で引ける。 規則を変えたら hook の判定式も同じ版の code に合わせ直す (hook の test が規則の例を持つ)。
+
+### <a id="code-tab-display-fix"></a>表示の前に直す hook (MessageDisplay)
+
+Stop の検査は返事が画面に出た後に走るので、 崩れた版は画面に残り、 追記と並ぶ。 Claude Code の hook の種類 `MessageDisplay` は返事の文を画面に出す前に呼ばれ、 hook が返した `displayContent` を元の文の代わりに出す (公式の hooks の説明)。 [`hooks/chat-math-display-fix.py`](../hooks/chat-math-display-fix.py) はこれを使い、 上の判定式で落ちる式だけを意味を変えずに描ける形へ書き換える (区切りの付け替え・1 文字の添字の `{}`・`\(` の前の空白・表のセルの `|` → `\vert`・`\[…\]` → `$$…$$`・数だけの式 → 地の文)。 直した行が同じ判定式を通るときだけ差し替え、 直せない式と数式でない `$` は触らない。 書き換えの部品は Stop の hook の `fix_text` (Stop の「直した形」 の案内も同じ部品)。
+
+- **表示だけ**: 会話記録と Claude が読む文は元のまま。 Claude 自身は崩れた形を書き続けるので、 書き方の既定 ([#code-tab-default-form](#code-tab-default-form)) は残す。 Stop の検査は、 この hook が同じ session で走った印 (`$TMPDIR/chat-math-display-fix/<session>`) があれば、 画面に出た直した文で判定する (表示で直った式では止めない)。
+- **desktop では書き終えた後に 1 回**: desktop は engine を SDK の形 (`--output-format stream-json --include-partial-messages`) で動かすので、 hook は返事 1 つにつき書き終えた後に全文で 1 回呼ばれ、 差し替えた文が書き終えた返事として desktop に届く。 書いている途中の小分けの文は元のまま届く (実測 = 埋込 engine 2.1.317 を同じ flag で動かした出力)。 画面の試験 (desktop app 4.23118.0・埋込 engine 2.1.317、 project の設定だけに目印の語と式を差し替える hook を置いた folder): 書き終えた返事は差し替えた文で描かれ (目印の語・式 3 つとも)、 session を離れて戻っても差し替えた文のまま。 書いている途中に元の文が一瞬見えるかは画面では確かめていない (engine の出力では途中の小分けの文は元のまま)。 app を再起動した後は未確認。 session の turn の終わりに起こした側の session へ届く報告の文も差し替えた文だった = 表示の hook の書き換えは、 本人の画面だけでなく別の session へ渡る報告にも乗る (会話記録は元のまま)。
+- この hook は desktop の entrypoint (`claude-desktop` / `claude-desktop-3p`) でしか動かない (CLI のターミナルは数式を描かない)。 対話の端末では行のまとまりごとに呼ばれるので、 code block の開閉を返事の id ごとの一時 file で引き継ぐ。
+- 試験は、 project の `.claude/settings.json` だけに hook を置いた folder で session を開けば、 本人の全体の設定を触らずにできる。 SDK の形の出力は、 埋込 engine を同じ flag と `--setting-sources project` で `-p` 実行すれば、 本人の hook を読まずに確かめられる。
+- 計器 = `~/.claude/state/chat-math-events.jsonl` (表示で直した式・差し戻し・差し戻しの後に残った式の数)。 効いたかは差し戻しの回数の前後で比べる。 校正 = `python3 hooks/chat-math-render-guard.py --calibrate <日数>` (全ての設定フォルダ `~/.claude*/projects` の、 画面に出た全ての版 = 差し戻された版も含めて数える)。
 
 ## <a id="where-to-put-the-rule"></a>規則をどこに置くか
 
