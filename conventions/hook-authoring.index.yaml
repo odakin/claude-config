@@ -378,6 +378,9 @@ sections:
   - id: trailer-needs-final-newline
     level: 2
     title: "§26. commit message に trailer を足す git hook は、 message を改行で終えてから書く"
+  - id: message-display-hook
+    level: 2
+    title: "§27. 表示だけを差し替える hook (MessageDisplay) — 返事の文を画面に出す前に書き換える"
   - id: related-docs
     level: 2
     title: "関連"
