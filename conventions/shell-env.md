@@ -291,6 +291,13 @@ l="pre(post)"; print -r -- "${l##*\(}"   # zsh でも通る (= ( を escape)
 
 兄弟 = 「Bash tool は bash script ではない」 の別の現れ: [`edit-intent-record.md#apply-then-record`](../../ai-collaboration/conventions/edit-intent-record.md#apply-then-record) の shell 注 (Bash tool の最上位では `set -e` が効かない、 gate を pipe の後ろに置かない、 2026-09-11)。 1 件目を記録していたので 2 件目で規約化できた (上の「記録されない残骸は trigger を持たない」 が機能した例)。
 
+### <a id="zsh-wait-next"></a>zsh の待機は子の PID を指定する
+
+zsh 5.9 では `wait -n` が `wait: job not found: -n` で終了する (実測)。
+子を起こした直後の `$!` を保存し、`wait "$child_pid"` でその子を待つ。
+複数の子のうち最初に終わるものを待つ場合は、その機能を持つ実行器を明示して使い、zsh に Bash の option を渡さない。
+`wait` の失敗の後に無条件の完了表示を置くと、子を待っていないのに完了した形になる。各子の終了値と、残っている子を確かめる。
+
 ## <a id="ambiguous-identifier-in-issued-commands"></a>渡すコマンドに埋める識別子は、 受け手が別の意味に取れない形にする (2026-09-12)
 
 兄弟 2 節 (`#` と `~`) は **shell** が値を再解釈する罠だったが、 同じ族は **コマンド自身の引数パーサ**でも起きる。 値そのものは正しいのに、 埋めた文字列がたまたま別の構文と一致すると、 受け手が違う対象を指す。
