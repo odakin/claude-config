@@ -5,6 +5,7 @@
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+- **公開ベンチマークのモデル比較** — 比較方法を整理し、参照段階へ移る。再開時は [推論設定・課題費用・測定範囲](conventions/web-tools.md#model-benchmark-comparisons) を入口に、対象の評価表で条件を確認する。
 - **Git の版の本文を読む処理** — 方針調査を終え、実装の適用前で停止。次は方針の確認後に対象の読取を修正する。対象・原出力・適用前の再現コードの扱い = [棚卸しと方針](docs/git-blob-read-sweep.md)。
 - **Codex のチャットの wrap と archive** — 道具と規則を入れ、 試運転で済んだチャットを閉じた段階。 次はアプリが開いたままの盲検の窓を、 アプリが手放した後に `archive` で閉じる (雑用の指揮役)。 入口 = [`scripts/codex-thread-close.py`](scripts/codex-thread-close.py)・[規則と実測](conventions/multi-session-coordination.md#codex-thread-close)。
 - **層1 の手元の変更を PR に運ぶ道具と入口の配線** — 道具 [`scripts/upstream-pr.py`](scripts/upstream-pr.py) (段・所有者の判定・漏洩の検査の正本 = 冒頭) と、 共同研究者の点検の repo 行 ([`shared-repo.md#collaborator-check`](conventions/shared-repo.md#collaborator-check)) は入った。 turn の終わりの促しと session の開始の hook は保護された file で、 候補のまま当てる窓の手順を待つ。 規約・README の文書と backup の ref の片づけは未着手。
