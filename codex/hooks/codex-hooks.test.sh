@@ -231,16 +231,16 @@ payload = json.load(open(sys.argv[1], encoding="utf-8"))
 assert payload == {}
 PY
 
-# A fresh known write attempt re-arms notification even without a byte change.
+# A write attempt to the same unresolved path does not repeat the notification.
 make_touch_input "$TEMP_ROOT" dirty-session PreToolUse apply_patch "$DIRTY_PATCH" \
   | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
 make_stop_input "$TOUCH_REPO" dirty-session false \
   | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
-  > "$TEMP_ROOT/nudge-rearmed.json"
-python3 - "$TEMP_ROOT/nudge-rearmed.json" <<'PY'
+  > "$TEMP_ROOT/nudge-same-path.json"
+python3 - "$TEMP_ROOT/nudge-same-path.json" <<'PY'
 import json
 import sys
-assert json.load(open(sys.argv[1], encoding="utf-8"))["decision"] == "block"
+assert json.load(open(sys.argv[1], encoding="utf-8")) == {}
 PY
 
 git -C "$TOUCH_REPO" restore edited.txt

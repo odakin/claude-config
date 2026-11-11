@@ -267,29 +267,26 @@ without changing its baseline. This keeps the exact exception visible to
 the owner when it is first made without repeating it in later read-only
 turns.
 
-The hook records a separate `last_dirty_notice` for an exact, readable, stable
-dirty snapshot, regardless of who wrote it. Its first unresolved Stop still
-warns. A later identical Stop emits no duplicate warning, including after an
-unclassified read-only tool call or while permission to publish remains
-unresolved. This deliberately omits repeated Stop forcing for the same
-unresolved task-owned dirt too; it does not establish completion or owner
-approval. The original baseline, acknowledgement receipt and issue predicate
-remain unchanged, and Git/live remote checks still run on every Stop.
+The hook records a separate `last_dirty_notice` keyed by the unresolved path
+set and the same session, worktree, branch, local day, tracking epoch and HEAD.
+The first dirty notification warns. Later notifications for the same unresolved
+files are suppressed regardless of ownership, even when their content, index,
+mode or deletion state changes or another write is attempted on those files.
+This deliberately omits repeated Stop forcing for new work within that same
+unresolved path set too. It establishes neither completion nor owner approval.
+The original baseline, acknowledgement receipt and issue predicate remain
+unchanged, and Git/live remote checks still run on every Stop.
 
-A matched PreToolUse patch or recognized simple Git write attempt increments
-a separate notification generation, so even unchanged bytes warn once again.
-PostToolUse does not increment it a second time. An unclassified Bash command
-does not by itself advance this generation; actual data changes are detected
-by the snapshots. A publication refused before any matched PreToolUse has no
-write observation. Tool coverage remains limited to these observed events.
-A changed path, content, index, mode, deletion, HEAD, worktree, branch, session
-or local day also requires a new warning. Malformed or incomplete receipt
-scopes, invalid receipt dates, malformed or unreadable baselines, unreadable
-state, tracker races, and remote or publication-state problems remain loud.
-Notification eligibility validates records without repairing them or changing
-the original acknowledgement predicate. This suppresses newly generated
-duplicate output; it cannot retract an old Hook prompt already generated and
-later redisplayed by the client.
+Full readable snapshots are still sampled and checked for stability during
+each verification; their content fingerprints do not form the notification
+key. A changed unresolved path set, HEAD, worktree, branch, session or local
+day requires a new warning. Malformed or incomplete receipt scopes, invalid
+receipt dates, malformed or unreadable baselines, unreadable state, tracker
+races, and remote or publication-state problems remain loud. Eligibility
+validates records without repairing them or changing the acknowledgement
+predicate. No write-attempt notification generation is maintained. This only
+suppresses newly generated duplicate output; it cannot retract an old Hook
+prompt already generated and later redisplayed by the client.
 
 [`session_touch.test.py`](hooks/session_touch.test.py) exercises the receipt and
 notification-state regressions on isolated Git data.

@@ -117,7 +117,9 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(prior, self.git("status", "--porcelain=v1"))
         self.blocked("dirty")
         (self.repo / "foreign a").write_text("other a\n")
-        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        entry = gate.load_state(self.state)["repos"][str(self.repo)]
+        self.assertIn("dirty", gate.repo_issues(self.repo, entry, "fixture")[0])
 
     def test_same_porcelain_index(self):
         self.fixture()
@@ -323,38 +325,35 @@ class ReceiptTests(unittest.TestCase):
         self.assertIn("dirty", gate.repo_issues(self.repo, entry, "fixture")[0])
         self.assertIn("last_dirty_notice", state)
 
-    def test_notice_new_path_same_path_index_mode_delete_and_return(self):
+    def test_notice_same_path_updates_stay_quiet_and_path_set_changes_warn(self):
         self.fixture()
         self.blocked("dirty")
-        self.assertEqual(self.nudge(), {})
         old_porcelain = self.git("status", "--porcelain=v1")
         (self.repo / "foreign a").write_text("new same-status bytes\n")
         self.assertEqual(self.git("status", "--porcelain=v1"), old_porcelain)
-        self.blocked("dirty")
         self.assertEqual(self.nudge(), {})
         self.git("add", "--", "foreign a")
-        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
         old_porcelain = self.git("status", "--porcelain=v1")
         (self.repo / "foreign a").write_text("new staged bytes\n")
         self.git("add", "--", "foreign a")
         self.assertEqual(self.git("status", "--porcelain=v1"), old_porcelain)
-        self.blocked("dirty")
         self.assertEqual(self.nudge(), {})
         (self.repo / "foreign a").chmod(0o755)
-        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
         (self.repo / "foreign a").unlink()
-        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
         (self.repo / "foreign a").write_text("new staged bytes\n")
-        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
         (self.repo / "new-path").write_text("new\n")
         self.blocked("2 unacknowledged")
+        (self.repo / "new-path").unlink()
+        self.blocked("1 unacknowledged")
 
-    def test_notice_own_dirty_publication_refused_read_only_then_new_writes(self):
+    def test_notice_own_dirty_publication_refused_same_path_writes_stay_quiet(self):
         self.track("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch")
         (self.repo / "ours").write_text("authorized task work awaiting publication permission\n")
         self.blocked("dirty")
-        # Publication refused before matched PreToolUse produces no observed
-        # write or Git effect. Read-only tools run while the owner answers.
         self.track("git status --short && git diff --stat")
         self.track("python3 - <<'PY'\nprint('read-only publication status')\nPY")
         self.assertEqual(self.nudge(), {})
@@ -362,27 +361,61 @@ class ReceiptTests(unittest.TestCase):
         baseline = gate.load_state(self.state)["repos"][str(self.repo)]["baseline"]
         for command, tool in (("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch"),
                               ("git add -- ours", "Bash"), ("git commit -m retry -- ours", "Bash")):
-            with self.subTest(command=command):
-                self.track(command, tool)
-                self.blocked("dirty")
-                self.assertEqual(self.nudge(), {})
+            self.track(command, tool)
+            self.assertEqual(self.nudge(), {})
         entry = gate.load_state(self.state)["repos"][str(self.repo)]
         self.assertEqual(entry["baseline"], baseline)
         self.assertNotIn("receipt", entry)
+        self.assertNotIn("notice_write_generation", entry)
 
-    def test_notice_unattributed_patch_rearms_without_permanent_suppression(self):
+    def test_notice_unattributed_patch_same_paths_stay_quiet(self):
         self.fixture()
         self.blocked("dirty")
-        self.assertEqual(self.nudge(), {})
-        self.track("unrecognized patch target", "apply_patch")
-        self.blocked("dirty")
-        self.assertEqual(self.nudge(), {})
-        self.call(gate.track, tool_name="apply_patch", hook_event_name="PostToolUse",
-                  tool_input={"command": "unrecognized patch target"})
-        self.assertEqual(self.nudge(), {})
-        self.track("unrecognized patch target", "apply_patch")
-        self.blocked("dirty")
-        self.assertEqual(self.nudge(), {})
+        for phase in ("PreToolUse", "PostToolUse", "PreToolUse"):
+            self.call(gate.track, tool_name="apply_patch", hook_event_name=phase,
+                      tool_input={"command": "unrecognized patch target"})
+            self.assertEqual(self.nudge(), {})
+        self.assertNotIn("notice_write_generation", gate.load_state(self.state)["repos"][str(self.repo)])
+
+    def test_notice_three_paths_tex_pdf_updates_and_same_path_writes_stay_quiet(self):
+        names = ("paper.tex", "preview.pdf", "notes.txt")
+        for name in names:
+            (self.repo / name).write_text("base fixture bytes\n")
+        self.git("add", "--", *names)
+        self.git("commit", "-qm", "three-path fixture")
+        self.bare_remote()
+        for known in (False, True):
+            self.git("restore", "--", *names)
+            (self.repo / "new-path").unlink(missing_ok=True)
+            self.event["session_id"] = "three-path-" + str(known)
+            self.state = gate.state_path(self.event)
+            with self.subTest(known_writer=known):
+                patch_text = "*** Begin Patch\n" + "".join("*** Update File: " + p + "\n" for p in names) + "*** End Patch"
+                self.track(patch_text if known else "git status", "apply_patch" if known else "Bash")
+                for name in names:
+                    (self.repo / name).write_text("unresolved fixture bytes\n")
+                self.blocked("3 unacknowledged")
+                porcelain = self.git("status", "--porcelain=v1")
+                for name in names[:2]:
+                    (self.repo / name).write_text("new content, same unresolved file\n")
+                self.assertEqual(self.git("status", "--porcelain=v1"), porcelain)
+                self.track("git status --short")
+                self.assertEqual(self.nudge(), {})
+                self.track(patch_text, "apply_patch")
+                self.assertEqual(self.nudge(), {})
+                entry = gate.load_state(self.state)["repos"][str(self.repo)]
+                self.assertIn("3 unacknowledged", gate.repo_issues(self.repo, entry, self.event["session_id"])[0])
+                (self.repo / "new-path").write_text("additional unresolved path\n")
+                self.blocked("4 unacknowledged")
+                (self.repo / "new-path").unlink()
+                self.blocked("3 unacknowledged")
+                self.git("commit", "--allow-empty", "-qm", "new fixture head")
+                self.git("push", "-q")
+                self.blocked("3 unacknowledged")
+                self.assertEqual(self.nudge(), {})
+                with patch.object(gate, "live_remote_head", return_value=(None, "unavailable")):
+                    for _ in range(2):
+                        self.blocked("live remote head could not be verified")
 
     def test_notice_git_inspection_forms_do_not_rearm(self):
         self.track("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch")
@@ -406,6 +439,34 @@ class ReceiptTests(unittest.TestCase):
                 gate.save_state(self.state, state)
                 for _ in range(2):
                     self.blocked("dirty")
+
+    def test_notice_receipt_nul_scope_after_three_paths_report_stays_loud(self):
+        self.track()
+        for name in ("foreign a", "foreign-b", "ours"):
+            (self.repo / name).write_text("unresolved fixture bytes\n")
+        self.blocked("3 unacknowledged")
+        original = gate.load_state(self.state)
+        entry = original["repos"][str(self.repo)]
+        reviewed = gate.receipt_manifest("fixture", self.repo, entry,
+                                        gate.repo_signature(self.repo, with_identity=True))
+        for field in ("session", 0, 3, 6):
+            with self.subTest(scope_field=field):
+                state = json.loads(json.dumps(original))
+                manifest = json.loads(json.dumps(reviewed))
+                if field == "session":
+                    manifest["session"] = "\x00"
+                else:
+                    manifest["worktree"][field] += "\x00"
+                state["repos"][str(self.repo)]["receipt"] = {
+                    "manifest": manifest, "digest": gate.digest(manifest), "invalidated": []}
+                gate.save_state(self.state, state)
+                for _ in range(2):
+                    self.blocked("3 unacknowledged")
+                current = gate.load_state(self.state)["repos"][str(self.repo)]
+                self.assertEqual(current["baseline"], entry["baseline"])
+                self.assertEqual(current["receipt"]["manifest"], manifest)
+                self.assertEqual(gate.acknowledged_paths("fixture", self.repo, current,
+                                                       gate.repo_signature(self.repo, with_identity=True)), set())
 
     def test_notice_receipt_nul_path_stays_loud_without_repair(self):
         self.fixture()

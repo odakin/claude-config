@@ -427,41 +427,6 @@ def prune_stale_state(directory: Path) -> None:
             continue
 
 
-def notice_write_attempt(event: dict[str, Any], writes: dict[str, set[str]] | None) -> bool:
-    """Recognize a write attempt without classifying arbitrary Bash as safe."""
-    if event.get("tool_name") == "apply_patch" or (writes and any(writes.values())):
-        return True
-    for component in command_text(event).split("&&"):
-        if SHELL_SPECIAL.search(component):
-            continue
-        try:
-            words = shlex.split(component)
-        except ValueError:
-            continue
-        if words[:1] != ["git"]:
-            continue
-        if words[1:2] == ["-C"] and len(words) >= 4:
-            words = [words[0], *words[3:]]
-        if len(words) < 2:
-            continue
-        verb, args = words[1], words[2:]
-        if ("--help" in args or "-h" in args or "--dry-run" in args
-            or (verb in {"add", "push", "clean"} and "-n" in args)
-            or (verb == "apply" and "--apply" not in args
-                and any(arg in args for arg in ("--check", "--stat", "--numstat", "--summary")))):
-            continue
-        if (verb in {"add", "commit", "push", "apply", "am", "checkout", "switch",
-                     "reset", "restore", "rm", "mv", "merge", "rebase", "cherry-pick", "revert", "clean"}
-            or (verb == "stash" and args[:1] not in (["list"], ["show"]))
-            or (verb == "branch" and any(arg in {"-d", "-D", "-m", "-M", "-c", "-C",
-                                                "--delete", "--move", "--copy", "--unset-upstream"}
-                                        or arg.startswith("--set-upstream-to") for arg in args))
-            or (verb == "remote" and args[:1] in (["add"], ["remove"], ["rm"], ["rename"],
-                                                 ["set-head"], ["set-branches"], ["set-url"], ["prune"], ["update"]))):
-            return True
-    return False
-
-
 def track(event: dict[str, Any]) -> int:
     if event.get("hook_event_name") not in {"PreToolUse", "PostToolUse"}:
         return 0
@@ -512,16 +477,6 @@ def track(event: dict[str, Any]) -> int:
                     else:
                         entry["unknown_write"] = True
                         entry["receipt"] = None
-            if before and notice_write_attempt(event, writes):
-                # Re-arm once for a newly observed write attempt, even if the
-                # tool fails or leaves the bytes unchanged. PostToolUse does
-                # not count the same attempt a second time. Unknown Bash
-                # still relies on the actual Git/file snapshots at Stop.
-                for key, entry in repos.items():
-                    if isinstance(entry, dict) and (writes is None or key in {str(root) for root in roots}):
-                        generation = entry.get("notice_write_generation", 0)
-                        if type(generation) is int and generation >= 0:
-                            entry["notice_write_generation"] = generation + 1
             if repos:
                 save_state(path, state)
     except OSError:
@@ -691,6 +646,8 @@ def repo_issues(root: Path, entry: dict[str, Any], session: str = "",
         changed_status = bool(current.get("dirty_count")) or current.get("status_hash") != baseline.get("status_hash")
     had_receipt = "receipt" in entry
     accepted = acknowledged_paths(session, root, entry, current) if had_receipt else set()
+    if observation is not None:
+        observation["accepted_paths"] = sorted(accepted)
     if not current.get("dirty_count"):
         entry.pop("receipt", None)
     own_paths = entry.get("own_paths")
@@ -791,11 +748,12 @@ def notice_receipt_valid(receipt: Any) -> bool:
         return False
     manifest = receipt["manifest"]
     identity = manifest["worktree"]
-    if (not isinstance(manifest["session"], str) or not manifest["session"]
+    if (not isinstance(manifest["session"], str) or not manifest["session"] or "\x00" in manifest["session"]
         or not isinstance(identity, list) or len(identity) != 7
-        or not all(isinstance(identity[i], str) and Path(identity[i]).is_absolute() for i in (0, 3))
+        or not all(isinstance(identity[i], str) and "\x00" not in identity[i]
+                   and Path(identity[i]).is_absolute() for i in (0, 3))
         or not all(type(identity[i]) is int and identity[i] >= 0 for i in (1, 2, 4, 5))
-        or not isinstance(identity[6], str) or not identity[6].startswith("refs/heads/")
+        or not isinstance(identity[6], str) or "\x00" in identity[6] or not identity[6].startswith("refs/heads/")
         or len(identity[6]) <= len("refs/heads/")
         or not isinstance(manifest["epoch"], str)
         or re.fullmatch(r"[0-9a-f]{32}(?:[0-9a-f]{32})?", manifest["epoch"]) is None
@@ -815,8 +773,10 @@ def dirty_notice_manifest(
 ) -> dict[str, Any] | None:
     """Identify a repeated notification, never an approved dirty-state exception.
 
-    Only exact, readable, stable dirt since the last observed write attempt
-    is eligible, regardless of ownership. Other Git issues remain loud.
+    Full snapshots must still be readable and stable. Only the unresolved
+    path set and repository scope identify repeated dirt notifications.
+    Content/index/mode changes and writes to the same paths do not re-arm.
+    Other Git issues remain loud.
     """
     if not session or fcntl is None:
         return None
@@ -832,17 +792,19 @@ def dirty_notice_manifest(
                 or re.fullmatch(r"[0-9a-f]{32}(?:[0-9a-f]{32})?", entry["epoch"]) is None))
             or ("receipt" in entry and not notice_receipt_valid(receipt))):
             return None
-        generation = entry.get("notice_write_generation", 0)
-        if (type(generation) is not int or generation < 0 or len(issues) != 1
+        accepted = observation.get("accepted_paths")
+        if (len(issues) != 1
             or not issues[0].startswith(f"{root}: dirty (")
             or not isinstance(current, dict) or not isinstance(current.get("paths"), dict)
             or not isinstance(current.get("identity"), list)
             or not isinstance(own_paths, list) or not all(isinstance(p, str) for p in own_paths)
+            or not isinstance(accepted, list) or not all(isinstance(p, str) for p in accepted)
+            or not set(accepted) <= set(current["paths"])
             or repo_signature(root, with_identity=True) != current):
             return None
-        repos[str(root)] = {"snapshot": current,
-                            "epoch": entry.get("epoch") or digest(entry.get("baseline")),
-                            "receipt": receipt, "write_generation": generation, "issues": issues}
+        repos[str(root)] = {"head": current["head"], "worktree": current["identity"],
+                            "unresolved_paths": sorted(set(current["paths"]) - set(accepted)),
+                            "epoch": entry.get("epoch") or digest(entry.get("baseline"))}
     if not repos:
         return None
     return {"version": 1, "session": session,
