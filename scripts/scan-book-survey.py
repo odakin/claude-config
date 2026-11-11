@@ -210,6 +210,20 @@ def estimate_offset(doc, pages: list[int]) -> tuple[list[tuple[int, list[int]]],
     return seen, sorted(diffs.items(), key=lambda kv: -kv[1])
 
 
+def offset_shift_note(seen: list[tuple[int, list[int]]]) -> str | None:
+    """範囲の中で差 (PDF − ノンブル) が 2 つ以上、 どれも 2 頁以上で出たら、 差ごとの PDF の頁の範囲を 1 行で返す。
+    差は本の途中で変わることがある (実測) = 1 か所で測った差を本全体に当てないための知らせ。"""
+    pages_of: dict[int, list[int]] = {}
+    for p, nums in seen:
+        for x in nums:
+            pages_of.setdefault(p - x, []).append(p)
+    multi = sorted(((d, ps) for d, ps in pages_of.items() if len(ps) >= 2), key=lambda kv: min(kv[1]))
+    if len(multi) < 2:
+        return None
+    parts = [f"差 {d} = PDF p{min(ps)}–{max(ps)} ({len(ps)} 頁)" for d, ps in multi]
+    return "⚠️ この範囲の中で差が変わる: " + " / ".join(parts) + "。 引く頁ごとに柱かノンブルを画像で読む"
+
+
 def digest(doc, color: bool = True, kws: list[tuple[str, str]] | None = None, colophon_chars: int = 900) -> str:
     n = doc.page_count
     lines = [f"pages={n} producer={doc.metadata.get('producer')}"]
@@ -343,6 +357,9 @@ def selftest() -> int:
     check(find_pages(d, r"sample\s*term") == [3, 4, 5, 6], f"find {find_pages(d, r'sample term')}")
     _, diffs = estimate_offset(d, parse_pages("3-6", d.page_count))
     check(diffs and diffs[0] == (2, 4), f"offset {diffs}")
+    check(offset_shift_note([(p, [p - 2]) for p in range(3, 7)]) is None, "offset constant: no note")
+    shifted = offset_shift_note([(p, [p - 6]) for p in range(20, 24)] + [(p, [p - 3]) for p in range(90, 93)] + [(95, [1])])
+    check(shifted is not None and "差 6 = PDF p20–23" in shifted and "差 3 = PDF p90–92" in shifted, f"offset shift note {shifted}")
     dg = digest(d, color=False, kws=[("st", "sample")])
     check("colophon candidates: [7]" in dg, "colophon candidate")
     check("toc candidates: [1]" in dg, "toc candidate")
@@ -414,6 +431,9 @@ def main(argv: list[str] | None = None) -> int:
         for p, nums in seen:
             print(p, nums)
         print("PDF − ノンブル (頻度順):", diffs[:3] or "推定できず (数字だけのブロックが無い)")
+        note = offset_shift_note(seen)
+        if note:
+            print(note)
     elif a.cmd == "render":
         out = a.out_dir or default_out_dir()
         for o in render_pages(doc, a.pdf, parse_pages(a.pages, doc.page_count), a.zoom, _pair(a.clip), out):

@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 共同 PDF を Dropbox に置いてリポから symlink 参照するとき + 論文が引く文献の写しの所在を repo に持たせるとき (#per-reference-copy-table)
+when: 共同 PDF を Dropbox に置いてリポから symlink 参照するとき + 論文が引く文献の写しの所在を repo に持たせるとき (#per-reference-copy-table) + 共有フォルダの写しが記録した sha256 と合わないとき (#annotated-copy-hash)
 category: infra
 summary: 共同 PDF を Dropbox に置いてリポから symlink で参照する規約 (§10 で OneDrive / Google Drive 等の他クラウド + 索引自動生成 launchd gotchas へ応用。 §11 同期中 file は「元の状態」の証拠にならない = 時系列主張は immutable スナップショットで #live-sync-no-timeline-evidence、 §12 相手側にも AI がいる並行作業 = zone 分担 + commit された note が交換 channel + 自 commit 除外 monitor + 独立再計算の交差検証 #counterpart-ai-parallel-work、 §13 共有 script の OS 絶対パス hardcode = POSIX では `C:\...` が literal 名 file として cwd に生まれ同期エラー化 + 同期エラー表示の「パスに見える file 名」を他マシン起源と誤読する前にローカル 1 find + de-hardcode は出力側 write call の grep 完了まで #cross-platform-path-hardcode)
 -->
@@ -396,3 +396,4 @@ Dropbox で共有する script に片方の OS の絶対パスを hardcode す�
 - **共有フォルダの外の個人の path を表に書かない** — 共有層から narrower な層へ path を張らない ([`docs/personal-layer.md`](../docs/personal-layer.md))。 手元にしか無い写しは file 名だけを書く
 - **写しの場所を `.bib` に書かない** — 表と二重になる
 - **保ち方** — 引用を足した turn で行を足す。 表の鍵と原稿の引用の過不足を見る小さな検査を repo に置く
+- <a id="annotated-copy-hash"></a>**共有フォルダの写しは、 だれかが注釈 (印・下線・付箋・書き込み) を付けると file の sha256 が変わる** (実測)。 sha256 の不一致は「版が違う」 とも「注釈が増えた」 とも合うので、 版の照合を sha256 だけに頼らない。 記録と照合の道具には、 注釈に依らない確かめを併せて持たせる = 頁数、 PDF に刷られた版の印 (arXiv の押印の番号と版)、 注釈を外した頁ごとの文字の hash。 文字の hash は、 写しを開いて注釈を全部消した写しを memory の上で作ってから頁ごとに取る: 印・下線・付箋・手書きの線は頁の文字を変えないが、 文字を打ち込む型の注釈 (テキストボックス) は抽出した文字に混じる (実測、 PyMuPDF の `get_text`)。 注釈を頁に焼き込む保存 (平坦化) をした写しでは、 文字の層も変わる。 一致すれば同じ版に注釈が増えただけとして記録に書き、 外れれば版が違うものとして読み直す

@@ -74,7 +74,7 @@ claude-config/
 │   ├── downloaded-file-scan.md             # ネットから落とした file (browser で取得した PDF・zip・Office・script、 メールの添付、 curl / wget の取得物) を repo や作業 dir に取り込む前・開く前 + 取り込んだ file の来歴に安全検査の 1 行を書くとき + 「ウイルスチェックして」 と頼まれたとき + 取り込みを止める hook (downloaded-file-import-guard) に止められたとき + ClamAV を入れるか決めるとき
 │   ├── dropbox-api-access.md               # Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload) + 共同編集者から「Dropbox の容量がいっぱい」 と言われ、 自分の共有フォルダが相手の容量をどれだけ使っているかを量るとき + 共有フォルダに大きいデータを足す前 (#shared-folder-quota) + 共有フォルダの重い中身を自分だけのフォルダへ移すとき・容量のいっぱいな相手から大きい file を受け取るとき (#split-shared-folder-keep-paths)
 │   ├── dropbox-placeholder-diagnosis.md    # Dropbox 配下の file が 0 byte に見えたとき + 読むのに時間がかかる・`ls -lO` に `dataless` と出るとき (#file-provider-dataless) + Dropbox の多数の file を script で読む前
-│   ├── dropbox-refs.md                     # 共同 PDF を Dropbox に置いてリポから symlink 参照するとき + 論文が引く文献の写しの所在を repo に持たせるとき (#per-reference-copy-table)
+│   ├── dropbox-refs.md                     # 共同 PDF を Dropbox に置いてリポから symlink 参照するとき + 論文が引く文献の写しの所在を repo に持たせるとき (#per-reference-copy-table) + 共有フォルダの写しが記録した sha256 と合わないとき (#annotated-copy-hash)
 │   ├── email-surface-pattern.md            # 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき + 会員サービスからの情報流出のお詫びが網から落ちたとき (#vendor-breach-notice-class) + 止まっている待ちの項目を棚卸しするとき (#waiting-item-answer-elsewhere) + 当番が年ごとに替わる会の案内 (出欠のフォーム) を最初の便で拾う網を作るとき (#recurring-event-invitation)
 │   ├── erad-submission.md                  # e-Rad 経由で研究費 (JST・科研費・財団等) に応募するとき
 │   ├── exam-grading-return.md              # 紙で実施した小テスト・試験の解答用紙を写真から採点して返すとき + 部分点の決まり (答えだけ・途中の誤り・誤りの引き継ぎ) を決める・直すとき + 解答用紙の写真に赤で点と直し方を書き込むとき + 一人ずつ点と添付が違う返却メールを送るとき + クラス全体に平均・中央値・標準偏差を知らせるとき + 返却の後に解説つきの解答を作って配るとき (#explained-solutions)
@@ -212,7 +212,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (442 file + formcase/ 26 module + lib/ 84 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (443 file + formcase/ 26 module + lib/ 84 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式

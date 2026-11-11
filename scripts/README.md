@@ -194,6 +194,7 @@
 - **[generate-doc-index.py](generate-doc-index.py)** — regenerate a slug index FROM its markdown, so Claude writes
 - **[generate-tree.py](generate-tree.py)** — CLAUDE.md 構造 tree (conventions/hooks/scripts) + CONVENTIONS.md 冒頭列挙 +
 - **[generate-trigger-table.py](generate-trigger-table.py)** — 全文の markdown table (源) から、 auto-load 面に置く「trigger + ⚠️ だけ」 の表を marker の間に生成する (--write / --check / --selftest)
+- **[git-amend-shared-clone.py](git-amend-shared-clone.py)** — 並列の session が居うる clone での git commit --amend と、 直前の commit の成否に繋がらない git push を止める PreToolUse(Bash) の述語と本体 (find_issues(command) = 校正の道具が呼ぶ形、 --selftest)。 規約 = conventions/multi-session-coordination.md#no-amend-in-shared-worktree / #confirm-commit-landed
 - **[git-commit-own-hunk.mutants.json](git-commit-own-hunk.mutants.json)** — git-commit-own-hunk.py の selftest の foil に歯があることを、 修正の一部を外した mutant 18 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[git-commit-own-hunk.py](git-commit-own-hunk.py)** — 同じ file に別の session の未 commit の変更が居る時に、 自分の変更だけを commit する (一時 index。 作業 tree の相手の変更は触らない)。
 - **[git-drop-path-history.py](git-drop-path-history.py)** — ある file の全版を git の履歴から落とす (不可逆) を、 予行演習・本番・他 machine の追従の 3 段で安全に行う。
