@@ -37,6 +37,11 @@
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/first_prompt_stamp.py\"",
             "timeout": 8
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/session_touch.py\" acknowledge",
+            "timeout": 12
           }
         ]
       },

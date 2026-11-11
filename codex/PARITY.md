@@ -235,16 +235,36 @@ PostToolUse fallback treats such an observation conservatively. Pre-existing,
 unchanged dirty state is not attributed to this task, and repositories with no
 remote are left to the documented exception path. Git-side content gates and
 the instruction entry points therefore remain authoritative alongside this
-turn-end guard. The fifth limit is attribution within a shared checkout: the
-baseline stores one hash of the porcelain status for the whole repository, not
-per-path authorship. Committing the task files while unrelated dirt remains, or
-another writer changing the dirty set, can keep the aggregate signature different.
-The warning reports repository state; it does not establish that every remaining
-path was changed by this task. A reported exception is not persisted as an
-acknowledgement, so a later read-only turn can receive the warning again. Use the
-semantic rule's explicit exception report for that case; never stage unrelated
-work to make the warning disappear. Changing the acknowledgement predicate needs
-separate rule-owner authorization and regression controls for new task changes.
+turn-end guard. The fifth limit is attribution within a shared checkout. The hook snapshots
+the dirty path set, HEAD and index entries, and regular worktree file content
+when readable. The current dirty count does not establish who made a change.
+
+For an already reported foreign-dirt exception, inspect the exact diff and
+verify who owns the listed paths as required by the semantic rule. To display
+a manifest without changing state, feed `session_touch.py review` a JSON object
+with this native `session_id` and the repository's `cwd`. The display excludes
+paths the tracker knows this task wrote. It flags incomplete attribution,
+including legacy tracking. Present the reviewed paths and its
+`git-gate-ack <digest>` line to the owner. Only the exact line as the owner's
+next native prompt records the exception. Git state is sampled again before
+recording the manifest. The hook relies on the client to deliver the native
+`UserPromptSubmit` event and on the owner to affirm who owns the exact
+diff. It does not authenticate arbitrary processes running under the same
+OS account.
+
+An exception applies to the reviewed fingerprints only, within the same
+session, worktree and branch, on the same local calendar day. A new or
+changed path, a path the task is known to have written, or an unreadable
+snapshot stays in the check. Receipts require readable regular files or
+deletions with an accessible parent directory. A path invalidated by an observed change does
+not regain its exception by returning to the old bytes. A new explicit
+confirmation can acknowledge a newly reviewed manifest. Unclassified tool
+calls do not establish authorship and cannot extend an exception to changed
+bytes. The original baseline, commit and push checks, and live remote
+comparison still apply. Legacy state can be reviewed and acknowledged
+without changing its baseline. This keeps the exact exception visible to
+the owner when it is first made without repeating it in later read-only
+turns.
 
 `codex-hooks.test.sh` supplies negative controls for dirty completion,
 commit-only/ahead completion, a later separate push, and behind state. The

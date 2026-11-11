@@ -17,19 +17,33 @@ Codex coverage: codex/PARITY.md#completion-git-gate-hook.
 
 from __future__ import annotations
 
+import contextlib
+import datetime
 import hashlib
 import json
 import os
 import re
+import secrets
 import shlex
+import stat
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
+try:
+    import fcntl
+except ImportError:
+    fcntl = None  # Legacy gate still runs where locking is unavailable.
+
 PRUNE_AGE_SECONDS = 30 * 24 * 60 * 60
-PATCH_PATH_RE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.MULTILINE)
+PATCH_PATH_RE = re.compile(r"^\*\*\* (?:(?:Add|Update|Delete) File|Move to): (.+)$", re.MULTILINE)
+ACK_RE = re.compile(r"git-gate-ack ([0-9a-f]{64})")
+SNAPSHOT_BYTES = 16 * 1024 * 1024
+# A simple argv or a chain of simple Git commands only. Shell expansions,
+# redirects, variables, and unfamiliar forms cannot establish path ownership.
+SHELL_SPECIAL = re.compile(r"[\n\r;&|<>$`*?{}()~#\\]")
 GIT_COMMIT_RE = re.compile(r"(?:^|[;&|]\s*|\s)git(?:\s+-C\s+\S+)?\s+commit(?:\s|$)")
 GIT_PUSH_RE = re.compile(r"(?:^|[;&|]\s*|\s)git(?:\s+-C\s+\S+)?\s+push(?:\s|$)")
 
@@ -63,6 +77,7 @@ def run_git(root: str | Path, *args: str, timeout: int = 8) -> subprocess.Comple
             check=False,
             capture_output=True,
             text=True,
+            errors="surrogateescape",
             timeout=timeout,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -117,31 +132,285 @@ def target_repositories(event: dict[str, Any]) -> set[Path]:
     return {root for path in paths if (root := git_root(path.resolve())) is not None}
 
 
-def repo_signature(root: Path) -> dict[str, Any] | None:
-    head = run_git(root, "rev-parse", "HEAD", timeout=3)
-    status = run_git(root, "status", "--porcelain=v1", "--untracked-files=all", timeout=3)
-    if head is None or status is None or head.returncode != 0 or status.returncode != 0:
+def digest(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def file_stamp(info: os.stat_result) -> tuple[int, ...]:
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+            info.st_mtime_ns, info.st_ctime_ns)
+
+
+def literal_rel(root: Path, value: str) -> str:
+    """Validate the path without following symlinks into another tree."""
+    path = Path(value)
+    if path.is_absolute():
+        path = path.relative_to(root)
+    if not path.parts or any(part in (".", "..", ".git") for part in path.parts):
+        raise ValueError("not a literal worktree path")
+    full = root / path
+    if full.resolve() != full:
+        raise ValueError("path has a symlink component")
+    return path.as_posix()
+
+
+def file_snapshot(root: Path, rel: str, remaining: int) -> tuple[list[Any], tuple[int, ...] | None, int]:
+    if not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd:
+        raise ValueError("safe file reads are unavailable")
+    directories = os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
+    parent = os.open(root, directories)
+    try:
+        *folders, name = Path(rel).parts
+        for folder in folders:
+            child = os.open(folder, directories, dir_fd=parent)
+            os.close(parent)
+            parent = child
+        try:
+            before = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            return ["absent"], None, 0
+        if not stat.S_ISREG(before.st_mode) or before.st_size > remaining:
+            raise ValueError("unsupported or oversized worktree file")
+        fd = os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=parent)
+        with os.fdopen(fd, "rb") as fh:
+            stamp = file_stamp(before)
+            if file_stamp(os.fstat(fh.fileno())) != stamp:
+                raise ValueError("file changed while opening")
+            contents = fh.read(before.st_size + 1)
+            if len(contents) != before.st_size or file_stamp(os.fstat(fh.fileno())) != stamp:
+                raise ValueError("file changed while reading")
+        return ["regular", stat.S_IMODE(before.st_mode), hashlib.sha256(contents).hexdigest()], stamp, len(contents)
+    finally:
+        os.close(parent)
+
+
+def status_output(root: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "--no-optional-locks", "status", "--porcelain=v2",
+             "-z", "--no-renames", "--untracked-files=all"],
+            capture_output=True, timeout=1,
+        )
+    except (OSError, subprocess.TimeoutExpired):
         return None
-    porcelain = status.stdout
-    return {
-        "head": head.stdout.strip(),
-        "status_hash": hashlib.sha256(porcelain.encode("utf-8")).hexdigest(),
-        "dirty_count": len(porcelain.splitlines()),
-    }
+    return os.fsdecode(result.stdout) if result.returncode == 0 else None
 
 
-def load_state(path: Path) -> dict[str, Any]:
+def repo_signature(root: Path, *, with_identity: bool = False) -> dict[str, Any] | None:
+    head = run_git(root, "rev-parse", "--verify", "HEAD", timeout=1)
+    raw = status_output(root)
+    if head is None or head.returncode or raw is None:
+        return None
+    rows = raw.split("\0")[:-1]
+    identity = worktree_identity(root) if with_identity and rows else None
+    result = {"head": head.stdout.strip(), "status_hash": digest(raw),
+              "dirty_count": len(rows), "paths": None}
+    paths: dict[str, str] = {}
+    stamps: dict[str, tuple[int, ...] | None] = {}
+    remaining = SNAPSHOT_BYTES
+    try:
+        for row in rows:
+            # v2 ordinary entries include all HEAD and index modes and blob IDs.
+            # Renames are separate delete/add entries. Conflicts, submodules,
+            # symlinks and unusual Git modes cannot receive a receipt.
+            if row.startswith("1 "):
+                parts = row.split(" ", 8)
+                if len(parts) != 9 or parts[2] != "N..." or any(
+                    mode not in {"000000", "100644", "100755"} for mode in parts[3:6]
+                ):
+                    return result
+                meta, name = parts[:8], parts[8]
+            elif row.startswith("? "):
+                meta, name = ["?"], row[2:]
+            else:
+                return result
+            rel = literal_rel(root, name)
+            if rel != name or rel in paths:
+                return result
+            worktree, stamp, size = file_snapshot(root, rel, remaining)
+            remaining -= size
+            paths[rel] = digest([meta, worktree])
+            stamps[rel] = stamp
+        # A changed listing or a file changed while a sibling was hashed makes
+        # this snapshot unusable. Always validate HEAD again when there is dirt.
+        if rows:
+            if status_output(root) != raw:
+                return result
+            check_head = run_git(root, "rev-parse", "--verify", "HEAD", timeout=1)
+            if check_head is None or check_head.returncode or check_head.stdout != head.stdout:
+                return result
+            for rel, before in stamps.items():
+                try:
+                    after = file_stamp((root / literal_rel(root, rel)).lstat())
+                except FileNotFoundError:
+                    after = None
+                if before != after:
+                    return result
+    except (OSError, RuntimeError, ValueError):
+        return result
+    result["paths"] = paths
+    if identity is not None and worktree_identity(root) == identity:
+        result["identity"] = identity
+    return result
+
+
+def worktree_identity(root: Path) -> list[Any] | None:
+    branch = run_git(root, "symbolic-ref", "--quiet", "HEAD", timeout=1)
+    gitdir = run_git(root, "rev-parse", "--absolute-git-dir", timeout=1)
+    if branch is None or branch.returncode or gitdir is None or gitdir.returncode:
+        return None
+    try:
+        if git_root(root) != root:
+            return None
+        git_path = Path(gitdir.stdout.rstrip("\n")).resolve(strict=True)
+        git_stat, root_stat = git_path.stat(), root.stat()
+        return [str(root), root_stat.st_dev, root_stat.st_ino, str(git_path),
+                git_stat.st_dev, git_stat.st_ino, branch.stdout.strip()]
+    except (OSError, RuntimeError):
+        return None
+
+
+def git_paths_from_tool(event: dict[str, Any], roots: set[Path]) -> dict[str, set[str]] | None:
+    """Paths a supported tool invocation can write, or None when uncertain."""
+    command = command_text(event)
+    data = event.get("tool_input")
+    cwd = Path(str((data.get("workdir") if isinstance(data, dict) else None)
+                   or event.get("cwd", "."))).resolve()
+    touched: dict[str, set[str]] = {}
+    def remember(values: list[str], directory: Path) -> None:
+        for value in values:
+            if not value or value.startswith(("-", ":")) or SHELL_SPECIAL.search(value):
+                raise ValueError("nonliteral path")
+            full = directory / value
+            root = git_root(full)
+            if root is None or root not in roots or full.is_dir():
+                raise ValueError("unresolved path")
+            touched.setdefault(str(root), set()).add(literal_rel(root, str(full)))
+    try:
+        if event.get("tool_name") == "apply_patch":
+            targets = PATCH_PATH_RE.findall(command)
+            if not targets or not command.startswith("*** Begin Patch\n"):
+                return None
+            remember(targets, cwd)
+            return touched
+        for component in command.split("&&"):
+            if SHELL_SPECIAL.search(component):
+                return None
+            words = shlex.split(component)
+            if not words or words[0] != "git":
+                return None
+            base = cwd
+            if words[1:2] == ["-C"] and len(words) >= 4:
+                base = (cwd / words[2]).resolve()
+                words = [words[0], *words[3:]]
+            verb, *args = words[1:]
+            if verb in {"status", "diff", "log", "rev-parse", "ls-remote", "show",
+                        "branch", "remote", "fetch", "push"}:
+                # branch and remote have mutating forms; only accept their
+                # explicit read-only forms here. Checkout changes are unknown.
+                if verb == "branch" and args not in ([], ["--show-current"]):
+                    return None
+                if verb == "remote" and args not in ([], ["-v"]):
+                    return None
+                if any(arg.startswith(("--ext-diff", "--textconv", "--output",
+                                       "--exec", "--receive-pack", "--upload-pack")) for arg in args):
+                    return None
+            elif verb == "add":
+                remember(args[1:] if args[:1] == ["--"] else args, base)
+                if not args or args == ["--"]:
+                    return None
+            elif verb == "commit" and args[:1] == ["-m"] and len(args) >= 2:
+                if len(args) > 2:
+                    if args[2] != "--" or len(args) < 4:
+                        return None
+                    remember(args[3:], base)
+                else:
+                    staged = run_git(base, "diff", "--cached", "--name-only", "--no-renames", "-z", timeout=1)
+                    if staged is None or staged.returncode:
+                        return None
+                    root = git_root(base)
+                    if root is None:
+                        return None
+                    remember(staged.stdout.split("\0")[:-1], root)
+            else:
+                return None
+        return touched
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def receipt_manifest(session: str, root: Path, entry: dict[str, Any],
+                     current: dict[str, Any]) -> dict[str, Any] | None:
+    paths = current.get("paths")
+    own_paths = entry.get("own_paths", [])
+    baseline = entry.get("baseline")
+    identity = current.get("identity")
+    if (not session or not isinstance(paths, dict) or not isinstance(own_paths, list)
+        or not all(isinstance(p, str) for p in own_paths)
+        or not isinstance(baseline, dict) or not isinstance(identity, list)
+        or not identity or identity[0] != str(root)):
+        return None
+    # A legacy tracker has no epoch or per-path history. Bind to its original
+    # baseline instead. An explicit owner confirmation is required either way.
+    epoch = entry.get("epoch") or digest(baseline)
+    day = datetime.datetime.now().astimezone().date().isoformat()
+    eligible = {path: value for path, value in paths.items() if path not in own_paths}
+    return ({"session": session, "worktree": identity, "epoch": epoch,
+             "day": day, "paths": eligible} if eligible else None)
+
+
+def acknowledged_paths(session: str, root: Path, entry: dict[str, Any],
+                       current: dict[str, Any]) -> set[str]:
+    receipt = entry.get("receipt")
+    if not isinstance(receipt, dict) or set(receipt) != {"digest", "manifest", "invalidated"}:
+        return set()
+    stored = receipt["manifest"]
+    invalidated = receipt["invalidated"]
+    if (not isinstance(stored, dict) or digest(stored) != receipt["digest"]
+        or not isinstance(stored.get("paths"), dict) or not isinstance(invalidated, list)
+        or not all(isinstance(path, str) for path in invalidated)):
+        return set()
+    fresh = receipt_manifest(session, root, entry, current)
+    keys = ("session", "worktree", "epoch", "day")
+    comparable = fresh is not None and all(stored.get(key) == fresh[key] for key in keys)
+    unchanged = {path for path, fingerprint in stored["paths"].items()
+                 if comparable and fresh["paths"].get(path) == fingerprint and path not in invalidated}
+    # Record observed changes, even if bytes later return to the reviewed value.
+    receipt["invalidated"] = sorted(set(stored["paths"]) - unchanged)
+    return unchanged
+
+
+def load_state(path: Path) -> dict[str, Any] | None:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except FileNotFoundError:
         return {"version": 1, "repos": {}}
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
     if not isinstance(value, dict) or not isinstance(value.get("repos"), dict):
-        return {"version": 1, "repos": {}}
+        return None
     return value
 
 
 def save_state(path: Path, state: dict[str, Any]) -> None:
-    path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
+    temporary = path.with_name(path.name + "." + secrets.token_hex(8) + ".tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as stream:
+            json.dump(state, stream, sort_keys=True)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+@contextlib.contextmanager
+def state_lock(path: Path):
+    if fcntl is None:
+        yield False
+        return
+    # A separately stored lock remains valid across atomic state replacement.
+    with path.with_suffix(".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield True
 
 
 def prune_stale_state(directory: Path) -> None:
@@ -152,7 +421,7 @@ def prune_stale_state(directory: Path) -> None:
         return
     for path in entries:
         try:
-            if path.is_file() and path.stat().st_mtime < cutoff:
+            if path.suffix == ".json" and path.is_file() and path.stat().st_mtime < cutoff:
                 path.unlink()
         except OSError:
             continue
@@ -164,8 +433,6 @@ def track(event: dict[str, Any]) -> int:
     if event.get("tool_name") not in {"Bash", "apply_patch"}:
         return 0
     roots = target_repositories(event)
-    if not roots:
-        return 0
     before = event.get("hook_event_name") == "PreToolUse"
     command = command_text(event)
     split_commit = bool(GIT_COMMIT_RE.search(command) and not GIT_PUSH_RE.search(command))
@@ -174,26 +441,105 @@ def track(event: dict[str, Any]) -> int:
         directory.mkdir(parents=True, exist_ok=True)
         prune_stale_state(directory)
         path = state_path(event)
-        state = load_state(path)
-        repos = state["repos"]
-        for root in roots:
-            key = str(root)
-            entry = repos.get(key)
-            if not isinstance(entry, dict):
-                signature = repo_signature(root)
-                if signature is None:
-                    continue
-                entry = {
-                    "baseline": signature,
-                    "post_only_fallback": not before,
-                    "commit_without_push": False,
-                }
-                repos[key] = entry
-            if split_commit:
-                entry["commit_without_push"] = True
-        save_state(path, state)
+        with state_lock(path) as locked:
+            state = load_state(path)
+            if state is None:
+                return 0
+            repos = state["repos"]
+            writes = git_paths_from_tool(event, roots) if locked else None
+            for root in roots:
+                key = str(root)
+                entry = repos.get(key)
+                if not isinstance(entry, dict):
+                    signature = repo_signature(root)
+                    entry = {
+                        "baseline": signature,
+                        "post_only_fallback": not before,
+                        "commit_without_push": False,
+                        "epoch": secrets.token_hex(16),
+                        "unknown_write": not before,
+                        "own_paths": [],
+                    }
+                    repos[key] = entry
+                if split_commit:
+                    entry["commit_without_push"] = True
+            if writes is None:
+                # An unresolved tool can write outside its reported cwd.
+                for entry in repos.values():
+                    if isinstance(entry, dict):
+                        entry["unknown_write"] = True
+            else:
+                for key, names in writes.items():
+                    entry = repos[key]
+                    own_paths = entry.setdefault("own_paths", [])
+                    if isinstance(own_paths, list) and all(isinstance(path, str) for path in own_paths):
+                        entry["own_paths"] = sorted(set(own_paths) | names)
+                    else:
+                        entry["unknown_write"] = True
+                        entry["receipt"] = None
+            if repos:
+                save_state(path, state)
     except OSError:
         pass
+    return 0
+
+
+def review(event: dict[str, Any]) -> int:
+    """Print the current candidate for one explicit repo without recording it."""
+    session = event.get("session_id")
+    requested = event.get("cwd")
+    if not isinstance(session, str) or not session or not isinstance(requested, str):
+        return 2
+    root = git_root(Path(requested).resolve())
+    state = load_state(state_path(event))
+    entry = state["repos"].get(str(root)) if state is not None else None
+    if root is not None and isinstance(entry, dict) and fcntl is not None:
+        current = repo_signature(root, with_identity=True)
+        manifest = receipt_manifest(session, root, entry, current) if current is not None else None
+        if manifest is not None:
+            emit({"repository": str(root), "branch": manifest["worktree"][-1],
+                  "paths": manifest["paths"],
+                  "review": ("Confirm only after checking the exact current diff and verifying that"
+                             " every listed path belongs to someone else."),
+                  "tracking_incomplete": (entry.get("unknown_write", True)
+                                          or not isinstance(entry["baseline"].get("paths"), dict)),
+                  "owner_prompt": "git-gate-ack " + digest(manifest)})
+            return 0
+    print("No reviewable Git gate exception for this repository and session.", file=sys.stderr)
+    return 2
+
+
+def acknowledge(event: dict[str, Any]) -> int:
+    """Record an exact manifest only from the native user prompt lifecycle."""
+    prompt = event.get("prompt")
+    session = event.get("session_id")
+    if (event.get("hook_event_name") != "UserPromptSubmit" or not isinstance(prompt, str)
+        or not isinstance(session, str) or not session or not (match := ACK_RE.fullmatch(prompt.strip()))):
+        return 0
+    path = state_path(event)
+    found = False
+    try:
+        with state_lock(path) as locked:
+            state = load_state(path)
+            matches = []
+            for key, entry in state["repos"].items() if locked and state is not None else ():
+                if not isinstance(entry, dict):
+                    continue
+                root = Path(key)
+                current = repo_signature(root, with_identity=True)
+                manifest = receipt_manifest(session, root, entry, current) if current is not None else None
+                if manifest is not None and digest(manifest) == match[1]:
+                    matches.append((entry, manifest))
+            if len(matches) == 1:
+                entry, manifest = matches[0]
+                entry["receipt"] = {"digest": match[1], "manifest": manifest, "invalidated": []}
+                save_state(path, state)
+                found = True
+    except OSError:
+        pass
+    message = ("Recorded the reviewed Git gate state for this session." if found else
+               "Git gate acknowledgement did not match a currently reviewable snapshot. No exception recorded.")
+    emit({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": message}})
     return 0
 
 
@@ -238,10 +584,10 @@ def tracking_counts(root: Path) -> tuple[int, int] | None:
     return ahead, behind
 
 
-def remote_count(root: Path) -> int:
+def remote_count(root: Path) -> int | None:
     result = run_git(root, "remote", timeout=3)
     if result is None or result.returncode != 0:
-        return 0
+        return None
     return len([line for line in result.stdout.splitlines() if line])
 
 
@@ -278,41 +624,77 @@ def push_refused_by_checkout(root: Path, remote: str, merge_ref: str) -> bool:
     return value in ("", "refuse", "true")
 
 
-def repo_issues(root: Path, entry: dict[str, Any]) -> list[str]:
-    current = repo_signature(root)
+def repo_issues(root: Path, entry: dict[str, Any], session: str = "") -> list[str]:
+    current = repo_signature(root, with_identity="receipt" in entry)
     baseline = entry.get("baseline")
     if current is None or not isinstance(baseline, dict):
         return [f"{root}: Git state could not be read"]
-    changed = (
-        current.get("head") != baseline.get("head")
-        or current.get("status_hash") != baseline.get("status_hash")
-        or bool(entry.get("post_only_fallback"))
-        or bool(entry.get("commit_without_push"))
+    paths, initial_paths = current.get("paths"), baseline.get("paths")
+    if isinstance(paths, dict) and isinstance(initial_paths, dict):
+        changed_status = paths != initial_paths
+    elif "paths" not in baseline:
+        # Preserve version 1's original baseline comparison. Only a fresh,
+        # explicitly acknowledged manifest can establish exact path evidence.
+        status = run_git(root, "status", "--porcelain=v1", "--untracked-files=all", timeout=1)
+        if status is None or status.returncode:
+            return [f"{root}: Git state could not be read"]
+        changed_status = hashlib.sha256(status.stdout.encode("utf-8", errors="surrogateescape")).hexdigest() != baseline.get("status_hash")
+    else:
+        changed_status = bool(current.get("dirty_count")) or current.get("status_hash") != baseline.get("status_hash")
+    had_receipt = "receipt" in entry
+    accepted = acknowledged_paths(session, root, entry, current) if had_receipt else set()
+    if not current.get("dirty_count"):
+        entry.pop("receipt", None)
+    own_paths = entry.get("own_paths")
+    own_dirty = isinstance(paths, dict) and isinstance(own_paths, list) and any(
+        isinstance(path, str) and path in paths for path in own_paths
     )
+    unresolved_dirt = (changed_status or own_dirty or had_receipt
+                       or not isinstance(paths, dict)
+                       or bool(entry.get("post_only_fallback")))
+    changed = (current.get("head") != baseline.get("head") or changed_status
+               or bool(current.get("dirty_count") and unresolved_dirt)
+               or bool(entry.get("post_only_fallback")) or bool(entry.get("commit_without_push")))
     if not changed:
         return []
-
     issues: list[str] = []
-    if current.get("status_hash") != baseline.get("status_hash") and current.get("dirty_count"):
-        issues.append(f"{root}: dirty ({current['dirty_count']} path(s) differ from the pre-work baseline)")
+    unacknowledged = current.get("dirty_count", 0) - len(accepted)
+    if unacknowledged and unresolved_dirt:
+        detail = ("exact dirty state could not be read" if not isinstance(paths, dict)
+                  else "check which changes belong to this task")
+        issues.append(f"{root}: dirty ({unacknowledged} unacknowledged current path(s); {detail})")
+
+    def finish(verified_upstream: tuple[str, str, str] | None = None) -> list[str]:
+        if issues or not (accepted or verified_upstream):
+            return issues
+        latest = repo_signature(root, with_identity=had_receipt)
+        if (latest != current or
+            (verified_upstream is not None and upstream_info(root) != verified_upstream)):
+            if had_receipt:
+                acknowledged_paths(session, root, entry, latest or {})
+            issues.append(f"{root}: Git state changed during verification; retry the check")
+        return issues
 
     remotes = remote_count(root)
-    upstream = upstream_info(root)
-    if remotes == 0:
+    if remotes is None:
+        issues.append(f"{root}: configured remotes could not be read")
         return issues
+    if remotes == 0:
+        return finish()
+    upstream = upstream_info(root)
     if upstream is None:
         issues.append(f"{root}: remote exists but the current branch has no configured upstream")
         return issues
     branch, remote, merge_ref = upstream
     if push_refused_by_checkout(root, remote, merge_ref):
-        return issues
+        return finish()
     remote_head, remote_error = live_remote_head(root, remote, merge_ref)
     if remote_error:
         issues.append(f"{root}: live remote head could not be verified ({remote_error})")
         return issues
     local_head = str(current.get("head", ""))
     if local_head == remote_head:
-        return issues
+        return finish(upstream)
 
     counts = tracking_counts(root)
     if counts is None:
@@ -337,16 +719,32 @@ def nudge(event: dict[str, Any]) -> int:
         return 0
     path = state_path(event)
     state = load_state(path)
-    repos = state.get("repos", {})
+    session = event.get("session_id")
     issues: list[str] = []
-    for root_value, entry in repos.items():
+    if state is None:
+        issues.append("Git gate state could not be read")
+        state = {"repos": {}}
+    # The remote query can take time. Never hold the tracker lock while
+    # probing it; if a tracker changed the state meanwhile, leave it intact.
+    before = digest(state)
+    for root_value, entry in state["repos"].items():
         if isinstance(root_value, str) and isinstance(entry, dict):
-            issues.extend(repo_issues(Path(root_value), entry))
-    if not issues:
+            issues.extend(repo_issues(Path(root_value), entry, session if isinstance(session, str) else ""))
+        else:
+            issues.append("Git gate repository state is malformed")
+    keep = any(isinstance(entry, dict) and "receipt" in entry for entry in state["repos"].values())
+    if path.exists() or state["repos"]:
         try:
-            path.unlink(missing_ok=True)
+            with state_lock(path):
+                if digest(load_state(path)) != before:
+                    issues.append("Git gate state changed during verification; retry the check")
+                elif not issues and not keep:
+                    path.unlink(missing_ok=True)
+                elif digest(state) != before:
+                    save_state(path, state)
         except OSError:
-            pass
+            issues.append("Git gate state could not be verified")
+    if not issues:
         emit({})
         return 0
 
@@ -367,10 +765,10 @@ def nudge(event: dict[str, Any]) -> int:
 
 
 def main() -> int:
-    if len(sys.argv) != 2 or sys.argv[1] not in {"track", "nudge"}:
+    if len(sys.argv) != 2 or sys.argv[1] not in {"track", "nudge", "review", "acknowledge"}:
         return 2
     event = read_event()
-    return track(event) if sys.argv[1] == "track" else nudge(event)
+    return {"track": track, "nudge": nudge, "review": review, "acknowledge": acknowledge}[sys.argv[1]](event)
 
 
 if __name__ == "__main__":

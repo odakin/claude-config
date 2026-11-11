@@ -29,6 +29,10 @@ import sys
 
 hooks = json.load(open(sys.argv[1], encoding="utf-8"))["hooks"]
 assert any(
+    hook.get("command", "").endswith('session_touch.py" acknowledge')
+    for group in hooks["UserPromptSubmit"] for hook in group.get("hooks", [])
+)
+assert any(
     group.get("matcher") == "Bash"
     and any("session_provenance.py" in hook.get("command", "") for hook in group.get("hooks", []))
     for group in hooks["PreToolUse"]
@@ -403,6 +407,8 @@ make_touch_input "$TOUCH_REPO" prune-session PreToolUse Bash 'git status' \
   | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
 [ ! -e "$STALE_FILE" ]
 ls "$TEMP_ROOT/state"/*.json >/dev/null
+
+python3 -B "$SCRIPT_DIR/session_touch.test.py"
 
 PROVENANCE_STATE="$TEMP_ROOT/provenance-state"
 printf '%s' '{"hook_event_name":"SessionStart","session_id":"codex-test-session","model":"gpt-test"}' \
