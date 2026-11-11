@@ -70,8 +70,39 @@ HEREDOC_RE = re.compile(
     re.S)
 DASH_C_RE = re.compile(r"(?:^|[\s;&|(])(" + INTERP + r")\s+(?:-\w+\s+)*-[ce]\s+(['\"])(.*?)(?<!\\)\2", re.S)
 WRITES_FILE_RE = re.compile(r"open\([^)]*['\"][wa]['\"]|\.write_text\(|\.write_bytes\(|sed\s+-i")
-# file の script の実行 (python3 x.py / tools/py x.py / bash x.sh)
-RUN_SCRIPT_RE = re.compile(r"(?:^|[\s;&|(])(" + INTERP + r")\s+(?:-\w+\s+)*([^\s;&|<>'\"]+\.(?:py|sh|jl|R|rb|pl|js|wls))(?=\s|$)")
+# file の script の実行 (python3 x.py / tools/py x.py / bash x.sh)。 path は引用符で囲んだ形 (空白を含んでよい) と、
+# 空白をバックスラッシュで逃がした形も取る (実測: 空白を含む path の script の起動を 1 件も数えなかった)。 値は unquote_path で戻す
+_RUN_EXT = r"\.(?:py|sh|jl|R|rb|pl|js|wls)"
+RUN_SCRIPT_RE = re.compile(r"(?:^|[\s;&|(])(" + INTERP + r")\s+(?:-\w+\s+)*(\"[^\"\n]+?" + _RUN_EXT + r"\"|'[^'\n]+?" + _RUN_EXT
+                           + r"'|(?:\\.|[^\s;&|<>'\"\\])+?" + _RUN_EXT + r")(?=\s|$)")
+
+
+def unquote_path(s):
+    """command の中の path の字面を値に戻す: 囲む引用符を外し、 バックスラッシュで逃がした文字を戻す。"""
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"":
+        return s[1:-1]
+    return re.sub(r"\\(.)", r"\1", s)
+
+
+def path_args(cmd, ext):
+    """cmd の中の、 拡張子 ext (正規表現の選択肢、 例 'pdf') で終わる path を (位置, 値) で順に返す。
+
+    引用符で囲んだ文字列は空白・括弧を含めて 1 つの path (python の open('…') や p="…" の中も)、 空白などを
+    バックスラッシュで逃がした語は戻した値、 残りは裸の語 (頭が ~ / / / $VAR/ か相対、 URL は除く)。 裸の語は、
+    先に取った引用符の範囲の中では拾わない。 実測: 空白を含む PDF の path を最後の空白で切り、 後ろの断片 (`mechanics.pdf`
+    や `.pdf`) を相対 path と読んで「もう無い」 と出した。 位置は変数と cd の展開 (_vars_at / _cwd_at) に渡す。"""
+    quoted = re.compile(r"(?:^|(?<=[\s=(,\[{:]))(?:\"([^\"\n]*?\.(?:%s))\"|'([^'\n]*?\.(?:%s))')" % (ext, ext), re.I)
+    bare = re.compile(r"(?:^|(?<=[\s'\"=(,]))((?:~|/|\$\{?\w+\}?/|(?![a-z][a-z0-9+.-]*://)(?=[\w.\\]))"
+                      r"(?:\\.|[^\s'\";|&<>()\\])*?\.(?:%s))(?=[\s'\";|&<>),]|$)" % ext, re.I)
+    out, spans = [], []
+    for m in quoted.finditer(cmd):
+        g = 1 if m.group(1) is not None else 2
+        out.append((m.start(g), m.group(g)))
+        spans.append((m.start(), m.end()))
+    for m in bare.finditer(cmd):
+        if not any(a <= m.start(1) < b for a, b in spans):
+            out.append((m.start(1), unquote_path(m.group(1))))
+    return sorted(out)
 CAT_TO_FILE_RE = re.compile(
     r"(?:cat|tee)\s+(?:-a\s+)?>?\s*(['\"]?)([^\s'\";&|<>]+)\1\s*<<-?\s*(['\"]?)(\w+)\3[^\n]*\n(.*?)\n\s*\4\s*(?:\n|$)", re.S)
 # 同じ command の中の `cd <dir> &&` / `cd <dir>;` (記録の cwd は command を打つ前の位置 = この cd を含まない)
@@ -302,7 +333,7 @@ def collect(calls):
                     inline.append((ts, m.group(1) + " -c", body, err, out))
             m = RUN_SCRIPT_RE.search(cmd)
             if m and not HEREDOC_RE.search(cmd):
-                runs.append((ts, m.group(2), out))
+                runs.append((ts, unquote_path(m.group(2)), out))
     return files, inline, runs
 
 
@@ -472,6 +503,17 @@ def selftest():
                   "numbers": ["0.23940", "0.5615", "7.6e-10"], "recorded": ["0.23940"]},
               "共通 module を import して同じ出力を照合する")
         check([r[1] for r in runs] == [os.path.join(repo, "kept.py")] and "19.635" in runs[0][2], "file の script の実行と出力も拾う")
+        # 空白を含む path の script の起動 (実測: 1 件も数えなかった)。 引用符・逃がした空白を読み、 値に戻す
+        sp = [(c, RUN_SCRIPT_RE.search(c)) for c in ('python3 "/tmp/a dir/check.py" --x', "bash '/tmp/a dir/run.sh'",
+                                                      "python3 /tmp/a\\ dir/check.py", 'python3 -c "print(1)"')]
+        check([unquote_path(m.group(2)) if m else None for _, m in sp] == ["/tmp/a dir/check.py", "/tmp/a dir/run.sh",
+                                                                          "/tmp/a dir/check.py", None],
+              "空白を含む path の script の起動も拾う (-c の本文は拾わない)")
+        pa_cmd = "d=fitz.open('a b/x y.pdf'); p=\"c (d) .pdf\"; cat e\\ f.pdf https://h.org/u.pdf g.pdf"
+        pa = path_args(pa_cmd, "pdf")
+        check([v for _, v in pa] == ["a b/x y.pdf", "c (d) .pdf", "e f.pdf", "g.pdf"] and
+              [pos for pos, _ in pa] == [pa_cmd.index("a b/"), pa_cmd.index("c (d)"), pa_cmd.index("e\\ f"), pa_cmd.index(" g.pdf") + 1],
+              "path_args = 引用符の中は空白・括弧ごと 1 つ、 逃がした空白は戻す、 URL は除く、 裸の語も拾う")
         inline = inline[:-1]
         check(set(files) == {os.path.join(repo, "kept.py"), os.path.join(repo, "dirty.py"), tmpscript,
                              os.path.join(repo, "gen.sh"), os.path.join(repo, "sub", "gen2.sh")},

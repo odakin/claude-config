@@ -11,7 +11,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 
 | 何 | どこ | 中身 |
 |---|---|---|
-| 画面 (renderer) | `/Applications/Claude.app/Contents/Resources/ion-dist/assets/**/*.js`。 新しい版 (実測 = app 4.4212.0) は dir でなく `Resources/ion-dist.asar` の中 = 道具が初回に cache へ展開して読む (道具の冒頭) | minified の JS chunk。 1 行が MB 級 |
+| 画面 (renderer) | `/Applications/Claude.app/Contents/Resources/ion-dist/assets/**/*.js`。 新しい版 (実測 = app 4.4212.0) は dir でなく `Resources/ion-dist.asar` の中 = 道具が初回に cache へ展開して読む。 さらに新しい版 (実測 = app 5.1231.2) は dir (中は `index.html` だけ) と asar の両方を持つ = 道具は JS のある方を読む (道具の冒頭) | minified の JS chunk。 1 行が MB 級 |
 | 画面の文言 | `…/Resources/ion-dist/i18n/<locale>.json` (`ja-JP` / `en-US` 等。 新しい版は同じく `ion-dist.asar` の中) | 翻訳 key → 文言。 key は chunk の中に `id:"<key>"` で現れる |
 | main process | `…/Resources/app.asar` | 独自形式の archive。 session の設定 (作業フォルダ等) を決める側 |
 | 埋込 engine (Claude Code) | `~/Library/Application Support/Claude/claude-code/<版>/<hash>/claude.app/Contents/MacOS/claude` (旧い版は `<hash>` の段が無い。 道具は両方を探す。 道具の既定は見つかった最新の版 = 今の session が動いている版は Bash の環境変数 `CLAUDE_CODE_EXECPATH` が指し、 違えば `--engine "$CLAUDE_CODE_EXECPATH"` を subcommand の前に) | 単一 binary。 文字列として JS が入っている (entrypoint の一覧、 hook の matcher の当て方など) |
@@ -32,7 +32,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 ## <a id="pitfalls"></a>落とし穴
 
 - **素の `grep -o '.{0,80}X.{0,200}'` は時間切れになる** (実測: 120 秒で終わらない)。 1 行が MB 級なので、 python の `re` で bytes に当てて前後だけ切り出す (本道具がそうしている)。 ugrep は長い正規表現で `exceeds complexity limits` になることもある。
-- **画面 (renderer) の JS と文言は手元の `ion-dist` にある** (dir か `ion-dist.asar`)。 app.asar と cache だけを探して「画面は remote から来るので読めない」 と結論しない (実測: この取り違えで、 メニューの訳語を読まずに推測で案内した)。 道具の `i18n` / `grep --where renderer` が何も返さないときは、 まず版で置き場所が変わっていないかを `ls …/Resources` で見る (実測: dir が asar に移り、 旧い道具は黙って 0 件を返した)。
+- **画面 (renderer) の JS と文言は手元の `ion-dist` にある** (dir か `ion-dist.asar`)。 app.asar と cache だけを探して「画面は remote から来るので読めない」 と結論しない (実測: この取り違えで、 メニューの訳語を読まずに推測で案内した)。 道具の `i18n` / `grep --where renderer` が何も返さないときは、 まず版で置き場所が変わっていないかを `ls …/Resources` で見る (実測: dir が asar に移り、 旧い道具は黙って 0 件を返した。 その後 dir と asar の両方を持つ版で、 JS の無い dir を選んで同じく 0 件を返した)。 今の道具は読んだ source の本数を stderr に出し、 0 本なら exit 2 で言う (exit 1 = 読んだが当たり 0)。
 - **同じ関数でも chunk ごとに名前が違う**。 ある chunk の `Se` と別 chunk の `Se` は無関係。 必ず import を辿る。
 - **「コードにそう書いてある」 ≠ 「画面でそうなる」**。 条件が複数 chunk の plugin に散っていると、 読み切れないことがある。 読み切れない・結論が load-bearing なら、 次の実験で画面 1 回に決めさせる。
 - **「見つからない」 ≠ 「読めない」 — 探す語を変える**。 実測: inline code をリンクにする条件は、 markdown の plugin 側から探して見つからず画面実験で決めたが、 後の検収で **描画する側** (mdast の node 型名 `inlineCode` と、 描画した要素の `data-…` 属性名を grep → その component が呼ぶ parser を `resolve`) から入ると、 数 KB の 1 chunk に正規表現ごと読めた。 入口の候補 = 画面の文言 (i18n) / node 型名 / DOM の属性名 / log に出る文言 (main process は失敗を `[…] could not resolve` のように log へ書くので、 **app の log の文言を `--where asar` で探す**と解決関数に直接着く)。

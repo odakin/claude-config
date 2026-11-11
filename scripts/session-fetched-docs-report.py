@@ -20,11 +20,13 @@
      (f) PDF の文字を読む道具 (PDF_READER_RE = PyMuPDF の fitz.open・pdfplumber・pypdf・pdftotext など) を呼ぶ Bash の command に現れる `….pdf`
      (取り込み口の外でも。 実測: 原典を `python3 -c` の fitz.open に path で渡して読んだ session で 0 件と出た)。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
      隣に同じ名前の .tex がある PDF (組版の生成物) は数えない。 path の変数は同じ command で先に代入したものだけ展開し、
-     展開できない path と glob は数えない (loop の取得は 1 の番号で拾う)
+     展開できない path と glob は数えない (loop の取得は 1 の番号で拾う)。 引用符で囲んだ path は空白・括弧ごと 1 つに、
+     空白をバックスラッシュで逃がした path は戻して読む (実測: 空白の後ろの断片を相対 path と読み「もう無い」 と出した)
 
 判定:
   arXiv → 探した repo の追跡済み file の path にその番号 (版の有無を問わない) があれば ✅ (path)、 無ければ ⚠️ 保存なし
-  手元の PDF → 在れば大きさと sha256 で追跡済みの PDF と照合し、 同じものがあれば ✅ (path)、 無ければ ⚠️ 保存なし。
+  手元の PDF → repo の dropbox-refs (共有のクラウドの置き場への symlink、 層1 dropbox-refs.md) を通る path は ✅ 共有の置き場
+     (git の外と分かる印)。 ほかは在れば大きさと sha256 で追跡済みの PDF と照合し、 同じものがあれば ✅ (path)、 無ければ ⚠️ 保存なし。
      もう無ければ ❌ (取得した元が分からないので、 記録の command を見て決める)
   ⚠️ / ❌ は 1 件ずつ決める: 判定・計算・引用の根拠に使ったなら版を固定して取り直し、 原物の置き場へ。
   使っていない (開いただけ・別の論文だった・自分で作った図) なら保存せず、 報告に理由を 1 行。
@@ -61,11 +63,10 @@ ARXIV_ID_RE = re.compile(
     r"(?<![\w.])((?:0[7-9]|[1-9]\d)(?:0[1-9]|1[0-2])\.\d{4,5}"
     r"|(?:hep-th|hep-ph|hep-ex|hep-lat|gr-qc|astro-ph|cond-mat|quant-ph|math-ph|nucl-th|nucl-ex|physics|math)"
     r"(?:\.[A-Z]{2})?/\d{7})(v\d+)?(?![\w])")
-# 左の境界 (行頭・空白・引用符・= ( ,) から始まる token だけを拾う。 頭が ~ / / / $VAR でない相対の path (data/x.pdf・x.pdf) も拾い、
-# command の中の cd を当てた cwd で解く。 URL (scheme://) は拾わない。 実測: 境界が無く相対の path を読まなかったので、
-# `cd <repo> && pdftoppm data/<dir>/x.pdf` の途中の `/<dir>/x.pdf` が絶対 path として当たり、 repo にある file を「もう無い」 と出した
-PDF_TOKEN_RE = re.compile(r"(?:^|(?<=[\s'\"=(,]))(['\"]?)((?:~|/|\$\{?\w+\}?/|(?![a-z][a-z0-9+.-]*://)(?=[\w.]))"
-                          r"[^\s'\";|&<>()]*?\.pdf)\1(?=[\s'\";|&<>),]|$)", re.I)
+# command の中の PDF の path は session-scripts-report.py の path_args で切る (引用符の中の空白・括弧、 逃がした空白、
+# 左の境界、 相対の path、 URL の除外)。 実測: 境界が無く相対の path を読まなかったので、 `cd <repo> && pdftoppm data/<dir>/x.pdf`
+# の途中の `/<dir>/x.pdf` が絶対 path として当たり、 repo にある file を「もう無い」 と出した。 その直しの後、 空白を含む path の
+# 最後の空白の後ろの断片 (`mechanics.pdf`・`.pdf`) が相対 path として当たり、 同じく「もう無い」 と出した
 # PDF の文字を読む道具 (Python の library を -c や heredoc で呼ぶ形と、 command line の道具)。 この印がある command の PDF は
 # 取り込み口の外でも数える (実測: 原典を fitz.open に path で渡して読み、 判定の根拠にした session で 0 件と出た)
 PDF_READER_RE = re.compile(r"\b(?:fitz|pymupdf)\.open\s*\(|\bpdfplumber\.open\s*\(|\bPdfReader\s*\(|\bpypdf\b"
@@ -161,8 +162,8 @@ def collect(calls, drop_dirs=DROP_DIRS):
         for m in OUTPUT_RE.finditer(cmd):
             add_local(_expand_at(cmd, m.start(2), m.group(2), cwd), "URL から取得 (curl / wget の書き先)", ts)
         reader = bool(PDF_READER_RE.search(cmd))
-        for m in PDF_TOKEN_RE.finditer(cmd):
-            p = _expand_at(cmd, m.start(2), m.group(2), cwd)
+        for pos, raw in ssr.path_args(cmd, "pdf"):
+            p = _expand_at(cmd, pos, raw, cwd)
             if p and any(os.path.realpath(p).startswith(d + os.sep) for d in drops):
                 add_local(p, "取り込み口の file (" + os.path.dirname(p) + ")", ts)
             elif p and reader:
@@ -229,6 +230,19 @@ def is_build_product(path):
     return os.path.exists(os.path.splitext(path)[0] + ".tex")
 
 
+def shared_store(path):
+    """repo の dropbox-refs (共有のクラウドの置き場への、 git の外の symlink = 層1 conventions/dropbox-refs.md) を通る path なら
+    その repo の名前、 でなければ None。 project が決めた原典の置き場なので「保存なし」 と言い直さない (realpath にすると repo の
+    外に出て、 前は ⚠️ と出た = 実測)。 path は realpath にする前の、 記録に書かれた形で渡す。"""
+    parts = os.path.normpath(path).split(os.sep)
+    if "dropbox-refs" not in parts[:-1]:
+        return None
+    root = os.sep.join(parts[:parts.index("dropbox-refs")]) or os.sep
+    if not os.path.islink(os.path.join(root, "dropbox-refs")) or not ssr.repo_of(root):
+        return None
+    return os.path.basename(root)
+
+
 def judge(arxiv, local, files):
     rows = []
     for aid, rec in sorted(arxiv.items(), key=lambda kv: kv[1]["time"]):
@@ -245,6 +259,11 @@ def judge(arxiv, local, files):
         if os.path.exists(real):
             repo = ssr.repo_of(real)
             if repo or is_build_product(real):
+                continue
+            store = shared_store(path)
+            if store:
+                rows.append({"kind": "local", "time": rec["time"][:19], "what": path, "mark": "✅",
+                             "note": rec["how"] + " — 共有の置き場 (" + store + " の dropbox-refs = git の外)"})
                 continue
             hits = find_by_content(real, files)
             mark, note = ("✅", "同じ中身を保存: " + ", ".join(hits[:3])) if hits else ("⚠️", "保存なし")
@@ -384,6 +403,19 @@ def selftest():
         Path(lib, "rel", "y.pdf").write_bytes(b"%PDF-1.4 kept original")      # 保存済みと同じ中身
         call(28, "Bash", {"command": "cd " + lib + " && python3 -c \"import fitz; print(len(fitz.open('rel/y.pdf')))\""})
         call(29, "Bash", {"command": "pdftotext https://example.org/z.pdf - | head"})
+        # 空白を含む path (実測): 引用符の中・代入・名前の中の括弧と .pdf の前の空白・
+        # 二重引用符・逃がした空白。 前は最後の空白の後ろの断片を相対 path と読んで ❌ と出した。 repo の dropbox-refs
+        # (git の外の共有の置き場への symlink) を通る path は ✅ 共有の置き場
+        share = os.path.join(t, "cloud", "Shared refs")
+        os.makedirs(os.path.join(share, "sub"))
+        Path(share, "sub", "Some long title of a paper.pdf").write_bytes(b"%PDF-1.4 in the shared store")
+        os.symlink(share, os.path.join(repo, "dropbox-refs"))
+        call(30, "Bash", {"command": "python3 -c \"\nimport fitz\nd=fitz.open('dropbox-refs/sub/Some long title of a paper.pdf')\nprint(len(d))\n\""})
+        Path(lib, "A title (with a parenthesis) .pdf").write_bytes(b"%PDF-1.4 read through a variable")
+        call(31, "Bash", {"command": "python3 - <<'EOF'\nimport fitz\np=\"" + lib + "/A title (with a parenthesis) .pdf\"\nd=fitz.open(p)\nEOF"})
+        call(32, "Bash", {"command": "pdftotext \"" + lib + "/Gone Title Words.pdf\" - | head"})
+        Path(lib, "Escaped name here.pdf").write_bytes(b"%PDF-1.4 escaped spaces")
+        call(33, "Bash", {"command": "pdfinfo " + lib + "/Escaped\\ name\\ here.pdf"})
         Path(proj, sid + ".jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
 
         calls = ssr.read_calls(Path(proj, sid + ".jsonl"))
@@ -422,12 +454,23 @@ def selftest():
         copy = [r for k, r in rows.items() if k.startswith(os.path.join(t, "scan", "paper.pdf"))]
         check(len(copy) == 1 and copy[0]["mark"] == "✅" and "写し" in copy[0]["what"],
               "消えた写しは cp の元で照合する (❌ にしない)")
+        sh = rows.get(os.path.join(repo, "dropbox-refs", "sub", "Some long title of a paper.pdf"))
+        check(sh is not None and sh["mark"] == "✅" and "共有の置き場" in sh["note"],
+              "引用符の中の空白入りの path を 1 つに読み、 repo の dropbox-refs を通る path は ✅ 共有の置き場")
+        par = rows.get(os.path.join(lib, "A title (with a parenthesis) .pdf"))
+        check(par is not None and par["mark"] == "⚠️", "代入の引用符の中の括弧と .pdf の前の空白を含む path も 1 つに読む")
+        gone = rows.get(os.path.join(lib, "Gone Title Words.pdf"))
+        check(gone is not None and gone["mark"] == "❌", "二重引用符の空白入りの path を 1 つに読む (無ければ ❌ は全体の path で)")
+        esc = rows.get(os.path.join(lib, "Escaped name here.pdf"))
+        check(esc is not None and esc["mark"] == "⚠️", "バックスラッシュで逃がした空白を戻して読む")
+        frag = [k for k in rows if os.path.basename(k) in (".pdf", "paper.pdf", "Words.pdf", "here.pdf") and k.startswith(repo)]
+        check(frag == [], "空白の後ろの断片を相対 path として数えない")
         res = []
         _capture(lambda: res.append(report(sid[:8], [Path(t, "projects")], root, True, False, drop_dirs=(drop,))))
-        check(res == [(0, 16)], "保存なし・もう無い = 16 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・"
-              "取得の道具の 5 件・other・vanished・dl・WebFetch の PDF・メールの添付・読む道具に渡した PDF)")
+        check(res == [(0, 19)], "保存なし・もう無い = 19 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・"
+              "取得の道具の 5 件・other・vanished・dl・WebFetch の PDF・メールの添付・読む道具に渡した PDF・空白入りの path の 3 件)")
         out = json.loads(_capture(lambda: report(sid[:8], [Path(t, "projects")], root, True, True, drop_dirs=(drop,))))
-        check(out["unsaved"] == 16 and out["repos"] == 1, "json も同じ数")
+        check(out["unsaved"] == 19 and out["repos"] == 1, "json も同じ数")
     print("selftest: " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
 

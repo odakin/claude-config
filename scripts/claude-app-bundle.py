@@ -16,9 +16,11 @@
 main process の file は展開しないと読めない。
 
 画面側 (renderer の JS と翻訳) の置き場所は版で違う: 旧い版 = Resources/ion-dist/ の dir、 新しい版 = Resources/ion-dist.asar
-(実測、 app 4.4212.0)。 asar しか無ければ、 i18n・grep (renderer)・slice (renderer)・resolve の初回に
+(実測、 app 4.4212.0)。 さらに新しい版は両方を持ち、 dir の中は index.html だけ (実測、 app 5.1231.2)。 だから dir は
+assets/ に JS があるときだけ使い、 そうでなく asar があれば、 i18n・grep (renderer)・slice (renderer)・resolve の初回に
 ~/Library/Caches/claude-app-bundle/ (env CLAUDE_APP_BUNDLE_CACHE で変更) へ 1 回展開して使う (asar の大きさと mtime が
-変われば作り直し、 古い展開は消す)。 version・asar-ls・--where asar|engine は展開しない。
+変われば作り直し、 古い展開は消す)。 version・asar-ls・--where asar|engine は展開しない。 grep は読んだ source の本数を
+stderr に出し、 0 本なら exit 2 (exit 1 = 読んだが当たり 0)。 i18n は翻訳の file が無ければ exit 2。
 """
 from __future__ import annotations
 
@@ -99,12 +101,21 @@ def asar_read(path: str, node: dict, base: int) -> bytes | None:
         return f.read(int(node["size"]))
 
 
+def _has_js(assets: str) -> bool:
+    """assets の下に .js が 1 本でもあるか (最初の 1 本で止める)。"""
+    for _root, _dirs, names in os.walk(assets):
+        if any(n.endswith(".js") for n in names):
+            return True
+    return False
+
+
 def renderer_dirs(app: str, cache_root: str | None = None) -> dict:
-    """画面側の {"assets": …, "i18n": …}。 Resources/ion-dist/ の dir が在ればそれ、 無くて ion-dist.asar が在れば
-    cache に展開した dir (冒頭の説明)。 どちらも無ければ dir の path をそのまま返す (呼ぶ側が「無い」 を出す)。"""
+    """画面側の {"assets": …, "i18n": …}。 Resources/ion-dist/assets に JS があればその dir、 無くて ion-dist.asar が在れば
+    cache に展開した dir (冒頭の説明)。 どちらも無ければ dir の path をそのまま返す (呼ぶ側が「無い」 を出す)。
+    実測 (app 5.1231.2): dir (中は index.html だけ) と asar の両方があり、 dir を選んで JS を 0 本読み、 grep が空振りした。"""
     p = paths(app)
     base = os.path.dirname(p["assets"])
-    if not os.path.isdir(base) and os.path.isfile(base + ".asar"):
+    if not _has_js(os.path.join(base, "assets")) and os.path.isfile(base + ".asar"):
         base = ion_dist_extracted(base + ".asar", cache_root)
     return {"assets": os.path.join(base, "assets"), "i18n": os.path.join(base, "i18n")}
 
@@ -208,8 +219,9 @@ def cmd_grep(args) -> int:
     except re.error as e:
         print(f"正規表現が不正: {e} (括弧などの記号そのものを探すなら \\ で escape する)", file=sys.stderr)
         return 2
-    n = 0
+    n = srcs = 0
     for name, buf in grep_sources(args.where, args.app, args.engine):
+        srcs += 1
         per = 0
         for m in rx.finditer(buf):
             print(f"{name}:{m.start()}: {snippet(buf, m.start(), m.end(), args.context)}")
@@ -219,7 +231,22 @@ def cmd_grep(args) -> int:
                 break
         if n >= args.max:
             break
+    place = source_place(args.where, args.app, args.engine)
+    if not srcs:
+        # 「当たり 0」 (exit 1) と分ける。 実測: JS の無い dir を探して 0 本読み、 出力 0 行・exit 1 で「無い」 に見えた
+        print(f"読む source が 0 本 ({place}) = 「見つからない」 ではない。 置き場所を確かめる (冒頭の説明)", file=sys.stderr)
+        return 2
+    print(f"-- source {srcs} 本を読んだ ({place})", file=sys.stderr)
     return 0 if n else 1
+
+
+def source_place(where: str, app: str, engine: str | None) -> str:
+    """grep / slice が読む場所 (読んだ本数の報告と、 0 本のときの知らせに出す)。"""
+    if where == "renderer":
+        return renderer_dirs(app)["assets"]
+    if where == "asar":
+        return paths(app)["asar"]
+    return engine_path(engine) or "埋込 engine が見つからない"
 
 
 def i18n_lookup(i18n_dir: str, text: str, locale: str, en: str = "en-US") -> list[tuple[str, str, str]]:
@@ -235,7 +262,12 @@ def i18n_lookup(i18n_dir: str, text: str, locale: str, en: str = "en-US") -> lis
 
 
 def cmd_i18n(args) -> int:
-    rows = i18n_lookup(renderer_dirs(args.app)["i18n"], args.text, args.locale)
+    i18n = renderer_dirs(args.app)["i18n"]
+    if not os.path.isfile(os.path.join(i18n, f"{args.locale}.json")):
+        print(f"翻訳の file が無い ({os.path.join(i18n, args.locale + '.json')}) = 「見つからない」 ではない。 置き場所か locale を確かめる",
+              file=sys.stderr)
+        return 2
+    rows = i18n_lookup(i18n, args.text, args.locale)
     for k, v, e in rows:
         print(f"{k}\t{v}\t{e}")
     return 0 if rows else 1
@@ -441,6 +473,27 @@ def selftest() -> int:
                 second = os.path.dirname(renderer_dirs(app2)["assets"])
                 check("ion-dist.asar: asar が変われば作り直し、 古い展開を消す",
                       second != first and os.path.isdir(second) and not os.path.exists(first))
+                # さらに新しい配置: dir (index.html だけ) と asar の両方 = dir を選ばず asar を展開する
+                app3 = os.path.join(t, "Claude3.app")
+                res3 = os.path.join(app3, "Contents", "Resources")
+                os.makedirs(os.path.join(res3, "ion-dist"))
+                with open(os.path.join(res3, "ion-dist", "index.html"), "w") as f:
+                    f.write("<html></html>")
+                shutil.copy(asar2, os.path.join(res3, "ion-dist.asar"))
+                hits3 = [n for n, buf in grep_sources("renderer", app3, None) if re.search(rb"KEY9", buf)]
+                check("ion-dist の dir が index.html だけなら asar を展開して探す", hits3 == [os.path.join("v1", "view-CCC.js")])
+                g3 = argparse.Namespace(pattern="KEY9", where="renderer", app=app3, engine=None, context=5, per_file=5, max=10)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    check("grep: 当たれば exit 0 (両方を持つ配置)", cmd_grep(g3) == 0)
+                # 置き場所に何も無い = 読む source が 0 本: 「当たり 0」 (exit 1) と分けて exit 2
+                app4 = os.path.join(t, "Claude4.app")
+                os.makedirs(os.path.join(app4, "Contents", "Resources", "ion-dist"))
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    rc4 = cmd_grep(argparse.Namespace(**{**vars(g3), "app": app4}))
+                    rc4i = cmd_i18n(argparse.Namespace(app=app4, text="x", locale="ja-JP"))
+                check("grep: 読む source が 0 本なら exit 2 で理由を言う", rc4 == 2 and "source が 0 本" in err.getvalue())
+                check("i18n: 翻訳の file が無ければ exit 2", rc4i == 2 and "翻訳の file が無い" in err.getvalue())
             check("ion-dist.asar: version・--where asar は展開しない (paths は dir の形のまま)",
                   paths(app2)["assets"] == os.path.join(res2, "ion-dist", "assets"))
         finally:
