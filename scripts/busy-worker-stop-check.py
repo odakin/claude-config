@@ -33,6 +33,10 @@ Why (実測): 見え方や model を直すために、 動いている worker �
     「締めは要らない」 など) 1 回目から通す。 本人の「閉じていい」「畳んで」 (CLOSE_WORD) は本人の側の理由だけを通し、 wrap の
     記録の無いことは通さない (実測: 親の本人への問いが「wrap の記録が無い」 を落とし、 本人の「畳んで」 が理由の欠けた問いへの
     答えになった。 止めたのは app の別の理由だった)。
+  - mcp の stop_session / archive_session は、 上の全部より先に、 相手がこの session の起こした session (自分・その子孫・
+    起こした控え) かを見る (scripts/session-launch-check.py の touch_check = model・effort の切り替えと同じ判定。 起こしていない
+    session は、 本人がこの窓の直近 3 回の発言でその session の id・題を出したときだけ通す。 規約 =
+    conventions/multi-session-coordination.md#touch-only-own-sessions)。 Bash の `claude stop` は app の記録の親を持たないので見ない。
   - Bash だけ: 本人が直前の発言で止めるよう明示に言ったなら、 command に `# stop-ok: <本人の発言の一部を逐語で>` を
     付けると、 その文字列が本人の最新の発言に在る時に限って 1 回目から通す (逐語でなければ通さない)。
 
@@ -277,7 +281,25 @@ def _minutes_since(row: dict) -> str:
     return f"{max(0, int((time.time() * 1000 - started) / 60000))} 分前に起動"
 
 
+def touch_gate(inp: dict) -> tuple[int, str]:
+    """stop_session / archive_session of a desktop session this session did not start: the same check as the model
+    and effort setters (scripts/session-launch-check.py touch_check, rule = TOUCH_RULE there). Fail-open."""
+    tool = inp.get("tool_name") or ""
+    if not (tool.endswith("__stop_session") or tool.endswith("__archive_session")):
+        return 0, ""
+    try:
+        spec = _ilu.spec_from_file_location("session_launch_check", os.path.join(HERE, "session-launch-check.py"))
+        slc = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(slc)
+        return slc.touch_check(inp)
+    except Exception:
+        return 0, ""
+
+
 def check(inp: dict) -> tuple[int, str]:
+    rc, txt = touch_gate(inp)
+    if rc:
+        return rc, txt
     ids, cmd = targets_of(inp)
     if not ids:
         return 0, ""
@@ -483,7 +505,10 @@ def selftest() -> int:
         ddir = os.path.join(td, "desktop", "acct", "env")
         os.makedirs(ddir)
         os.environ.update(CLAUDE_SESSIONS_DIR=sdir, CLAUDE_PROJECTS_DIR=pdir, BUSY_WORKER_STOP_STATE_DIR=stdir,
-                          CLAUDE_DESKTOP_SESSIONS_DIR=os.path.join(td, "desktop"), CHILD_WRAP_REPOS_GLOB=os.path.join(td, "none"))
+                          CLAUDE_DESKTOP_SESSIONS_DIR=os.path.join(td, "desktop"), CHILD_WRAP_REPOS_GLOB=os.path.join(td, "none"),
+                          SESSION_LAUNCH_STATE_DIR=os.path.join(td, "launch-state"),
+                          SESSION_TOUCH_GATE_OFF_MARKER=os.path.join(td, "no-touch-off"))
+        os.environ.pop("SESSION_TOUCH_GATE", None)
         busy_id, idle_id = "b0b0b0b0-0000-4000-8000-00000000000b", "a0a0a0a0-0000-4000-8000-00000000000a"
         for n, (sid_, status) in enumerate(((busy_id, "busy"), (idle_id, "idle"))):
             with open(os.path.join(sdir, f"{n}.json"), "w", encoding="utf-8") as fh:
@@ -691,8 +716,27 @@ def selftest() -> int:
             fh.write(json.dumps({"type": "user", "promptSource": "sdk", "message": {"content": "送って"},
                                  "timestamp": "2099-04-04T00:00:00.000Z"}, ensure_ascii=False) + "\n")
         ok("... and the person's own prompt with the same promptSource still is", last_human(tr)[1] == "送って")
+        # ---- a session this session did not start (session-launch-check.py touch_check): stop / archive
+        me_cli, me_local = "c0c0c0c0-0000-4000-8000-0000000000c1", "local_0000000c-0000-4000-8000-000000000000"
+        own_local, other_local = "local_0000000d-0000-4000-8000-000000000000", "local_0000000e-0000-4000-8000-000000000000"
+        for local, cli, extra in ((me_local, me_cli, {}),
+                                  (own_local, "d0d0d0d0-0000-4000-8000-0000000000d1", {"spawnedFrom": {"sessionId": me_local, "sideSession": True}}),
+                                  (other_local, "e0e0e0e0-0000-4000-8000-0000000000e1", {})):
+            with open(os.path.join(ddir, local + ".json"), "w", encoding="utf-8") as fh:
+                json.dump({"sessionId": local, "cliSessionId": cli, "title": "窓 " + local[6:14], **extra}, fh)
+        transcript(("2026-01-01T00:00:00.000Z", "締めて"))
+        rc, txt = run("mcp__ccd_session_mgmt__stop_session", {"session_id": other_local}, sid=me_cli)
+        ok("stop_session on a window this session did not start (the owner opened it) → blocked by the touch check",
+           rc == 2 and "起こした session でも" in txt and "本人が開いた窓" in txt)
+        rc, txt = run("mcp__ccd_session_mgmt__archive_session", {"session_id": other_local}, sid=me_cli)
+        ok("archive_session on it → blocked too", rc == 2 and "畳む" in txt)
+        rc, _ = run("mcp__ccd_session_mgmt__stop_session", {"session_id": own_local}, sid=me_cli)
+        ok("stop_session on this session's own idle child → passes", rc == 0)
+        transcript(("2026-01-01T00:00:00.000Z", "e0e0e0e0 は止めて"))
+        rc, _ = run("mcp__ccd_session_mgmt__stop_session", {"session_id": other_local}, sid=me_cli)
+        ok("... the owner named it by its id in this window → passes", rc == 0)
         for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "BUSY_WORKER_STOP_STATE_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR",
-                  "CHILD_WRAP_REPOS_GLOB"):
+                  "CHILD_WRAP_REPOS_GLOB", "SESSION_LAUNCH_STATE_DIR", "SESSION_TOUCH_GATE_OFF_MARKER"):
             os.environ.pop(k, None)
         del uuid
     print("selftest:", "PASS" if not fails else f"{len(fails)} FAIL")

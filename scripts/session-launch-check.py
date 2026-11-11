@@ -49,8 +49,9 @@ mode (hook の入力の hook_event_name + tool_name で選ぶ = `auto`):
   PreToolUse(SendMessage)     宛先が台帳で未解決の session なら app の記録を読み直す。 合っていれば通し、 違えば止める。
                               本人がその model でよいと言ったなら message に `[model-ok]` を入れれば通る (= 本人が app で
                               model を変えた場合を止め続けない)。
-  PreToolUse(set_session_model / set_session_effort)  PREMIUM_GATE の機械で、 Fable (上位 tier) か max への引き上げは、
-                              起こした時の理由 (台帳) か本人の直近の名指しが無いと止める。
+  PreToolUse(set_session_model / set_session_effort)  まず TOUCH_GATE (下) を見る。 次に PREMIUM_GATE の機械で、 Fable
+                              (上位 tier) か max への引き上げは、 起こした時の理由 (台帳) か本人の直近の名指しが無いと止める。
+  (stop_session / archive_session の TOUCH_GATE は hooks/busy-worker-stop-check.sh の engine がこの file の touch_check を呼ぶ)
   `--workflow-gate` (hooks/workflow-launch-check.sh = PreToolUse の全 tool、 PREMIUM_GATE の機械):
     PreToolUse(Workflow)      Fable の session からの Workflow は、 script の agent() が全部 opts に model を書くまで止める
                               (書かない agent は親の model を継ぐ)。 本人の直近の発言が週の切替 (リセット) に触れていれば、
@@ -79,6 +80,17 @@ PREMIUM_GATE: `~/.claude/session-launch-premium-gate.on` が在るか env SESSIO
 (打ち消し・疑いの文は数えない) か理由 (`[model-reason: …]` / `[effort-reason: …]`、 掲示板の記録の reason、
 `--note-reason`) が無いと止める。 仕事の性質を語で判定はしない (実測 = 人が選んだ model を依頼の語の規則で当てると、 どの規則も
 外れた)。 既定は off。 規約 = conventions/multi-session-coordination.md#premium-launch-reason。
+
+TOUCH_GATE (既定は on。 外す = `~/.claude/session-touch-gate.off` か env SESSION_TOUCH_GATE=0): この session が起こしていない
+desktop の session の model・effort を変える (set_session_model / set_session_effort)、 止める (stop_session)、 畳む
+(archive_session) 呼び出しを止める。 起こした = 相手が自分か、 この session の起こした控え (start_session の返りで書く
+<state>/<session>.started.json、 card を id で起こした台帳の行も数える) に在るか、
+app の記録の親の鎖 (desktop_sessions.lineage の parent、 本人が作った fork は数えない) を辿って自分に着く (= 自分の子孫)。
+通す = 本人がこの窓の直近 3 回の発言で、 その session の id (`local_…`・その 8 桁・会話記録の id の 8 桁)・一覧の名前・題を
+出した (その文が打ち消し・苦情・本人が自分でした報告 = TOUCH_NEGATED なら数えない。 最後の発言が勝つ)。 理由の印で通す道は
+作らない (本人の裁定)。 app も自分が起こしていない session への変更は本人に聞くが、 auto mode では本人に聞かずに決めることがある
+(set_session_model の説明) = この hook がその線を保つ。 自分の記録・相手の記録が読めない = 通す (fail-open)。
+規約 = conventions/multi-session-coordination.md#touch-only-own-sessions。
 
 故障は通す (読めない入力・記録が見つからない・例外 = exit 0)。 止めるのは条件が成り立った時だけ。
 env: SESSION_LAUNCH_CHECK_DISABLE=1 / SESSION_LAUNCH_STATE_DIR (test) / CLAUDE_DESKTOP_SESSIONS_DIR (test) /
@@ -405,6 +417,151 @@ def premium_refusal(miss: list[str], where: list[str]) -> str:
             f" 規約 = {PREMIUM_RULE}")
 
 
+# ---- TOUCH_GATE: a session this session did not start ----
+TOUCH_RULE = "claude-config/conventions/multi-session-coordination.md#touch-only-own-sessions"
+TOUCH_VERB = {"__set_session_model": "model を変える", "__set_session_effort": "effort を変える",
+              "__stop_session": "止める", "__archive_session": "畳む"}
+# A sentence that names the session but negates, complains or reports the owner's own fix is not a request to touch it
+# (measured: the owner's complaint named the session's id and said they had switched it back themselves).
+TOUCH_NEGATED = re.compile(NEGATED.pattern + r"|勝手|触るな|触らな|いじるな|弄るな|違反|責任転嫁|変えるな|変えないで|止めるな"
+                           r"|止めないで|畳むな|畳まないで|するな|戻した(?!い|ら)|直した(?!い|ら)")
+TOUCH_SENTENCE = re.compile(r"[^。！!？?\n]+")
+TOUCH_MAX_DEPTH = 12
+TOUCH_MIN_NAME = 6   # a title or a list name shorter than this is too generic to count as naming the session
+
+
+def touch_gate_on() -> bool:
+    if os.environ.get("SESSION_TOUCH_GATE") == "0":
+        return False
+    marker = os.environ.get("SESSION_TOUCH_GATE_OFF_MARKER") or os.path.expanduser("~/.claude/session-touch-gate.off")
+    return not os.path.exists(marker)
+
+
+def _started_path(sid: str) -> str:
+    return os.path.join(state_dir(), re.sub(r"[^A-Za-z0-9_.-]", "_", sid or "unknown") + ".started.json")
+
+
+def note_started(sid: str, local_id: str) -> None:
+    """Keep the `local_…` ids this session started (start_session's return), kept apart from the ledger."""
+    try:
+        with open(_started_path(sid), encoding="utf-8") as fh:
+            ids = json.load(fh)
+        ids = ids if isinstance(ids, list) else []
+    except (OSError, ValueError):
+        ids = []
+    if local_id in ids:
+        return
+    try:
+        os.makedirs(state_dir(), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=state_dir(), suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump((ids + [local_id])[-200:], fh)
+        os.replace(tmp, _started_path(sid))
+    except OSError:
+        pass
+
+
+def started_here(sid: str, local_id: str) -> bool:
+    """This session started the session (start_session's return, or a card of this session it started by its id)."""
+    if not local_id:
+        return False
+    try:
+        with open(_started_path(sid), encoding="utf-8") as fh:
+            if local_id in (json.load(fh) or []):
+                return True
+    except (OSError, ValueError, TypeError):
+        pass
+    return any(e.get("local_id") == local_id or e.get("started") == local_id for e in load(sid))
+
+
+def descends_from(rec: dict, caller_local: str) -> bool:
+    """The app's parent links of `rec` reach `caller_local` (its child, grandchild, …). A user's fork is not a launch."""
+    cur, seen = rec, set()
+    for _ in range(TOUCH_MAX_DEPTH):
+        lin = (cur or {}).get("lineage")
+        if not lin or lin.get("kind") == "fork":
+            return False
+        parent = lin.get("parent") or ""
+        if parent == caller_local:
+            return True
+        if not parent or parent in seen:
+            return False
+        seen.add(parent)
+        cur = ds.find(parent)
+    return False
+
+
+def session_names(rec: dict) -> list[str]:
+    """The words the owner may name the session by: its ids, its title (and the title without its tags), its list name."""
+    lid, cli = rec.get("local_id") or "", rec.get("cli_id") or ""
+    names = [lid, lid[6:14] if lid.startswith("local_") else "", cli[:8]]
+    title = (rec.get("title") or "").strip()
+    head = re.split(r"\s+·\s+", re.sub(r"\[[^\]]*\]", " ", title))[0].strip()
+    names += [t for t in (title, head) if len(t) >= TOUCH_MIN_NAME]
+    try:
+        names += [s["name"] for s in (sm.live_sessions() if sm else [])
+                  if (s.get("host") == lid or (cli and s.get("sessionId") == cli)) and len(s.get("name") or "") >= TOUCH_MIN_NAME]
+    except Exception:
+        pass
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def owner_named_session(path: str, names: list[str]) -> str:
+    """The owner's sentence that names the session in their last prompts ('' when none, or when their latest sentence
+    that names it negates, complains or reports their own fix)."""
+    quote = ""
+    low = [n.lower() for n in names]
+    for t in owner_prompts(path):   # oldest first
+        for sent in TOUCH_SENTENCE.findall(t):
+            s = sent.lower()
+            if any(n in s for n in low):
+                quote = "" if TOUCH_NEGATED.search(sent) else sent.strip()
+    return quote[:120]
+
+
+def _label(rec: dict | None) -> str:
+    if not rec:
+        return "?"
+    title = (rec.get("title") or "").strip()
+    return (rec.get("cli_id") or rec.get("local_id") or "?")[:8] + (f"「{title[:40]}」" if title else "")
+
+
+def touch_check(inp: dict) -> tuple[int, str]:
+    """TOUCH_GATE (module docstring): (2, why) when this session would change the model or effort of, stop or archive a
+    desktop session it did not start and the owner did not name; (0, '') otherwise (and whenever a record is unreadable)."""
+    tool = inp.get("tool_name") or ""
+    verb = next((v for k, v in TOUCH_VERB.items() if tool.endswith(k)), "")
+    if not verb or not touch_gate_on():
+        return 0, ""
+    target = str((inp.get("tool_input") or {}).get("session_id") or "").strip()
+    sid = inp.get("session_id") or ""
+    if not target or target == "self" or not sid:
+        return 0, ""
+    me = ds.find(sid)
+    rec = ds.find(target)
+    if not me or not rec:
+        return 0, ""
+    if rec.get("local_id") == me.get("local_id") or started_here(sid, rec.get("local_id") or "") \
+            or descends_from(rec, me.get("local_id") or ""):
+        return 0, ""
+    if owner_named_session(inp.get("transcript_path") or "", session_names(rec)):
+        return 0, ""
+    lin = rec.get("lineage") or {}
+    if lin.get("parent") and lin.get("kind") != "fork":
+        parent = ds.find(lin["parent"])
+        who = (f"起こした窓 = {_label(parent)} (SendMessage の to = {lin['parent']})。 その窓に、 何を・なぜを 1 行で伝え、"
+               " 変えるかはその窓が決める (その窓が本人に聞く)")
+    else:
+        who = ("app の記録に起こした窓が無い = 本人が開いた窓か、 切り離された窓。 本人に 1 行で伝える (何を・なぜ")
+        who += ("。 本人は app の model の menu で変えられる。 session は自分の model・effort を変えられない = app が断る)"
+                if "変える" in verb else ")")
+    return 2, (f"🛑 session-launch-check: {_label(rec)} はこの session が起こした session でも、 その子孫でもない。"
+               f" この session からは{verb}操作をしない。\n  {who}。\n"
+               f"  本人がこの窓の直近 {OWNER_WINDOW} 回の発言でその session の id ({(rec.get('cli_id') or '')[:8] or rec.get('local_id')})"
+               " か題を出して頼んだときだけ、 ここから通る (打ち消し・苦情・本人が自分で直した報告の文は数えない)。"
+               f" 規約 = {TOUCH_RULE}")
+
+
 def not_worker_signatures() -> list[tuple[str, str]]:
     """The user's signatures of a launch that starts a coordinator rather than a worker: [(kind, text)], kind "re" or
     "lit". One per line of ~/.claude/session-launch-not-worker.txt (env SESSION_LAUNCH_NOT_WORKER_FILE): `re:` = a
@@ -494,7 +651,10 @@ def pre_start(inp: dict) -> tuple[int, str]:
 def pre_set(inp: dict) -> tuple[int, str]:
     """set_session_model to the top tier / set_session_effort to max: the reason the launch carried (the ledger), or the
     owner's naming in their last prompts. The app caps a start at the launcher's model, so the raise happens here
-    (measured: the owner refused the raise of a card's worker to Fable here)."""
+    (measured: the owner refused the raise of a card's worker to Fable here). TOUCH_GATE comes first."""
+    rc, txt = touch_check(inp)
+    if rc:
+        return rc, txt
     if not premium_gate_on():
         return 0, ""
     ti = inp.get("tool_input") or {}
@@ -541,6 +701,9 @@ def post_start(inp: dict) -> str:
     if not m or "Started session" not in text:
         return ""
     local_id = m.group(0)
+    # TOUCH_GATE: this session started it, whatever it asked for (a detached one stays this session's own launch). A
+    # file of its own, so the model checks below (which read the ledger's entries) do not treat it as a worker to watch.
+    note_started(sid, local_id)
     want_m, want_e = requested(ti)
     reason = launch_reason(ti)
     if ti.get("proposal_id") and not (want_m or want_e or reason):
@@ -1355,8 +1518,11 @@ def selftest() -> int:
                           # marker on the machine, a pre-start case that expects a pass was blocked)
                           SESSION_LAUNCH_PREMIUM_GATE_MARKER=os.path.join(td, "no-premium-marker"),
                           # and the machine's own not-worker signatures must not pass a case that expects a block
-                          SESSION_LAUNCH_NOT_WORKER_FILE=os.path.join(td, "no-not-worker"))
+                          SESSION_LAUNCH_NOT_WORKER_FILE=os.path.join(td, "no-not-worker"),
+                          # and the machine's own off marker of the touch gate must not pass a case that expects a block
+                          SESSION_TOUCH_GATE_OFF_MARKER=os.path.join(td, "no-touch-off"))
         os.environ.pop("SESSION_LAUNCH_BOARD_FIRST", None)
+        os.environ.pop("SESSION_TOUCH_GATE", None)
         os.environ.pop("SESSION_LAUNCH_PREMIUM_GATE", None)
         app = os.path.join(td, "app", "acct", "env")
         os.makedirs(app)
@@ -1798,6 +1964,84 @@ def selftest() -> int:
             json.dump({"sessionId": lid, "model": "claude-opus-5-5", "effort": "xhigh", "title": reasons["title"]}, fh)
         check("premium: a clicked card's worker is found by its title and its card's reason",
               setter("mcp__ccd_session_mgmt__set_session_model", {"session_id": lid, "model": "claude-fable-5-1"}, sid="launcher-6") == 0)
+        os.environ.pop("SESSION_LAUNCH_PREMIUM_GATE", None)
+
+        # ---- TOUCH_GATE: a session this session did not start (the measured case: a chore conductor switched the
+        # physics conductor's review desk, which the owner had named Fable in the physics window)
+        def arec(n: str, cli: str, title: str = "", parent: str = "", **extra) -> str:
+            local = f"local_{n * 8}-0000-4000-8000-0000000000{n * 2}"
+            d = {"sessionId": local, "cliSessionId": cli, "model": "claude-opus-5-5", "effort": "xhigh", "title": title}
+            if parent:
+                d["spawnedFrom"] = {"sessionId": parent, "sideSession": True}
+            d.update(extra)
+            with open(os.path.join(app, local + ".json"), "w", encoding="utf-8") as fh:
+                json.dump(d, fh, ensure_ascii=False)
+            return local
+
+        me_cli = "c0c0c0c0-0000-4000-8000-0000000000c1"
+        me = arec("c", me_cli, "雑用の指揮役")
+        kid = arec("d", "d1d1d1d1-0000-4000-8000-0000000000d1", "雑用の worker", parent=me)
+        grandkid = arec("e", "e1e1e1e1-0000-4000-8000-0000000000e1", "孫の worker", parent=kid)
+        phys = arec("f", "f1f1f1f1-0000-4000-8000-0000000000f1", "物理の指揮役の窓")
+        desk = arec("9", "5a5a5a5a-0000-4000-8000-000000000009", "[local推奨] 物理の検収所 · fable xhigh", parent=phys)
+        loose = arec("a", "a1a1a1a1-0000-4000-8000-0000000000a1", "切り離した worker", parent=me, lineageDetached=True)
+        fork = arec("b", "b1b1b1b1-0000-4000-8000-0000000000b1", "本人の fork", forkedFromSessionId=me)
+
+        def touch(tool: str, target: str, sid: str = me_cli, **ti) -> tuple[int, str]:
+            inp = {"hook_event_name": "PreToolUse", "tool_name": "mcp__ccd_session_mgmt__" + tool,
+                   "tool_input": {"session_id": target, **ti}, "session_id": sid, "transcript_path": tr}
+            if tool.startswith("set_"):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    return run(inp), err.getvalue()
+            return touch_check(inp)
+
+        owner_said("締めて")
+        check("touch: model of this session's own child → pass", touch("set_session_model", kid, model="claude-opus-5-5")[0] == 0)
+        check("touch: effort of a grandchild → pass", touch("set_session_effort", grandkid, effort="xhigh")[0] == 0)
+        rc, err = touch("set_session_model", desk, model="claude-opus-5-5")
+        check("touch: the measured case (another conductor's review desk) → blocked, names the window that started it",
+              rc == 2 and "5a5a5a5a" in err and "起こした窓 = f1f1f1f1" in err and phys in err and "model を変える" in err)
+        rc, err = touch("stop_session", desk)
+        check("touch: stopping it → blocked too", rc == 2 and "止める" in err)
+        rc, err = touch("archive_session", phys)
+        check("touch: archiving a window the owner opened → blocked, tells the owner", rc == 2 and "本人が開いた窓" in err and "畳む" in err)
+        rc, err = touch("set_session_effort", phys, effort="xhigh")
+        check("touch: the owner's window, effort → the owner can switch it in the menu", rc == 2 and "model の menu" in err)
+        check("touch: archive self → pass", touch("archive_session", "self")[0] == 0)
+        check("touch: its own record → pass", touch("archive_session", me)[0] == 0)
+        check("touch: a fork the owner made of this session is not its launch → blocked", touch("set_session_model", fork, model="claude-opus-5-5")[0] == 2)
+        check("touch: a detached session with no launch in the ledger → blocked", touch("set_session_effort", loose, effort="xhigh")[0] == 2)
+        call("PostToolUse", "mcp__ccd_session__start_session", {"initiation": "user_asked", "title": "切り離した worker", "prompt": "x"},
+             [{"type": "text", "text": f'Started session "切り離した worker" (session_id: {loose}, name: w). It runs'}], sid=me_cli)
+        check("touch: ... one this session started (the ledger), detached after → pass", touch("set_session_effort", loose, effort="xhigh")[0] == 0)
+        check("touch: the started-entry does not make the model watch nag", call("PostToolUse", "mcp__ccd_session_mgmt__set_session_model",
+              {"session_id": loose, "model": "claude-opus-5-5"}, "ok", sid=me_cli)[1] == "")
+        owner_said("5a5a5a5a を Opus にして")
+        check("touch: the owner named the session's id in this window → pass", touch("set_session_model", desk, model="claude-opus-5-5")[0] == 0)
+        owner_said("なんで勝手にその窓まで Opus にしたの？　5a5a5a5a は自分で戻した。")
+        check("touch: the owner's complaint that names the id (the measured shape) → blocked", touch("set_session_model", desk, model="claude-opus-5-5")[0] == 2)
+        owner_said("物理の検収所を Fable に戻して")
+        check("touch: the owner named the title (without its tags) → pass", touch("set_session_model", desk, model="claude-fable-5-1")[0] == 0)
+        owner_said("物理の検収所を Fable に戻して", "やっぱり物理の検収所は触らないで")
+        check("touch: the owner's latest word on it negates → blocked", touch("stop_session", desk)[0] == 2)
+        owner_said("雑用は Fable でなく Opus でいい。")
+        check("touch: a word about another window does not name this one → blocked", touch("set_session_model", desk, model="claude-opus-5-5")[0] == 2)
+        check("touch: a caller with no app record (not a desktop session) → pass (fail-open)",
+              touch("set_session_model", desk, sid="0f0f0f0f-0000-4000-8000-000000000000", model="claude-opus-5-5")[0] == 0)
+        check("touch: a target with no app record → pass (fail-open)",
+              touch("stop_session", "local_77777777-0000-4000-8000-000000000077")[0] == 0)
+        open(os.environ["SESSION_TOUCH_GATE_OFF_MARKER"], "w").close()
+        check("touch: the off marker → pass", touch("set_session_model", desk, model="claude-opus-5-5")[0] == 0)
+        os.remove(os.environ["SESSION_TOUCH_GATE_OFF_MARKER"])
+        os.environ["SESSION_TOUCH_GATE"] = "0"
+        check("touch: SESSION_TOUCH_GATE=0 → pass", touch("set_session_model", desk, model="claude-opus-5-5")[0] == 0)
+        os.environ.pop("SESSION_TOUCH_GATE", None)
+        check("touch: the gate is on by default", touch("set_session_model", desk, model="claude-opus-5-5")[0] == 2)
+        os.environ["SESSION_LAUNCH_PREMIUM_GATE"] = "1"
+        owner_said("締めて")
+        rc, err = touch("set_session_model", kid, model="claude-fable-5-1")
+        check("touch: own child passes TOUCH_GATE, then the premium gate still asks for a reason", rc == 2 and "理由が要る" in err)
         os.environ.pop("SESSION_LAUNCH_PREMIUM_GATE", None)
 
         # ---- a hand-off naming a request with no launch record here (BOARD_FIRST)
