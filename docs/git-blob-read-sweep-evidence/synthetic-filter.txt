@@ -1,0 +1,9 @@
+fixture: True stored overhead 11 helper plaintext True
+memory HEAD byte excess 11
+letter git_text UnicodeDecodeError
+history show UnicodeDecodeError
+flatten reader equals plaintext False
+link target AttributeError
+legacy committed map set()
+candidate regions UnicodeDecodeError
+helper with failed smudge: rc 0 ciphertext returned True

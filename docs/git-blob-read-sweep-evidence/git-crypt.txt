@@ -1,0 +1,8 @@
+git-crypt fixture: magic True stored overhead 22 helper plaintext True
+memory HEAD byte excess 22
+letter git_text UnicodeDecodeError
+history show UnicodeDecodeError
+flatten reader equals plaintext False
+link target 'lands on a.md but #anchor is not defined there in HEAD'
+legacy committed map set()
+candidate regions UnicodeDecodeError

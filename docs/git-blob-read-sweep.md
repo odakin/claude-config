@@ -1,6 +1,6 @@
 # Git の版を読む処理の棚卸しと修正方針
 
-状態: **方針案。実装には未着手**。依頼側がこの範囲を検収し、方針の確認後に実装を依頼する。
+状態: **調査結果と方針案。実装には未着手**。実装は方針の確認後に別途依頼する。
 
 推す案は、任意の repo の本文を読む **16 file・17 呼出箇所**を、Python では `lib/git_blob.py`、shell では既存の暗号化 path の分岐に揃えること。すでに復号する処理、公開時の保存内容を調べる処理、暗号文を確認する試験は用途を保つ。共通 helper の失敗時の契約は変更しない。
 
@@ -91,6 +91,20 @@ shell の 3 file・3 箇所。規則が示す [staged-conflict-markers.sh](../sc
 同じ repo の `read_blob` は本文と byte 単位で一致した。別の合成 filter (clean で `\0GITCRYPT\0` と非 UTF-8 byte を付加し、smudge を失敗させる) では、helper が **rc 0 と暗号文の bytes を返す**ことも確認した。これは fallback の現在の仕様であり、rc だけで復号成功とみなせない。
 
 この probe は各関数の読取の観測であり、修正後の CLI 全体や本番 hook の検証ではない。上表以外の移行候補は静的な用途の追跡まで。Overleaf の送信、無人 routine の実行、private データでの較正は行っていない。
+
+### 原出力と再現コード
+
+根拠に使った一回きりの code と出力の扱いは、[締めの evidence script の規則](../conventions/closing-sweep.md#evidence-scripts)に従う。下の出力は調査時の実行結果を回収したもので、修正後に取り直した結果ではない。
+
+| 根拠 | 保存先と読み方 |
+|---|---|
+| 本文の読取候補を列挙した AST の走査 | [inventory.py](git-blob-read-sweep-evidence/inventory.py) と [原出力](git-blob-read-sweep-evidence/inventory.txt)。基準版の checkout の root で `python3 docs/git-blob-read-sweep-evidence/inventory.py` を実行する。文字列の候補一覧であり、表の用途判定そのものを自動で証明するものではない |
+| 合成 filter の probe | [原出力](git-blob-read-sweep-evidence/synthetic-filter.txt)。`link target AttributeError` は誤った関数名で呼んだ失敗であり、anchor の結論の根拠には使わない。後半の smudge 失敗時に rc 0 の暗号文が返る結果が根拠 |
+| 実 git-crypt の probe | [原出力](git-blob-read-sweep-evidence/git-crypt.txt)。7 関数の観測と本文の 22 byte の差はこの出力に対応する |
+
+probe 2 本の code は `agent-rule-guard-history.py` を名前で読み込むため、実行用 script としての配置は保護対象となる。候補全文は [合成 filter の候補](git-blob-read-sweep-evidence/synthetic-filter.py.txt) と [実 git-crypt の候補](git-blob-read-sweep-evidence/git-crypt.py.txt) に text として置き、実行用 file には適用していない。候補の受け渡しに `.txt` を使う形は [締めの保護対象の手順](../conventions/closing-sweep.md#protected-files-need-ruling)に従う。元の一回きりの code から、repo の位置の決定だけを file の相対位置に替えた。原出力は上に保存し、実行用 file への適用は既存の承認手順の対象として残す。名前を隠して保護を外す書き換えはしない。
+
+ほかの一回きりの code は、本文の部分表示・文字列での候補抽出・掲示板表示の絞り込みに用いた。新しい判定や再現結果を持たない表示用の枠なので恒久配置しない。数値の集計は上の AST code、静的な用途の判断は基準版と本書の各呼出しの表を根拠とする。
 
 ## 実装の方針案
 

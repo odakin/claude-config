@@ -1,0 +1,30 @@
+from pathlib import Path
+import importlib.util, subprocess, tempfile, os, sys
+root=Path(__file__).resolve().parents[2]; sys.path.insert(0,str(root/'scripts/lib'))
+from git_blob import read_blob
+
+def load(name):
+ spec=importlib.util.spec_from_file_location(name,root/'scripts'/f'{name}.py'); m=importlib.util.module_from_spec(spec); sys.modules[name]=m; spec.loader.exec_module(m); return m
+mods={n:load(n) for n in ['memory-budget-pay','letter-word-count','agent-rule-guard-history','latexdiff-flatten','fix-md-links','check-legacy-append-only','manuscript-candidate-regions']}
+with tempfile.TemporaryDirectory(prefix='blob-crypt-audit-') as td:
+ repo=Path(td); env=dict(os.environ,GIT_CONFIG_GLOBAL=os.devnull,GIT_CONFIG_NOSYSTEM='1')
+ def git(*a): return subprocess.run(['git','-C',str(repo),*a],env=env,capture_output=True,check=True)
+ git('init','-q','-b','main'); git('config','user.name','fixture'); git('config','user.email','fixture@example.invalid')
+ subprocess.run(['git-crypt','init'],cwd=repo,env=env,capture_output=True,check=True)
+ (repo/'.gitattributes').write_text('*.md filter=git-crypt diff=git-crypt\n*.tex filter=git-crypt diff=git-crypt\n*.yaml filter=git-crypt diff=git-crypt\n')
+ md='# Anchor\n<a id="anchor"></a>\nPlain synthetic text.\n'; tex='\\begin{document}\n\\section{Introduction}\nSynthetic sentence.\n\\end{document}\n'
+ (repo/'a.md').write_text(md); (repo/'main.tex').write_text(tex); (repo/'a.index.yaml').write_text('sections:\n  - id: a\n    legacy: "1"\n')
+ git('add','-A'); git('commit','-qm','synthetic')
+ raw=git('show','HEAD:a.md').stdout; rc,plain=read_blob('HEAD:a.md',cwd=repo)
+ print('git-crypt fixture: magic',raw.startswith(b'\0GITCRYPT'),'stored overhead',len(raw)-len(md.encode()),'helper plaintext',rc==0 and plain==md.encode())
+ def observe(label, fn):
+  try: print(label,repr(fn()))
+  except Exception as e: print(label,type(e).__name__)
+ observe('memory HEAD byte excess',lambda:mods['memory-budget-pay'].head_bytes(repo/'a.md')-len(md.encode()))
+ observe('letter git_text',lambda:mods['letter-word-count'].git_text(repo/'main.tex','HEAD')==tex)
+ observe('history show',lambda:mods['agent-rule-guard-history'].show(str(repo),'HEAD','a.md')==md)
+ observe('flatten reader equals plaintext',lambda:mods['latexdiff-flatten'].reader(repo,'HEAD',[],'.')('main.tex')==tex)
+ observe('link target',lambda:mods['fix-md-links'].target_problem(repo,'a.md','a.md#anchor','HEAD'))
+ os.chdir(repo)
+ observe('legacy committed map',lambda:mods['check-legacy-append-only'].legacy_set(mods['check-legacy-append-only'].git_show('HEAD:a.index.yaml')))
+ observe('candidate regions',lambda:mods['manuscript-candidate-regions'].candidate_regions(repo,'main.tex',repo/'main.tex'))
