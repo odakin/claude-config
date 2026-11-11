@@ -369,6 +369,7 @@ slash は割り算、 中黒は乗算 (\cdot) と紛らわしい。 2 個は「$
 - 本文が説明を与えていて外部文献が詳説の補足なら「see also」、 本文が説明を文献に委ねるときだけ「see」。 1 句で書く (「; see also Sec.~4 of Ref.~\cite{X} for the full derivation.」)。
 - <a id="generalization-states-the-difference"></a>**先行研究の式を再掲・一般化するときは、 違いを主語にした文で言う**: 「This is Y of Ref.~\cite{X} with …」 では違いが通じない。 「In Ref.~\cite{X} the two widths are equal; here they are independent.」 のように、 先行研究が何で本論文が何かを並べる。 先行研究の式の一般化にすぎない式を「one of the main results」 と呼ばない。 書く前に、 その式が先行論文の何番の式と同じで何が違うかを、 先行論文の PDF を開いて確かめる。
 - 本文の途中の帰属と要約の比較の置き場 = [#prior-work-in-introduction](#prior-work-in-introduction)。
+- <a id="novelty-sentence-from-table"></a>**新規性の文と、 先行研究から「導ける」「既知」 と言う文は、 新規性の表から書く**: 比べる文を固定し、 判定を 5 つの語 (印刷されている / 先行研究だけから出る / 我々の入力を足せば出る / 新しい考えが要る / 未判定) で付けた表を先に作る。 要旨・序論・結論が新しいと言う範囲は、 表の「我々の入力を足せば出る」 の足すものと「新しい考えが要る」 の行に当たる部分だけにする。 正本 = [`novelty-comparison.md`](novelty-comparison.md)。
 - <a id="cited-authors-by-name"></a>**引用した著者は名前で呼び、 前に使った動詞から作った役割の名詞で呼ばない**: 最初の文の動詞から作った名詞 (collected → the collectors、 proposed → the proposers) で後の段落から著者を呼ぶと、 読者はその名詞が誰を指すかを最初の文まで戻って探し、 同じ綴りの別の意味 (道具の名前など) とも紛れる (実測)。 名前で書き (「Smith and Jones」)、 先行詞がすぐ前の文にあるときだけ they / their にする。 段落が変わったら名前に戻す。
 
 ## <a id="paper-symbols"></a>8. 記号・定義・式

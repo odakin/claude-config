@@ -781,6 +781,7 @@ origin: 2026-09-12、長く改稿を重ねた原稿で、共著者が外部 tool
 投稿前の readiness gate (別 session・別 vendor に渡す機械 gate + claim sweep) の spec は、 claim sweep の対象として少なくとも次の anchor を名指す (anchor 名は安定 — spec からそのまま引く):
 
 - 主張の収支と強さ: [`headline-claim-budget-check`](#headline-claim-budget-check) (**係数の符号を含む**) / [`claim-strength-three-tests`](#claim-strength-three-tests) / [`uniqueness-claim-exhaustion`](#uniqueness-claim-exhaustion) / [`title-claim-check`](#title-claim-check)
+- <a id="novelty-table-before-submission"></a>新規性: 主結果 1 つにつき 1 行以上の新規性の表 ([`novelty-comparison.md#table-template`](novelty-comparison.md#table-template)) が在り、 要旨・序論・結論が新しいと言う範囲が、 表の「我々の入力を足せば出る」 の足すものと「新しい考えが要る」 の行に収まっているか。 「未判定」 の行は、 済んでいないものを添えて著者に出す。 主結果ごとに、 「先行研究だけから出る」 を立証する側と「出ない」 を立証する側を別の AI に書かせて突き合わせる ([`novelty-comparison.md#adversarial-pair-before-submission`](novelty-comparison.md#adversarial-pair-before-submission))
 - 符号と規約: [`absolute-sign-external-anchor`](#absolute-sign-external-anchor) / [`convention-difference-closure`](#convention-difference-closure) / [`euclidean-check-in-lorentzian-paper`](#euclidean-check-in-lorentzian-paper)
 - 配置と語彙: [`statement-placement-check`](#statement-placement-check) / [`stale-framing-sweep`](#stale-framing-sweep) / [`abstract-geroch-compression`](#abstract-geroch-compression) / [`sentence-length-audit`](#sentence-length-audit) (機械 = [`check-paper-prose.py`](../scripts/check-paper-prose.py) の L・位置語 P・強い語 W) / 節の頭のイタリックの文 = [`writing-discipline.md#no-italic-section-lead`](writing-discipline.md#no-italic-section-lead) (機械 = 同 script の I1) / 略語の 2 条件 = [`latex.md#abbreviation-first-occurrence`](latex.md#abbreviation-first-occurrence) (機械 = `check-abbreviations.py`)
 - 記号と付録: [`new-symbol-convention-consistency`](#new-symbol-convention-consistency) / [`notation-continuity-across-sections`](#notation-continuity-across-sections) / [`cross-check-appendix-shape`](#cross-check-appendix-shape) / [`appendix-order-by-first-reference`](#appendix-order-by-first-reference) (機械 = `check-paper-prose.py` の A1–A3) / [`flagged-formula-consumption`](#flagged-formula-consumption) (付録に誤りの注記が残る原稿)
@@ -846,7 +847,7 @@ origin: 2026-09-12、長く改稿を重ねた原稿で、共著者が外部 tool
 
 ## <a id="novelty-calibrated-to-venue"></a>新規性は venue の型で測る — AI の評価は安全側に倒れる (2026-09-12)
 
-読み手側から「何が新しくて、 面白くて、 重要なのか」 を量る 3 問 (正しさの検査の後、 低/中/高 → 媒体の重さ) = [manuscript-value-triage.md](manuscript-value-triage.md)。
+読み手側から「何が新しくて、 面白くて、 重要なのか」 を量る 3 問 (正しさの検査の後、 低/中/高 → 媒体の重さ) = [manuscript-value-triage.md](manuscript-value-triage.md)。 この節の物差しは「この投稿先の型に対して足りるか」 を量る。 主張が先行研究に印刷されているか・先行研究から導けるかの判定は別の物差しで、 [novelty-comparison.md](novelty-comparison.md) (比べる文の固定・5 つの判定の語・反例探し・表) が持つ。
 
 「新規性が足りるか」 の答えは投稿先の型 (原著論文 / 短報 / 資料・調査ノート / レター) で変わる。 **測る物差しを先に固定しないと、 評価は必ず辛い方に倒れる**。
 
@@ -904,7 +905,7 @@ bare 作用が一階形式 (vierbein + 独立な接続) で、 誘導作用が�
 
 **型 1 (変数)**: 変数 Y で書いた一ループの汎関数 Γ[Y] が既に知られていて、 こちらは別の変数 X での 2 点関数を計算した、 という設定で「相手の変数には X が無い」「相手は X を量子化しない、 こちらは量子化する」「X の一部の成分は相手の計算に現れない」 を新規性の論拠にする。
 その一ループに X の内線が無ければ、 X を量子場と呼ぶかどうかは行列式を変えない。 こちらの量は Γ[Y(X)] の X についての 2 階変分で、 連鎖律 Γ_{,ij} = Y^A_{,i} Γ_{,AB} Y^B_{,j} + Γ_{,A} Y^A_{,ij} で決まる (第 2 項 = off-shell の接触項・tadpole)。
-相手の変数に X の一部の成分が無くても、 その成分は Y(X) を通して入っている。 合成例: O(N) 模型の有効ポテンシャルが不変量 ρ = φ_aφ_a の関数 V(ρ) として知られていれば、 成分の 2 点関数は ∂²V/∂φ_a∂φ_b = 2δ_ab V'(ρ) + 4φ_aφ_b V''(ρ) で決まり、 ρ に現れない角度の方向 (Goldstone の方向) も第 1 項を通して入る。 読み手は数行でこれを示せる。
+相手の変数に X の一部の成分が無くても、 その成分は Y(X) を通して入っている。 合成例: O(N) 模型の有効ポテンシャルが不変量 ρ = φ_aφ_a の関数 V(ρ) として知られていれば、 成分の 2 点関数は ∂²V/∂φ_a∂φ_b = 2δ_ab V'(ρ) + 4φ_aφ_b V''(ρ) で決まり、 ρ に現れない角度の方向 (Goldstone の方向) も第 1 項を通して入る。 読み手は、 既知の V(ρ) と連鎖律だけでこれを示せる (段の出どころが先行研究と教科書の事実だけ = [novelty-comparison.md](novelty-comparison.md#verdict-definitions) の判定では「先行研究だけから出る」 の側)。
 
 **型 2 (恒等式)**: 「Ward–Takahashi 恒等式を確かめた」 を、 相手の有効作用の計算より量子的な中身がある証拠にする。
 不変性から導いた WT 恒等式は、 係数が何であれ、 不変な汎関数の変分で恒等的に成り立つ (機械で示せる: 共変な汎関数の係数を乱数にしても、 その 2 点関数と混合 2 点関数で恒等式の残差は 0)。

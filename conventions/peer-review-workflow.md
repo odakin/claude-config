@@ -212,6 +212,8 @@ related_files:
 
 検証結果を `analysis.md §X` に reflect。 申請の真の novelty (= 残る gap) を狭く evaluation し直す根拠とする。
 
+<a id="novelty-same-yardstick"></a>**査読・審査する側も、 新規性は同じ物差しで量る**: 相手の新規性の主張と差別化の主張を、 [`novelty-comparison.md`](novelty-comparison.md) の規則で表にする = 相手の主張の文を固定し、 [N] の頁と式を固定し、 [N] が与えるものを 3 種 (中身の保証された結果 / 具体例 / 形式的な式) に分け、 判定を 5 つの語で付ける。 「[N] から導ける」 と書く前に導出の段ごとの出どころを書き、 反例を探す ([`#counterexample-search`](novelty-comparison.md#counterexample-search))。 AI が出すのは表と見た範囲までで、 評価の語 (overclaim か、 新規性が足りるか) を付けるのは評価を出す本人。
+
 ### 関連: 「単一 source trust 禁則」 family の related axes
 
 申請書 wording (= 単一情報源) で結論せず引用元現物で 2 情報源化する本節の規律は、 「single source = false confidence」 family の **citation 軸 wording** instance。 layer 1 で近接する **related axes** (= 同じ mechanism family、 ただし domain / mechanism は各々異なる):
