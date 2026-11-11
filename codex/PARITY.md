@@ -223,8 +223,9 @@ An unresolved state returns the [official Codex Hook](https://learn.chatgpt.com/
 `{"decision":"block","reason":"..."}`. Codex then receives one automatic
 continuation prompt to commit/push/verify or to report a legitimate exception.
 `stop_hook_active` prevents an infinite continuation loop; if state is still
-unresolved on that second Stop, the hook remains loud but cannot force a second
-continuation in the same turn. This is the product contract, not a claim of
+unresolved on that second Stop, issues other than an exact repeated dirty-state
+notification remain loud but cannot force a second continuation in the same
+turn. This is the product contract, not a claim of
 absolute enforcement.
 
 Coverage has five honest limits. Tool hooks can miss specialized execution
@@ -266,6 +267,32 @@ without changing its baseline. This keeps the exact exception visible to
 the owner when it is first made without repeating it in later read-only
 turns.
 
+The hook records a separate `last_dirty_notice` for an exact, readable, stable
+dirty snapshot, regardless of who wrote it. Its first unresolved Stop still
+warns. A later identical Stop emits no duplicate warning, including after an
+unclassified read-only tool call or while permission to publish remains
+unresolved. This deliberately omits repeated Stop forcing for the same
+unresolved task-owned dirt too; it does not establish completion or owner
+approval. The original baseline, acknowledgement receipt and issue predicate
+remain unchanged, and Git/live remote checks still run on every Stop.
+
+A matched PreToolUse patch or recognized simple Git write attempt increments
+a separate notification generation, so even unchanged bytes warn once again.
+PostToolUse does not increment it a second time. An unclassified Bash command
+does not by itself advance this generation; actual data changes are detected
+by the snapshots. A publication refused before any matched PreToolUse has no
+write observation. Tool coverage remains limited to these observed events.
+A changed path, content, index, mode, deletion, HEAD, worktree, branch, session
+or local day also requires a new warning. Malformed or incomplete receipt
+scopes, invalid receipt dates, malformed or unreadable baselines, unreadable
+state, tracker races, and remote or publication-state problems remain loud.
+Notification eligibility validates records without repairing them or changing
+the original acknowledgement predicate. This suppresses newly generated
+duplicate output; it cannot retract an old Hook prompt already generated and
+later redisplayed by the client.
+
+[`session_touch.test.py`](hooks/session_touch.test.py) exercises the receipt and
+notification-state regressions on isolated Git data.
 `codex-hooks.test.sh` supplies negative controls for dirty completion,
 commit-only/ahead completion, a later separate push, and behind state. The
 integration checker preserves the firing stubs and Hook wiring; the machine

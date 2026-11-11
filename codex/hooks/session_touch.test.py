@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import hashlib
 import importlib.util
 import io
@@ -101,7 +102,8 @@ class ReceiptTests(unittest.TestCase):
         self.blocked("1 unacknowledged current path(s)")
         prompt = self.review()
         self.assertEqual(self.acknowledge(prompt, hook_event_name="PreToolUse"), "")
-        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        self.assertIn("dirty", gate.repo_issues(self.repo, gate.load_state(self.state)["repos"][str(self.repo)], "fixture")[0])
         self.assertIn("Recorded", self.acknowledge(prompt))
         self.assertEqual(self.nudge(), {})
         self.track("git status --short && git diff --stat")
@@ -140,7 +142,9 @@ class ReceiptTests(unittest.TestCase):
         (self.repo / "ours").write_text("owned\n")
         self.blocked("1 unacknowledged current path(s)")
         self.assertIn("Recorded", self.acknowledge())
-        self.blocked("1 unacknowledged current path(s)")
+        self.assertEqual(self.nudge(), {})
+        entry = gate.load_state(self.state)["repos"][str(self.repo)]
+        self.assertIn("1 unacknowledged current path(s)", gate.repo_issues(self.repo, entry, "fixture")[0])
 
     def test_same_porcelain_own_edit_of_preexisting_path(self):
         (self.repo / "foreign a").write_text("other a\n")
@@ -300,6 +304,278 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(gate.load_state(self.state)["repos"][str(self.repo)]["baseline"], prior)
         (self.repo / "foreign a").write_text("new current data\n")
         self.blocked("dirty")
+
+
+    def test_notice_read_only_unknown_tools_and_replayed_stop(self):
+        self.fixture()
+        baseline = gate.load_state(self.state)["repos"][str(self.repo)]["baseline"]
+        self.blocked("dirty")
+        for active, run in ((True, "same"), (False, "same"), (False, "new")):
+            self.track("git status --short && git diff --stat")
+            self.track("python3 - <<'PY'\nprint('read-only report')\nPY")
+            self.assertEqual(self.call(gate.nudge, hook_event_name="Stop",
+                                      stop_hook_active=active, hook_run_id=run)[1], {})
+        state = gate.load_state(self.state)
+        entry = state["repos"][str(self.repo)]
+        self.assertEqual(entry["baseline"], baseline)
+        self.assertNotIn("receipt", entry)
+        self.assertTrue(entry["unknown_write"])
+        self.assertIn("dirty", gate.repo_issues(self.repo, entry, "fixture")[0])
+        self.assertIn("last_dirty_notice", state)
+
+    def test_notice_new_path_same_path_index_mode_delete_and_return(self):
+        self.fixture()
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        old_porcelain = self.git("status", "--porcelain=v1")
+        (self.repo / "foreign a").write_text("new same-status bytes\n")
+        self.assertEqual(self.git("status", "--porcelain=v1"), old_porcelain)
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        self.git("add", "--", "foreign a")
+        self.blocked("dirty")
+        old_porcelain = self.git("status", "--porcelain=v1")
+        (self.repo / "foreign a").write_text("new staged bytes\n")
+        self.git("add", "--", "foreign a")
+        self.assertEqual(self.git("status", "--porcelain=v1"), old_porcelain)
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        (self.repo / "foreign a").chmod(0o755)
+        self.blocked("dirty")
+        (self.repo / "foreign a").unlink()
+        self.blocked("dirty")
+        (self.repo / "foreign a").write_text("new staged bytes\n")
+        self.blocked("dirty")
+        (self.repo / "new-path").write_text("new\n")
+        self.blocked("2 unacknowledged")
+
+    def test_notice_own_dirty_publication_refused_read_only_then_new_writes(self):
+        self.track("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch")
+        (self.repo / "ours").write_text("authorized task work awaiting publication permission\n")
+        self.blocked("dirty")
+        # Publication refused before matched PreToolUse produces no observed
+        # write or Git effect. Read-only tools run while the owner answers.
+        self.track("git status --short && git diff --stat")
+        self.track("python3 - <<'PY'\nprint('read-only publication status')\nPY")
+        self.assertEqual(self.nudge(), {})
+        self.assertEqual(self.call(gate.nudge, hook_event_name="Stop", stop_hook_active=True)[1], {})
+        baseline = gate.load_state(self.state)["repos"][str(self.repo)]["baseline"]
+        for command, tool in (("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch"),
+                              ("git add -- ours", "Bash"), ("git commit -m retry -- ours", "Bash")):
+            with self.subTest(command=command):
+                self.track(command, tool)
+                self.blocked("dirty")
+                self.assertEqual(self.nudge(), {})
+        entry = gate.load_state(self.state)["repos"][str(self.repo)]
+        self.assertEqual(entry["baseline"], baseline)
+        self.assertNotIn("receipt", entry)
+
+    def test_notice_unattributed_patch_rearms_without_permanent_suppression(self):
+        self.fixture()
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        self.track("unrecognized patch target", "apply_patch")
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        self.call(gate.track, tool_name="apply_patch", hook_event_name="PostToolUse",
+                  tool_input={"command": "unrecognized patch target"})
+        self.assertEqual(self.nudge(), {})
+        self.track("unrecognized patch target", "apply_patch")
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+
+    def test_notice_git_inspection_forms_do_not_rearm(self):
+        self.track("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch")
+        (self.repo / "ours").write_text("owned dirty state\n")
+        self.blocked("dirty")
+        for command in ("git branch -a", "git remote show origin", "git stash list",
+                        "git apply --check candidate.patch", "git add --dry-run -- ours"):
+            with self.subTest(command=command):
+                self.track(command)
+                self.assertEqual(self.nudge(), {})
+
+    def test_notice_receipt_missing_scope_keys_stays_loud(self):
+        self.approved()
+        original = gate.load_state(self.state)
+        for field in ("session", "worktree", "epoch", "day"):
+            with self.subTest(field=field):
+                state = json.loads(json.dumps(original))
+                receipt = state["repos"][str(self.repo)]["receipt"]
+                receipt["manifest"].pop(field)
+                receipt["digest"] = gate.digest(receipt["manifest"])
+                gate.save_state(self.state, state)
+                for _ in range(2):
+                    self.blocked("dirty")
+
+    def test_notice_receipt_nul_path_stays_loud_without_repair(self):
+        self.fixture()
+        state = gate.load_state(self.state)
+        entry = state["repos"][str(self.repo)]
+        manifest = gate.receipt_manifest("fixture", self.repo, entry,
+                                         gate.repo_signature(self.repo, with_identity=True))
+        manifest["paths"] = {"bad\x00name": next(iter(manifest["paths"].values()))}
+        entry["receipt"] = {"manifest": manifest, "digest": gate.digest(manifest), "invalidated": []}
+        gate.save_state(self.state, state)
+        for _ in range(3):
+            self.blocked("dirty")
+        entry = gate.load_state(self.state)["repos"][str(self.repo)]
+        self.assertEqual(entry["receipt"]["manifest"], manifest)
+        self.assertEqual(gate.acknowledged_paths("fixture", self.repo, entry,
+                                               gate.repo_signature(self.repo, with_identity=True)), set())
+
+    def test_notice_baseline_nul_path_stays_loud_without_repair(self):
+        self.fixture()
+        state = gate.load_state(self.state)
+        baseline = state["repos"][str(self.repo)]["baseline"]
+        baseline["paths"]["bad\x00name"] = baseline["paths"].pop("foreign a")
+        gate.save_state(self.state, state)
+        for _ in range(3):
+            self.blocked("dirty")
+        self.assertEqual(gate.load_state(self.state)["repos"][str(self.repo)]["baseline"], baseline)
+
+    def test_notice_receipt_invalid_day_stays_loud(self):
+        self.approved()
+        original = gate.load_state(self.state)
+        for day in (None, 42, [], {}, "2026-02-30", "not-a-date"):
+            with self.subTest(day=day):
+                state = json.loads(json.dumps(original))
+                receipt = state["repos"][str(self.repo)]["receipt"]
+                receipt["manifest"]["day"] = day
+                receipt["digest"] = gate.digest(receipt["manifest"])
+                gate.save_state(self.state, state)
+                for _ in range(2):
+                    self.blocked("dirty")
+
+    def test_notice_invalid_baseline_stays_loud_without_repair(self):
+        self.fixture()
+        original = gate.load_state(self.state)
+        baseline = original["repos"][str(self.repo)]["baseline"]
+        variants = ({}, {**baseline, "head": None}, {**baseline, "status_hash": 4},
+                    {**baseline, "dirty_count": False}, {**baseline, "paths": None})
+        for invalid in variants:
+            with self.subTest(baseline=invalid):
+                state = json.loads(json.dumps(original))
+                state["repos"][str(self.repo)]["baseline"] = invalid
+                gate.save_state(self.state, state)
+                for _ in range(2):
+                    self.blocked("dirty")
+                self.assertEqual(gate.load_state(self.state)["repos"][str(self.repo)]["baseline"], invalid)
+
+    def test_notice_scope_branch_day_session_and_worktree(self):
+        self.fixture()
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        self.git("switch", "-qc", "other")
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        original_datetime = datetime.datetime
+        class Tomorrow(original_datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return original_datetime.now(tz) + datetime.timedelta(days=1)
+        with patch.object(gate.datetime, "datetime", Tomorrow):
+            self.blocked("dirty")
+            self.assertEqual(self.nudge(), {})
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        # A copied notice is still bound to its native session, even if state
+        # restoration or a legacy migration copied the enclosing tracker.
+        state = gate.load_state(self.state)
+        other_event = {**self.event, "session_id": "different"}
+        gate.save_state(gate.state_path(other_event), state)
+        self.assertEqual(self.call(gate.nudge, **other_event, hook_event_name="Stop")[1].get("decision"), "block")
+        gitdir = self.repo / ".git"
+        saved_gitdir = self.root / "saved-gitdir"
+        gitdir.rename(saved_gitdir)
+        shutil.copytree(saved_gitdir, gitdir)
+        self.blocked("dirty")
+
+    def test_notice_live_remote_rechecked_and_ahead_behind_stay_loud(self):
+        self.bare_remote()
+        self.fixture()
+        original = gate.live_remote_head
+        with patch.object(gate, "live_remote_head", wraps=original) as live:
+            self.blocked("dirty")
+            self.assertEqual(self.nudge(), {})
+            self.assertEqual(live.call_count, 2)
+        (self.repo / "ours").write_text("local committed progress\n")
+        self.git("commit", "-qm", "ours", "--", "ours")
+        for _ in range(2):
+            self.blocked("ahead=1")
+        self.git("push", "-q")
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        clone = self.root / "remote-writer"
+        self.git("clone", "-q", str(self.remote), str(clone))
+        (clone / "ours").write_text("remote progress\n")
+        self.git("commit", "-qam", "remote", cwd=clone)
+        self.git("push", "-q", cwd=clone)
+        self.git("fetch", "-q")
+        for _ in range(2):
+            self.blocked("behind=1")
+        with patch.object(gate, "live_remote_head", return_value=(None, "unavailable")):
+            for _ in range(2):
+                self.blocked("live remote head could not be verified")
+
+    def test_notice_unreadable_state_or_snapshot_stays_loud(self):
+        self.fixture()
+        self.blocked("dirty")
+        with patch.object(gate, "file_snapshot", side_effect=OSError("unavailable")):
+            for _ in range(2):
+                self.blocked("exact dirty state could not be read")
+        state = gate.load_state(self.state)
+        state["repos"][str(self.repo)]["receipt"] = {"digest": "malformed"}
+        gate.save_state(self.state, state)
+        for _ in range(2):
+            self.blocked("dirty")
+        self.state.write_text("{bad JSON")
+        for _ in range(2):
+            self.blocked("state could not be read")
+
+    def test_notice_concurrent_tracker_and_state_write_failure_stay_loud(self):
+        self.fixture()
+        self.blocked("dirty")
+        original = gate.repo_issues
+        def tracker_race(*args):
+            answer = original(*args)
+            self.track("git add -- foreign a")
+            return answer
+        with patch.object(gate, "repo_issues", side_effect=tracker_race):
+            self.blocked("state changed during verification")
+        # Force a new candidate notice, then fail to persist it. A warning must
+        # still be emitted, and an unrecorded notice must never be suppressed.
+        (self.repo / "foreign-b").write_text("additional unknown change\n")
+        with patch.object(gate, "save_state", side_effect=OSError("read-only state")):
+            for _ in range(2):
+                self.blocked("state could not be verified")
+
+    def test_notice_snapshot_changed_during_verification_stays_loud(self):
+        self.bare_remote()
+        self.fixture()
+        self.blocked("dirty")
+        original = gate.live_remote_head
+        def racing(*args):
+            result = original(*args)
+            (self.repo / "foreign a").write_text("changed during query\n")
+            return result
+        with patch.object(gate, "live_remote_head", side_effect=racing):
+            self.blocked("dirty")
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+
+    def test_notice_malformed_other_repo_and_no_lock_stay_loud(self):
+        self.fixture()
+        self.blocked("dirty")
+        state = gate.load_state(self.state)
+        state["repos"]["malformed"] = []
+        gate.save_state(self.state, state)
+        for _ in range(2):
+            self.blocked("repository state is malformed")
+        state["repos"].pop("malformed")
+        gate.save_state(self.state, state)
+        with patch.object(gate, "fcntl", None):
+            for _ in range(2):
+                self.blocked("dirty")
 
 
 if __name__ == "__main__":

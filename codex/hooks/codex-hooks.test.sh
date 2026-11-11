@@ -218,8 +218,8 @@ assert "dirty" in payload["reason"]
 assert "CONVENTIONS.md#completion-git-gate" in payload["reason"]
 PY
 
-# Codex's stop_hook_active recursion guard permits only one continuation. The
-# second pass stays loud but does not create an infinite continuation loop.
+# Identical readable dirt is notified once even when it belongs to this task.
+# The automatic continuation does not receive the same full warning again.
 make_stop_input "$TOUCH_REPO" dirty-session true \
   | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
   > "$TEMP_ROOT/nudge-active.json"
@@ -228,8 +228,19 @@ import json
 import sys
 
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
-assert "decision" not in payload
-assert "unresolved state remains" in payload["systemMessage"]
+assert payload == {}
+PY
+
+# A fresh known write attempt re-arms notification even without a byte change.
+make_touch_input "$TEMP_ROOT" dirty-session PreToolUse apply_patch "$DIRTY_PATCH" \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" track
+make_stop_input "$TOUCH_REPO" dirty-session false \
+  | CODEX_SESSION_TOUCH_STATE_DIR="$TEMP_ROOT/state" python3 "$SCRIPT_DIR/session_touch.py" nudge \
+  > "$TEMP_ROOT/nudge-rearmed.json"
+python3 - "$TEMP_ROOT/nudge-rearmed.json" <<'PY'
+import json
+import sys
+assert json.load(open(sys.argv[1], encoding="utf-8"))["decision"] == "block"
 PY
 
 git -C "$TOUCH_REPO" restore edited.txt
