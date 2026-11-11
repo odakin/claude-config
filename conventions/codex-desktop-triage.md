@@ -52,6 +52,14 @@ Codex の rollout では、 Stop hook の差し戻し文 (`<hook_prompt …>`) �
 - **原因の一つ**: 完了 gate ([`codex/hooks/session_touch.py`](../codex/hooks/session_touch.py) の `nudge`) は、 remote を持つ repo で HEAD が remote の先頭と違うと終了を 1 回差し戻す (remote が 0 本なら黙る)。 push しない仕事では満たせないので、 worker は理由を述べてもう 1 turn 使って終わる。 その turn も利用枠を食う。 push 先が手元の作業ツリーの checkout 中の branch (git が push を拒む = 手元の repo から clone した写し) なら、 gate は head を比べない。
 - **予防**: push しない仕事を渡す写しで remote が手元の作業ツリー以外 (GitHub など) を指すなら、 渡す前に remote を外す (手順 = ai-collaboration [`physics-verification-cycle.md#cross-vendor-repo-copy`](../../ai-collaboration/conventions/physics-verification-cycle.md#cross-vendor-repo-copy) の 1)。
 
+## <a id="app-followup-visible-input"></a>アプリ経由の依頼が受信側の入力一覧に現れない
+
+`send_message_to_thread` が対象 ID を返し、その対象が依頼への応答を終えていても、`read_thread` が返す当該 turn の `items` に `userMessage` が含まれない場合がある (実測)。送信側の tool の引数・返値と、受信側の turn の ID・終了時刻・可視応答は別々の証拠になる。`completed` は turn の終了を示すが、入力の内容や本人の承認を示すものではない。
+
+この形では、`codex-thread-close.py` の `judge()` が `userMessage` 内の wrap 指示を探す箇所は「wrap の記録が無い」を返す。通常のユーザー入力や CLI の予約で残る記録と、アプリ内の tool からの依頼が同じ形で返るとは限らない。入力欄の欠落だけから、依頼の未送信や wrap の未実行まで断定することはできない。可視の発言を読む補助経路と未取得の扱いは [締めの Codex 段](closing-sweep.md#codex)、閉鎖条件は [窓を畳む手順](multi-session-coordination.md#codex-thread-close) が持つ。ここで示すのは reader の対応範囲で、閉鎖判定の条件は従来のまま。
+
+同じ判定の Git 部分には、turn の時間帯に更新された未追跡 file を拾う補助がある。共有 checkout では別の worker の新規 file もその時間帯に入るため、時刻の一致は変更者の同定とは別である (実測)。差分・作成元・編集宣言の照合と既存の他担当差分の扱いは [完了 Git gate](../CONVENTIONS.md#completion-git-gate) に従う。
+
 ## <a id="thread-not-in-app"></a>script や別の session から起こした Codex の仕事がアプリの一覧に出ない
 
 原因 (実測): `codex exec` の thread は状態の記録 (`~/.codex/state_5.sqlite` の `threads`) に `source = exec` で入り、 アプリの一覧は対話の種類だけを出す。
