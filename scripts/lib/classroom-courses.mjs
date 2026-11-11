@@ -1,4 +1,4 @@
-// Google Classroom course engine: create / update, invite (parallel), announcements (post + read back against the draft), roster match by address, coursework list, short answers without names; takes a googleapis classroom client, no imports.
+// Google Classroom course engine: create / update, invite (parallel), announcements and coursework readback, roster match by address, coursework list, short answers without names; takes a googleapis classroom client, no imports.
 //
 // Every function takes the `classroom` client (googleapis `google.classroom({version: "v1", auth})`) as its
 // first argument, so the caller owns the credentials and the googleapis install; this module needs neither.
@@ -218,6 +218,59 @@ export async function listCourseWork(classroom, courseId) {
     pageToken = res.data.nextPageToken;
   } while (pageToken);
   return out.sort((a, b) => String(b.creationTime).localeCompare(String(a.creationTime)));
+}
+
+// Read one coursework and compare its publication settings with an explicit expected record.
+// Only final line breaks are ignored in descriptions; spaces and internal newlines still matter.
+// dueAt must include a timezone, or be null for no deadline; maxPoints null means ungraded.
+// This is GET-only. UI-only settings (such as the late-submission lock) remain unverified.
+export async function checkCourseWork(classroom, courseId, courseWorkId, expected) {
+  if (!courseId || !courseWorkId) throw new Error("courseId and courseWorkId are required");
+  if (!expected || typeof expected.title !== "string" || typeof expected.description !== "string") {
+    throw new Error("expected title and description are required");
+  }
+  if (expected.maxPoints !== null && (!Number.isFinite(expected.maxPoints) || expected.maxPoints < 0)) {
+    throw new Error("expected maxPoints must be a nonnegative number or null");
+  }
+  if (expected.dueAt !== null && (typeof expected.dueAt !== "string" ||
+      !/T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(expected.dueAt) ||
+      !Number.isFinite(Date.parse(expected.dueAt)))) {
+    throw new Error("expected dueAt must have an explicit timezone, or be null");
+  }
+  const { data: w } = await classroom.courses.courseWork.get({ courseId, id: courseWorkId });
+  const d = w.dueDate;
+  const t = w.dueTime || {};
+  const dueAt = d ? new Date(Date.UTC(d.year, d.month - 1, d.day,
+    t.hours || 0, t.minutes || 0, t.seconds || 0, (t.nanos || 0) / 1e6)).toISOString() : null;
+  const posted = {
+    id: w.id, title: w.title, description: w.description || "", state: w.state,
+    workType: w.workType, maxPoints: w.maxPoints ?? null, dueAt,
+    alternateLink: w.alternateLink, creationTime: w.creationTime, updateTime: w.updateTime,
+  };
+  const stripFinalNewlines = (s) => s.replace(/(?:\r?\n)+$/, "");
+  const got = stripFinalNewlines(posted.description);
+  const want = stripFinalNewlines(expected.description);
+  const checks = {
+    title: posted.title === expected.title,
+    description: got === want,
+    state: posted.state === (expected.state ?? "PUBLISHED"),
+    maxPoints: posted.maxPoints === expected.maxPoints,
+    dueAt: dueAt === (expected.dueAt === null ? null : new Date(expected.dueAt).toISOString()),
+  };
+  if (expected.workType !== undefined) checks.workType = posted.workType === expected.workType;
+  const result = {
+    ok: Object.values(checks).every(Boolean), checks, posted,
+    unverified: ["lateSubmissionLock"],
+  };
+  if (!checks.description) {
+    let index = 0;
+    while (index < Math.min(got.length, want.length) && got[index] === want[index]) index++;
+    const start = Math.max(0, index - 10);
+    result.descriptionDifference = {
+      index, posted: got.slice(start, index + 20), expected: want.slice(start, index + 20),
+    };
+  }
+  return result;
 }
 
 // Short-answer texts of a coursework without names or user ids, one entry per submission, for counting

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import {
   summarize, createCourse, updateCourse, createAnnouncement, checkAnnouncement, inviteMembers, rosterStatus, emailsFromRosterText,
-  gradeHistory, shortAnswers, listCourseWork,
+  gradeHistory, shortAnswers, listCourseWork, checkCourseWork,
 } from "./classroom-courses.mjs";
 
 const apiError = (status, code) => Object.assign(new Error(status), { code, response: { status: code, data: { error: { status, message: status } } } });
@@ -173,6 +173,69 @@ await check("listCourseWork pages through, formats the due date and sorts newest
 await check("emailsFromRosterText takes the last column, skips the header and non-addresses", () => {
   const text = '"year","id","name","E-mail"\r\n"2026","S1","A","a@example.com"\r\n"2026","S2","B",""\r\n"2026","S3","C","c@example.com"\r\n';
   assert.deepEqual(emailsFromRosterText(text), ["a@example.com", "c@example.com"]);
+});
+
+const sampleWork = {
+  id: "work-demo", title: "Discussion prompt", description: "First line\nSecond line",
+  state: "PUBLISHED", workType: "SHORT_ANSWER_QUESTION", maxPoints: 7,
+  dueDate: { year: 2032, month: 3, day: 4 }, dueTime: { hours: 15, minutes: 30 },
+};
+const sampleExpected = {
+  title: sampleWork.title, description: sampleWork.description + "\n",
+  maxPoints: 7, dueAt: "2032-03-05T00:30:00+09:00", workType: "SHORT_ANSWER_QUESTION",
+};
+function workClient(work = sampleWork) {
+  const calls = [];
+  return { calls, courses: { courseWork: { get: async (args) => {
+    calls.push(args); return { data: work };
+  } } } };
+}
+
+await check("coursework readback verifies only GET and compares a timezone crossing midnight", async () => {
+  const c = workClient();
+  const r = await checkCourseWork(c, "course-demo", "work-demo", sampleExpected);
+  assert.equal(r.ok, true);
+  assert.deepEqual(c.calls, [{ courseId: "course-demo", id: "work-demo" }]);
+  assert.equal(r.posted.dueAt, "2032-03-04T15:30:00.000Z");
+  assert.deepEqual(r.unverified, ["lateSubmissionLock"]);
+});
+
+await check("coursework readback exposes title, score, deadline and publication-state drift", async () => {
+  const c = workClient({ ...sampleWork, title: "Different prompt", maxPoints: undefined,
+    state: "DRAFT", dueDate: { year: 2032, month: 3, day: 5 } });
+  const r = await checkCourseWork(c, "course-demo", "work-demo", sampleExpected);
+  assert.equal(r.ok, false);
+  assert.equal(r.checks.description, true);
+  for (const k of ["title", "maxPoints", "state", "dueAt"]) assert.equal(r.checks[k], false, k);
+});
+
+await check("coursework readback finds missing text and does not trim meaningful spaces", async () => {
+  for (const description of ["First line\nSecond", sampleWork.description + " ", "First line Second line"]) {
+    const r = await checkCourseWork(workClient({ ...sampleWork, description }), "c", "w", sampleExpected);
+    assert.equal(r.ok, false);
+    assert.equal(r.checks.description, false);
+    assert.ok(Number.isInteger(r.descriptionDifference.index));
+  }
+});
+
+await check("coursework readback distinguishes ungraded and no deadline from zero and midnight", async () => {
+  const c = workClient({ ...sampleWork, maxPoints: undefined, dueDate: undefined, dueTime: undefined });
+  assert.equal((await checkCourseWork(c, "c", "w", { ...sampleExpected, maxPoints: null, dueAt: null })).ok, true);
+  const midnight = workClient({ ...sampleWork, maxPoints: 0, dueTime: {} });
+  assert.equal((await checkCourseWork(midnight, "c", "w", {
+    ...sampleExpected, maxPoints: 0, dueAt: "2032-03-04T00:00:00Z",
+  })).ok, true);
+});
+
+await check("coursework readback rejects incomplete expectations and propagates API failures", async () => {
+  const c = workClient();
+  await assert.rejects(checkCourseWork(c, "c", "", sampleExpected), /required/);
+  await assert.rejects(checkCourseWork(c, "c", "w", {}), /required/);
+  await assert.rejects(checkCourseWork(c, "c", "w", { ...sampleExpected, maxPoints: undefined }), /maxPoints/);
+  await assert.rejects(checkCourseWork(c, "c", "w", { ...sampleExpected, dueAt: "2032-03-05T00:30:00" }), /timezone/);
+  assert.equal(c.calls.length, 0);
+  const denied = { courses: { courseWork: { get: async () => { throw apiError("PERMISSION_DENIED", 403); } } } };
+  await assert.rejects(checkCourseWork(denied, "c", "w", sampleExpected), /PERMISSION_DENIED/);
 });
 
 console.log(`classroom-courses selftest: ${n} passed`);

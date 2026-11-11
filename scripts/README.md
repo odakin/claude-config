@@ -486,7 +486,7 @@
 - **[lib/browser_tab.py](lib/browser_tab.py)** — 起動中の Chromium 系 browser に裏で tab を 1 枚開かせ、 行き先を見て、 自分が開いた tab だけを閉じる (macOS)。 SSO 保護サイトの login 切れからの復帰用
 - **[lib/chat_file_refs.py](lib/chat_file_refs.py)** — chat の最終発話にある file 参照 (markdown link の href と、 path に見える inline code) を、 Claude Code desktop app の右パネルと同じ基準で解決し、 開けないものに正しい path を添えて返す共通部品 (Stop hook chat-file-ref-enforce.sh と校正が共用)
 - **[lib/class_meetings.py](lib/class_meetings.py)** — 授業の「第何回か」 をクラスのカレンダーから数え、 撮影時刻を時限に振り分ける helper (python3 class_meetings.py で selftest)
-- **[lib/classroom-courses.mjs](lib/classroom-courses.mjs)** — Google Classroom course engine: create / update, invite (parallel), announcements (post + read back against the draft), roster match by address, coursework list, short answers without names; takes a googleapis classroom client, no imports.
+- **[lib/classroom-courses.mjs](lib/classroom-courses.mjs)** — Google Classroom course engine: create / update, invite (parallel), announcements and coursework readback, roster match by address, coursework list, short answers without names; takes a googleapis classroom client, no imports.
 - **[lib/classroom-courses.test.mjs](lib/classroom-courses.test.mjs)** — Hermetic self-test for classroom-courses.mjs; uses a fake Classroom client and needs no network or googleapis.
 - **[lib/claude_config_dirs.py](lib/claude_config_dirs.py)** — every Claude Code config dir on this machine, so readers of per-session state see all of them.
 - **[lib/codex_thread_reader.py](lib/codex_thread_reader.py)** — Read explicitly addressed Codex threads through app-server; never list history.
