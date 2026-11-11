@@ -709,6 +709,17 @@ Codex の外部 Chromium browser では、公式の profile 選択契約と具�
 - 確かめの段の所要は、 説明や推測でなく、 その段を単独で 1 回回して測る (実測: 「組むだけで数分」 の説明に対し、 組版は 1 本 20 秒ほどで、 長かったのは別の照合だった)。
 - 区間の長さの合計が始点から終点までの長さと合うまで数え直す (合わないなら区間の境の取り方が違う)。
 
+## <a id="reading-live-app-sqlite"></a>24. 他の app が開いている SQLite (WAL) を読む道具は、 閉じた DB と読めないときの答えを先に決める
+
+他の app の状態 DB (SQLite、 WAL mode) を読む道具を書く・直すときの罠。 実装の例 = [`scripts/lib/codex_threads.py`](../scripts/lib/codex_threads.py) の `_open_state`。
+
+- **書き手が全部閉じた WAL の DB は、 読み取り専用 (`?mode=ro`) では開けない** — app が動いたままでも、 最後の接続が閉じると `-wal`・`-shm` が消え、 開くと `unable to open database file` になる (実測)。 SQLite は WAL の DB を読み取り専用で開くのに `-shm` を要し、 読み取り専用では作れない。
+  - 開けなければ `?mode=rw` (file が無ければ作らない) に `PRAGMA query_only = ON` をかけて開き直す。 普通の `connect(path)` は、 file が消えた瞬間に開くと空の DB を作る。
+  - この接続は SQLite の側 file (`-wal`・`-shm`) を作る (中身は書かない)。 道具の説明が「何も書かない」 と言っていたら言い直す。 書けない場所 (書き込みを禁じた sandbox) では側 file を作れず開けない = 「分からない」 として扱う。
+  - `immutable=1` は使わない: 読む途中で書き手が書き始めると、 エラーを出さずに壊れた頁を読む。 本物に何も足したくないなら、 DB と `-wal`・`-shm` を一時 dir に写して読む ([`macos-notification-db.md`](macos-notification-db.md) の方式。 写しは写した瞬間の状態)。
+- **「読めない」 を空の一覧で返さない** — 行を返す関数が「読めない」 と「行が無い」 を同じ `[]` で返すと、 呼び元は「生きているものは 0 件」 と読む (実測: 閉じた DB の間、 生存の一覧が 0 本と答えた)。 読めないときは `None` を返し、 空を返す古い関数を残すなら、 区別が要る呼び元は新しい関数を使う。
+- **試験で閉じた WAL の DB を作るときは、 側 file を自分で消す** — macOS の SQLite は最後の接続を閉じても側 file を残す (persistent WAL、 実測) ので、 閉じただけでは「消えた状態」 にならない (側 file を消す SQLite もある = app が同梱した版)。 `PRAGMA wal_checkpoint(TRUNCATE)` の後に閉じ、 `-wal`・`-shm` を消してから読む。 その状態で読み取り専用が実際に開けないことも試験の中で 1 回確かめる (開けてしまう環境では代わりの開き方を通っていない)。
+
 ## <a id="aggregate-check-runtime"></a>集計検査の待ち時間
 
 `bash scripts/run-all-checks.sh` は多数の selftest・変異試験・shell 試験を順に回すため、

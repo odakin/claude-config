@@ -27,7 +27,8 @@ open database file") while the app is still running. Then _connect() opens it re
 with query_only on: SQLite makes the -wal/-shm side files as any client would, and the connection writes no data.
 (immutable=1 is not used: if Codex starts writing during the read, it would read a torn page without an error.) A sandbox
 that cannot write CODEX_HOME (Codex's workspace-write) cannot make those side files, so there a closed database should
-read as unknown rather than as rows (not measured).
+read as unknown rather than as rows (not measured). General form for any app's live WAL database:
+conventions/debugging-discipline.md#reading-live-app-sqlite.
 
 Both are undocumented local layout: every reader fails open, so a changed layout reads as "unknown", never as an error
 and never as "not live". thread_rows() returns [] both for absent rows and for an unreadable database; live_threads()

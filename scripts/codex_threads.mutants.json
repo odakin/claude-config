@@ -1,0 +1,45 @@
+{
+  "_comment": "lib/codex_threads.py (Codex の thread の生存・状態 DB・一度も動いていない lock の読み) の selftest の foil に歯があることを、 直しの部品を 1 つずつ外した mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 写しは lib/ だけなので、 状態 DB の場所の resolver (scripts/session_provenance_cache.py) は PYTHONPATH で元の dir から読む。",
+  "target": "lib/codex_threads.py",
+  "run": "env PYTHONPATH={spec_dir} python3 {} --selftest",
+  "fail_marker": "FAIL: ",
+  "pass_marker": "PASS: ",
+  "mutants": [
+    {
+      "name": "閉じた WAL の DB に読み書きの接続で入り直さない (読み取り専用だけ)",
+      "pairs": [["    for mode in (\"ro\", \"rw\"):", "    for mode in (\"ro\",):"]],
+      "expect_fail": ["closed WAL database: rows still read", "closed WAL database: live threads still read"],
+      "expect_pass": ["held lock with neither row nor rollout = never ran", "read-write fallback does not create a missing database"]
+    },
+    {
+      "name": "rollout のある lock も一度も動いていないと数える",
+      "pairs": [["    return held - {r[\"id\"] for r in rows} - rolled\n", "    return held - {r[\"id\"] for r in rows}\n"]],
+      "expect_fail": ["rollout without a row stays unknown", "archived .zst rollout counts as having run"],
+      "expect_pass": ["no held lock = empty, not unknown", "unreadable state db = None for never-ran"]
+    },
+    {
+      "name": "lock があるのに DB が開けないとき、 生きている thread を 0 本と答える",
+      "pairs": [["    if found is None:\n        return None\n    rows = [r for r in found", "    found = found or []\n    rows = [r for r in found"]],
+      "expect_fail": ["unreadable state db with held locks: live is None, not empty"],
+      "expect_pass": ["live = held lock, sub-agent threads left out", "closed WAL database: live threads still read"]
+    },
+    {
+      "name": "歩けない rollout の dir を無視する",
+      "pairs": [["    return None if failed else ids", "    return ids"]],
+      "expect_fail": ["a rollout directory that cannot be walked = None"],
+      "expect_pass": ["no sessions/ directory = None", "held lock with neither row nor rollout = never ran"]
+    },
+    {
+      "name": "sessions/ が無くても rollout が無いと読む",
+      "pairs": [["    if not (home / \"sessions\").is_dir():\n        return None", "    if False:\n        return None"]],
+      "expect_fail": ["no sessions/ directory = None"],
+      "expect_pass": ["a rollout directory that cannot be walked = None"]
+    },
+    {
+      "name": "DB が読めないとき行が無いと読む (一度も動いていない側に倒す)",
+      "pairs": [["    rows = _query_rows(sorted(held), env=env)\n    if rows is None:\n        return None\n    rolled", "    rows = _query_rows(sorted(held), env=env) or []\n    rolled"]],
+      "expect_fail": ["unreadable state db = None for never-ran"],
+      "expect_pass": ["unreadable state db with held locks: live is None, not empty", "unreadable state db: thread_rows keeps its [] contract"]
+    }
+  ]
+}
