@@ -11,7 +11,11 @@ lib/claude_config_dirs.py). A Codex thread has no SendMessage, but the Codex CLI
   - a thread not loaded anywhere keeps the message in the queue until it is next opened.
 
 Live = the thread's writer lock (`<CODEX_HOME>/thread-writer-locks/<id>.lock`) is held open by some process (read with
-`lsof`; nothing here takes or tests a lock). Metadata comes from Codex's local state database, opened read-only through
+`lsof`; nothing here takes or tests a lock). A held lock with no threads row is not always an unreadable record.
+Measured with CLI 0.166.0-alpha.6: each sub-agent the client spawns gets a guardian (approval reviewer) thread a few tens
+of ms later, whose writer lock is held from creation while its row, rollout file and history are written only when its
+first review turn starts; a guardian that is never asked to review stays lock-only until the client shuts it down. Once
+its row exists it is a sub-agent (is_subagent), so such a thread is never anyone's peer. Metadata comes from Codex's local state database, opened read-only through
 the same resolver the provenance hook uses (session_provenance_cache.codex_state_databases). Both are undocumented
 local layout: every reader fails open (None / empty), so a changed layout reads as "unknown", never as an error and
 never as "not live". Writes nothing. Convention: conventions/multi-account-machine-surface.md#codex-peers.
