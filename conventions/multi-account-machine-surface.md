@@ -123,9 +123,9 @@ summary: アカウント × マシン × 端末 (desktop app / スマホ remote)
 - Codex の sandbox (workspace-write) の中には network が無い = `--sync` と掲示板への投稿は承認を経る。 Codex の home も書けない = Codex から打った `codex queue` は state DB の書き込みで失敗した。 読むだけの道具 (`list-live-sessions.py` / `lib/codex_threads.py` / 会話記録の検索) は Codex の sandbox の中でも動いた
 - Codex の session から Claude の session への直接の道は無い (`uds:` の宛先は SendMessage の宛先で、 Codex は SendMessage を持たない)。 Codex は掲示板に書き、 Claude 側は request・claim・submit の後に回している watch で起こされる
 
-**道具** (読むだけ・何も書かない):
+**道具** (読むだけ・中身は書かない。 Codex が状態 DB を閉じて `-wal`・`-shm` が消えているときだけ、 それを読む接続が SQLite の側 file を作る):
 
-- [`scripts/lib/codex_threads.py`](../scripts/lib/codex_threads.py): 生きている thread・cwd・model、 thread id の解決 (8 文字の先頭から)、 `codex queue` の 1 行。 CLI は app 同梱の版を先に使う (PATH の `codex` は古いことがあり、 `queue` を持たないかもしれない)
+- [`scripts/lib/codex_threads.py`](../scripts/lib/codex_threads.py): 生きている thread・cwd・model、 thread id の解決 (8 文字の先頭から)、 `codex queue` の 1 行。 CLI は app 同梱の版を先に使う (PATH の `codex` は古いことがあり、 `queue` を持たないかもしれない)。 lock だけで行の無い thread (審査役が最初の審査の前に持つ lock) を、 行も rollout も無いと確かめられたときだけ「一度も動いていない」 と分ける (`unstarted_lock_ids`)。 閉じた状態 DB の開き方と、 読めないときの答え (`None` = 不明) は file の冒頭
 - [`scripts/list-live-sessions.py`](../scripts/list-live-sessions.py): Claude の兄弟と並べて Codex の生きている thread を出す (SessionStart の兄弟の表示では同じ cwd の thread だけ)
 - 掲示板の投稿 (ai-collaboration `board/board.py`): 次に動くのがこの機械の Codex の thread なら、 投稿の後に `codex queue` の 1 行を出す (役割 id は claim の名前の先頭 8 文字から thread を引く)。 `request` は宛先の Codex の thread の model も出す。 Codex が投稿したときは SendMessage を頼まず、 相手の Claude の watch で届くことを出す
 

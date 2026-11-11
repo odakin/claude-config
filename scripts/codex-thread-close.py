@@ -54,8 +54,8 @@ subcommand:
   unarchive THREAD   thread/unarchive (戻す)。 Codex の CLI の `codex unarchive <id>` も同じく戻す。
 台帳 = env CODEX_THREAD_CLOSE_LOG か ~/.claude/state/codex-thread-close.jsonl (wrap の依頼・archive・戻しの時刻と根拠)。
 状態 DB・queue・lock の配置は Codex の未文書の手元の layout = 読めなければ「分からない」 として残す側に倒す。 状態 DB は
-WAL の -wal/-shm が片づいた後 (書き手が全部閉じた時) は読み取り専用で開けない (実測、 アプリは動いたまま) = その時は
-書き込まない設定 (query_only) の通常の接続で読む (_state_connect)。
+WAL の -wal/-shm が片づいた後 (書き手が全部閉じた時) は読み取り専用で開けない (実測、 アプリは動いたまま) = その時の
+開き方 (作らない読み書きの接続 + query_only) は共通の reader (lib/codex_threads.py の _connect) が持ち、 ここはそれを呼ぶだけ。
 """
 from __future__ import annotations
 
@@ -182,30 +182,12 @@ def asks_owner(msg: dict | None) -> str | None:
 # ---------------------------------------------------------------- Codex state (read-only)
 
 def _state_connect():
-    """(connection, columns) on Codex's state DB, or None. First the shared read-only opener (lib/codex_threads.py).
-    Measured: when every writer has closed the WAL database, its -wal/-shm files are gone and a read-only connection
-    cannot open it ("unable to open database file") while the app is still running; then open it normally with
-    query_only on (SQLite makes the -shm/-wal files as any client would, and this connection writes nothing)."""
+    """(connection, columns) on Codex's state DB, or None. The shared opener (lib/codex_threads.py _connect) reads a
+    closed WAL database too (read-only first, then read-write without create and query_only on); this tool waits
+    longer on a busy database than the hooks do."""
     if ct is None:
         return None
-    got = ct._connect(None)
-    if got is not None:
-        return got
-    try:
-        from session_provenance_cache import codex_state_databases
-    except Exception:
-        return None
-    for database in codex_state_databases(dict(os.environ)):
-        try:
-            con = sqlite3.connect(str(database), timeout=2)
-            con.execute("PRAGMA query_only = ON")
-            cols = {str(r[1]) for r in con.execute("PRAGMA table_info(threads)")}
-            if "id" in cols:
-                return con, [c for c in ct.COLUMNS if c in cols]
-            con.close()
-        except (OSError, sqlite3.Error):
-            continue
-    return None
+    return ct._connect(None, timeout=2)
 
 
 def state_rows(ids=None, unarchived_interactive=False) -> list[dict] | None:
