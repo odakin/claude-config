@@ -304,6 +304,7 @@
 - **[page-text.py](page-text.py)** — 公式の頁・PDF の原文を、 要約を通さずに見える文だけの text にして出す (HTML の comment を除く・frameset の中身の頁まで読む・PDF は PyMuPDF で頁ごと。 標準ライブラリだけで動き、 PDF のときだけ PyMuPDF が要る)
 - **[pdf-cleaner.html](pdf-cleaner.html)** — clipboard-cleaner.py のブラウザ版 fallback（非 macOS / pbcopy なし環境用、整形ロジックの正本は clipboard-cleaner.py で両実装を同期）
 - **[pdf-contact-sheet.py](pdf-contact-sheet.py)** — PDF の頁 (スライド・図) を縮小して 1 枚の一覧 PNG に並べる。 --selftest 内蔵。
+- **[pdf-cvd-render.py](pdf-cvd-render.py)** — PDF の各頁を PNG にし、 色覚 3 型 (P・D・T) と grayscale の見え方を並べて作る。 --selftest 内蔵。
 - **[pdf-grayscale-copy.py](pdf-grayscale-copy.py)** — PDF の頁を「複写機で写したもの」 相当の白黒の写しにする (raster・圧縮・紙専用の印を引き継ぐ)。
 - **[pdf-print-preflight.mutants.json](pdf-print-preflight.mutants.json)** — pdf-print-preflight.py の「様式の案件の出力の受け入れ」 (7 段目) と派生物の origin の selftest に歯があることを、 判定の一部を外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[pdf-print-preflight.py](pdf-print-preflight.py)** — 印刷直前の PDF preflight — 「画面で見えた」 を印刷の保証にしない機械 gate (office-automation.md#print-preflight)。

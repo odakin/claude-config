@@ -256,7 +256,7 @@ python-pptx の notes part を Keynote が拒否する上の既知事例を否�
 2. **認知の負荷を減らす** (Mayer のマルチメディア学習の原則): 飾り・重複を削る (coherence) / いまどのメッセージかの目印を毎頁に置く (signaling = 題の上の小さな見出し + 右上の現在地の線) / 凡例をやめて図に直接ラベル (spatial contiguity) / メッセージごとに扉 (segmenting、 扉の形 = §5)
 3. **色 = 地 + 2 色** (構造と強調): 色覚の違いに配慮した対 (Okabe–Ito の青と橙など)、 本文と地のコントラスト比を 7:1 以上 (WCAG AAA)。 図の色を deck の token と同じ値にする
 4. **主題を意匠にする**: 講演の主題から 1 つのモチーフを決め、 全頁に控えめに通す (合成例: 主題が「流れ」 なら下端に細い流線、 表紙だけ一面に)。 モチーフは現在地の目印 (2 の signaling) を兼ねられる (合成例: 主題が「対称と破れ」 なら下端に頁の数だけ同じ点を並べ = ずらしても同じ並び、 今の頁の点だけ色と大きさを変える = その頁が並びの対称を破る。 `\inserttotalframenumber` と `\insertframenumber` から tikz で描く)
-5. **文字の階層は太さで**: 同梱のフォントで install 不要 = 欧文と数字は Inter (TeX Live 同梱、 `Numbers=Tabular`)、 和文は原ノ味ゴシック (`deluxe` で極太まで)。 見出し Bold、 断言と大きな数字 Heavy / Black、 本文 Regular。 <a id="subtitle-smaller-than-title"></a>**表題と副題を同じ大きさで並べない** = 副題は主題の 0.5〜0.65 倍で一段細く組む (大きさと太さの差が副題を表すので、 「―」「：」「～…～」 の区切りの記号は要らない)。 同じ大きさで改行だけで続けると、 どこまでが題か読めない (実測)。 ポスター・チラシの表題も同じ
+5. **文字の階層は太さで**: 同梱のフォントで install 不要 = 欧文と数字は Inter (TeX Live 同梱。 本文と題の font に `Numbers=Tabular` を付けない = 下の罠のハイフンの幅)、 和文は原ノ味ゴシック (`deluxe` で極太まで)。 見出し Bold、 断言と大きな数字 Heavy / Black、 本文 Regular。 <a id="subtitle-smaller-than-title"></a>**表題と副題を同じ大きさで並べない** = 副題は主題の 0.5〜0.65 倍で一段細く組む (大きさと太さの差が副題を表すので、 「―」「：」「～…～」 の区切りの記号は要らない)。 同じ大きさで改行だけで続けると、 どこまでが題か読めない (実測)。 ポスター・チラシの表題も同じ
 6. **頁の種類を絞る**: 表紙・断言・討論のお題 = 全面の hero / 数字 = 大きな数字だけの頁 / 並列の 3 項目 = カード (bento) / 扉 = 大きな番号 + 全メッセージ
 7. **暗い地は明るい部屋で沈む** → 色を名前で 1 か所にまとめ、 白地の版に切り替えられるようにしておく
 
@@ -264,6 +264,8 @@ python-pptx の notes part を Keynote が拒否する上の既知事例を否�
 - 図はすべて自作 (§10)。 写真や観測の画像を使うなら出所の公式頁から取り、 クレジットを頁に入れる
 - 罠 = §4b と §10
 - <a id="principled-deck-pitfalls"></a>組版と言葉の罠 (実測):
+  - <a id="inter-tabular-hyphen"></a>Inter に `Numbers=Tabular` (tnum) を付けると、 ハイフンも数字と同じ幅になる (Inter Bold で 6.46 pt、 付けなければ 4.68 pt = lualatex の `\settowidth` で実測)。 本文・題の font に付けると、 すべてのハイフンの両側に隙間が出る (two - point)。 組版の error にも overfull にもならず、 頁を画像にして初めて見える。 数字の列を揃える箇所だけ `\addfontfeature{Numbers=Tabular}` で局所に付ける
+  - 色覚の確かめ = [`../scripts/pdf-cvd-render.py`](../scripts/pdf-cvd-render.py) `deck.pdf OUT --sheet` (頁ごとに 元・P 型・D 型・T 型・grayscale の 5 枚を横に並べる)。 2 色の系列が線種・点の形・直接ラベルだけでも区別できるかを見る
   - `fontspec` の font に `Ligatures=TeX` を付ける。 無いと `--` と `---` がそのまま出る
   - 本文は左寄せにする = `\usepackage[document]{ragged2e}` と `\setlength{\RaggedRightRightskip}{0pt plus 1fil}`。 両端揃えのままだと狭い欄で字間が崩れ、 長い題が折り返さずにはみ出す
   - 題の 1 行に入る字数を、 組む前に計算する: 和文は全角 1 字 = 字の大きさの幅なので、 本文の幅を字の大きさで割る (合成例: 16:9 の 160 mm の幅から左右の余白 12 mm ずつを引いた 136 mm に 17.5 pt の題 = 約 6.2 mm/字 → 21 字)。 題が 2 行に折れると、 その頁の本体が 1 行分 (約 8 mm) 下がり、 図の頁の下がはみ出す = 図の頁の題は 1 行に収まる字数で書く
