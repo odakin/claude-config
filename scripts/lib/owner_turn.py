@@ -35,7 +35,12 @@ import re
 import sys
 
 GENERATED_PROMPT = ("<command-", "<local-command", "<task-notification>", "<cross-session-message", "Another Claude session",
-                    "Stop hook feedback", "Base directory for this skill", "Caveat:", "<system-reminder>", "[Request interrupted")
+                    "Stop hook feedback", "Base directory for this skill", "Caveat:", "<system-reminder>", "[Request interrupted",
+                    "<side-sessions-event", "This session is being continued from a previous conversation",
+                    # a session started by another session: its first prompt is the starter's hand-off text, which often
+                    # quotes the owner's words (conventions/hook-authoring.md#transcript-human-vs-peer-message)
+                    "Background (from the session that started this one)")
+RETRY_TEXTS = {"Try again"}   # the app's retry after an API error is not the owner talking (same section, measured)
 
 
 def _norm(s: str) -> str:
@@ -82,14 +87,18 @@ def owner_entries(path) -> list[dict]:
         fh = open(path, encoding="utf-8", errors="replace")
     except (OSError, TypeError):
         return out
+    api_error = False
     with fh:
         for line in fh:
             try:
                 e = json.loads(line)
             except ValueError:
                 continue
+            if isinstance(e, dict) and e.get("type") == "assistant":
+                api_error = bool(e.get("isApiErrorMessage"))
+                continue
             text, queued = _text_of(e)
-            if text:
+            if text and not (api_error and text in RETRY_TEXTS):
                 out.append({"ts": e.get("timestamp"), "queued": queued, "text": text})
     return out
 
@@ -176,6 +185,11 @@ def _selftest() -> int:
         "not json",
         queued("2026-01-01T00:05:30Z", "the sheet waits until everything is decided"),
         user("2026-01-01T00:05:40Z", "<task-notification>a watcher</task-notification>"),
+        user("2026-01-01T00:05:50Z", "<system-reminder>Linked sessions now</system-reminder>\n\nBackground (from the session that"
+                                     " started this one):\nthe owner said 「put it on the top model」"),
+        {"type": "assistant", "timestamp": "2026-01-01T00:05:55Z", "isApiErrorMessage": True,
+         "message": {"content": [{"type": "text", "text": "API Error"}]}},
+        user("2026-01-01T00:05:56Z", "<system-reminder>x</system-reminder>\n\nTry again"),
     ]
     with tempfile.TemporaryDirectory() as td:
         p = os.path.join(td, "t.jsonl")
@@ -202,6 +216,14 @@ def _selftest() -> int:
         check("a peer's words are not the owner's", not find_quote(p, "a peer asks", now)["found"])
         check("a missing file: nothing found", not find_quote(os.path.join(td, "none.jsonl"), "x")["found"] and owner_entries(None) == [])
         check("transcript_for refuses a non-id", transcript_for("role-x-y") is None and transcript_for("") is None)
+        check("a started session's hand-off text is not the owner (even when it quotes the owner)",
+              not find_quote(p, "put it on the top model", now)["found"])
+        check("the app's retry after an API error is not the owner", not find_quote(p, "Try again", now)["found"])
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"type": "assistant", "timestamp": "2026-01-01T00:06:00Z",
+                                "message": {"content": [{"type": "text", "text": "ok"}]}}) + "\n")
+            f.write(json.dumps(user("2026-01-01T00:06:10Z", "Try again")) + "\n")
+        check("'Try again' typed with no API error before it is the owner's", find_quote(p, "Try again", now)["in_latest"])
     print(f"{'OK' if not fails else 'FAILED'}: {fails} failure(s)")
     return 1 if fails else 0
 
