@@ -38,6 +38,7 @@ MCP / API / CLI の経路が**存在しない**と分かった時、 それは�
 - **user 側に切り出すのは認証境界だけ**: developer console での app 作成、 OAuth consent の Allow click 等、 agent が代行してはならない部分。 手順を番号付きで渡し、 済んだら agent が続きを引き取る
 
 **実装した経路は auto-load される記憶面 (CLAUDE.md の scripts index 等) に記録するまでが 1 単位** — 経路は「次の session が見つけられる」 ことで初めて画面 drive を置換する。 記録がなければ次の session は再び画面に流れる。
+経路の台帳を持つなら、 台帳を引く語に頼らず、 引く瞬間にも台帳の行を届ける = PreToolUse の hook で [`scripts/constraint-at-use.py`](../scripts/constraint-at-use.py) の `--hosts` を呼ぶと、 Bash の command (curl・urllib・requests など) や WebFetch が引く URL の host が台帳の行にあるとき、 その行を session に 1 回出す (止めない)。 引く語が service の名でないと台帳の行に当たらない (実測: 取りたい物の名で引いて service の行を外し、 道具のある照会を手書きの code で回した) = 台帳の行には service の host を書く。 行の文字に host が無い行 (host が道具の source の中だけにある) は、 台帳の末尾の `route-hosts` の区画に足す (書式 = 同 script の docstring「host の形」)。
 
 OAuth を伴う実装では loopback consent の hardening 4 点 set ([`google-api-direct-access.md` oauth-loopback-hardening](google-api-direct-access.md#oauth-loopback-hardening)) を最初から適用する。
 
