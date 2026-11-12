@@ -85,7 +85,8 @@ TOUCH_GATE (既定は on。 外す = `~/.claude/session-touch-gate.off` か env 
 desktop の session の model・effort を変える (set_session_model / set_session_effort)、 止める (stop_session)、 畳む
 (archive_session) 呼び出しを止める。 起こした = 相手が自分か、 この session の起こした控え (start_session の返りで書く
 <state>/<session>.started.json、 card を id で起こした台帳の行も数える) に在るか、
-app の記録の親の鎖 (desktop_sessions.lineage の parent、 本人が作った fork は数えない) を辿って自分に着く (= 自分の子孫)。
+app の記録の親の鎖 (desktop_sessions.lineage の parent。 detach_session で外した session も記録に spawnedFrom が残るので
+それを読む = launched_by。 本人が作った fork は数えない) を辿って自分に着く (= 自分の子孫)。
 通す = 本人がこの窓の直近 3 回の発言で、 その session の id (`local_…`・その 8 桁・会話記録の id の 8 桁)・一覧の名前・題を
 出した (その文が打ち消し・苦情・本人が自分でした報告 = TOUCH_NEGATED なら数えない。 最後の発言が勝つ)。 理由の印で通す道は
 作らない (本人の裁定)。 app も自分が起こしていない session への変更は本人に聞くが、 auto mode では本人に聞かずに決めることがある
@@ -474,14 +475,30 @@ def started_here(sid: str, local_id: str) -> bool:
     return any(e.get("local_id") == local_id or e.get("started") == local_id for e in load(sid))
 
 
+def launched_by(rec: dict) -> str:
+    """The `local_…` of the session that started `rec` ('' when none, or when it is the user's fork). A session moved to
+    top level (`detach_session`) keeps its spawnedFrom in the record: its launcher still started it (measured on the
+    record: lineageDetached true with spawnedFrom.sessionId kept), so a launcher that detached its chore conductor
+    right after the start, or a card's session that detached itself, still counts as the launcher's own."""
+    lin = rec.get("lineage")
+    if lin:
+        return "" if lin.get("kind") == "fork" else (lin.get("parent") or "")
+    if not rec.get("detached") or not rec.get("parent"):
+        return ""
+    try:
+        with open(rec.get("path") or "", encoding="utf-8") as fh:
+            sf = (json.load(fh) or {}).get("spawnedFrom") or {}
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return "" if sf.get("userFork") else str(sf.get("sessionId") or "")
+
+
 def descends_from(rec: dict, caller_local: str) -> bool:
-    """The app's parent links of `rec` reach `caller_local` (its child, grandchild, …). A user's fork is not a launch."""
+    """The parent links of `rec` (launched_by) reach `caller_local` (its child, grandchild, …). A user's fork is not a
+    launch."""
     cur, seen = rec, set()
     for _ in range(TOUCH_MAX_DEPTH):
-        lin = (cur or {}).get("lineage")
-        if not lin or lin.get("kind") == "fork":
-            return False
-        parent = lin.get("parent") or ""
+        parent = launched_by(cur or {})
         if parent == caller_local:
             return True
         if not parent or parent in seen:
@@ -2011,12 +2028,18 @@ def selftest() -> int:
         check("touch: archive self → pass", touch("archive_session", "self")[0] == 0)
         check("touch: its own record → pass", touch("archive_session", me)[0] == 0)
         check("touch: a fork the owner made of this session is not its launch → blocked", touch("set_session_model", fork, model="claude-opus-5-5")[0] == 2)
-        check("touch: a detached session with no launch in the ledger → blocked", touch("set_session_effort", loose, effort="xhigh")[0] == 2)
-        call("PostToolUse", "mcp__ccd_session__start_session", {"initiation": "user_asked", "title": "切り離した worker", "prompt": "x"},
-             [{"type": "text", "text": f'Started session "切り離した worker" (session_id: {loose}, name: w). It runs'}], sid=me_cli)
-        check("touch: ... one this session started (the ledger), detached after → pass", touch("set_session_effort", loose, effort="xhigh")[0] == 0)
-        check("touch: the started-entry does not make the model watch nag", call("PostToolUse", "mcp__ccd_session_mgmt__set_session_model",
-              {"session_id": loose, "model": "claude-opus-5-5"}, "ok", sid=me_cli)[1] == "")
+        check("touch: one this session started and then detached (the record keeps spawnedFrom) → pass",
+              touch("set_session_effort", loose, effort="xhigh")[0] == 0)
+        loose_other = arec("8", "81818181-0000-4000-8000-000000000081", "別の窓が切り離した窓", parent=phys, lineageDetached=True)
+        check("touch: one another window started and detached → blocked", touch("set_session_effort", loose_other, effort="xhigh")[0] == 2)
+        bare = arec("6", "61616161-0000-4000-8000-000000000061", "親の記録の無い窓")
+        check("touch: a session with no launcher in its record and none in this session's launches → blocked",
+              touch("set_session_effort", bare, effort="xhigh")[0] == 2)
+        call("PostToolUse", "mcp__ccd_session__start_session", {"initiation": "user_asked", "title": "親の記録の無い窓", "prompt": "x"},
+             [{"type": "text", "text": f'Started session "親の記録の無い窓" (session_id: {bare}, name: w). It runs'}], sid=me_cli)
+        check("touch: ... once start_session's return noted it as this session's launch → pass", touch("set_session_effort", bare, effort="xhigh")[0] == 0)
+        check("touch: the launch note does not make the model watch nag", call("PostToolUse", "mcp__ccd_session_mgmt__set_session_model",
+              {"session_id": bare, "model": "claude-opus-5-5"}, "ok", sid=me_cli)[1] == "")
         owner_said("5a5a5a5a を Opus にして")
         check("touch: the owner named the session's id in this window → pass", touch("set_session_model", desk, model="claude-opus-5-5")[0] == 0)
         owner_said("なんで勝手にその窓まで Opus にしたの？　5a5a5a5a は自分で戻した。")
