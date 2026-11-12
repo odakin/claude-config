@@ -1036,6 +1036,8 @@ origin: 2026-06-13 desktop-hook-gap remediation。 odakin は Claude Code deskto
 
 **reflex**: 「事前告知が無い」 / 「規程に書かれていない」 / 「未連絡」 等を断定する前に、 sweep scope を「Verified scope = ___ / NOT verified = ___」 で明示する。 アクセス経路が機械化されていない channel (= 手動 login portal、 MCP 経路無し) は **「未 verify」 と honest framing して保留**、 内部 portal が institution に存在することが分かっている場合は universal absence を主張せず、 確認手段を user / 他 channel に委ねる。
 
+<a id="board-post-absence-is-not-unreached"></a>**機械の表示も同じ — 依頼の掲示板の「投稿が無い」 を「届いていない」 に読み替えない**。 共同作業の掲示板で引受・提出の投稿が無い日数から「相手の session が開かれていない」 と出す表示は、 相手が別の channel (依頼を名指す commit) で依頼に手を付けていたときに誤る (実測: 表示は開かれていないと言い続け、 相手の commit は依頼の一部を当てていた)。 表示は待ちの日数でなく、 読める channel ごとの証拠 (投稿・依頼の後の相手の commit・依頼を名指す commit) で出し分け、 証拠の無い場合だけ推測の文にする (実装例 = `ai-collaboration/board/board_activity.py`)。
+
 origin: ある institutional 締切超過の指摘を受け、 person-to-person mail (= Gmail) と 個別 reference PDF (= 配付資料) のみ sweep して「事前告知が見当たらない」 と 2 段で argue した RCA。 実際は institutional broadcast (= 学内 portal 掲示板) に 4 ヶ月前から告知が出ており、 単に sweep scope に portal が入っていなかった (= 共著者から portal URL 指摘で catch)。 [`§8.11`](#downstream-net-intake-leverage) (downstream net は intake で正しく表現された対象しか守れない) の dual: intake の channel category を取りこぼすと downstream sweep がいくら丁寧でも universal absence は嘘になる。
 
 <a id="side-effect-trace-absence"></a>**変種 = 副作用の痕跡の不在から状態を推す**: 「X が起きたなら通知 (mail・ログ・履歴) が残るはず → 残っていない → X は無い」 も single-channel null。 通知は送られない・消される・別の宛先に行くことがある。 状態そのものを直接見られる場所 (端末の設定画面・サービスの一覧) があるなら、 推論より先にそこを 1 回見る (例: 「端末に Google のアカウントを足せば『新しいログイン』 の通知 mail が届くはず、 それが無いから端末にアカウントは無い」 と推さない。 端末の設定でアカウントを足そうとすれば「既に存在します」 で直接分かる、 実測)。

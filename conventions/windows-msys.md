@@ -126,6 +126,8 @@ UnicodeEncodeError: 'cp932' codec can't encode character '\U0001f550'
 
 **対処**: 環境側で `PYTHONIOENCODING=utf-8` + `PYTHONUTF8=1` を与える (`~/.claude/settings.json` の `env` に置ける)。 script 側で閉じるなら子プロセス出力の decode に `errors="replace"` を付ける。 ⚠️ `subprocess.run(..., text=True)` の decode 例外は **capture 用の reader thread 内**で起きるため呼び出し側の `try/except` では捕まらず、 traceback を撒いたうえで出力だけが失われる。
 
+<a id="cp932-pipe-in-shared-tools"></a>**他人の機械で動く道具 (共有 repo の点検・hook の写し) は、 相手の環境の設定に頼らず script の側で閉じる** — console でなく pipe に書くとき (shell の `$(...)`、 hook の出力の取り込み) も同じ cp932 になり、 呼び元が stderr を捨てていると**何も出さずに終わる** (実測: `PYTHONIOENCODING=cp932` で真似ると、 全角ダッシュ 1 字で表示の script が exit 1、 その出力を取り込む session 開始の点検は 0 byte を出した)。 3 つを揃える: (1) 各 entry point の最初で `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` (stderr も) (2) 出力を読む子の python には `PYTHONUTF8=1`・`PYTHONIOENCODING=utf-8` を渡し、 こちらは `encoding="utf-8", errors="replace"` で読む (子が古い版で (1) を持たなくても落ちない) (3) shell から呼ぶ側も同じ 2 つの環境変数を付け、 失敗を捨てずに 1 行で言う。 試験は `PYTHONIOENCODING=cp932` を付けて script を別 process で走らせ、 出力の bytes を UTF-8 として strict に decode する (実装例 = `ai-collaboration/board/board-session-start.py` の selftest)。
+
 ## <a id="autocrlf-corrupts-scripts"></a>`core.autocrlf=true` (Git for Windows の既定) が shell script を壊す
 
 既定のまま clone すると **作業ツリー全 file が CRLF** になる。 shell script の CRLF 化は多くの下流で誤動作を生むうえ、 上記 CRLF 系の症状と混ざって切り分けを難しくする。
