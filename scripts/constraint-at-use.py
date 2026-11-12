@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""constraint-at-use.py — 制約表 (markdown table) の行を、 その道具・file を使う瞬間の PreToolUse hook で session に 1 回だけ出す (auto-load 面から降ろした制約の point-of-use 配達)
+"""constraint-at-use.py — 制約表 (markdown table) の行を、 その道具・file を使う瞬間の PreToolUse hook で session に 1 回だけ出す (auto-load 面から降ろした制約の point-of-use 配達。 --hosts = 経路の台帳の行を、 command が引く URL の host で出す)
 
 層1 engine (2026-10-04)。 「触る前に効く制約」 の表 (1 列目 = 対象の道具・台帳の名、 2 列目 = 制約) を毎 session
 auto-load される CLAUDE.md に置くと、 道具ごとに 1 行足す構造ゆえ際限なく育ち、 memory file の予算に張り付く
@@ -38,10 +38,40 @@ Bash の command のうち、 道具を使っていない文字列は照合か�
 検索語。 検索先の path と、 叩いている道具の名は外さない (= その file を読む瞬間には出る)。 実測: 発火の約 1/3 が
 「文字列に含むだけ」 で、 その主な形がこの 2 つだった。 quote が閉じない行 (heredoc の本文など) は外さずに当てる。
 
+host の形 (`--hosts`、 2026-11-12): 外部の service ごとの経路の台帳 (行 = service、 列 = 用途・経路の実体など) の行を、
+**Bash の command が引く URL の host** で出す。 道具や API の経路があるのに、 手書きの code (curl・urllib など) で
+同じ service を引く瞬間に、 その service の行が tool 結果の直前に居るようにする (実測: 照会の道具がある service を、
+台帳を引かずに手書きの code で照会した)。 止めない・fail-open は上と同じ。
+  - 行: file の中の全ての markdown table の行 (header と区切りを除く)。 1 つめの table だけではない。
+  - host の導出 (= 対応表を別に持たない): 行の文字から ① `http(s)://` の URL の host ② code span の外の host の
+    形の語 (`a.b.example` の形) ③ 中身全体が host の形の code span (`` `x.example/s/<id>` ``)。 1 列目の候補は
+    path の 1 段目まで残す (同じ host を path で分ける service のため。 1 段目の `?` `#` `<` `{` から先は捨てる)、
+    ほかの列の候補は host だけ。 最後の label が file の拡張子 (`.py` `.md` …) の語と、 label の中に小文字→大文字の
+    並びがある語 (code の識別子) は host にしない。 command の引数の中の host (`` `gh auth -h x.example` `` の形) は、
+    code span の中身全体でないので host にしない。
+  - 導けない・広すぎる行は、 台帳の file の HTML comment で足す・置き換える:
+      <!-- route-hosts
+      - <1 列目の頭> :: <host[/path]> [<host[/path]>]...     ← 導いた host に足す
+      - <1 列目の頭> := <host[/path]> [...]                  ← 導いた host を置き換える
+      -->
+    頭が同じ行が複数あれば (同じ service の別の用途)、 全部に当てる。 頭の当たらない行・形の悪い host は `--check` が
+    exit 1 で止める (= 足した行が黙って効かない、 にならない)。
+  - 当て方: command の URL の host が key の host と同じか、 その下の名 (`api.x.example` は `x.example` に当たる)、
+    key に path があれば URL の path がその段で始まる。 1 つの URL に当たる行のうち、 いちばん細かい key の行だけを
+    出す (path つき > host が同じ > host の段が多い)。 command の文字の除き方は上と同じ (掲示板の自由文・grep 系の
+    検索語の URL には出ない)。 行に書かれた道具 (`*.py` `*.sh` の名) を command が叩いているなら、 その行は出さない
+    (= もう経路を使っている)。 Bash の他に、 tool_input に `url` を持つ tool (WebFetch など) の URL にも当てる
+    (どの tool に配線するかは呼び手が決める)。
+  - 出し方: 1 回の call で最大 --max 行、 行の頭から ROW_MAX 字まで (行の番号つき。 全文は台帳を開く)。 同じ行は
+    1 session に 1 回 (state = <state-dir>/<session_id>、 既定の dir は上と別 = 2 つの hook が同時に追記しない)。
+
 usage:
   constraint-at-use.py --table T.md [--table U.md]... [--state-dir DIR] [--max N]      # hook (stdin = PreToolUse JSON)
   constraint-at-use.py --table T.md --probe '<command or path>' [--tool Bash]           # どの行が出るか (state は書かない)
   constraint-at-use.py --table T.md --check                                            # 行と key の一覧、 key 無しの行があれば exit 1
+  constraint-at-use.py --hosts --table L.md [--state-dir DIR] [--max N]                 # host の形の hook
+  constraint-at-use.py --hosts --table L.md --probe '<command or URL>' [--tool Bash]    # どの行が出るか
+  constraint-at-use.py --hosts --table L.md --check [--json]                            # 行と host の一覧、 overlay の誤りで exit 1
   constraint-at-use.py --selftest
 
 public-safe / stdlib only。 表の path・state の場所は呼び手 (利用者の shim) が渡す。
@@ -353,6 +383,417 @@ def check_main(tables: list[Path]) -> int:
     return 1 if bad else 0
 
 
+# ── host の形 (--hosts): 経路の台帳の行を、 command が引く URL の host で出す (docstring の「host の形」) ──
+DEFAULT_HOST_STATE_DIR = os.path.join(os.path.expanduser("~"), ".claude", "state", "route-ledger-at-use")
+HOST_HEADER = ("🧭 この command が引く URL の host が経路の台帳にある (この session で初めての行。 "
+               "道具・API の経路があれば手書きの code より先にそれを使う。 正本 = {table})")
+HOST_KEY_BLOCK_RE = re.compile(r"<!--\s*route-hosts\s*\n(.*?)-->", re.S)
+ROW_MAX = 1200
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+_HOST = r"(?:" + _LABEL + r"\.)+[A-Za-z][A-Za-z0-9-]*[A-Za-z0-9]"
+URL_RE = re.compile(r"(?<![A-Za-z0-9])https?://(" + _HOST + r")(?::\d+)?(/[^\s'\"`<>()\[\]{}|\\,]*)?", re.I)
+HOST_WORD_RE = re.compile(r"(?<![A-Za-z0-9_./@:\\~-])(" + _HOST + r")(/[A-Za-z0-9._~%-]+)?(?![A-Za-z0-9_(-])")
+HOST_WHOLE_RE = re.compile(r"^(" + _HOST + r")(/\S*)?$")
+HOST_KEY_RE = re.compile(r"^" + _HOST + r"(/\S*)?$")
+TOOL_NAME_RE = re.compile(r"(?<![A-Za-z0-9_-])([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:py|sh))(?![A-Za-z0-9_.-])")
+# 「引く」 の語 = URL を取りに行く・開く command と library の名。 これの無い Bash の command の URL は、 記録や文に
+# 書いている URL として出さない (実測: URL を含む command の一部は、 台帳・notes に URL を書き込む heredoc や
+# python と、 URL を取らない git pull の後の書き換えだった)。 git は URL を引数に取る形だけ、 open は URL を開く形
+# だけを数える (python の open( を数えない)。 tool_input の url (WebFetch など) はそれ自体が引くことなので要らない。
+FETCH_RE = re.compile(
+    r"(?<![A-Za-z0-9_.-])(?:curl|wget|aria2c|yt-dlp|lynx|w3m)(?![A-Za-z0-9_-])"
+    r"|\b(?:urllib|urlopen|urlretrieve|httpx|aiohttp|http\.client|axios)\b"
+    r"|\brequests\.(?:get|post|head|put|patch|delete|request|Session)\b|\bfetch\("
+    r"|\bgit\s+(?:clone|fetch|pull|ls-remote|push|remote\s+(?:add|set-url))\b[^\n;|&]*?https?://"
+    r"|(?<![A-Za-z0-9_.-])(?:xdg-)?open\s+(?:-[A-Za-z]+\s+(?:\"[^\"]*\"|'[^']*'|\S+)\s+)*[\"']?https?://",
+    re.I)
+FILE_EXTS = {"py", "sh", "md", "json", "jsonl", "yaml", "yml", "toml", "txt", "js", "mjs", "cjs", "ts", "html", "htm",
+             "css", "pdf", "csv", "tsv", "xlsx", "xls", "docx", "doc", "pptx", "tex", "bib", "bst", "sty", "cls",
+             "conf", "cfg", "ini", "plist", "log", "env", "png", "jpg", "jpeg", "gif", "svg", "zip", "gz", "tar",
+             "key", "lock", "db", "sqlite", "xml", "php", "jsp", "csp", "asp", "aspx", "rb", "pl", "lua", "go",
+             "rs", "swift", "java", "kt", "nb", "wl", "m", "c", "h", "cpp", "hpp", "app", "dmg", "pkg", "bak"}
+
+
+def _host_ok(host: str) -> bool:
+    """file 名 (最後の label が拡張子) と code の識別子 (label の中の小文字→大文字) を host にしない。"""
+    if host.rsplit(".", 1)[-1].lower() in FILE_EXTS:
+        return False
+    return not any(re.search(r"[a-z][A-Z]", lab) for lab in host.split("."))
+
+
+def _host_candidates(cell: str) -> list[tuple[str, str]]:
+    """1 つの cell の文字から (host, path) の候補。 URL / code span の外の host の形の語 / 中身全体が host の code span。"""
+    out = [(m.group(1), m.group(2) or "") for m in URL_RE.finditer(cell)]
+    rest = URL_RE.sub(" ", cell)
+    rest = re.sub(r"\]\([^)]*\)", "] ", rest)  # markdown の link 先 (相対 path・anchor) は service の host でない
+
+    def span(m: re.Match) -> str:
+        w = HOST_WHOLE_RE.match(m.group(1).strip())
+        if w:
+            out.append((w.group(1), w.group(2) or ""))
+        return " "
+
+    rest = re.sub(r"`([^`]*)`", span, rest)
+    out.extend((m.group(1), m.group(2) or "") for m in HOST_WORD_RE.finditer(rest))
+    return [(h, p) for h, p in out if _host_ok(h)]
+
+
+def _first_segment(path: str) -> str:
+    seg = re.split(r"[?#<{…]", path, 1)[0].strip("/").split("/", 1)[0]
+    return seg.lower()
+
+
+def derive_host_keys(cells: list[str]) -> list[str]:
+    keys: list[str] = []
+    for idx, cell in enumerate(cells):
+        for host, path in _host_candidates(cell):
+            k = host.lower()
+            if idx == 0 and _first_segment(path):
+                k += "/" + _first_segment(path)
+            if k not in keys:
+                keys.append(k)
+    return keys
+
+
+def load_host_rows(path: Path) -> tuple[list[dict], list[str]]:
+    """([{id, head, line, lineno, keys, tools, table}], overlay の誤り) — file の全ての table の行。"""
+    text = path.read_text(encoding="utf-8")
+    lines = text.split("\n")
+    sep = re.compile(r"^\|[-\s|:]+\|?\s*$")
+    rows: list[dict] = []
+    for i, line in enumerate(lines):
+        if not line.startswith("|") or sep.match(line):
+            continue
+        if i + 1 < len(lines) and sep.match(lines[i + 1]):
+            continue  # header の行
+        cells = [c.strip() for c in line.strip().strip("|").split(" | ")]
+        if len(cells) < 2:
+            continue
+        tools = []
+        for m in TOOL_NAME_RE.finditer(line):
+            name = m.group(1).rsplit("/", 1)[-1]
+            if name not in tools:
+                tools.append(name)
+        rows.append({"id": "h" + hashlib.sha1(line.encode("utf-8")).hexdigest()[:11], "head": cells[0],
+                     "line": line, "lineno": i + 1, "keys": derive_host_keys(cells), "tools": tools,
+                     "table": str(path)})
+    errors: list[str] = []
+    for blk in HOST_KEY_BLOCK_RE.findall(text):
+        for raw in blk.split("\n"):
+            l = raw.strip()
+            if not l.startswith("- "):
+                continue
+            if " :: " not in l and " := " not in l:
+                errors.append(f"区切り (:: / :=) が無い: {l[:60]}")
+                continue
+            replace = " := " in l and (" :: " not in l or l.index(" := ") < l.index(" :: "))
+            prefix, rhs = l[2:].split(" := " if replace else " :: ", 1)
+            prefix = prefix.strip()
+            new = [k.lower() for k in rhs.split()]
+            bad = [k for k in new if not HOST_KEY_RE.match(k) or not _host_ok(k.split("/", 1)[0])]
+            hits = [r for r in rows if r["head"].startswith(prefix)] if prefix else []
+            if not new or bad:
+                errors.append(f"host の形でない: {prefix[:30]} -> {bad or rhs.strip()[:40]}")
+                continue
+            if not hits:
+                errors.append(f"頭の当たる行が無い: {prefix[:40]}")
+                continue
+            if len({r["head"] for r in hits}) > 1:
+                errors.append(f"頭が複数の行に当たる (頭を長く書く): {prefix[:40]} -> "
+                              + " / ".join(sorted({r['head'][:20] for r in hits})))
+                continue
+            for r in hits:
+                if replace:
+                    r["keys"] = []
+                for k in new:
+                    if k not in r["keys"]:
+                        r["keys"].append(k)
+    return rows, errors
+
+
+def url_targets(text: str) -> list[tuple[str, str]]:
+    """文字の中の http(s) の URL の (host, path) (小文字)。"""
+    out = []
+    for m in URL_RE.finditer(text):
+        t = (m.group(1).lower(), (m.group(2) or "").lower())
+        if t not in out:
+            out.append(t)
+    return out
+
+
+def key_score(key: str, host: str, path: str) -> tuple | None:
+    """key (host[/path]) が URL に当たれば細かさの順位 (大きいほど細かい)、 当たらなければ None。"""
+    kh, _, kp = key.partition("/")
+    if not (host == kh or host.endswith("." + kh)):
+        return None
+    kp = kp.strip("/")
+    if kp:
+        p = re.split(r"[?#]", path, 1)[0].strip("/")
+        if not (p == kp or p.startswith(kp + "/")):
+            return None
+    return (1 if kp else 0, 1 if host == kh else 0, kh.count("."), len(kp))
+
+
+def match_host_rows(rows: list[dict], text: str) -> list[tuple[dict, str]]:
+    """[(行, 当たった URL の host)] — URL ごとにいちばん細かい key の行。 行の道具を叩いている command の行は除く。"""
+    hits: list[tuple[dict, str]] = []
+    for host, path in url_targets(text):
+        best, best_rows = None, []
+        for r in rows:
+            sc = max((s for s in (key_score(k, host, path) for k in r["keys"]) if s is not None), default=None)
+            if sc is None:
+                continue
+            if best is None or sc > best:
+                best, best_rows = sc, [r]
+            elif sc == best:
+                best_rows.append(r)
+        for r in best_rows:
+            if any(r is h for h, _ in hits):
+                continue
+            if any(re.search(LEFT_BOUNDARY + re.escape(t) + r"(?![A-Za-z0-9_.-])", text) for t in r["tools"]):
+                continue  # もう行の道具を使っている
+            hits.append((r, host))
+    return hits
+
+
+def host_haystack(tool_name: str, tool_input: dict) -> str | None:
+    """当てる文字。 Bash は「引く」 の語のある command だけ (語は元の command で見る = quote を外す前。 当てる URL は
+    掲示板の自由文・grep 系の検索語を除いた後の文字から取る)、 ほかの tool は tool_input の url。 当てない時は None。"""
+    if tool_name == "Bash":
+        raw = str(tool_input.get("command", ""))
+        return strip_unused_text(raw) if FETCH_RE.search(raw) else None
+    url = tool_input.get("url")
+    return url if isinstance(url, str) else None
+
+
+def render_hosts(hits: list[tuple[dict, str]], table_names: str, rest: list[tuple[dict, str]] | None = None) -> str:
+    body = []
+    for r, host in hits:
+        line = r["line"] if len(r["line"]) <= ROW_MAX else r["line"][:ROW_MAX] + " …(続きは台帳)"
+        body.append(f"L{r['lineno']} (← {host}): {line}")
+    more = ""
+    if rest:
+        more = ("\nほかにも当たる行: " + " / ".join(f"L{r['lineno']} {r['head'][:30]}" for r, _ in rest)
+                + " (次に引く時に出る。 今すぐ読むなら台帳を開く)")
+    return (HOST_HEADER.format(table=table_names) + "\n" + "\n".join(body) + more
+            + "\n(同じ行は 1 session に 1 回だけ出る。 どの行が出るか = constraint-at-use.py --hosts --probe '<command>')")
+
+
+def hook_main_hosts(tables: list[Path], state_dir: str, max_rows: int) -> int:
+    try:
+        ev = json.loads(sys.stdin.read() or "{}")
+        if ev.get("hook_event_name", "PreToolUse") != "PreToolUse":
+            return 0
+        text = host_haystack(ev.get("tool_name", ""), ev.get("tool_input") or {})
+        if not text or self_mention(text, tables):
+            return 0
+        rows = []
+        for t in tables:
+            if t.is_file():
+                rows.extend(load_host_rows(t)[0])
+        hits = match_host_rows(rows, text)
+        if not hits:
+            return 0
+        sid = str(ev.get("session_id") or "")
+        seen = _seen(state_dir, sid)
+        unseen = [h for h in hits if h[0]["id"] not in seen]
+        fresh, rest = unseen[:max_rows], unseen[max_rows:]
+        if not fresh:
+            return 0
+        _mark(state_dir, sid, [r["id"] for r, _ in fresh])
+        names = " / ".join(sorted({Path(r["table"]).name for r, _ in fresh}))
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                                 "additionalContext": render_hosts(fresh, names, rest)}},
+                         ensure_ascii=False))
+        return 0
+    except Exception:  # noqa: BLE001  fail-open: hook の故障で tool call を止めない
+        return 0
+
+
+def check_hosts_main(tables: list[Path], as_json: bool) -> int:
+    bad = 0
+    report = []
+    for t in tables:
+        rows, errors = load_host_rows(t)
+        bad += len(errors)
+        report.append({"table": str(t), "errors": errors,
+                       "rows": [{k: r[k] for k in ("lineno", "head", "keys", "tools")} for r in rows]})
+    if as_json:
+        print(json.dumps(report, ensure_ascii=False, indent=1))
+        return 1 if bad else 0
+    for rep in report:
+        rows = rep["rows"]
+        keyed = [r for r in rows if r["keys"]]
+        print(f"{rep['table']}: {len(rows)} 行 (host のある行 {len(keyed)})")
+        for r in keyed:
+            print(f"  L{r['lineno']:<4} {r['head'][:40]!r:44} -> {r['keys'][:4]}{' …' if len(r['keys']) > 4 else ''}")
+        shared: dict[str, list[str]] = {}
+        for r in rows:
+            for k in r["keys"]:
+                shared.setdefault(k, []).append(f"L{r['lineno']}")
+        shared = {k: v for k, v in shared.items() if len(v) > 1}
+        if shared:
+            print("複数の行が同じ host を持つ (= 同じ URL で一緒に出る。 広すぎるなら := で絞る):")
+            for k, v in shared.items():
+                print(f"    {k} -> {' '.join(v)}")
+        for e in rep["errors"]:
+            print(f"  ❌ route-hosts: {e}")
+    if bad:
+        print(f"route-hosts の誤り = {bad} (台帳の末尾の <!-- route-hosts --> の行を直す)")
+    return 1 if bad else 0
+
+
+def hosts_main(tables: list[Path], state_dir: str, max_rows: int, probe: str | None, tool: str, check: bool,
+               as_json: bool) -> int:
+    if check:
+        return check_hosts_main([t for t in tables if t.is_file()], as_json)
+    if probe is None:
+        return hook_main_hosts(tables, state_dir, max_rows)
+    rows = []
+    for t in tables:
+        if t.is_file():
+            rows.extend(load_host_rows(t)[0])
+    text = host_haystack(tool, {"command": probe, "url": probe}) or ""  # hook と同じ除き方で当てる
+    hits = match_host_rows(rows, text)
+    print(f"{len(hits)} 行が出る (tool = {tool}、 URL = {[h for h, _ in url_targets(text)]}):")
+    for r, host in hits:
+        print(f"  L{r['lineno']} (← {host}) {r['head'][:70]}")
+    return 0
+
+
+def selftest_hosts(tmp: Path, check) -> None:
+    """host の形の selftest (合成の host だけ = 予約された .example の名)。"""
+    import subprocess
+    led = tmp / "ledger.md"
+    long_tail = "長い説明" * 400
+    led.write_text(
+        "# 台帳\n\n| 段 | 意味 |\n|---|---|\n| **1** | 専用の経路 |\n\n"
+        "| サイト / 対象 | 用途 | 段 | 経路の実体 |\n|---|---|---|---|\n"
+        "| 文献の検索 (LitDB) | 書誌 | 2 | 層1 `lit-tool.py` (`https://api.lit.example/works` を引く)。 "
+        "`gh auth refresh -h code.example -s user` は別の話 |\n"
+        "| 蔵書の検索 | 所蔵 | 4 | `book-tool.py opac` |\n"
+        "| 貸出の状況 | 貸出 | 6 | 画面で `https://opac.lib.example/opac/odr` |\n"
+        "| 図書館の頁 | DB | 6 | https://lib.example/found/db を開く |\n"
+        "| サイト A (`sites.host.example/tenant-a/home`) | Q&A | 6 | 画面 |\n"
+        "| サイト B (`sites.host.example/tenant-b`) | 旧 | 6 | 画面 |\n"
+        "| 共有の Box (`box.gov.example/s/<id>`) | DL | 4 | 画面 |\n"
+        "| 同じ頭 | 読む | 2 | `same-tool.py` |\n"
+        "| 同じ頭 | 書く | 2 | `same-tool.py --write` |\n"
+        "| 識別子だけ | x | 2 | `capabilities.canAddChildren` と notes.md と [link](sub.linked.example) と "
+        "v1.2.3 |\n"
+        "| 広い行 | x | 2 | wide.example の説明、 noisy.example の例 |\n"
+        f"| 長い行 (long.example) | x | 2 | {long_tail} |\n"
+        "\n後文\n\n<!-- route-hosts\n説明の行は無視する (:: を含んでも頭が - でなければ)\n"
+        "- 蔵書の検索 :: opac.lib.example\n- 同じ頭 :: same.example\n- 広い行 := wide.example\n-->\n",
+        encoding="utf-8")
+    rows, errors = load_host_rows(led)
+    k = {r["head"]: r["keys"] for r in rows}
+    check(len(rows) == 13 and not errors, "hosts table: 2 つの table の行を読み、 header と区切りを除く (13 行・誤り無し)")
+    check(k.get("**1**") == [], "hosts derive: host の無い行 (凡例) は key 無し")
+    check(k["文献の検索 (LitDB)"] == ["api.lit.example"],
+          "hosts derive: code span の中の URL の host は取り、 command の引数の host (gh -h) は取らない")
+    check(k["蔵書の検索"] == ["opac.lib.example"], "hosts derive: overlay の :: で導けない行に足す")
+    check(k["貸出の状況"] == ["opac.lib.example"], "hosts derive: 1 列目でない URL は host だけ (path を捨てる)")
+    check(k["図書館の頁"] == ["lib.example"], "hosts derive: 裸の URL の host")
+    check(k["サイト A (`sites.host.example/tenant-a/home`)"] == ["sites.host.example/tenant-a"],
+          "hosts derive: 1 列目の候補は path の 1 段目まで残す")
+    check(k["共有の Box (`box.gov.example/s/<id>`)"] == ["box.gov.example/s"], "hosts derive: path の <id> から先は捨てる")
+    check([r["keys"] for r in rows if r["head"] == "同じ頭"] == [["same.example"], ["same.example"]],
+          "hosts overlay: 頭が同じ行が複数なら全部に当てる")
+    check(k["識別子だけ"] == [], "hosts derive: code の識別子・file 名・markdown の link 先・版番号は host にしない")
+    check(k["広い行"] == ["wide.example"], "hosts overlay: := は導いた host を置き換える")
+    hs = lambda c: host_haystack("Bash", {"command": c}) or ""  # noqa: E731
+    heads = lambda c: [r["head"][:6] for r, _ in match_host_rows(rows, hs(c))]  # noqa: E731
+    check(heads("curl -s 'https://api.lit.example/works?q=x'") == ["文献の検索 "], "hosts match: curl の URL の host")
+    check(heads("curl https://opac.lib.example/opac/search?q=x") == ["蔵書の検索", "貸出の状況"],
+          "hosts match: host が同じ行どうしは両方 (下の名の lib.example の行は出ない = いちばん細かい key)")
+    check(heads("curl https://www.lib.example/x") == ["図書館の頁"], "hosts match: 下の名 (www.lib.example) は上の key に当たる")
+    check(heads("curl https://xapi.lit.example/") == [] and heads("curl https://lit.example.org/") == [],
+          "hosts match: 名の途中 (xapi.) や後ろに続く名 (.org) には当てない")
+    check(heads("curl https://sites.host.example/tenant-a/page") == ["サイト A "]
+          and heads("curl https://sites.host.example/tenant-ab/page") == []
+          and heads("curl https://sites.host.example/other") == [],
+          "hosts match: path つきの key は path の段の境目で当てる")
+    check(heads("curl https://box.gov.example/s/abc") == ["共有の Bo"] and heads("curl https://box.gov.example/x") == [],
+          "hosts match: path つきの key は他の path に当てない")
+    check(heads("python3 tools/book-tool.py opac && curl https://opac.lib.example/x") == ["貸出の状況"],
+          "hosts match: 行の道具を叩いている command では、 その行を出さない")
+    check(heads("cat >> notes.md <<'EOF'\nURL https://api.lit.example/works\nEOF") == [],
+          "hosts gate: 引く語の無い command (記録に URL を書く) には出さない")
+    check(heads("git pull -q && python3 - <<'EOF'\ns = 'https://api.lit.example/x'\nEOF") == [],
+          "hosts gate: URL を取らない git (pull だけ) は引く語にしない")
+    check(heads("git clone https://api.lit.example/repo.git") == ["文献の検索 "], "hosts gate: git clone の URL")
+    check(heads('open -a "Some Browser" "https://lib.example/found/db"') == ["図書館の頁"],
+          "hosts gate: URL を開く open (app の指定つき)")
+    check(heads("python3 - <<'EOF'\nimport urllib.request\nurllib.request.urlopen(\"https://api.lit.example/w\")\nEOF")
+          == ["文献の検索 "], "hosts gate: heredoc の python の urllib")
+    check(heads("python3 - <<'EOF'\np = open('notes.md').read()\nq = 'https://api.lit.example/w'\nEOF") == [],
+          "hosts gate: python の open( は引く語にしない")
+    check(heads("curl -s https://elsewhere.example/ | grep 'https://api.lit.example'") == [],
+          "hosts strip: grep の検索語の URL には出さない")
+    check(heads("python3 board/board.py note --summary 'curl https://api.lit.example/x を引いた'") == [],
+          "hosts strip: 掲示板の自由文の URL には出さない")
+    check(heads("curl HTTPS://API.LIT.EXAMPLE/works") == ["文献の検索 "], "hosts match: scheme と host の大文字")
+    check(heads("curl https://elsewhere.example/") == [], "hosts match: 台帳に無い host は 0")
+    check([r["head"][:6] for r, _ in match_host_rows(rows, host_haystack("WebFetch", {"url": "https://api.lit.example/w"}))]
+          == ["文献の検索 "], "hosts match: tool_input の url (WebFetch) は引く語なしで当てる")
+    st = tmp / "hstate"
+
+    def run(e, *extra, table=led):
+        return subprocess.run([sys.executable, __file__, "--hosts", "--table", str(table), "--state-dir", str(st), *extra],
+                              input=json.dumps(e), capture_output=True, text=True)
+
+    ev = {"hook_event_name": "PreToolUse", "session_id": "h1", "tool_name": "Bash",
+          "tool_input": {"command": "curl -s https://api.lit.example/works"}}
+    r = run(ev)
+    check(r.returncode == 0 and '"additionalContext"' in r.stdout and "lit-tool.py" in r.stdout
+          and "L9 (← api.lit.example)" in r.stdout and "経路の台帳" in r.stdout,
+          "hosts hook: 初回は行の番号と当たった host つきで行を出す")
+    r = run(ev)
+    check(r.returncode == 0 and r.stdout.strip() == "", "hosts hook: 同じ session の 2 回目は無言")
+    r = run(dict(ev, session_id="h2"))
+    check('"additionalContext"' in r.stdout, "hosts hook: 別の session では再び出る")
+    r = run({"hook_event_name": "PreToolUse", "session_id": "h3", "tool_name": "Bash",
+             "tool_input": {"command": "curl https://opac.lib.example/a https://api.lit.example/b"}}, "--max", "1")
+    check("ほかにも当たる行" in r.stdout, "hosts hook: --max を超えた行は番号と頭を末尾に並べる")
+    r = run({"hook_event_name": "PreToolUse", "session_id": "h4", "tool_name": "Bash",
+             "tool_input": {"command": "curl https://long.example/"}})
+    check("…(続きは台帳)" in r.stdout and len(json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]) < ROW_MAX + 600,
+          "hosts hook: 長い行は ROW_MAX 字で切る")
+    r = run({"hook_event_name": "PreToolUse", "session_id": "h5", "tool_name": "Bash",
+             "tool_input": {"command": "python3 constraint-at-use.py --hosts --probe 'curl https://api.lit.example/'"}})
+    check(r.stdout.strip() == "", "hosts hook: engine 自身を叩く command には出さない")
+    r = run({"hook_event_name": "PostToolUse", "session_id": "h6", "tool_name": "Bash",
+             "tool_input": {"command": "curl https://api.lit.example/"}})
+    check(r.stdout.strip() == "", "hosts hook: PreToolUse 以外の event は無言")
+    r = subprocess.run([sys.executable, __file__, "--hosts", "--table", str(led), "--state-dir", str(st)],
+                       input="not json", capture_output=True, text=True)
+    check(r.returncode == 0 and r.stdout.strip() == "", "hosts hook: 壊れた stdin は fail-open")
+    r = run(ev, table=tmp / "missing.md")
+    check(r.returncode == 0 and r.stdout.strip() == "", "hosts hook: 台帳が無ければ fail-open")
+    r = subprocess.run([sys.executable, __file__, "--hosts", "--table", str(led), "--probe",
+                        "curl https://opac.lib.example/x"], capture_output=True, text=True)
+    check(r.returncode == 0 and "2 行が出る" in r.stdout and "蔵書の検索" in r.stdout, "hosts --probe: 出る行を表示")
+    r = subprocess.run([sys.executable, __file__, "--hosts", "--table", str(led), "--check"], capture_output=True, text=True)
+    check(r.returncode == 0 and "opac.lib.example -> L10 L11" in r.stdout, "hosts --check: 同じ host の行を並べて rc 0")
+    r = subprocess.run([sys.executable, __file__, "--hosts", "--table", str(led), "--check", "--json"],
+                       capture_output=True, text=True)
+    try:
+        js = json.loads(r.stdout)
+        check(r.returncode == 0 and js[0]["rows"][1]["keys"] == ["api.lit.example"]
+              and js[0]["rows"][2]["tools"] == ["book-tool.py"], "hosts --check --json: 行ごとの host と道具")
+    except (ValueError, IndexError, KeyError):
+        check(False, "hosts --check --json: 行ごとの host と道具")
+    bad = tmp / "bad.md"
+    bad.write_text("| a | b |\n|---|---|\n| 甲の行 | x |\n| 甲の別 | y |\n\n<!-- route-hosts\n"
+                   "- 無い頭 :: none.example\n- 甲の行 :: not_a_host\n- 甲 :: a.example\n- 甲の行 a.example\n-->\n",
+                   encoding="utf-8")
+    r = subprocess.run([sys.executable, __file__, "--hosts", "--table", str(bad), "--check"], capture_output=True, text=True)
+    check(r.returncode == 1 and "頭の当たる行が無い" in r.stdout and "host の形でない" in r.stdout
+          and "頭が複数の行に当たる" in r.stdout and "区切り" in r.stdout and "誤り = 4" in r.stdout,
+          "hosts --check: overlay の誤り (当たらない頭・host でない・頭が曖昧・区切り無し) で rc 1")
+
+
 def selftest() -> int:
     import shutil
     import subprocess
@@ -486,6 +927,7 @@ def selftest() -> int:
         tbl.write_text(tbl.read_text(encoding="utf-8").replace("| Remote Control の auth |", "| 承認の CLI |"), encoding="utf-8")
         r = subprocess.run([sys.executable, __file__, "--table", str(tbl), "--check"], capture_output=True, text=True)
         check(r.returncode == 1 and "key の無い行 = 1" in r.stdout, "--check: key の無い行があれば rc 1 + 行を列挙")
+        selftest_hosts(tmp, check)  # check() が selftest の ok を更新する
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest:", "ALL PASS" if ok else "FAIL")
@@ -496,7 +938,8 @@ def main() -> int:
     args = sys.argv[1:]
     if args == ["--selftest"]:
         return selftest()
-    tables, state_dir, max_rows, probe, tool, check = [], DEFAULT_STATE_DIR, 2, None, "Bash", False
+    tables, state_dir, max_rows, probe, tool, check = [], None, 2, None, "Bash", False
+    hosts, as_json = False, False
     it = iter(args)
     for tok in it:
         if tok == "--table":
@@ -511,12 +954,19 @@ def main() -> int:
             tool = next(it, "Bash")
         elif tok == "--check":
             check = True
+        elif tok == "--hosts":
+            hosts = True
+        elif tok == "--json":
+            as_json = True
         else:
             print(__doc__.split("usage:", 1)[-1])
             return 64
     if not tables:
         print("--table が要る")
         return 64
+    if hosts:
+        return hosts_main(tables, state_dir or DEFAULT_HOST_STATE_DIR, max_rows, probe, tool, check, as_json)
+    state_dir = state_dir or DEFAULT_STATE_DIR
     if check:
         return check_main([t for t in tables if t.is_file()])
     if probe is not None:
