@@ -22,7 +22,11 @@
 #   board <board dir> [<engine の dir の環境変数>] -- <何か>   例: board board AI_COLLABORATION_DIR -- 掲示板の自分宛て
 #     この repo の中の掲示板 (<board dir>/board.json) で要注意の thread (引受待ち・検収待ち・質問) を session の冒頭に出す。
 #     engine = 環境変数の dir (既定 AI_COLLABORATION_DIR)、 無ければこの repo の隣の ai-collaboration (= 上の repo 行が clone する)。
-#     手元の写しを読む (network なし)。 要注意が無ければ何も出さない。 engine が無ければ黙る (repo 行の ❌ が先に出る)
+#     まず remote を読み (掲示板の投稿は main への commit = pull するまで手元に無い)、 読めなければ手元の写しを読んで 1 行添える。
+#     要注意が無ければ何も出さない。 **読めなかったときは黙らず ⚠️ を 1 行出す** (engine が無い・python 3 が無い・表示の script が
+#     落ちた。 実測: 日本語版 Windows の python の符号 cp932 を真似ると表示の script が落ち、 黙っていたこの行は 0 byte を出した)。
+#     python は python3 → python → py -3 の順に、 版を 3 と答えるものだけを使う (Windows の Store の alias は「Python」 とだけ出して
+#     成功で終わる = 使わない)。 試験用に COLLAB_CHECK_PYTHONS で候補を差し替えられる (空白区切り、 py は py -3 の意味)
 #   python [<入口の path>] -- <何に使うか>              例: python tools/py -- 計算と検算
 #     この repo の Python の入口 (既定 tools/py = claude-config の templates/shared-project/python-env/py の写し) に
 #     `--venv-check` を聞く (network なし、 何も変えない)。 venv の用意・requirements への追従は入口が初回の実行で
@@ -97,6 +101,20 @@ env_suggest() {
   s="$(printf '%s' "$1" | sed 's/^\.*//' | LC_ALL=C tr 'a-z' 'A-Z' | LC_ALL=C sed 's/[^A-Z0-9_]/_/g')$2"
   reserved_env "$s" && s="COLLAB_${s}"
   printf '%s' "$s"
+}
+
+# 掲示板を読む python 3 (配列 PY に入れる。 見つからなければ 1)。 版を 3 と答えない interpreter (Windows の Store の alias) は飛ばす
+PY=()
+pick_python() {
+  [ ${#PY[@]} -gt 0 ] && return 0
+  local c out
+  for c in ${COLLAB_CHECK_PYTHONS:-python3 python py}; do
+    if [ "$c" = py ]; then set -- py -3; else set -- "$c"; fi
+    command -v "$1" >/dev/null 2>&1 || continue
+    out="$("$@" -c 'import sys; print(sys.version_info[0])' 2>/dev/null </dev/null)"
+    if [ "${out%$'\r'}" = 3 ]; then PY=("$@"); return 0; fi
+  done
+  return 1
 }
 
 reserved_line() {  # $1 = 行の種類、 $2 = 変数、 $3 = 代わりの名前の例、 $4 = conf の行
@@ -244,11 +262,36 @@ while IFS= read -r line || [ -n "$line" ]; do
       [ "$engine" = "none" ] && continue
       [ -n "$engine" ] && engine="$(expand_home "$engine")" || engine="$PARENT/ai-collaboration"
       start="$engine/board/board-session-start.py"
-      if [ -f "$ROOT/$bdir/board.json" ] && [ -f "$start" ] && command -v python3 >/dev/null 2>&1; then
-        text="$(python3 "$start" --no-sync --plain --root "$ROOT/$bdir" 2>/dev/null)"
-        [ -n "$text" ] && boards="$boards
-$text"
+      [ -f "$ROOT/$bdir/board.json" ] || continue   # この clone にまだ掲示板が無い = 読む物が無い
+      if [ ! -f "$start" ]; then
+        # 同じ engine の repo 行が ❌ (clone できなかった) を出していれば、 ここでは重ねて言わない
+        case "$missing" in
+          *"❌ $(basename "$engine")"*) ;;
+          *) missing="$missing
+  ⚠️ 掲示板の道具が無い ($start) = 掲示板の自分宛てを読めていない → .collaborator-check.conf の repo 行で隣に ai-collaboration を置く${how:+ ($how)}" ;;
+        esac
+        continue
       fi
+      if ! pick_python; then
+        missing="$missing
+  ⚠️ 掲示板を読む python 3 が見つからない (python3・python・py -3 を試した。 Windows の Store の alias は使えない) = 掲示板の自分宛てを読めていない → python.org の installer か uv で Python 3 を入れる${how:+ ($how)}"
+        continue
+      fi
+      berr="${GITDIR:-${TMPDIR:-/tmp}}/collaborator-check.board.err"
+      # remote を読み、 読めなければ手元の写し (--sync-fallback)。 その flag を知らない古い engine (argparse の exit 2) は今までの形で読む
+      text="$(GIT_TERMINAL_PROMPT=0 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 "${PY[@]}" "$start" --sync-fallback --timeout 15 --plain --root "$ROOT/$bdir" 2>"$berr" </dev/null)"
+      brc=$?
+      if [ "$brc" -eq 2 ]; then
+        text="$(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 "${PY[@]}" "$start" --no-sync --plain --root "$ROOT/$bdir" 2>"$berr" </dev/null)"
+        brc=$?
+      fi
+      if [ "$brc" -ne 0 ]; then
+        missing="$missing
+  ⚠️ 掲示板を読めなかった (board-session-start.py が exit $brc: $(tail -n 1 "$berr" 2>/dev/null)) = 掲示板の自分宛てを読めていない → 次の session でも出るなら、 この行を依頼元に知らせる"
+      fi
+      rm -f "$berr" 2>/dev/null
+      [ -n "$text" ] && boards="$boards
+$text"
       ;;
     python)
       wrapper="${2:-tools/py}"
@@ -300,7 +343,7 @@ if [ -n "$missing" ] || [ -n "$done_now" ] || [ "$show_reads" = 1 ] || [ "$ALL" 
 fi
 if [ -n "$boards" ]; then
   printf '%s\n' "${boards#?}"
-  echo "  → 自分 (この session) 宛ての依頼・検収があれば、 最初の返答で user に 1 行で伝え、 作業の始めに inbox --sync で読む"
+  echo "  → 自分 (この session) 宛ての依頼・検収があれば、 最初の返答で user に 1 行で伝え、 作業の始めに inbox --sync で読む。 手を付けたら同じ turn に claim か note を 1 行 (commit だけでは依頼元に見えない)"
 fi
 
 if [ "$FIRST" = 1 ] && [ "$ALL" = 0 ] && [ -n "$SEEN" ]; then

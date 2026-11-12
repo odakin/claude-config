@@ -485,6 +485,42 @@ def selftest() -> int:
             fails.append(f"Claude Code の変数でない名前の行を止めた / 読まなかった:\n{out_n}")
         if run(extra=ok_env).strip():
             fails.append(f"揃っているのに出力した:\n{run(extra=ok_env)}")
+        # board: 読めなかったら黙らず ⚠️ (engine が無い / python 3 が無い / 表示の script が落ちた)、 古い engine は今までの形で読む
+        (repo / "board").mkdir(exist_ok=True)
+        (repo / "board" / "board.json").write_text('{"board_format": 1}\n')
+        eng = td / "stub-engine"
+        (eng / "board").mkdir(parents=True)
+        (eng / "board" / "board-session-start.py").write_text(
+            "import os, sys\n"
+            "mode = os.environ.get('STUB_MODE', 'ok')\n"
+            "if mode == 'old' and '--sync-fallback' in sys.argv: sys.stderr.write('unrecognized arguments\\n'); sys.exit(2)\n"
+            "if mode == 'fail': sys.stderr.write('UnicodeEncodeError: cp932\\n'); sys.exit(1)\n"
+            "print('掲示板: 要注意 1 thread — 記録:')\n"
+            "print('📨 role-p-x 対応待ち [引受待ち] p/t-board — ' + ' '.join(a for a in sys.argv[1:] if a.startswith('--')))\n")
+        (repo / CONF).write_text(CONF_HEADER + "board board STUB_ENGINE_DIR -- 掲示板の自分宛て\n")
+        benv = dict(pathenv, STUB_ENGINE_DIR=str(eng), COLLAB_CHECK_PYTHONS=sys.executable)
+        out_b = run(extra=benv)
+        if "p/t-board" not in out_b or "--sync-fallback" not in out_b or "claim か note を 1 行" not in out_b:
+            fails.append(f"掲示板の要注意を --sync-fallback で読んで出すはず:\n{out_b}")
+        out_b = run(extra=dict(benv, STUB_MODE="old"))
+        if "p/t-board" not in out_b or "--no-sync" not in out_b or "⚠️" in out_b:
+            fails.append(f"古い engine (exit 2) は --no-sync で読み直すはず:\n{out_b}")
+        out_b = run(extra=dict(benv, STUB_MODE="fail"))
+        if "⚠️ 掲示板を読めなかった" not in out_b or "exit 1" not in out_b or "cp932" not in out_b:
+            fails.append(f"表示の script が落ちたら黙らず理由つきの ⚠️ を出すはず:\n{out_b}")
+        out_b = run(extra=dict(benv, STUB_ENGINE_DIR=str(td / "no-engine")))
+        if "⚠️ 掲示板の道具が無い" not in out_b:
+            fails.append(f"engine が無ければ黙らず ⚠️ を出すはず:\n{out_b}")
+        store = td / "store-alias"
+        store.mkdir()
+        (store / "python3").write_text("#!/bin/sh\necho Python\n")   # Windows の Store の alias の真似 = 何もせず成功
+        (store / "python3").chmod(0o755)
+        out_b = run(extra=dict(benv, COLLAB_CHECK_PYTHONS=str(store / "python3")))
+        if "⚠️ 掲示板を読む python 3 が見つからない" not in out_b or "p/t-board" in out_b:
+            fails.append(f"Store の alias しか無ければ使わず ⚠️ を出すはず:\n{out_b}")
+        (repo / "board" / "board.json").unlink()
+        if run(extra=dict(benv, STUB_MODE="fail")).strip():
+            fails.append("掲示板の無い clone で board 行が何か出した")
         # conf が無い repo では何も出さない
         (repo / CONF).unlink()
         if run().strip():
