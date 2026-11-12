@@ -116,6 +116,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "lib"))
 import desktop_sessions as ds  # noqa: E402
+import owner_turn  # noqa: E402  (the one reader of the owner's typed prompts; the board gate reads the same)
 
 try:
     import session_model as sm  # noqa: E402
@@ -271,8 +272,26 @@ def board_launch_record(prompt: str) -> dict | None:
             continue
         if isinstance(rec, dict):
             rec.setdefault("_path", p)
+            rec.setdefault("_root", root)
             return rec
     return None
+
+
+def board_names_only(rec: dict) -> bool:
+    """The record's board starts the record's tier only on the owner's naming: its board.json sets launch_model_allow
+    and does not list that tier (ai-collaboration board/CONTRACT.md#launch-model-allow). Such a board checks the
+    owner's words itself and writes them as model_quote; a record of that tier without them was not written by that
+    check (an older engine, a hand-written record)."""
+    root = (rec or {}).get("_root") or ""
+    for p in (os.path.join(root, "board.json"), os.path.join(root, "board", "board.json")):
+        try:
+            with open(p, encoding="utf-8") as fh:
+                allow = (json.load(fh) or {}).get("launch_model_allow") or {}
+        except (OSError, ValueError, AttributeError):
+            continue
+        tiers = [str(t).strip().lower() for t in (allow.get("tiers") or []) if str(t).strip()]
+        return bool(tiers) and tier(rec.get("model") or "") not in tiers
+    return False
 
 
 def board_first_on() -> bool:
@@ -291,8 +310,7 @@ NAMES_TOP = re.compile(r"fable|フェイブル|mythos", re.I)
 NAMES_MAX = re.compile(r"(?<![a-z-])max(?![a-z-])|マックス", re.I)
 # 名指しでなく打ち消し・疑い (「要らん」「じゃなくて大丈夫？」) を名指しと数えない = 迷えば理由を求める側に倒す
 NEGATED = re.compile(r"要らん|要らな|いらん|いらな|不要|じゃなく|ではなく|でなく|やめ|使わな|もったいな|過剰")
-GENERATED_PROMPT = ("<command-", "<local-command", "<task-notification>", "<cross-session-message", "Another Claude session",
-                    "Stop hook feedback", "Base directory for this skill", "Caveat:", "<system-reminder>", "[Request interrupted")
+GENERATED_PROMPT = owner_turn.GENERATED_PROMPT   # the filter lives in lib/owner_turn.py (one reader for every gate)
 OWNER_WINDOW = 3
 
 
@@ -326,40 +344,9 @@ def premium_asked(ti: dict) -> tuple[bool, bool, list[str]]:
 
 def owner_prompts(path: str, last: int = OWNER_WINDOW) -> list[str]:
     """The owner's own last `last` prompts in a Claude transcript (typed by the person: no tool results, meta lines,
-    compact summaries, other sessions' messages, hook feedback or skill bodies; a prompt queued mid-turn counts)."""
-    out: list[str] = []
-    try:
-        fh = open(path, encoding="utf-8", errors="replace")
-    except (OSError, TypeError):
-        return out
-    with fh:
-        for line in fh:
-            try:
-                e = json.loads(line)
-            except ValueError:
-                continue
-            if not isinstance(e, dict) or e.get("isMeta") or e.get("isSidechain") or e.get("isCompactSummary"):
-                continue
-            text = ""
-            if e.get("type") == "user":
-                if e.get("turnOrigin") not in (None, "human") or e.get("promptSource") == "system":
-                    continue
-                c = (e.get("message") or {}).get("content")
-                if isinstance(c, str):
-                    text = c
-                elif isinstance(c, list) and not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c):
-                    text = "".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
-            elif e.get("type") == "attachment":
-                a = e.get("attachment") or {}
-                if (isinstance(a, dict) and a.get("type") == "queued_command" and a.get("commandMode") == "prompt"
-                        and isinstance(a.get("origin"), dict) and a["origin"].get("kind") == "human"):
-                    p = a.get("prompt")
-                    text = p if isinstance(p, str) else "".join(
-                        b.get("text", "") for b in (p or []) if isinstance(b, dict) and b.get("type") == "text")
-            text = re.sub(r"<system-reminder>.*?</system-reminder>", "", text or "", flags=re.S).strip()
-            if text and not text.startswith(GENERATED_PROMPT):
-                out.append(text)
-    return out[-last:]
+    compact summaries, other sessions' messages, hook feedback or skill bodies; a prompt queued mid-turn counts).
+    The filter is lib/owner_turn.py's, which the board's model gate also reads (one reader, so the two cannot drift)."""
+    return [e["text"] for e in owner_turn.owner_entries(path)][-last:]
 
 
 def _mentions(rx: re.Pattern, t: str) -> list[bool]:
@@ -656,6 +643,12 @@ def pre_start(inp: dict) -> tuple[int, str]:
         top, mx, where = premium_asked(ti)
         if rec and tier(rec.get("model") or "") == "fable":
             top = True; where.append(f"掲示板の記録 model {rec.get('model')}")
+            if not (rec.get("model_quote") or "").strip() and board_names_only(rec):
+                return 2, ("🛑 session-launch-check: 掲示板の記録は Fable の worker なのに、 本人の名指し (model_quote) が無い。"
+                           " この掲示板は Opus 以外を本人の名指しでしか起こさないので、 記録の理由の文だけでは通さない"
+                           f" (記録 = {rec.get('_path', 'outbox の launch.json')})。 本人がこの依頼で名指したなら掲示板の request を"
+                           " --model-quote '<本人の発言そのまま>' で出し直す。 名指しが無いなら --expect-model opus で出し直すか、"
+                           " 起こす前に本人に 1 行で聞く。 規約 = ai-collaboration/board/CONTRACT.md#launch-model-allow")
         if rec and (rec.get("effort") or "").lower() == "max":
             mx = True; where.append("掲示板の記録 effort max")
         if top or mx:
@@ -1954,6 +1947,33 @@ def selftest() -> int:
         check("premium: a model reason does not cover max → blocked on max only", rc == 2 and "max を選ぶ" in err and "Fable と" not in err)
         cheap = {"initiation": "own_initiative", "title": "[local推奨] [model: opus xhigh] 検品", "prompt": "This window should run on Opus at xhigh effort."}
         check("premium: Opus xhigh → pass", start(cheap)[0] == 0)
+
+        # a board that starts other tiers only on the owner's naming (launch_model_allow): its record's reason alone does
+        # not let a Fable start through (measured: a reason written in the question's own words passed a fixed-text edit)
+        nb = os.path.join(td, "named-only")
+        os.makedirs(os.path.join(nb, ".local", "outbox"), exist_ok=True)
+        nrid = "20260101T000000Z-claude-0000a1"
+        nst = {"initiation": "user_asked", "title": "文の直し · fable xhigh", "model": "claude-fable-5-1", "effort": "xhigh",
+               "prompt": f"You are the board worker for role `role-p-n`, request `{nrid}` on the p board (`--root {nb}`);"
+                         " execute it yourself. This window must run on fable at xhigh effort.\n0. …"}
+
+        def named_board(allow, **rec) -> None:
+            with open(os.path.join(nb, "board.json"), "w", encoding="utf-8") as fh:
+                json.dump({"board_format": 1, **({"launch_model_allow": allow} if allow else {})}, fh)
+            with open(os.path.join(nb, ".local", "outbox", nrid + ".launch.json"), "w", encoding="utf-8") as fh:
+                json.dump({"model": "claude-fable-5-1", "effort": "xhigh", "surface": "desktop", **rec}, fh)
+
+        owner_said("締めて")
+        named_board({"tiers": ["opus"]}, reason="規則の文をどう言い直すかを worker が判断する")
+        rc, err = start(nst)
+        check("premium: a named-only board's Fable record with a reason and no owner naming → blocked",
+              rc == 2 and "model_quote" in err and "launch-model-allow" in err)
+        named_board({"tiers": ["opus"]}, reason="導出を worker が組む", model_quote="この導出は Fable でやって")
+        check("premium: the same record carrying the owner's naming the board checked → pass", start(nst)[0] == 0)
+        named_board({"tiers": ["opus", "fable"]}, reason="導出を worker が組む")
+        check("premium: a board that lists Fable → the reason passes as before", start(nst)[0] == 0)
+        named_board(None, reason="導出を worker が組む")
+        check("premium: a board without launch_model_allow → the reason passes as before", start(nst)[0] == 0)
         for t in ("[Request interrupted by user for tool use]", "<command-name>/model</command-name> fable"):
             owner_said(t)
             if start(card)[0] != 2:

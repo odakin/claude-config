@@ -527,6 +527,7 @@
 - **[lib/office_census.py](lib/office_census.py)** — OOXML package (xlsx / docx / pptx) が「紙に出すもの」 を、 道具に依らず zip の XML から数える。
 - **[lib/office_staging.py](lib/office_staging.py)** — office-staging.sh の Python 鏡像 (同じ root 解決規則、 Excel / Word を osascript で駆動する python driver 用。 office-automation.md#office-pregranted-staging-dir)
 - **[lib/output_numbers.py](lib/output_numbers.py)** — 実行出力の数値と追跡済みの記録を照合する共通規則。--selftest。
+- **[lib/owner_turn.py](lib/owner_turn.py)** — what the owner typed in a Claude Code session, and which of it is the owner's latest input.
 - **[lib/pending_cards.py](lib/pending_cards.py)** — この session が出した card (`start_session` の提案) のうち、 押されていないものと、 本人がまだ見ていないものを、 会話記録と desktop app の記録から数える部品 (点呼の Stop hook と、 card を出した依頼を拾い直す見張りが、 同じ述語で読む)
 - **[lib/permission_rules.py](lib/permission_rules.py)** — settings.json の permission rule を宣言した形に揃える (engine)
 - **[lib/photos_picker.py](lib/photos_picker.py)** — Google Photos Picker API の client (session を作る → 本人が URL を開いて写真を選ぶ → 選ばれた写真を列挙・download。 python3 photos_picker.py で selftest)

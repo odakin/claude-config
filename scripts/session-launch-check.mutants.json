@@ -74,6 +74,15 @@
     {"name": "署名の re: の行を literal として読む",
      "pairs": [["        if s.startswith(\"re:\"):\n", "        if False:\n"]],
      "expect_fail": ["a hand-off with a not-worker signature (re:) → pass"],
-     "expect_pass": ["a literal not-worker signature → pass", "signatures present, a hand-off without one → still blocked"]}
+     "expect_pass": ["a literal not-worker signature → pass", "signatures present, a hand-off without one → still blocked"]},
+    {"name": "名指しでしか起こさない掲示板の Fable の記録を、 記録の理由の文だけで通す (前の形)",
+     "pairs": [["            if not (rec.get(\"model_quote\") or \"\").strip() and board_names_only(rec):\n", "            if False:\n"]],
+     "expect_fail": ["premium: a named-only board's Fable record with a reason and no owner naming"],
+     "expect_pass": ["premium: the same record carrying the owner's naming the board checked", "premium: a board that lists Fable",
+                     "premium: a board without launch_model_allow"]},
+    {"name": "掲示板の board.json が記録の tier を並べていても止める (tier を見ない)",
+     "pairs": [["        return bool(tiers) and tier(rec.get(\"model\") or \"\") not in tiers\n", "        return bool(tiers)\n"]],
+     "expect_fail": ["premium: a board that lists Fable"],
+     "expect_pass": ["premium: a named-only board's Fable record with a reason and no owner naming", "premium: a board without launch_model_allow"]}
   ]
 }
