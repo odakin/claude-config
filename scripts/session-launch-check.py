@@ -550,17 +550,17 @@ def touch_check(inp: dict) -> tuple[int, str]:
         return 0, ""
     if owner_named_session(inp.get("transcript_path") or "", session_names(rec)):
         return 0, ""
-    lin = rec.get("lineage") or {}
-    if lin.get("parent") and lin.get("kind") != "fork":
-        parent = ds.find(lin["parent"])
-        who = (f"起こした窓 = {_label(parent)} (SendMessage の to = {lin['parent']})。 その窓に、 何を・なぜを 1 行で伝え、"
+    launcher = launched_by(rec)
+    if launcher:
+        parent = ds.find(launcher)
+        who = (f"起こした窓 = {_label(parent)} (SendMessage の to = {launcher})。 その窓に、 何を・なぜを 1 行で伝え、"
                " 変えるかはその窓が決める (その窓が本人に聞く)")
     else:
-        who = ("app の記録に起こした窓が無い = 本人が開いた窓か、 切り離された窓。 本人に 1 行で伝える (何を・なぜ")
+        who = ("app の記録に起こした窓が無い = 本人が開いた窓。 本人に 1 行で伝える (何を・なぜ")
         who += ("。 本人は app の model の menu で変えられる。 session は自分の model・effort を変えられない = app が断る)"
                 if "変える" in verb else ")")
     return 2, (f"🛑 session-launch-check: {_label(rec)} はこの session が起こした session でも、 その子孫でもない。"
-               f" この session からは{verb}操作をしない。\n  {who}。\n"
+               f" この session からは {verb}操作をしない。\n  {who}。\n"
                f"  本人がこの窓の直近 {OWNER_WINDOW} 回の発言でその session の id ({(rec.get('cli_id') or '')[:8] or rec.get('local_id')})"
                " か題を出して頼んだときだけ、 ここから通る (打ち消し・苦情・本人が自分で直した報告の文は数えない)。"
                f" 規約 = {TOUCH_RULE}")
@@ -2051,7 +2051,9 @@ def selftest() -> int:
         check("touch: one this session started and then detached (the record keeps spawnedFrom) → pass",
               touch("set_session_effort", loose, effort="xhigh")[0] == 0)
         loose_other = arec("8", "81818181-0000-4000-8000-000000000081", "別の窓が切り離した窓", parent=phys, lineageDetached=True)
-        check("touch: one another window started and detached → blocked", touch("set_session_effort", loose_other, effort="xhigh")[0] == 2)
+        rc, err = touch("set_session_effort", loose_other, effort="xhigh")
+        check("touch: one another window started and detached → blocked, names that window from the record",
+              rc == 2 and "起こした窓 = f1f1f1f1" in err and "本人が開いた窓" not in err)
         bare = arec("6", "61616161-0000-4000-8000-000000000061", "親の記録の無い窓")
         check("touch: a session with no launcher in its record and none in this session's launches → blocked",
               touch("set_session_effort", bare, effort="xhigh")[0] == 2)
