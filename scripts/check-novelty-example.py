@@ -15,6 +15,8 @@ x = c + h sin(θ) の置換で消した中点則で積分する。 確かめる�
   5. V = k (x - c)^2 / 2 + V1: T = 2π sqrt(m/k) (平行移動に依らない)                       〔規則 8 の例〕
   6. V = -cos x で E を極大の値 1 に近づけると、 周期が増え続ける (転回点が極大に当たると周期は有限でない)
      〔教科書役の結果の条件「転回点で V の傾きが零でない」 が要る理由〕
+  7. V = -V0 / cosh^2(x/a) で T0 > π a sqrt(2m/V0) なら、 E = -2 π^2 m a^2 / T0^2 は -V0 < E < 0 にあり、
+     周期がちょうど T0。 T0 がその下限より小さければ E < -V0 (束縛運動の範囲の外)   〔規則 8 の、 存在しか示されていない例〕
 
 使い方:
   python3 scripts/check-novelty-example.py            # 項目ごとの数値と PASS / FAIL (失敗があれば exit 1)
@@ -95,6 +97,18 @@ def checks():
         Ts.append(period(lambda x: -math.cos(x), -xt, xt, E, m, n=400000))
     yield ("6 極大に近づくと周期が増え続ける", Ts[0] < Ts[1] < Ts[2] and Ts[2] > 2.0 * Ts[0],
            "T=" + ", ".join(f"{t:.4f}" for t in Ts))
+    # 7. sech^2 well: the energy with a given period T0 (explicit form of an existence statement)
+    for V0, a, T0 in [(1.0, 1.0, 6.0), (5.0, 0.7, 2.5), (5.0, 0.7, 20.0)]:
+        bound = math.pi * a * math.sqrt(2.0 * m / V0)
+        E = -2.0 * math.pi ** 2 * m * a * a / T0 ** 2
+        xt = a * math.acosh(math.sqrt(V0 / abs(E)))
+        T = period(lambda x: -V0 / math.cosh(x / a) ** 2, -xt, xt, E, m)
+        ok = T0 > bound and -V0 < E < 0 and abs(T - T0) < 1e-4 * T0
+        yield (f"7 周期 T0 の E V0={V0} a={a} T0={T0}", ok, f"E={E:.6f} T={T:.6f} 下限={bound:.6f}")
+    V0, a, T0 = 1.0, 1.0, 3.0  # below the bound pi*sqrt(2) = 4.44...
+    E = -2.0 * math.pi ** 2 * m * a * a / T0 ** 2
+    yield ("7 下限より短い T0 では E < -V0", T0 < math.pi * a * math.sqrt(2.0 * m / V0) and E < -V0,
+           f"T0={T0} E={E:.6f}")
 
 
 def main():
