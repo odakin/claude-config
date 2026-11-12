@@ -66,6 +66,10 @@
 
 - [ ] **manuscript-claim-guard の commit の deny 文が、 同じ repo・file・領域の承認を持つ別の session を名指さない** — 受けた session が依頼元の `--session` で `apply` した後、 自分の commit が止まっても deny 文は「裁定が無い」 とだけ言う (実測、 [`tool-call-robustness.md#worker-apply-requester-commits`](conventions/tool-call-robustness.md#worker-apply-requester-commits))。 案 = deny 文に「この承認は session X の記録にある = X で commit する」 を足す (guard の code の変更 = 本人の裁定が要る、 作らずに queue)。
 
+- [ ] **manuscript-claim-guard の検収の照合が、 引き受けの前の無関係な command で長く続く検収の窓を承認できなくする** — 候補とその足した行は会話記録の全部で見るので、 読む形でない command の option の値の glob (`grep --include='*.sh' … | head`) が候補の file 名に当たる、 ありふれた足した行 (`import sys`) が前の `python3 -c` の文字にある、 のどちらでも「検収係が候補を書いた」 と断る (実測、 2 file とも)。 運用の注意 = [掲示板の契約の edit-approval](../ai-collaboration/board/CONTRACT.md#edit-approval)。 案 = option の値の glob を名指しに数えない / 足した行の照合を引き受けの後に絞るか最短の長さを上げる (guard の code の変更 = 本人の裁定が要る、 作らずに queue)。
+
+- [ ] **hook の試験の pipe の罠 ([`hook-authoring.md#hook-stdin-pipe-sigpipe`](conventions/hook-authoring.md#hook-stdin-pipe-sigpipe)) に機械の網が無い** — 節があっても、 新しい hook の試験の候補が同じ形 (`pipefail` の下で `writer | hook` の rc を `$?` で取る、 stdin を読まずに終わる経路) で書かれ、 時々だけ落ちた (実測、 2 回目の形)。 案 = `.test.sh` の足した行で、 `pipefail` の file の `… | … hook …` の直後に `rc=$?` を取る行を警告する検査を、 pre-commit の門 (`check-pipefail-grep-q.py` と同じ置き方) に足す (作らずに queue = 締めの中で、 門の配線は保護された file)。
+
 - [ ] **manuscript-claim-guard の Stop の照合が、 文脈圧縮の後の本人の turn の返事を読まない** — 圧縮の後の会話記録は、 圧縮の前の末尾を元の時刻のまま後ろに付け直すので、 本人の発言を含む turn の組の先頭が、 その発言より前の時刻になる。 `assistant_replies_since` は組の先頭の時刻で組ごと飛ばすため、 承認の行を書いた返事を見落とし、 後の event の turn (背景の task の通知など) で同じ行を再び求める (実測)。 直す案 = 組の entry が全部 since より前のときだけ飛ばす。 guard は保護された file = 本人の裁定待ち
 
 - [ ] **完了Git gateのリモート照会失敗の切り分け** — 自動照会の検査不能と直接照会の成功が食い違う条件を調べる段階。次は通常SSHと多重化を使わない照会を同時点で比較し、タイムアウトと起動失敗を区別する候補を作る。実装の入口 = [session_touch.py](codex/hooks/session_touch.py)。原因未特定のため検査の変更は未着手。
