@@ -84,6 +84,9 @@ sections:
   - id: model-fit-before-sending
     level: 3
     title: "送る前に宛先の実際の model を読む — 仕事の難しさと合わせる"
+  - id: research-dialogue-and-conductor
+    level: 3
+    title: "研究の対話係と指揮所の分担"
   - id: remote-handoff-constraints
     legacy: "11"
     level: 2
