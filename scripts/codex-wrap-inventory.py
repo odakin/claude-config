@@ -32,7 +32,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'lib'))
-from codex_thread_reader import Reader
+from codex_thread_reader import Reader, shell_payload
 import headless_record_clause as headless
 import worker_observations as observations
 import output_numbers
@@ -47,18 +47,6 @@ def visible_text(content):
         return content if isinstance(content, str) else ''
     return '\n'.join(x['text'] for x in content if isinstance(x, dict) and
                      x.get('type') in ('text', 'input_text', 'output_text') and isinstance(x.get('text'), str))
-
-
-def shell_payload(command):
-    # The native execution item records the transport shell around the input.
-    # Decode only a literal shell -c argument; never execute history as code.
-    try:
-        args = shlex.split(command)
-    except ValueError:
-        return command
-    if len(args) == 3 and Path(args[0]).name in ('sh','bash','zsh') and args[1] in ('-c','-lc','-cl','-lic'):
-        return args[2]
-    return command
 
 
 def command_routes(command):

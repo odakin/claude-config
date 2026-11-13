@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""session-scripts-report.py — ある session がその場で書いた script を会話記録から全部並べ、 file として残っているか (commit 済みか) を出す。--selftest 内蔵。
+"""会話記録からスクリプトを拾い、保存先を照合する。--selftest 内蔵。
 
 用途: 締めの sweep (conventions/closing-sweep.md#collect-from-transcript) で、 その場で書いた script を取りこぼさないため。
 context から思い出すと、 file に残らない形 (heredoc で interpreter に流した code・`-c` / `-e` の code) を数え落とす
@@ -35,13 +35,23 @@ script は subagent-reports.py、 headless の worker の script は headless-wo
   session-scripts-report.py abcd1234 --all-repos            # 作業ルート (--root、 既定 ~/Claude) の全 repo で探す
   session-scripts-report.py abcd1234 --json
   session-scripts-report.py abcd1234 --strict               # ⚠️ / ❌ / 🟡 が 1 件でもあれば exit 1
+  session-scripts-report.py --inventory codex-inventory.json --json
+  session-scripts-report.py --inventory codex-inventory.json --check-dispositions dispositions.json
   session-scripts-report.py --selftest
+
+Codex は `codex-wrap-inventory.py <full-id> --json` の出力を入力にする。
+一覧には一行の inline code も出す。本文と出力は載せず、thread・tool call ID で辿る。
+`--check-dispositions` は同じ inventory に対し、各 ID の保存先（--root からの追跡済み
+パス）か、除外理由が揃っていることを確かめる。JSON の形式は
+`{"<ID>": {"saved": "project/checks/example.py"}, "<ID>": {"excluded": "理由"}}`。
+検査は照合表の充足と保存先の状態まで。結論の裏付けや未対応の道具でのコード生成は目視する。
 
 projects-dir の既定 = この機械の全部の設定 dir の projects/ (lib/claude_config_dirs.py)。 0 件なら見た dir を出す。
 
 OS: macOS / Linux / Windows (Git Bash・PowerShell) で同じに動く (標準 library + git、 Python 3.8+、 出力は UTF-8)。
 """
 import argparse
+from collections import Counter
 import glob
 import json
 import os
@@ -248,6 +258,8 @@ def file_status(path):
     if rc != 0:
         return "🟡", "repo の中だが未追跡 (" + os.path.basename(repo) + ")"
     rc, out = _git(["status", "--porcelain", "--", rel], repo)
+    if rc != 0:
+        return "⚠️", "作業ツリーを確認できない (" + os.path.basename(repo) + ")"
     if out.strip():
         return "🟡", "commit していない変更あり (" + os.path.basename(repo) + ")"
     return "✅", "commit 済み (" + os.path.basename(repo) + ":" + rel + ")"
@@ -308,7 +320,7 @@ def all_repos(root):
     return sorted(str(p.parent) for p in Path(root).glob("*/.git"))
 
 
-def collect(calls):
+def collect(calls, min_lines=MIN_LINES):
     files, inline, runs = {}, [], []
     for name, inp, ts, err, cwd, out in calls:
         if name in FILE_TOOLS:
@@ -325,11 +337,11 @@ def collect(calls):
                 if re.search(r"(?:cat|tee)\s+(?:-a\s+)?>", cmd[max(0, m.start() - 80):m.start() + 1]):
                     continue
                 body = m.group(5)
-                if len(body.splitlines()) >= MIN_LINES:
+                if len(body.splitlines()) >= min_lines:
                     inline.append((ts, m.group(1), body, err, out))
             for m in DASH_C_RE.finditer(cmd):
                 body = m.group(3)
-                if len(body.splitlines()) >= MIN_LINES:
+                if len(body.splitlines()) >= min_lines:
                     inline.append((ts, m.group(1) + " -c", body, err, out))
             m = RUN_SCRIPT_RE.search(cmd)
             if m and not HEREDOC_RE.search(cmd):
@@ -396,22 +408,124 @@ def _number_note(r):
             " 個 (" + ", ".join(r["numbers"][:4]) + ")")
 
 
+def inventory_rows(inventory):
+    from codex_thread_reader import shell_payload
+
+    if not inventory['threads'] or inventory['threads'][0]['id'] != inventory['root']:
+        raise ValueError('inventory の親 thread が一致しない')
+    rows, seen_files = [], set()
+    for thread in inventory['threads']:
+        thread_id = thread['id']
+        calls = [
+            ('Bash', {'command': shell_payload(tool['input'])}, tool['id'],
+             bool(tool.get('exit_code')), tool.get('cwd') or thread.get('cwd'), '')
+            for tool in thread['tools'] if tool['tool'] == 'Bash'
+        ]
+        files, inline, _ = collect(calls, min_lines=1)
+        for change in thread['files']:
+            if is_script_path(change['path']):
+                files.setdefault(_expand(change['path'], thread.get('cwd')), change['call'])
+        for path, call in sorted(files.items()):
+            if path in seen_files:
+                continue
+            seen_files.add(path)
+            if os.path.isabs(path):
+                mark, note = file_status(path)
+            else:
+                mark, note = '⚠️', '記録に作業ディレクトリが無く保存先を解決できない'
+            rows.append(dict(id='file:' + path, thread=thread_id, call=call,
+                             kind='file', what=path, mark=mark, note=note))
+        ordinal = Counter()
+        for call, interpreter, body, failed, _ in inline:
+            ordinal[call] += 1
+            rows.append(dict(id=f'inline:{thread_id}:{call}:{ordinal[call]}',
+                             thread=thread_id, call=call, kind='inline',
+                             what=f'{interpreter} ({len(body.splitlines())} 行)', failed=failed))
+    return rows
+
+
+def disposition_errors(rows, dispositions, root):
+    if not isinstance(dispositions, dict):
+        raise ValueError('照合表は ID をキーにした JSON object にする')
+    ids = {row['id'] for row in rows}
+    errors = ['未照合: ' + key for key in sorted(ids - dispositions.keys())]
+    errors.extend('一覧にない ID: ' + key for key in sorted(dispositions.keys() - ids))
+    root = Path(root).expanduser().resolve()
+    for key in sorted(ids & dispositions.keys()):
+        entry = dispositions[key]
+        if not isinstance(entry, dict) or set(entry) not in ({'saved'}, {'excluded'}):
+            errors.append(f'{key}: saved か excluded を一つ記録する')
+            continue
+        status, value = next(iter(entry.items()))
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f'{key}: 保存先か除外理由が空')
+        elif status == 'saved':
+            path = (root / value).resolve()
+            if (Path(value).is_absolute() or root not in path.parents or not path.is_file()
+                    or file_status(str(path))[0] != '✅'):
+                errors.append(f'{key}: 保存先を追跡済みファイルとして確認できない: {value}')
+    return errors
+
+
+def report_inventory(args):
+    inventory = json.loads(Path(args.inventory).read_text(encoding='utf-8'))
+    rows = inventory_rows(inventory)
+    warnings = [warning for thread in inventory['threads'] for warning in thread['warnings']]
+    unavailable = inventory['unavailable']
+    errors = []
+    if args.check_dispositions:
+        dispositions = json.loads(Path(args.check_dispositions).read_text(encoding='utf-8'))
+        errors = disposition_errors(rows, dispositions, args.root)
+    if args.json:
+        print(json.dumps(dict(session=inventory['root'], rows=rows, warnings=warnings,
+                              unavailable=unavailable, errors=errors), ensure_ascii=False, indent=1))
+    else:
+        for row in rows:
+            print(f"{row['id']}  {row['what']}  call={row['call']}")
+        print(f"スクリプト候補 {len(rows)} 件")
+        if args.check_dispositions:
+            print(f"照合表の指摘 {len(errors)} 件")
+        for error in errors:
+            print(error)
+        for warning in warnings:
+            print('WARNING:', warning)
+        for item in unavailable:
+            print('UNAVAILABLE:', item)
+    if warnings or unavailable:
+        return 2
+    return 1 if errors or (args.strict and not args.check_dispositions
+                           and any(row.get('mark') != '✅' for row in rows)) else 0
+
+
 def main(argv=None):
     _utf8_stdout()
     ap = argparse.ArgumentParser(description="session がその場で書いた script を並べ、 保存の有無を出す")
-    ap.add_argument("session", nargs="?", default=os.environ.get("CLAUDE_CODE_SESSION_ID", ""))
+    ap.add_argument("session", nargs="?")
     ap.add_argument("--projects-dir")
     ap.add_argument("--root", default="~/Claude", help="作業ルート (repo を探す範囲)")
     ap.add_argument("--all-repos", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true")
+    ap.add_argument("--inventory", help="Codex の棚卸し JSON")
+    ap.add_argument("--check-dispositions", help="同じ棚卸しに対する保存先・除外理由の JSON")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
-    if not a.session:
+    if a.inventory:
+        if a.session:
+            ap.error('session と --inventory は同時に指定しない')
+        try:
+            return report_inventory(a)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            print(f'Codex の棚卸しを読めない: {exc}', file=sys.stderr)
+            return 2
+    if a.check_dispositions:
+        ap.error('--check-dispositions には --inventory が必要')
+    session = a.session or os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if not session:
         ap.error("session id を渡す (または CLAUDE_CODE_SESSION_ID)")
-    rc, bad = report(a.session, projects_dirs(a.projects_dir), a.root, a.all_repos, a.json)
+    rc, bad = report(session, projects_dirs(a.projects_dir), a.root, a.all_repos, a.json)
     if rc:
         return rc
     return 1 if (a.strict and bad) else 0
@@ -552,6 +666,37 @@ def selftest():
         check(rc == 0 and bad == 6, "未保存・未 commit の数 = 6 (dirty・scratch・gen.sh・code 3 本)")
         rows = json.loads(_capture(lambda: report(sid[:8], [Path(t, "projects")], root, False, True)))
         check(rows["numbers_not_recorded"] == 2, "記録に無い数値を出した行 = 2 (一部だけ記録にある code・記録に無い script の実行)")
+        import shlex
+
+        command = "python3 - <<'PY'\nprint(1)\nPY\npython3 -c 'print(2)'"
+        inventory = dict(root='parent', unavailable=[], threads=[
+            dict(id='parent', cwd=repo, warnings=[], tools=[],
+                 files=[dict(path='kept.py', call='write-one')]),
+            dict(id='child', cwd=repo, warnings=[], files=[], tools=[
+                dict(tool='Bash', id='exec-one', input=shlex.join(['/bin/zsh', '-lc', command]),
+                     exit_code=0)
+            ]),
+        ])
+        inventory_path = Path(t, 'inventory.json')
+        inventory_path.write_text(json.dumps(inventory), encoding='utf-8')
+        args = ['--inventory', str(inventory_path), '--root', root, '--json']
+        candidates = json.loads(_capture(lambda: main(args)))['rows']
+        check(len(candidates) == 3 and [r['id'] for r in candidates if r['kind'] == 'inline'] == [
+            'inline:child:exec-one:1', 'inline:child:exec-one:2'
+        ], 'Codex の子の一行コードも同一呼び出し内で別々に拾う')
+        check(all('print(' not in r['what'] for r in candidates), '一覧には会話中のコード本文を出さない')
+        dispositions = {r['id']: {'saved': 'proj/kept.py'} for r in candidates}
+        missing = candidates[-1]['id']
+        del dispositions[missing]
+        table = Path(t, 'dispositions.json')
+        table.write_text(json.dumps(dispositions), encoding='utf-8')
+        result = []
+        _capture(lambda: result.append(main(args + ['--check-dispositions', str(table)])))
+        check(result == [1], '一件でも未照合なら CLI は失敗する')
+        dispositions[missing] = {'excluded': '一度きりの表示確認'}
+        table.write_text(json.dumps(dispositions), encoding='utf-8')
+        _capture(lambda: result.append(main(args + ['--check-dispositions', str(table)])))
+        check(result[-1] == 0, '保存先か除外理由が全件揃えば CLI は成功する')
     print("selftest: " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
 

@@ -109,6 +109,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 | token方式 | inventoryにあるこのsessionの `--record` / tokenだけを0.5の道具で照合する。他sessionのmarkerを消費しない |
 
 - `--section summary` / `--section commands` の 🔢 も、 [0.3 の数値の候補](#numbers-not-recorded)として研究の中身の拾い出しに使う。
+- スクリプトは、圧縮前と取得できた子を含む inventory JSON を `python3 scripts/session-scripts-report.py --inventory <inventory.json> --json` に渡す。一行のコードも呼び出し ID から確認し、候補 ID ごとに保存先か除外理由を記録する。同じ入力に `--check-dispositions <照合表.json>` を加えて記入漏れを確かめる。結論の根拠に使ったコードは [#evidence-scripts](#evidence-scripts) に従って保存する。抽出器が扱えない道具や取得不能な記録は原記録・成果物と照らし、確認できない範囲を報告する。
 - 委ねるpromptには3項目を最初から入れる。Codexのnative子とCodex環境を引き継ぐheadless子にはworker側hookも渡す。
   親のCLIをrunnerで包んで許可判定を変える方式は使わない。通常のCLI入力を保ち、hookを止めるflagや環境の消去がある場合は
   到達を仮定せず記録・報告から確かめる。実装と機械別の限界は上のPARITYへ。

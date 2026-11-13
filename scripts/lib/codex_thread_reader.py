@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import shlex
 import subprocess
 import sys
 import threading
@@ -32,6 +33,18 @@ def runtime_binary(requested='auto'):
 
 STDERR_LINES = 20
 STATE_FAILURE = 'state runtime'
+
+
+def shell_payload(command):
+    """Unwrap a literal transport shell without executing recorded input."""
+    try:
+        args = shlex.split(command)
+    except ValueError:
+        return command
+    if (len(args) == 3 and Path(args[0]).name in ('sh', 'bash', 'zsh')
+            and args[1] in ('-c', '-lc', '-cl', '-lic')):
+        return args[2]
+    return command
 
 
 def exit_message(stderr_lines, environ=None):
