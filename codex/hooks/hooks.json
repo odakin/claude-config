@@ -21,6 +21,12 @@
             "command": "python3 \"$HOME/.codex/claude-config-hooks/board_surface.py\"",
             "timeout": 10,
             "statusMessage": "Reading the board"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/parent_wrap_observe.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking accepted workers"
           }
         ]
       }
@@ -136,6 +142,12 @@
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/first_turn_stamp_check.py\"",
             "timeout": 8
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/parent_wrap_observe.py\"",
+            "timeout": 10,
+            "statusMessage": "Checking accepted workers"
           },
           {
             "type": "command",
