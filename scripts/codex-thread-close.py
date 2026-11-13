@@ -38,6 +38,7 @@ conventions/multi-session-coordination.md#codex-thread-close。
 
 subcommand:
   list [--board-root R]... [--all] [--json]   archive されていない対話の thread (アプリの一覧に出る種類) を 1 行ずつ判定
+  parent PARENT [--board-root R]... [--json]   親が起票し受理された作業子を読み直す。通知・wrap・archive は行わない
   check THREAD [--board-root R]... [--evidence TEXT] [--json]   1 つを詳しく
   wrap THREAD [--board-root R]... [--evidence TEXT] [--writer daemon|app]
       照合の残す理由が「wrap の記録が無い」 だけのときに wrap を頼む。 既定 = 共有の Codex daemon で wrap skill を型つきの
@@ -66,6 +67,7 @@ import importlib.util
 import json
 import os
 import re
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -92,6 +94,11 @@ URL_OR_CODE = re.compile(r"`[^`]*`|https?://\S+|\[[^\]]*\]\([^)]*\)")
 SEALED_HEAD = re.compile(r"^#\s*Isolated\b")
 CLOSED_BOARD = {"accepted", "abandoned"}
 ROLE_PREFIXES = ("role-", "resident-")  # the board's role ids (board_workflow.ROLE_PREFIXES)
+NATIVE_ID = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+APP_DELEGATION = re.compile(
+    rf"<codex_delegation>\n  <source_thread_id>({NATIVE_ID})</source_thread_id>\n"
+    r"  <input>(.*?)</input>\n</codex_delegation>\s*\Z", re.S,
+)
 
 
 # ---------------------------------------------------------------- small helpers
@@ -154,6 +161,70 @@ def is_wrap_input(item: dict) -> bool:
                                          for x in content):
         return True
     return bool(WRAP_RX.search(text_of(content)))
+
+
+def wrap_delegation(item: dict) -> tuple[str, str] | None:
+    """Extract only the app's delivery item, with a wrap request at the start of its input."""
+    if (item.get("type"), item.get("namespace"), item.get("name")) != (
+        "functionCallOutput", "codex_app", "send_message_to_thread"
+    ):
+        return None
+    output = item.get("output")
+    if isinstance(output, dict):
+        if output.get("truncated"):
+            return None
+        output = output.get("text")
+    match = APP_DELEGATION.fullmatch(output) if isinstance(output, str) else None
+    if not match:
+        return None
+    source, prompt = match.groups()
+    if not re.match(r"^\s*(?:[$/]wrap\b|wrap\s*skill\b|skill\s*=\s*wrap\b)", prompt, re.I):
+        return None
+    return source, prompt
+
+
+def app_wrap_sent(sent: dict, tid: str, prompt: str, received_ms: float) -> bool:
+    if (sent.get("type"), sent.get("server"), sent.get("tool"), sent.get("status")) != (
+        "mcpToolCall", "codex_app", "send_message_to_thread", "completed"
+    ):
+        return False
+    args = sent.get("arguments")
+    result = sent.get("result")
+    started, completed = sent.get("startedAtMs"), sent.get("completedAtMs")
+    return (isinstance(args, dict) and args.get("threadId") == tid and args.get("prompt") == prompt
+            and isinstance(result, dict) and not result.get("isError") and not sent.get("error")
+            and isinstance(started, (int, float)) and isinstance(completed, (int, float))
+            and started <= completed <= received_ms + 1000)
+
+
+def verified_wrap_turns(tid: str, thread: dict, reader) -> set[int]:
+    """Match an inbound wrap to an actual successful app send addressed to this thread."""
+    verified = set()
+    sources = {}
+    for index, turn in enumerate(thread.get("turns") or []):
+        started = turn.get("startedAt")
+        if not isinstance(started, (int, float)):
+            continue
+        for item in turn.get("items") or []:
+            delivery = wrap_delegation(item)
+            if not delivery:
+                continue
+            source, prompt = delivery
+            if source == tid:
+                continue
+            if source not in sources:
+                try:
+                    sources[source] = reader(source)
+                except (OSError, RuntimeError, TimeoutError, ValueError):
+                    sources[source] = {}
+            received_ms = item.get("startedAtMs")
+            if not isinstance(received_ms, (int, float)):
+                received_ms = started * 1000
+            if any(app_wrap_sent(sent, tid, prompt, received_ms)
+                   for outgoing in sources[source].get("turns") or []
+                   for sent in outgoing.get("items") or []):
+                verified.add(index)
+    return verified
 
 
 def turn_running(turn: dict) -> bool:
@@ -287,7 +358,7 @@ def board_roots(args_roots) -> list[Path]:
     return out
 
 
-def board_threads(roots) -> list[dict]:
+def board_threads(roots, *, strict=False) -> list[dict]:
     """[{root, dir, events}] — each board thread's events in time order."""
     out = []
     for root in roots:
@@ -299,6 +370,8 @@ def board_threads(roots) -> list[dict]:
                 try:
                     evs.append(json.loads(f.read_text(encoding="utf-8")))
                 except (OSError, ValueError):
+                    if strict:
+                        raise ValueError(f"cannot read board event: {f.name}") from None
                     continue
             if evs:
                 evs.sort(key=lambda e: (e.get("created_at") or "", e.get("event_id") or ""))
@@ -441,6 +514,41 @@ def board_links(tid: str, threads: list[dict], unique8: bool) -> dict:
     return {"requests": out, "roles": sorted(roles), "next": nxt}
 
 
+def accepted_children(parent: str, threads: list[dict], host: str) -> list[dict]:
+    """Use only the parent's own requests and the current, same-host Codex claimant."""
+    reduce = board_reducer()
+    if reduce is None:
+        raise ValueError("the board reducer is unavailable")
+    now = _dt.datetime.fromtimestamp(now_ts(), _dt.timezone.utc)
+    children = []
+    for entry in threads:
+        request = next((event for event in entry["events"] if event.get("kind") == "request"), {})
+        actor = request.get("actor") or {}
+        if request.get("source_policy") != "ordinary" or (actor.get("agent"), actor.get("session_id")) != (
+            "codex", parent
+        ):
+            continue
+        state = reduce(entry["events"], now)
+        rid = request["event_id"]
+        if state["errors"]:
+            children.append({"request": rid, "error": "invalid board history"})
+            continue
+        if state["status"] != "accepted":
+            continue
+        claim = (state.get("claim") or {}).get("actor") or {}
+        worker = claim.get("session_id") or ""
+        if worker.startswith(ROLE_PREFIXES):
+            match = re.match(rf"({NATIVE_ID})(?![0-9a-z-])", claim.get("task") or "")
+            worker = match[1] if match else ""
+        receipt = state["review"]["event_id"]
+        if (claim.get("agent") != "codex" or claim.get("instance") != f"codex@{host}"
+                or worker == parent or not re.fullmatch(NATIVE_ID, worker)):
+            children.append({"request": rid, "acceptance": receipt, "error": "unverified local Codex worker"})
+            continue
+        children.append({"request": rid, "acceptance": receipt, "thread": worker})
+    return children
+
+
 # ---------------------------------------------------------------- work dir / sandbox / git
 
 def dir_kind(cwd: str | None) -> str:
@@ -543,7 +651,8 @@ def git_findings(cwd: str | None, changed: list[str], windows=()) -> list[str]:
 # ---------------------------------------------------------------- the judgment
 
 def judge(tid: str, thread: dict, row: dict | None, links: dict, evidence: str | None = None,
-          queued: int | None = 0, sandbox: dict | None = None, git: list[str] | None = None) -> dict:
+          queued: int | None = 0, sandbox: dict | None = None, git: list[str] | None = None,
+          app_wrap_turns: set[int] = frozenset()) -> dict:
     """Facts and keep-reasons for one thread. closable = no reason; wrap_only = the only reason is the missing wrap."""
     turns = thread.get("turns") or []
     reasons, notes = [], []
@@ -599,7 +708,9 @@ def judge(tid: str, thread: dict, row: dict | None, links: dict, evidence: str |
     else:
         wrap_turn = None
         for n, tu in enumerate(turns):
-            if any(it.get("type") == "userMessage" and is_wrap_input(it) for it in tu.get("items") or []):
+            if n in app_wrap_turns or any(
+                it.get("type") == "userMessage" and is_wrap_input(it) for it in tu.get("items") or []
+            ):
                 wrap_turn = n
         if wrap_turn is None:
             wrap_state, wrap_missing = "missing", True
@@ -656,7 +767,8 @@ def evaluate(tid: str, roots, evidence=None, row=None, threads_cache=None, ids_c
     sandbox = sandbox_state(cwd) if kind == "sealed" else None
     git = git_findings(cwd, changed_paths(thread), active_windows(thread)) if kind == "work" else []
     ev = evidence or next((r.get("evidence") for r in reversed(ledger_records(tid)) if r.get("evidence")), None)
-    res = judge(tid, thread, row, links, ev, queued_count(tid), sandbox, git)
+    res = judge(tid, thread, row, links, ev, queued_count(tid), sandbox, git,
+                verified_wrap_turns(tid, thread, read_thread) if kind == "work" else frozenset())
     held = held_ids()
     res["held"] = None if held is None else tid in held
     res["archived"] = bool((row or {}).get("archived"))
@@ -906,6 +1018,51 @@ def cmd_list(a) -> int:
     return 0
 
 
+def cmd_parent(a) -> int:
+    if not re.fullmatch(NATIVE_ID, a.thread):
+        print("⛔ 親の完全な Codex ID が必要", file=sys.stderr)
+        return 2
+    roots = board_roots(a.board_root)
+    if not roots:
+        print("⛔ 同期済み掲示板の root が必要", file=sys.stderr)
+        return 2
+    rows = state_rows(unarchived_interactive=True)
+    if rows is None:
+        print("⛔ Codex の状態 DB が読めない", file=sys.stderr)
+        return 2
+    try:
+        threads = board_threads(roots, strict=True)
+        children = accepted_children(a.thread, threads, socket.gethostname())
+    except (OSError, ValueError) as exc:
+        print(f"⛔ 掲示板の照合不能: {exc}", file=sys.stderr)
+        return 2
+    ids = all_ids()
+    by_id = {row["id"]: row for row in rows}
+    results = {}
+    for child in children:
+        tid = child.get("thread")
+        if tid is None:
+            continue
+        if tid not in by_id:
+            child["error"] = "not an open local interactive thread" if tid in ids else "thread unavailable"
+            continue
+        if tid not in results:
+            try:
+                results[tid] = evaluate(tid, roots, row=by_id[tid], threads_cache=threads, ids_cache=ids)
+            except (OSError, RuntimeError, TimeoutError, ValueError) as exc:
+                results[tid] = {"error": str(exc)}
+        child["check"] = results[tid]
+    if a.json:
+        print(json.dumps(children, ensure_ascii=False, indent=1, default=str))
+    else:
+        for child in children:
+            check = child.get("check") or {}
+            error = child.get("error") or check.get("error")
+            print(f"{child['request']} {child.get('acceptance', '')}")
+            print(f"  照合不能: {error}" if error else render(check))
+    return 0
+
+
 # ---------------------------------------------------------------- selftest
 
 def _selftest() -> int:
@@ -978,6 +1135,32 @@ def _selftest() -> int:
     wrap_typed = [{"type": "text", "text": "x"}, {"type": "skill", "name": "wrap", "path": "/s/wrap/SKILL.md"}]
     r = judge(T, th(work, turn("do x", "done."), turn(wrap_typed, "移した先: ...")), None, done)
     check("work: 型つきの wrap の turn の後は畳める", r["closable"] and r["wrap"] == "turn 2")
+    parent = "01a10000-0000-7000-8000-000000000002"
+    prompt = "$wrap\n仕上げてください。"
+    incoming = {"type": "functionCallOutput", "namespace": "codex_app", "name": "send_message_to_thread",
+                "output": f"<codex_delegation>\n  <source_thread_id>{parent}</source_thread_id>\n"
+                          f"  <input>{prompt}</input>\n</codex_delegation>"}
+    sent = {"type": "mcpToolCall", "server": "codex_app", "tool": "send_message_to_thread", "status": "completed",
+            "arguments": {"threadId": T, "prompt": prompt}, "result": {"content": []},
+            "startedAtMs": 1794199900000, "completedAtMs": 1794199939999}
+    delegated = turn("ignored", "wrapped")
+    delegated["items"][0] = incoming
+    child = th(work, turn("do x", "done."), delegated)
+    observed = verified_wrap_turns(T, child, lambda _: {"turns": [{"items": [sent]}]})
+    r = judge(T, child, None, done, app_wrap_turns=observed)
+    check("Desktop: 送信先・入力を照合した終了済み wrap を数える", observed == {1} and r["closable"])
+    for mismatched in (dict(sent, status="failed"), dict(sent, arguments={"threadId": parent, "prompt": prompt}),
+                       dict(sent, arguments={"threadId": T, "prompt": "別の依頼"}),
+                       dict(sent, result={"isError": True}), dict(sent, completedAtMs=1794200000000)):
+        observed = verified_wrap_turns(T, child, lambda _: {"turns": [{"items": [mismatched]}]})
+        check("foil: 宛先・本文・結果・時刻の照合が外れた app 送信は数えない", not observed)
+    check("foil: 他の道具の出力は app の依頼と数えない", not wrap_delegation(dict(incoming, namespace="other")))
+    check("foil: app の依頼に wrap を引用しただけなら数えない",
+          not wrap_delegation(dict(incoming, output=incoming["output"].replace(prompt, "先ほどの $wrap の記録"))))
+    delegated["status"] = "inProgress"
+    delegated["completedAt"] = None
+    r = judge(T, child, None, done, app_wrap_turns={1})
+    check("foil: app の wrap が実行中なら畳まない", not r["closable"] and r["wrap"] == "unfinished")
     r = judge(T, th(work, turn("do x", "done."), turn("$wrap please", "ok"),
                     turn("fix one more", "fixed", extra=[{"type": "fileChange", "changes": []}])), None, done)
     check("foil: wrap の後に file を変えたら wrap の番に戻る", not r["closable"] and r["wrap_only"])
@@ -1021,6 +1204,29 @@ def _selftest() -> int:
         d.mkdir(parents=True)
         for e in evs:
             (d / f"{e['event_id']}.json").write_text(json.dumps(e, ensure_ascii=False))
+
+    if board_reducer() is not None:
+        parent_request = v2("request", "P", "P", parent, "2026-11-09T01:00:00Z", agent="codex",
+                            assignee={"agent": "codex", "session_id": "role-worker"}, acceptance="done")
+        parent_claim = claim("P", "role-worker", "2026-11-09T01:01:00Z", task=f"{T} (Codex)")
+        submitted = v2("submit", "S-P", "P", "role-worker", "2026-11-09T01:02:00Z", agent="codex",
+                       reply_to="C-P", deliverables=["out.md"])
+        handover = v2("handover", "H-P", "P", parent, "2026-11-09T01:03:00Z", agent="codex", reply_to="P",
+                      target={"agent": "codex", "session_id": "role-reviewer"}, handover_role="reviewer")
+        receipt = v2("accept", "A-P", "P", "role-reviewer", "2026-11-09T01:04:00Z", agent="codex", reply_to="S-P")
+        events = [parent_request, parent_claim, submitted, handover]
+        check("parent: 正式受理より前は締め候補にしない", not accepted_children(parent, [{"events": events}], "host"))
+        check("parent: 別の検収係の受理を起票した親に結ぶ",
+              accepted_children(parent, [{"events": events + [receipt]}], "host")
+              == [{"request": "P", "acceptance": "A-P", "thread": T}])
+        check("foil: 他の親の受理を拾わない", not accepted_children(T, [{"events": events + [receipt]}], "host"))
+        unknown = accepted_children(parent, [{"events": events + [receipt]}], "different-host")
+        check("foil: 別の機械の子は照合不能", len(unknown) == 1 and "error" in unknown[0])
+        events[1] = claim("P", "role-worker", "2026-11-09T01:01:00Z")
+        unknown = accepted_children(parent, [{"events": events + [receipt]}], "host")
+        check("foil: 先頭8字だけの claim から子を動かさない", len(unknown) == 1 and "error" in unknown[0])
+    else:
+        print("SKIP: parent の reducer 試験には隣の ai-collaboration が必要")
 
     root = tmp / "board"
     write_thread(root, "2026-11-09-x", [
@@ -1167,7 +1373,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--selftest", action="store_true")
     sub = ap.add_subparsers(dest="cmd")
-    for name in ("list", "check", "wrap", "wait", "archive", "unarchive"):
+    for name in ("list", "parent", "check", "wrap", "wait", "archive", "unarchive"):
         p = sub.add_parser(name)
         if name != "list":
             p.add_argument("thread")
@@ -1175,7 +1381,7 @@ def main(argv=None) -> int:
             p.add_argument("--board-root", action="append")
         if name in ("check", "wrap", "archive"):
             p.add_argument("--evidence", help="指揮役の完了の判定の根拠 (file の path と節、 掲示板の id、 最後の報告の要点)")
-        if name in ("list", "check"):
+        if name in ("list", "parent", "check"):
             p.add_argument("--json", action="store_true")
         if name == "list":
             p.add_argument("--all", action="store_true", help="畳める thread の根拠も出す")
@@ -1187,7 +1393,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.selftest:
         return _selftest()
-    fn = {"list": cmd_list, "check": cmd_check, "wrap": cmd_wrap, "wait": cmd_wait, "archive": cmd_archive,
+    fn = {"list": cmd_list, "parent": cmd_parent, "check": cmd_check, "wrap": cmd_wrap, "wait": cmd_wait, "archive": cmd_archive,
           "unarchive": cmd_unarchive}.get(a.cmd)
     if not fn:
         ap.print_help()
