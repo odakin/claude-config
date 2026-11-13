@@ -613,6 +613,115 @@ class ReceiptTests(unittest.TestCase):
             for _ in range(2):
                 self.blocked("live remote head could not be verified")
 
+    def test_clean_gitlink_mismatch_and_unrelated_dirt_are_independent(self):
+        child = self.root / "child"
+        child.mkdir()
+        self.git("init", "-qb", "main", cwd=child)
+        self.git("commit", "--allow-empty", "-qm", "child base", cwd=child)
+        self.git("-c", "protocol.file.allow=always", "submodule", "add", "-q", str(child), "sub")
+        self.git("commit", "-qam", "record submodule")
+        nested = self.repo / "sub"
+        self.git("commit", "--allow-empty", "-qm", "local submodule checkout", cwd=nested)
+        second = self.root / "second"
+        self.git("clone", "-q", str(self.repo), str(second))
+        self.git("remote", "remove", "origin", cwd=second)
+        self.track(f"git -C {second} status --short")
+        reason = self.blocked(f"{self.repo}: dirty (1 unacknowledged")
+        self.assertNotIn("exact dirty state could not be read", reason)
+        self.assertEqual(self.nudge(), {})
+        # Model a persisted baseline from before gitlink snapshots were supported.
+        tracked = gate.load_state(self.state)
+        tracked["repos"][str(self.repo)]["baseline"].pop("gitlinks", None)
+        tracked["repos"][str(self.repo)]["baseline"]["paths"] = None
+        tracked.pop("last_dirty_notice", None)
+        gate.save_state(self.state, tracked)
+        for index in range(22):
+            (second / f"entry-{index}").write_text("pending\n")
+        reason = self.blocked(f"{self.repo}: dirty (1 unacknowledged")
+        self.assertIn(f"{second}: dirty (22 unacknowledged", reason)
+        self.assertEqual(self.call(gate.review)[0], 2)
+        self.assertEqual(self.nudge(), {})
+
+        self.git("commit", "--allow-empty", "-qm", "different clean checkout", cwd=nested)
+        reason = self.blocked(f"{self.repo}: dirty (1 unacknowledged")
+        self.assertNotIn(f"{second}: dirty", reason)
+        self.assertEqual(self.nudge(), {})
+
+        (nested / "untracked").write_text("new submodule contents\n")
+        for _ in range(2):
+            reason = self.blocked("exact dirty state could not be read")
+            self.assertNotIn(f"{second}: dirty", reason)
+        (second / "new").write_text("different unresolved set\n")
+        self.blocked(f"{second}: dirty (23 unacknowledged")
+
+    def test_notice_survives_clean_check_while_only_other_repo_errors(self):
+        other = self.root / "other"
+        self.git("clone", "-q", str(self.repo), str(other))
+        self.git("remote", "remove", "origin", cwd=other)
+        self.fixture()
+        self.track(f"git -C {other} status --short")
+        self.blocked(f"{self.repo}: dirty")
+        self.git("restore", "--", "foreign a")
+        self.git("remote", "add", "broken", str(self.root / "missing.git"), cwd=other)
+        (other / "changed").write_text("new file\n")
+        self.blocked(f"{other}: remote exists")
+        (self.repo / "foreign a").write_text("new parallel change\n")
+        reason = self.blocked(f"{other}: remote exists")
+        self.assertNotIn(f"{self.repo}: dirty", reason)
+
+    def test_notice_survives_when_only_another_repo_is_tracked(self):
+        other = self.root / "other"
+        self.git("clone", "-q", str(self.repo), str(other))
+        self.git("remote", "remove", "origin", cwd=other)
+        self.fixture()
+        self.blocked(f"{self.repo}: dirty")
+        self.git("restore", "--", "foreign a")
+        self.assertEqual(self.nudge(), {})
+        self.call(gate.track, cwd=str(other), tool_name="Bash", hook_event_name="PreToolUse",
+                  tool_input={"command": "git status"})
+        (other / "changed").write_text("new file\n")
+        self.blocked(f"{other}: dirty")
+        self.track()
+        (self.repo / "foreign a").write_text("new parallel change\n")
+        self.assertEqual(self.nudge(), {})
+
+    def test_notice_survives_when_other_repo_has_an_acknowledgement(self):
+        other = self.root / "other"
+        self.git("clone", "-q", str(self.repo), str(other))
+        self.git("remote", "remove", "origin", cwd=other)
+        self.fixture()
+        self.blocked(f"{self.repo}: dirty")
+        (other / "foreign a").write_text("first parallel edit\n")
+        self.call(gate.track, cwd=str(other), tool_name="Bash", hook_event_name="PreToolUse",
+                  tool_input={"command": "git status"})
+        (other / "foreign a").write_text("second parallel edit\n")
+        code, manifest = self.call(gate.review, cwd=str(other))
+        self.assertEqual(code, 0)
+        self.call(gate.acknowledge, cwd=str(other), hook_event_name="UserPromptSubmit",
+                  prompt=manifest["owner_prompt"])
+        self.git("restore", "--", "foreign a")
+        self.assertEqual(self.nudge(), {})
+        (self.repo / "foreign a").write_text("new parallel change\n")
+        self.assertEqual(self.nudge(), {})
+
+    def test_own_write_after_clean_stop_rearms_only_that_repository(self):
+        other = self.root / "other"
+        self.git("clone", "-q", str(self.repo), str(other))
+        self.git("remote", "remove", "origin", cwd=other)
+        self.fixture()
+        self.track(f"git -C {other} status --short")
+        (other / "changed").write_text("parallel change\n")
+        self.blocked(f"{self.repo}: dirty")
+
+        self.git("restore", "--", "foreign a")
+        self.assertEqual(self.nudge(), {})
+        self.call(gate.track, tool_name="apply_patch", hook_event_name="PreToolUse",
+                  tool_input={"patch": "*** Begin Patch\n*** Update File: foreign a\n*** End Patch"})
+        (self.repo / "foreign a").write_text("own new change\n")
+        reason = self.blocked(f"{self.repo}: dirty")
+        self.assertNotIn(f"{other}: dirty", reason)
+        self.assertEqual(self.nudge(), {})
+
     def test_notice_unreadable_state_or_snapshot_stays_loud(self):
         self.fixture()
         self.blocked("dirty")

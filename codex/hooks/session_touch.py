@@ -196,6 +196,17 @@ def status_output(root: Path) -> str | None:
     return os.fsdecode(result.stdout) if result.returncode == 0 else None
 
 
+def clean_gitlink_head(root: Path, rel: str) -> str:
+    child = root / literal_rel(root, rel)
+    if git_root(child) != child:
+        raise ValueError("submodule checkout is unavailable")
+    head = run_git(child, "rev-parse", "--verify", "HEAD", timeout=1)
+    if (head is None or head.returncode or not re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", head.stdout.strip())
+        or status_output(child) != ""):
+        raise ValueError("submodule checkout is not verifiably clean")
+    return head.stdout.strip()
+
+
 def repo_signature(root: Path, *, with_identity: bool = False) -> dict[str, Any] | None:
     head = run_git(root, "rev-parse", "--verify", "HEAD", timeout=1)
     raw = status_output(root)
@@ -207,19 +218,29 @@ def repo_signature(root: Path, *, with_identity: bool = False) -> dict[str, Any]
               "dirty_count": len(rows), "paths": None}
     paths: dict[str, str] = {}
     stamps: dict[str, tuple[int, ...] | None] = {}
+    gitlinks: dict[str, str] = {}
     remaining = SNAPSHOT_BYTES
     try:
         for row in rows:
             # v2 ordinary entries include all HEAD and index modes and blob IDs.
-            # Renames are separate delete/add entries. Conflicts, submodules,
-            # symlinks and unusual Git modes cannot receive a receipt.
+            # A clean submodule checked out at a different commit is readable
+            # as Git metadata. Conflicts and dirty submodule contents stay loud.
             if row.startswith("1 "):
                 parts = row.split(" ", 8)
-                if len(parts) != 9 or parts[2] != "N..." or any(
+                if len(parts) != 9:
+                    return result
+                meta, name = parts[:8], parts[8]
+                if parts[1:6] == [".M", "SC..", "160000", "160000", "160000"] and parts[6] == parts[7]:
+                    rel = literal_rel(root, name)
+                    if rel != name or rel in paths:
+                        return result
+                    gitlinks[rel] = clean_gitlink_head(root, rel)
+                    paths[rel] = digest([meta, gitlinks[rel]])
+                    continue
+                if parts[2] != "N..." or any(
                     mode not in {"000000", "100644", "100755"} for mode in parts[3:6]
                 ):
                     return result
-                meta, name = parts[:8], parts[8]
             elif row.startswith("? "):
                 meta, name = ["?"], row[2:]
             else:
@@ -246,9 +267,13 @@ def repo_signature(root: Path, *, with_identity: bool = False) -> dict[str, Any]
                     after = None
                 if before != after:
                     return result
+            if any(clean_gitlink_head(root, rel) != oid for rel, oid in gitlinks.items()):
+                return result
     except (OSError, RuntimeError, ValueError):
         return result
     result["paths"] = paths
+    if gitlinks:
+        result["gitlinks"] = {rel: paths[rel] for rel in gitlinks}
     if identity is not None and worktree_identity(root) == identity:
         result["identity"] = identity
     return result
@@ -354,6 +379,9 @@ def receipt_manifest(session: str, root: Path, entry: dict[str, Any],
     # baseline instead. An explicit owner confirmation is required either way.
     epoch = entry.get("epoch") or digest(baseline)
     day = datetime.datetime.now().astimezone().date().isoformat()
+    # A gitlink observation identifies a warning, not reviewed file content.
+    if current.get("gitlinks"):
+        return None
     eligible = {path: value for path, value in paths.items() if path not in own_paths}
     return ({"session": session, "worktree": identity, "epoch": epoch,
              "day": day, "paths": eligible} if eligible else None)
@@ -656,6 +684,7 @@ def repo_issues(root: Path, entry: dict[str, Any], session: str = "",
     )
     unresolved_dirt = (changed_status or own_dirty or had_receipt
                        or not isinstance(paths, dict)
+                       or bool(current.get("gitlinks"))
                        or bool(entry.get("post_only_fallback")))
     changed = (current.get("head") != baseline.get("head") or changed_status
                or bool(current.get("dirty_count") and unresolved_dirt)
@@ -727,7 +756,7 @@ def notice_paths_valid(paths: Any) -> bool:
     return True
 
 
-def notice_baseline_valid(baseline: Any) -> bool:
+def notice_baseline_valid(baseline: Any, *, legacy_gitlink: bool = False) -> bool:
     if (not isinstance(baseline, dict)
         or not isinstance(baseline.get("head"), str)
         or re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", baseline["head"]) is None
@@ -735,8 +764,10 @@ def notice_baseline_valid(baseline: Any) -> bool:
         or re.fullmatch(r"[0-9a-f]{64}", baseline["status_hash"]) is None
         or type(baseline.get("dirty_count")) is not int or baseline["dirty_count"] < 0):
         return False
-    # A valid legacy baseline lacks paths. An explicitly unreadable snapshot
-    # (paths=None) or an inconsistent path count is not safe to deduplicate.
+    # Older hooks could not snapshot a lone checkout mismatch. On upgrade,
+    # deduplicate that verified warning after it has been emitted once.
+    if legacy_gitlink and baseline.get("paths") is None and baseline["dirty_count"] == 1:
+        return True
     return "paths" not in baseline or (notice_paths_valid(baseline["paths"])
                                       and len(baseline["paths"]) == baseline["dirty_count"])
 
@@ -787,11 +818,13 @@ def dirty_notice_manifest(
         current = observation.get("snapshot")
         own_paths = entry.get("own_paths", [])
         receipt = entry.get("receipt")
-        if (not notice_baseline_valid(entry.get("baseline"))
+        gitlinks = current.get("gitlinks", {}) if isinstance(current, dict) else {}
+        legacy_gitlink = bool(gitlinks) and current.get("dirty_count") == len(gitlinks) == 1
+        if (not notice_baseline_valid(entry.get("baseline"), legacy_gitlink=legacy_gitlink)
             or ("epoch" in entry and (not isinstance(entry["epoch"], str)
                 or re.fullmatch(r"[0-9a-f]{32}(?:[0-9a-f]{32})?", entry["epoch"]) is None))
             or ("receipt" in entry and not notice_receipt_valid(receipt))):
-            return None
+            continue
         accepted = observation.get("accepted_paths")
         if (len(issues) != 1
             or not issues[0].startswith(f"{root}: dirty (")
@@ -801,12 +834,12 @@ def dirty_notice_manifest(
             or not isinstance(accepted, list) or not all(isinstance(p, str) for p in accepted)
             or not set(accepted) <= set(current["paths"])
             or repo_signature(root, with_identity=True) != current):
-            return None
+            continue
         repos[str(root)] = {"worktree": current["identity"],
                             "unresolved_paths": sorted(set(current["paths"]) - set(accepted)),
                             "epoch": entry.get("epoch") or digest(entry.get("baseline"))}
-    if not repos:
-        return None
+        if gitlinks:
+            repos[str(root)]["gitlinks"] = gitlinks
     return {"version": 1, "session": session,
             "day": datetime.datetime.now().astimezone().date().isoformat(), "repos": repos}
 
@@ -823,7 +856,7 @@ def nudge(event: dict[str, Any]) -> int:
     session = event.get("session_id")
     issues: list[str] = []
     observations = []
-    duplicate = False
+    duplicates: set[str] = set()
     if state is None:
         issues.append("Git gate state could not be read")
         state = {"repos": {}}
@@ -840,8 +873,7 @@ def nudge(event: dict[str, Any]) -> int:
         else:
             issues.append("Git gate repository state is malformed")
     notice = (dirty_notice_manifest(session if isinstance(session, str) else "", observations)
-              if type(state.get("version")) is int and state["version"] == 1
-              and issues and issues == [item for _, _, _, found in observations for item in found] else None)
+              if type(state.get("version")) is int and state["version"] == 1 else None)
     keep = any(isinstance(entry, dict) and "receipt" in entry for entry in state["repos"].values())
     last_notice = state.get("last_dirty_notice")
     keep_notice = (isinstance(last_notice, dict)
@@ -852,42 +884,52 @@ def nudge(event: dict[str, Any]) -> int:
             with state_lock(path) as locked:
                 if digest(load_state(path)) != before:
                     issues.append("Git gate state changed during verification; retry the check")
-                elif not issues and not keep:
-                    if locked and keep_notice and all(
-                        obs.get("snapshot", {}).get("dirty_count") == 0
-                        for _, _, obs, _ in observations
-                    ):
-                        # Retire the baseline, but retain the last displayed warning.
-                        state["repos"] = {}
-                        if digest(state) != before:
-                            save_state(path, state)
-                    else:
-                        path.unlink(missing_ok=True)
-                else:
-                    if locked and notice is not None:
-                        # This records a notification, not owner approval. The
-                        # original baseline, receipt and issue checks remain.
-                        duplicate = last_notice == notice
-                        if not duplicate and keep_notice:
-                            previous = last_notice.get("repos")
-                            if isinstance(previous, dict) and previous.keys() == notice["repos"].keys():
-                                duplicate = all(
-                                    isinstance(previous[root], dict)
-                                    and {**previous[root], "epoch": now["epoch"]} == now
-                                    and (previous[root].get("epoch") == now["epoch"]
-                                         or not set(now["unresolved_paths"]).intersection(state["repos"][root].get("own_paths", [])))
-                                    for root, now in notice["repos"].items()
-                                )
-                        if not duplicate:
-                            state["last_dirty_notice"] = notice
+                elif locked:
+                    if notice is not None:
+                        previous = last_notice.get("repos") if keep_notice and last_notice.get("version") == 1 else None
+                        if not isinstance(previous, dict):
+                            previous = {}
+                        # Repositories not visited in this tracking period have no
+                        # new evidence to invalidate a previously displayed notice.
+                        tracked = state["repos"]
+                        for key, prior in previous.items():
+                            if key not in tracked and isinstance(prior, dict):
+                                notice["repos"][key] = prior
+                        for root, entry, observation, found in observations:
+                            key = str(root)
+                            prior = previous.get(key)
+                            if not isinstance(prior, dict):
+                                continue
+                            now = notice["repos"].get(key)
+                            if now is None:
+                                if not found and (observation.get("snapshot") or {}).get("dirty_count") == 0:
+                                    notice["repos"][key] = prior
+                                    # The next tracked write begins a new epoch even if
+                                    # another repository still has unresolved work.
+                                    tracked.pop(key, None)
+                            elif ({**prior, "epoch": now["epoch"]} == now
+                                  and (prior.get("epoch") == now["epoch"]
+                                       or not set(now["unresolved_paths"]).intersection(entry.get("own_paths", [])))):
+                                duplicates.add(found[0])
+                                notice["repos"][key] = prior
+                    has_notice = notice is not None and bool(notice["repos"])
+                    if has_notice:
+                        state["last_dirty_notice"] = notice
                     else:
                         state.pop("last_dirty_notice", None)
+                    if not issues and not keep:
+                        if not has_notice:
+                            path.unlink(missing_ok=True)
+                            emit({})
+                            return 0
+                        state["repos"] = {}
                     if digest(state) != before:
                         save_state(path, state)
         except OSError:
-            duplicate = False
+            duplicates.clear()
             issues.append("Git gate state could not be verified")
-    if not issues or duplicate:
+    issues = [issue for issue in issues if issue not in duplicates]
+    if not issues:
         emit({})
         return 0
 

@@ -291,7 +291,15 @@ path set, worktree, branch, session or local day requires a new warning. Malform
 receipt dates, malformed or unreadable baselines, unreadable state, tracker
 races, and remote or publication-state problems remain loud. Eligibility
 validates records without repairing them or changing the acknowledgement
-predicate. No write-attempt notification generation is maintained. This only
+predicate. Repeated dirty notifications are decided per repository. A Git
+error in one repository does not repeat another repository's notification.
+Same-day notice history is kept for clean or temporarily untracked
+repositories while another repository is still being checked.
+The hook can identify a clean submodule checked out at a different commit
+from the parent's index. It warns on a new checkout mismatch and suppresses
+its repeats. A snapshot with a mismatched submodule remains ineligible
+for an acknowledgement receipt. Staged gitlink changes, dirty submodule contents, and unreadable
+snapshots still warn. No write-attempt notification generation is maintained. This only
 suppresses newly generated duplicate output; it cannot retract an old Hook
 prompt already generated and later redisplayed by the client.
 
