@@ -476,13 +476,19 @@ def cmd_notes(token: str, args) -> int:
               f"  ({pm.get('duration')} 分, 参加 {pm.get('participants_count')})")
         stem = f"{args.date}_{m['start_time'][11:19].replace(':', '')}Z"
         if pm.get("has_meeting_summary"):
-            summ = api(token, "GET", f"/meetings/{up}/meeting_summary")
-            found += 1
-            print("  要約     : あり")
-            if out:
-                (out / f"{stem}_summary.json").write_text(json.dumps(summ, ensure_ascii=False, indent=1))
-            else:
-                print(summ.get("summary_overview") or summ.get("summary_content") or "")
+            # 要約が取れなくても (ゴミ箱に移された = 2305 など) 文字起こしは別に残っていることがある = 止まらずに文字起こしへ進む
+            try:
+                summ = api(token, "GET", f"/meetings/{up}/meeting_summary")
+            except ZoomError as exc:
+                summ = None
+                print(f"  要約     : 取れない ({exc})。 文字起こしは別に問い合わせる")
+            if summ is not None:
+                found += 1
+                print("  要約     : あり")
+                if out:
+                    (out / f"{stem}_summary.json").write_text(json.dumps(summ, ensure_ascii=False, indent=1))
+                else:
+                    print(summ.get("summary_overview") or summ.get("summary_content") or "")
         else:
             print("  要約     : 無い (has_meeting_summary=false = この回では AI 要約が作られていない)")
         try:
