@@ -7,13 +7,17 @@ conventions/audio-transcription.md#splitting-long-recordings / conventions/podca
     window    ある時刻の前後を whisper で起こす (= 切れ目の候補・聞き取れない語・削る断片の確認。 時刻は元の音声の秒で出す)
     envelope  ある時刻の前後の音量 (RMS dBFS) を細かい刻みで並べる (= 声と声の間の静けさの幅を見て、 切る位置を決める)
     peaks     山 (Peak dBFS) が閾値を超える区間を大きい順に並べる (= リミッターが強く効く所 = 歪みを聞く所を探す)
+    floor     区切り (既定 1 分) ごとに、 0.1 秒の RMS の下位 10 % = 声と声の間の床の音を並べる (= 収録の中で音楽・雑音が鳴り続けた区間を探す。
+              床が周りより 20〜30 dB 上がった区切りが音の鳴っている所。 端は --block 1 で詰める = podcast-audio-finishing.md の BGM を消す区間)
 
 使い方:
     python3 audio-window-check.py edges parts/x-part1.m4a parts/x-part2.m4a parts/x-part3.m4a [--head 10 --tail 8]
     python3 audio-window-check.py window SRC.m4a --at 1850.4 [--before 6 --after 10]
     python3 audio-window-check.py envelope SRC.m4a --at 1850.4 [--span 2 --step 0.05]
     python3 audio-window-check.py peaks SRC.m4a [--above -1 --window 0.5 --top 15]
-    python3 audio-window-check.py --selftest     # 合成音で envelope と peaks を確かめる (whisper は使わない)
+    python3 audio-window-check.py floor SRC.m4a [--block 60]                          # 1 分ごとの床
+    python3 audio-window-check.py floor SRC.m4a --start 2130 --to 2300 --block 1      # 床の上がった所の端を 1 秒で
+    python3 audio-window-check.py --selftest     # 合成音で envelope・peaks・floor を確かめる (whisper は使わない)
 
 whisper: whisper-cli (whisper.cpp) と model (既定 ~/.cache/whisper-cpp/ggml-large-v3-turbo.bin、 --model か env WHISPER_MODEL)、
     言語 = --lang (既定 ja)。 起こした語は「生成」 = 語の確認でなく、 切れ目が発話の途中でないか・何の話かの確認に使う。
@@ -124,6 +128,27 @@ def cmd_peaks(a) -> int:
     return 0
 
 
+def floor_rows(src: Path, start: float, length: float, block: float, step: float = 0.1, pct: float = 10.0):
+    """start から length 秒を block 秒ごとに区切り、 各区切りの step 秒の RMS の下位 pct % (= 声と声の間の床の音) と中央値を返す。"""
+    rows = series(src, start, length, step, "RMS_level")
+    out, k = [], int(round(block / step))
+    for i in range(0, len(rows), k):
+        vals = sorted(v for _, v in rows[i:i + k])
+        if vals:
+            out.append((rows[i][0], vals[int(len(vals) * pct / 100)], vals[len(vals) // 2]))
+    return out
+
+
+def cmd_floor(a) -> int:
+    src = Path(a.src)
+    end = duration(src) if a.to is None else a.to
+    rows = floor_rows(src, a.start, end - a.start, a.block, a.step, a.pct)
+    print(f"{src.name}: {a.block:g} 秒ごとの {a.step:g} 秒の RMS の下位 {a.pct:g} % (= 声の間の床) と中央値。 床が周りより上がった区切り = 音楽・雑音が鳴り続けている所")
+    for t, lo, med in rows:
+        print(f"  {hms(t)}  床 {lo:6.1f}  中央 {med:6.1f}")
+    return 0
+
+
 def selftest() -> int:
     missing = [x for x in ("ffmpeg", "ffprobe") if not shutil.which(x)]
     if missing:  # run-all-checks の契約: 依存が無い環境では理由を出して SKIP (exit 0)
@@ -145,7 +170,9 @@ def selftest() -> int:
         assert all(-5 < v < -2 for v in loud), loud[:3]
         pk = [r for r in series(src, 0, 2, 0.5, "Peak_level") if r[1] > -3]
         assert [round(t, 1) for t, _ in pk] == [1.5], pk
-    print("audio-window-check selftest: ALL PASS (無音の区間・小さい音・大きい音の RMS、 山の区間の検出)")
+        fl = floor_rows(src, 0, 2, 0.5, 0.05)          # 0.5 秒ごとの床: 無音の区切り (1〜1.5 秒) だけが低い
+        assert len(fl) == 4 and fl[2][1] < -100 and all(r[1] > -40 for i, r in enumerate(fl) if i != 2), fl
+    print("audio-window-check selftest: ALL PASS (無音の区間・小さい音・大きい音の RMS、 山の区間の検出、 区切りごとの床)")
     return 0
 
 
@@ -176,8 +203,15 @@ def main(argv: list[str]) -> int:
     p.add_argument("--above", type=float, default=-1.0, help="この dBFS を超える区間だけ")
     p.add_argument("--window", type=float, default=0.5)
     p.add_argument("--top", type=int, default=15)
+    f = sub.add_parser("floor")
+    f.add_argument("src")
+    f.add_argument("--block", type=float, default=60.0, help="区切りの秒 (既定 = 1 分。 区間の端を詰めるなら 5 か 1)")
+    f.add_argument("--step", type=float, default=0.1)
+    f.add_argument("--pct", type=float, default=10.0, help="床とみなす下位の % (既定 10)")
+    f.add_argument("--start", type=float, default=0.0)
+    f.add_argument("--to", type=float, help="終わりの秒 (既定 = 最後まで)")
     a = ap.parse_args(argv)
-    return {"edges": cmd_edges, "window": cmd_window, "envelope": cmd_envelope, "peaks": cmd_peaks}[a.cmd](a)
+    return {"edges": cmd_edges, "window": cmd_window, "envelope": cmd_envelope, "peaks": cmd_peaks, "floor": cmd_floor}[a.cmd](a)
 
 
 if __name__ == "__main__":
