@@ -95,6 +95,7 @@ SEALED_HEAD = re.compile(r"^#\s*Isolated\b")
 CLOSED_BOARD = {"accepted", "abandoned"}
 ROLE_PREFIXES = ("role-", "resident-")  # the board's role ids (board_workflow.ROLE_PREFIXES)
 NATIVE_ID = r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+NATIVE_IN_LABEL = re.compile(rf"(?<![0-9a-z-])({NATIVE_ID})(?![0-9a-z-])")
 APP_DELEGATION = re.compile(
     rf"<codex_delegation>\n  <source_thread_id>({NATIVE_ID})</source_thread_id>\n"
     r"  <input>(.*?)</input>\n</codex_delegation>\s*\Z", re.S,
@@ -475,7 +476,10 @@ def board_links(tid: str, threads: list[dict], unique8: bool) -> dict:
             task = str(a.get("task") or "")
             if a.get("session_id") == tid:
                 how = "actor"
-            elif a.get("agent") == "codex" and (task.startswith(tid) or (unique8 and task.startswith(t8))):
+            elif a.get("agent") == "codex" and (
+                native_from_label(task) == tid or (unique8 and not NATIVE_IN_LABEL.search(task)
+                                                     and re.match(rf"{t8}(?![0-9a-z])", task))
+            ):
                 # the native id in the claim's name: the full id, or the board's 8-character form when it names one
                 # thread on this machine (measured: a worker's claims carried the full id while 8 characters were shared)
                 how = "actor"
@@ -514,6 +518,11 @@ def board_links(tid: str, threads: list[dict], unique8: bool) -> dict:
     return {"requests": out, "roles": sorted(roles), "next": nxt}
 
 
+def native_from_label(label: str) -> str:
+    ids = set(NATIVE_IN_LABEL.findall(label))
+    return next(iter(ids)) if len(ids) == 1 else ""
+
+
 def accepted_children(parent: str, threads: list[dict], host: str) -> list[dict]:
     """Use only the parent's own requests and the current, same-host Codex claimant."""
     reduce = board_reducer()
@@ -538,8 +547,7 @@ def accepted_children(parent: str, threads: list[dict], host: str) -> list[dict]
         claim = (state.get("claim") or {}).get("actor") or {}
         worker = claim.get("session_id") or ""
         if worker.startswith(ROLE_PREFIXES):
-            match = re.match(rf"({NATIVE_ID})(?![0-9a-z-])", claim.get("task") or "")
-            worker = match[1] if match else ""
+            worker = native_from_label(claim.get("task") or "")
         receipt = state["review"]["event_id"]
         if (claim.get("agent") != "codex" or claim.get("instance") != f"codex@{host}"
                 or worker == parent or not re.fullmatch(NATIVE_ID, worker)):
@@ -1208,7 +1216,7 @@ def _selftest() -> int:
     if board_reducer() is not None:
         parent_request = v2("request", "P", "P", parent, "2026-11-09T01:00:00Z", agent="codex",
                             assignee={"agent": "codex", "session_id": "role-worker"}, acceptance="done")
-        parent_claim = claim("P", "role-worker", "2026-11-09T01:01:00Z", task=f"{T} (Codex)")
+        parent_claim = claim("P", "role-worker", "2026-11-09T01:01:00Z", task=f"作業担当 ({T}; Codex)")
         submitted = v2("submit", "S-P", "P", "role-worker", "2026-11-09T01:02:00Z", agent="codex",
                        reply_to="C-P", deliverables=["out.md"])
         handover = v2("handover", "H-P", "P", parent, "2026-11-09T01:03:00Z", agent="codex", reply_to="P",
@@ -1222,6 +1230,9 @@ def _selftest() -> int:
         check("foil: 他の親の受理を拾わない", not accepted_children(T, [{"events": events + [receipt]}], "host"))
         unknown = accepted_children(parent, [{"events": events + [receipt]}], "different-host")
         check("foil: 別の機械の子は照合不能", len(unknown) == 1 and "error" in unknown[0])
+        events[1] = dict(parent_claim, actor=dict(parent_claim["actor"], task=f"{T} {parent}"))
+        unknown = accepted_children(parent, [{"events": events + [receipt]}], "host")
+        check("foil: claim 名に複数の完全 ID があれば照合不能", len(unknown) == 1 and "error" in unknown[0])
         events[1] = claim("P", "role-worker", "2026-11-09T01:01:00Z")
         unknown = accepted_children(parent, [{"events": events + [receipt]}], "host")
         check("foil: 先頭8字だけの claim から子を動かさない", len(unknown) == 1 and "error" in unknown[0])
