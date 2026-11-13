@@ -417,6 +417,41 @@ class ReceiptTests(unittest.TestCase):
                     for _ in range(2):
                         self.blocked("live remote head could not be verified")
 
+    def test_parallel_dirt_notice_survives_clean_stop(self):
+        self.bare_remote()
+        paths = ("foreign a", "foreign-b", "ours")
+        for owned in (False, True):
+            with self.subTest(owned=owned):
+                self.event["session_id"] = "clean-stop-" + str(owned)
+                self.state = gate.state_path(self.event)
+                self.track()
+                for name in paths:
+                    (self.repo / name).write_text(f"first parallel change {owned}\n")
+                self.blocked("3 unacknowledged")
+                self.git("commit", "-qam", "first parallel commit")
+                self.git("push", "-q")
+                self.assertEqual(self.nudge(), {})
+                self.assertEqual(gate.load_state(self.state)["repos"], {})
+                self.assertEqual(self.nudge(), {})
+
+                if owned:
+                    self.track("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch")
+                else:
+                    self.track()
+                for name in paths:
+                    (self.repo / name).write_text("second parallel change\n")
+                if owned:
+                    self.blocked("3 unacknowledged")
+                else:
+                    self.assertEqual(self.nudge(), {})
+                    self.track("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch")
+                    (self.repo / "ours").write_text("this session now writes the same file\n")
+                    self.blocked("3 unacknowledged")
+                (self.repo / "new-path").write_text("new unresolved change\n")
+                self.blocked("4 unacknowledged")
+                (self.repo / "new-path").unlink()
+                self.git("restore", "--", *paths)
+
     def test_notice_git_inspection_forms_do_not_rearm(self):
         self.track("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch")
         (self.repo / "ours").write_text("owned dirty state\n")

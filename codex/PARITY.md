@@ -280,7 +280,12 @@ unchanged, and Git/live remote checks still run on every Stop.
 Full readable snapshots are still sampled and checked for stability during
 each verification; their content fingerprints do not form the notification
 key. A commit that advances both local and remote heads with the same
-unresolved files keeps the existing dirty notification. The first check after
+unresolved files keeps the existing dirty notification. When a check sees
+clean, synchronized repositories, it retires the tracking baselines and
+keeps the last dirty notice for that session and day. A new baseline then
+applies to the next operation. If the same paths become dirty again, the
+previous notification still counts unless the new tracking period recorded
+this session writing one of those paths. The first check after
 this key format changes may issue one fresh notification. A changed unresolved
 path set, worktree, branch, session or local day requires a new warning. Malformed or incomplete receipt scopes, invalid
 receipt dates, malformed or unreadable baselines, unreadable state, tracker

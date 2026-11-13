@@ -843,19 +843,43 @@ def nudge(event: dict[str, Any]) -> int:
               if type(state.get("version")) is int and state["version"] == 1
               and issues and issues == [item for _, _, _, found in observations for item in found] else None)
     keep = any(isinstance(entry, dict) and "receipt" in entry for entry in state["repos"].values())
+    last_notice = state.get("last_dirty_notice")
+    keep_notice = (isinstance(last_notice, dict)
+                   and last_notice.get("session") == session
+                   and last_notice.get("day") == datetime.datetime.now().astimezone().date().isoformat())
     if path.exists() or state["repos"]:
         try:
             with state_lock(path) as locked:
                 if digest(load_state(path)) != before:
                     issues.append("Git gate state changed during verification; retry the check")
                 elif not issues and not keep:
-                    path.unlink(missing_ok=True)
+                    if locked and keep_notice and all(
+                        obs.get("snapshot", {}).get("dirty_count") == 0
+                        for _, _, obs, _ in observations
+                    ):
+                        # Retire the baseline, but retain the last displayed warning.
+                        state["repos"] = {}
+                        if digest(state) != before:
+                            save_state(path, state)
+                    else:
+                        path.unlink(missing_ok=True)
                 else:
                     if locked and notice is not None:
                         # This records a notification, not owner approval. The
                         # original baseline, receipt and issue checks remain.
-                        duplicate = state.get("last_dirty_notice") == notice
-                        state["last_dirty_notice"] = notice
+                        duplicate = last_notice == notice
+                        if not duplicate and keep_notice:
+                            previous = last_notice.get("repos")
+                            if isinstance(previous, dict) and previous.keys() == notice["repos"].keys():
+                                duplicate = all(
+                                    isinstance(previous[root], dict)
+                                    and {**previous[root], "epoch": now["epoch"]} == now
+                                    and (previous[root].get("epoch") == now["epoch"]
+                                         or not set(now["unresolved_paths"]).intersection(state["repos"][root].get("own_paths", [])))
+                                    for root, now in notice["repos"].items()
+                                )
+                        if not duplicate:
+                            state["last_dirty_notice"] = notice
                     else:
                         state.pop("last_dirty_notice", None)
                     if digest(state) != before:
