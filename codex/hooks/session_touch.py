@@ -694,8 +694,15 @@ def repo_issues(root: Path, entry: dict[str, Any], session: str = "",
     issues: list[str] = []
     unacknowledged = current.get("dirty_count", 0) - len(accepted)
     if unacknowledged and unresolved_dirt:
-        detail = ("exact dirty state could not be read" if not isinstance(paths, dict)
-                  else "check which changes belong to this task")
+        detail = "exact dirty state could not be read"
+        if isinstance(paths, dict):
+            if isinstance(own_paths, list) and all(isinstance(name, str) for name in own_paths):
+                linked = len((paths.keys() - accepted).intersection(own_paths))
+                detail = f"tracked write attempts: {linked} path(s)"
+                if linked < unacknowledged:
+                    detail += ", ownership of the rest unverified"
+            else:
+                detail = "path ownership could not be checked"
         issues.append(f"{root}: dirty ({unacknowledged} unacknowledged current path(s); {detail})")
 
     def finish(verified_upstream: tuple[str, str, str] | None = None) -> list[str]:
@@ -826,8 +833,7 @@ def dirty_notice_manifest(
             or ("receipt" in entry and not notice_receipt_valid(receipt))):
             continue
         accepted = observation.get("accepted_paths")
-        if (len(issues) != 1
-            or not issues[0].startswith(f"{root}: dirty (")
+        if (not issues[0].startswith(f"{root}: dirty (")
             or not isinstance(current, dict) or not isinstance(current.get("paths"), dict)
             or not isinstance(current.get("identity"), list)
             or not isinstance(own_paths, list) or not all(isinstance(p, str) for p in own_paths)
@@ -840,6 +846,10 @@ def dirty_notice_manifest(
                             "epoch": entry.get("epoch") or digest(entry.get("baseline"))}
         if gitlinks:
             repos[str(root)]["gitlinks"] = gitlinks
+        if len(issues) > 1:
+            # Repeat the dirty detail once when moving between a dirty-only
+            # notice and one accompanied by a publication issue.
+            repos[str(root)]["with_publication_issue"] = True
     return {"version": 1, "session": session,
             "day": datetime.datetime.now().astimezone().date().isoformat(), "repos": repos}
 

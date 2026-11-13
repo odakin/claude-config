@@ -293,6 +293,11 @@ races, and remote or publication-state problems remain loud. Eligibility
 validates records without repairing them or changing the acknowledgement
 predicate. Repeated dirty notifications are decided per repository. A Git
 error in one repository does not repeat another repository's notification.
+The same repository's publication issues still warn on every verification.
+The dirty detail can be suppressed on repeats in that state, with a fresh
+dirty detail when entering or leaving the state. The dirty count measures
+unacknowledged paths, and the count of tracked write attempts is reported
+separately. The rest of the paths have unverified ownership.
 Same-day notice history is kept for clean or temporarily untracked
 repositories while another repository is still being checked.
 The hook can identify a clean submodule checked out at a different commit

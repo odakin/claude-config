@@ -586,6 +586,42 @@ class ReceiptTests(unittest.TestCase):
         shutil.copytree(saved_gitdir, gitdir)
         self.blocked("dirty")
 
+    def test_shared_checkout_dirty_count_does_not_assign_ownership(self):
+        self.bare_remote()
+        (self.repo / "foreign a").write_text("preserved owner edit\n")
+        self.track("python3 synthetic_read.py")
+        for n in range(45):
+            (self.repo / f"worker-note-{n:02}.md").write_text("candidate\n")
+        (self.repo / "foreign-b").write_text("held publication\n")
+        self.track("*** Begin Patch\n*** Update File: ours\n*** End Patch", "apply_patch")
+        (self.repo / "ours").write_text("task edit\n")
+        reason = self.blocked("48 unacknowledged")
+        self.assertIn("tracked write attempts: 1 path(s)", reason)
+        self.assertIn("ownership of the rest unverified", reason)
+        code, body = self.call(gate.review)
+        self.assertEqual(code, 0)
+        self.assertNotIn("ours", body["paths"])
+        self.assertTrue(body["tracking_incomplete"])
+        self.assertEqual(self.nudge(), {})
+
+    def test_same_repo_publication_issue_does_not_repeat_dirty_detail(self):
+        self.bare_remote()
+        self.fixture()
+        self.blocked("dirty")
+        (self.repo / "ours").write_text("local committed progress\n")
+        self.git("commit", "-qm", "ours", "--", "ours")
+        self.assertIn("dirty (", self.blocked("ahead=1"))
+        self.assertNotIn("dirty (", self.blocked("ahead=1"))
+        self.git("push", "-q")
+        self.blocked("dirty")
+        self.assertEqual(self.nudge(), {})
+        with patch.object(gate, "live_remote_head", return_value=(None, "unavailable")):
+            self.assertIn("dirty (", self.blocked("live remote head could not be verified"))
+            self.assertNotIn("dirty (", self.blocked("live remote head could not be verified"))
+            (self.repo / "new-path").write_text("new unresolved work\n")
+            self.blocked("2 unacknowledged")
+            self.assertNotIn("dirty (", self.blocked("live remote head could not be verified"))
+
     def test_notice_live_remote_rechecked_and_ahead_behind_stay_loud(self):
         self.bare_remote()
         self.fixture()
