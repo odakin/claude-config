@@ -409,10 +409,10 @@ class ReceiptTests(unittest.TestCase):
                 self.blocked("4 unacknowledged")
                 (self.repo / "new-path").unlink()
                 self.blocked("3 unacknowledged")
-                self.git("commit", "--allow-empty", "-qm", "new fixture head")
-                self.git("push", "-q")
-                self.blocked("3 unacknowledged")
-                self.assertEqual(self.nudge(), {})
+                for commit in range(2):
+                    self.git("commit", "--allow-empty", "-qm", f"new fixture head {commit}")
+                    self.git("push", "-q")
+                    self.assertEqual(self.nudge(), {})
                 with patch.object(gate, "live_remote_head", return_value=(None, "unavailable")):
                     for _ in range(2):
                         self.blocked("live remote head could not be verified")

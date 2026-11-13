@@ -775,7 +775,7 @@ def dirty_notice_manifest(
 
     Full snapshots must still be readable and stable. Only the unresolved
     path set and repository scope identify repeated dirt notifications.
-    Content/index/mode changes and writes to the same paths do not re-arm.
+    Changes to HEAD, content, index, or mode do not re-arm the same paths.
     Other Git issues remain loud.
     """
     if not session or fcntl is None:
@@ -802,7 +802,7 @@ def dirty_notice_manifest(
             or not set(accepted) <= set(current["paths"])
             or repo_signature(root, with_identity=True) != current):
             return None
-        repos[str(root)] = {"head": current["head"], "worktree": current["identity"],
+        repos[str(root)] = {"worktree": current["identity"],
                             "unresolved_paths": sorted(set(current["paths"]) - set(accepted)),
                             "epoch": entry.get("epoch") or digest(entry.get("baseline"))}
     if not repos:

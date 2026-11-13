@@ -268,7 +268,7 @@ the owner when it is first made without repeating it in later read-only
 turns.
 
 The hook records a separate `last_dirty_notice` keyed by the unresolved path
-set and the same session, worktree, branch, local day, tracking epoch and HEAD.
+set and the same session, worktree, branch, local day and tracking epoch.
 The first dirty notification warns. Later notifications for the same unresolved
 files are suppressed regardless of ownership, even when their content, index,
 mode or deletion state changes or another write is attempted on those files.
@@ -279,8 +279,10 @@ unchanged, and Git/live remote checks still run on every Stop.
 
 Full readable snapshots are still sampled and checked for stability during
 each verification; their content fingerprints do not form the notification
-key. A changed unresolved path set, HEAD, worktree, branch, session or local
-day requires a new warning. Malformed or incomplete receipt scopes, invalid
+key. A commit that advances both local and remote heads with the same
+unresolved files keeps the existing dirty notification. The first check after
+this key format changes may issue one fresh notification. A changed unresolved
+path set, worktree, branch, session or local day requires a new warning. Malformed or incomplete receipt scopes, invalid
 receipt dates, malformed or unreadable baselines, unreadable state, tracker
 races, and remote or publication-state problems remain loud. Eligibility
 validates records without repairing them or changing the acknowledgement
