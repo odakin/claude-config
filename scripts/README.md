@@ -222,6 +222,7 @@
 - **[inspect-video.py](inspect-video.py)** — Inspect encoded video metadata, decode it, and extract review stills.
 - **[inspire-author-records.py](inspire-author-records.py)** — 1 人の業績が INSPIRE の複数の著者 record に割れていないか・record に別人の論文が混じっていないかを数え、 本人の業績だけを出す検索式 (API と画面の URL) を作る。
 - **[inspire-bib-audit.py](inspire-bib-audit.py)** — refs.bib を INSPIRE-HEP と texkey → arXiv ID → DOI の順で同定し、title / 第一著者 / 誌名 / 巻 / 初頁 / DOI / eprint を突合し、 doi・eprint の値の形 (URL・波括弧は JHEP.bst の link を壊す) も見る gate（TeX 記法 ↔ Unicode・誌名の略記ゆれ・巻の系列文字・再録は正規化、INSPIRE 未収録は SKIP、network 失敗は exit 2、--selftest）
+- **[inspire-conferences.py](inspire-conferences.py)** — INSPIRE の conferences DB から、 開始日が窓に入る会議を全部引いて一覧にする (会議の候補の洗い出し用)。
 - **[install-clamav.sh](install-clamav.sh)** — ClamAV (ネット由来の file の署名 scan) を Homebrew で入れ、 freshclam の設定と定義の取得までを揃える (冪等、 --check / --update つき)。 conventions/downloaded-file-scan.md#clamav-install
 - **[install-clamav.test.sh](install-clamav.test.sh)** — install-clamav.sh の test (偽の brew と freshclam で、 足りないものだけ揃う・既存の設定を触らない・freshclam の失敗の値をそのまま返す・定義が古いと出す・openssl@4 の署名の不具合なら固定の版に入れ替え、 homebrew-core の版が変わったら外して試す)
 - **[install-claude-app-account-mirror.sh](install-claude-app-account-mirror.sh)** — desktop の session 一覧の写し (claude-app-account-mirror.py) を launchd に常駐させる / 状態を見る / 外す (macOS、 本人が terminal で実行する)

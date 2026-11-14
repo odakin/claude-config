@@ -355,6 +355,11 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
   他のマシンでは fleet の reader (`check-fleet-status.py`) が config dir ごとに 🔴 1 行。
 - 再ログインした後も、 次の run までは失敗が残って見える。 `check-cron-health.py` はその config dir が今
   ログイン済みかを `claude auth status` で読み (読むだけ)、 「次の run で消える」 に切り替える。
+- <a id="auth-expiry-reach-owner"></a>**人に届く面に載せる**: 上の検出は session の開始の hook の出力と fleet の 🔴 に出るが、 hook の出力は人の画面に出ず、
+  agent が伝えない限り人は知らない (実測: どの機械の session でも検出が出ていたのに、 だれも人に伝えなかった)。
+  直す作業はその機械でしかできないので、 その機械の session の開始で人に伝える一覧 (agent が最初の返事で伝える段) に、
+  切れている間だけ出る常設の項目を置く。 条件 = その機械の名前 ∧ `scripts/check-desktop-logout-auth.py` の出力に 🔴 の行がある
+  (Claude を呼ばずに問い合わせの記録と keychain の更新時刻を読む = 速い。 ログインし直すと keychain が更新されて条件が外れる)。
 - **直し方**: そのマシンで `CLAUDE_CONFIG_DIR=<dir> claude auth login`。 ブラウザのアカウントに掴まれる罠 =
   [`remote-control-server.md#oauth-grabs-browser-account`](remote-control-server.md#oauth-grabs-browser-account)、
   agent の session から頼まれたときの手順 =
