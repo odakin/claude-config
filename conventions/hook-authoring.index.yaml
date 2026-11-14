@@ -381,6 +381,9 @@ sections:
   - id: message-display-hook
     level: 2
     title: "§27. 表示だけを差し替える hook (MessageDisplay) — 返事の文を画面に出す前に書き換える"
+  - id: unblock-message-from-tested-ways
+    level: 2
+    title: "§28. 止める hook が「こうすれば解ける」 と言う文は、 試験が 1 つずつ試す語の組から作る"
   - id: related-docs
     level: 2
     title: "関連"
