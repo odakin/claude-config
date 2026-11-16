@@ -435,7 +435,9 @@ def resolve_evidence(ev, base):
     m = re.match(r"^(.+)@([0-9a-fA-F]{7,40})$", ev)
     if m:
         repo = (base / os.path.expanduser(m.group(1))).resolve()
-        subject = _git_out(["log", "-1", "--format=%s", m.group(2)], repo) if repo.is_dir() else None
+        if not repo.is_dir():   # 相対の repo 名は --base (既定 = 今の dir) から探す = 別の dir から回すと全部ここに落ちる (実測)
+            return False, "repo の dir が無い: %s (%s から探した。 作業ルートから回すか --base を渡す)" % (ev, base.resolve())
+        subject = _git_out(["log", "-1", "--format=%s", m.group(2)], repo)
         if subject is None:
             return False, "commit が無い: %s" % ev
         return True, "commit: " + _one_line(subject, 150)
