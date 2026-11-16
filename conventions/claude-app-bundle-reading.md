@@ -47,7 +47,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 
 ## <a id="instances"></a>実例
 
-- chat のリンクの解決基準 (相対 path は session を始めたフォルダ、 Bash の cd に追従しない / 表示文言と原因の対応) = [`claude-code-permissions.md#chat-link-resolution-base`](claude-code-permissions.md#chat-link-resolution-base)。 右パネルが開くフォルダの範囲 (`additionalDirectories` は数えない) = [`claude-code-permissions.md#chat-link-rendering-scope`](claude-code-permissions.md#chat-link-rendering-scope) = 文言 → 状態の名前 (renderer) → main process の判定関数と根の作り方、 の順に辿り、 `show_pane` の実験で裏付けた
+- chat のリンクの解決基準 (相対 path は session を始めたフォルダ、 Bash で cd した先はそこで見つからないときの後の段だけ / 表示文言と原因の対応) = [`claude-code-permissions.md#chat-link-resolution-base`](claude-code-permissions.md#chat-link-resolution-base)。 右パネルが開くフォルダの範囲 (`additionalDirectories` は数えない) = [`claude-code-permissions.md#chat-link-rendering-scope`](claude-code-permissions.md#chat-link-rendering-scope) = 文言 → 状態の名前 (renderer) → main process の判定関数と根の作り方、 の順に辿り、 `show_pane` の実験で裏付けた
 - 通知音の仕様 (完了通知は常に無音 等) = [`macos-claude-app-notifications.md#app-notification-model`](macos-claude-app-notifications.md#app-notification-model)
 - 思考の要約が出ない仕組み (表示を「思考」 にするまで engine を `--thinking-display omitted` で動かす / メニューの訳語) = [`macos-claude-app-thinking-display.md`](macos-claude-app-thinking-display.md)
 - hook が frontend を見分ける値 (engine の entrypoint 一覧) = [`hook-authoring.md#entrypoint-values`](hook-authoring.md#entrypoint-values)
