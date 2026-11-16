@@ -507,6 +507,7 @@ finding は「直す」 か「見た上で残す」 のどちらかで閉じる�
 | 同じ当たりが、 owner の文を公開の文書と非公開の記録の両方に持っている形 | **同じ文を 2 か所に持たない** (非公開の記録の側を公開の文書の節への参照に置き換える) |
 
 - 未公開文書の逐語の当たりが表の「未公開の文」 の行か「両方に持っている」 の行かは、 両側の句が入った commit の日時で決める (`git log -S'<句>' --reverse --format='%h %ad'` を公開の repo と源の repo の両方で回す)。 公開の側が先なら、 源の文書が公開の文を使った二重持ち (漏れではない)。 源の側が先なら、 未公開の文が公開の側に写った漏れ。 1 つの file の当たりでも、 句ごとに向きが分かれることがある (実測) = 当たりごとに見る
+- <a id="fix-the-source-of-a-copy"></a>当たった file が、 別の repo・dir にある正本から写して置く file (公開用の release copy・build の出力・submodule に写す配布物) なら、 正本の側も同じ文に直し、 写しを正本と同じ中身にする。 写しだけを直すと、 次に正本から写す commit で同じ当たりが戻る (そのときは commit の門が止めるが、 写す人は何が当たったか分からない)。 写しかどうかは、 その repo の公開の手順 (CLAUDE.md の release の節など) を読み、 正本と公開の版を `cmp` で比べて確かめる。 submodule に写す形なら、 親の repo の pin も同じときに進める
 - どの種類の term が当たったかは gate の出力から分からない (件数と file 名だけ) — [`scripts/explain-sensitive-hits.py`](../scripts/explain-sensitive-hits.py) `--repo` が同じ除外を当てた後の残りを種類つき・term を伏せて出す
 - **archived の公開 repo** は push できない。 受理一覧を入れるなら unarchive → commit (message に `[skip ci]` = 古い CI を起こさない) → push → すぐ archive に戻し、 戻ったことを確認する
 - 決着させたら **本番の台帳で** `scan-public-tree.sh --repo <repo> --force` を 1 回通す (= temp の台帳で確かめただけでは進捗にならない)
