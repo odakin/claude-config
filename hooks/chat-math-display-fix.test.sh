@@ -96,11 +96,18 @@ stop "B2 直した形を添える" 1 "$t" false '直した形 `$E_{I}$`'
 for case in "B3 金額|Opus は \$4/\$20、 Fable は \$10/\$50 で、 半額以下です。" \
             "B4 shell の変数|消した 1: 「bmps=(\$CACHE/*.bmp(N)) # zsh (N) = nullglob」→「bmps=(\$CACHE/*.png(N))」" \
             "B5 題に入った \$\$|session「Close \$\$ and \\\$ gaps in guard」 を読んだ。" \
-            "B6 書き方の言及 \$…\$|注記の中の数式を \$…\$ で書く。"; do
+            "B6 書き方の言及 \$…\$|注記の中の数式を \$…\$ で書く。" \
+            "B3b 括弧が続く金額|見学は午前から、\$12 (送料込み、現地払い) です。別の催し (\$5) も同じです。" \
+            "B3c 数の後ろに付けた \$|原文は「the fee changed from 40\$ to 25\$ per item」「see attached」です。"; do
   label="${case%%|*}"; text="${case#*|}"
   t="$TMP/$(printf '%s' "$label" | tr -c 'A-Za-z0-9' '_').jsonl"; mkt "$t" "$text"
   stop "$label は数式でない = 止めない" 0 "$t" false
 done
+# 金額の形を広げても、 数で始まる数式と閉じの直前が数字の数式は今までどおり報告する (この直しの対照)
+t="$TMP/b3d.jsonl"; mkt "$t" '比は $2 x_{1}$ と置く。'
+stop "B3d 数で始まり空白と英字が続く式は今までどおり報告 (括弧の形だけを金額に足した)" 1 "$t" false
+t="$TMP/b3e.jsonl"; mkt "$t" '式は $a b 2$ と書く。'
+stop "B3e 閉じの直前が数字の描けない式 (\$a b 2\$) は今までどおり報告 = 閉じの \$ を数の後ろの \$ に取らない" 1 "$t" false 'DL_NOSYM'
 t="$TMP/b7.jsonl"; mkt "$t" '展開: $E_I(\boldsymbol P)=|\boldsymbol P|+m_I^2/(2|\boldsymbol P|)+\dots$ を使う。'
 stop "B7 E_I( で始まる長い式は shell と見なさない" 1 "$t" false "DL_LONG"
 t="$TMP/b8.jsonl"; mkt "$t" '阻止能 $dE/dx$ を測る。'
