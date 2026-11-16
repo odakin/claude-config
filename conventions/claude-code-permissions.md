@@ -122,7 +122,7 @@ Claude Code (desktop app / VS Code 拡張の chat panel) は、応答本文内�
 - 外部アプリに投げる: `open <path>` (PDF なら Preview) / `open -R <path>` で Finder に選んだ状態で出す。 OS 経由なので右パネルの範囲を通らない
 - session のフォルダか scratchpad に写して、 写しに link する (scratchpad の file は解決を通る = 実測。 写しは元を直しても追従しない)
 - 中身を本文に出す (どの画面でも読める)
-- session にそのフォルダを足す (`request_directory`)。 ⚠️ auto mode では classifier に止められることがある (実測)。 足した後に link が開くかは未確認 (コードからの見込み)
+- session にそのフォルダを足す (`request_directory`、 path にそのフォルダ)。 **既定の手** = 足した後は、 そのフォルダの file が書いた path のままで開く (実測 app 5.11492.5: 同期フォルダへの symlink の repo の実体のフォルダを足すと、 中の PDF が symlink の path でも実体の path でも `show_pane` の解決を通った。 足す前は断った)。 足すのは file の実体のフォルダ = 外を指す symlink の実体 (symlink の repo・`dropbox-refs`)、 無ければ git の work tree の最上段。 本人に確認の画面が 1 回出ることがある。 ⚠️ auto mode では classifier に止められることがある (実測) = そのときは上の手で見せる
 - 右パネルの「フォルダを追加して開く」 の提案は、 提案するフォルダが symlink を経由すると出ない (コードを読んだだけ、 画面では未確認)
 
 ⚠️ **診断反射の落とし穴**: error message は「削除または移動された可能性」 を並列で提示するため、**path form 誤り (相対 vs 絶対、typo、リネーム) を先に疑って retry する**引力が強い。file 実在・form 正しい状態で失敗が続いたら、次に触る仮説は **session のフォルダの外**であって別 form の retry ではない (= 単一情報源〔error message〕null からの結論飛躍防止)。 `settings.json` の `additionalDirectories` を見ても判定できない (右パネルは数えない) = 上の 3 の `show_pane` で確かめる。
@@ -165,7 +165,7 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 | 書き方 | 解決 |
 |---|---|
 | 相対 path (`dir/file.md`、 `../x.md`) | session を始めたときに選んだフォルダに連結し、 `..` を畳む |
-| 絶対 path (`/…/file.md`) | そのまま (実測: 右パネルで開いた) |
+| 絶対 path (`/…/file.md`) | そのまま (実測: 右パネルで開いた)。 ただし開くのは、 symlink を解いた実体が session のフォルダ (始めたフォルダと app で足したフォルダ) の中のときだけ。 中に見える path でも、 途中の symlink が外 (同期フォルダなど) を指すと開かない (実測 app 5.11492.5、 表示は「見つかりませんでした」 = 下の表の 1 行目) |
 | `~/…` | home に展開 |
 | 本文に素で書いた絶対 path / `~/…` (拡張子つき) | 自動でリンクになる |
 | `[x](<path>)` (CommonMark の山括弧で囲んだ href) | **開けない**: 山括弧ごと path になる (実測 = 「見つかりませんでした」 の path 欄に `<…>` が付いて出た)。 囲まずに書き、 空白は `%20`、 丸括弧は `%28` `%29` にする (href は `decodeURI` してから解釈される。 丸括弧を残すと markdown の link がそこで切れる)。 Stop hook (`scripts/lib/chat_file_refs.py` の reason = angle) が中身の実在する山括弧の href を拾い、 直した形を示す |
@@ -195,7 +195,7 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 **罠**: Bash で `cd` すると、 harness は「Primary working directory: <repo> (was <root>)」 と通知し、 system prompt も「href は working directory からの相対」 と指示する。 **右パネルが最初に試す基準はこの通知に追従しない** (session の設定に持つフォルダで、 起動時から変わらない)。 app 5.11492.5 からは、 そこで見つからなければ shell が入ったフォルダでも試す (上の「足された段」) が、 遠隔の停止スイッチの下にあり、 画面で確かめたのは 1 例だけ、 始めたフォルダの外のフォルダは試さない。 本 repo の hook (下の「機械の検査」「事前の知らせ」) は始めたフォルダだけで判定する = app より厳しい側。 通知どおり repo の中からの path を書くと、 その段が効かない版・環境では、 自分では正しく書いたつもりで開けない link になる。 repo の中で作業を続けているほど滑りやすい。
 
 **書き方の既定**:
-- markdown link の href = **絶対 path** (表示文字列は file 名でよい)。 基準を覚えていなくても壊れない
+- markdown link の href = **絶対 path** (表示文字列は file 名でよい)。 基準を覚えていなくても壊れない。 ただし実体が session のフォルダの外の file (symlink の先が同期フォルダの repo、 settings の追加フォルダにだけ在る file) には効かない = 先にそのフォルダを session に足してから link する ([§chat-link-rendering-scope](#chat-link-rendering-scope) の対処)
 - inline code に path を書くなら、 **session を始めたフォルダからの path** (repo 名から書く)。 repo の中からの path を inline code に書くと、 上の「足された段」 が効かない版・環境では押せるのに開けない link になる
 - 例示の path (`path/to/file.md` 等) も inline code に入れると押せるリンクになる (実在を見ないので必ず開けない)。 例示は fenced code block に入れるか backtick を付けない (fence の中はリンクにならない)
 - **右パネルはフォルダを開かない** (file だけ)。 「この中の file を見て」 と渡すときは中の file を 1 本ずつ link する。 フォルダごと渡すなら desktop の host tool (`reveal_path`) で Finder に出す
@@ -204,16 +204,16 @@ scope の中の file でも、 **相対 path の基準を取り違えると開�
 
 | 表示 | 原因 |
 |---|---|
-| 「このファイルが見つかりませんでした」 + 「削除または移動された可能性があります。」 | フォルダの中だが、 連結した path に file が無い = **基準の取り違え**を先に疑う。 **link の先がフォルダのときも同じ表示**になる (実測: 在るフォルダの絶対 path) |
+| 「このファイルが見つかりませんでした」 + 「削除または移動された可能性があります。」 | フォルダの中だが、 連結した path に file が無い = **基準の取り違え**を先に疑う。 **link の先がフォルダのときも同じ表示**になる (実測: 在るフォルダの絶対 path)。 **file が在るのに出るなら、 path が symlink をまたいで session のフォルダの外へ出ていないかを見る** (PDF の native の preview は、 実体が外のときもこの表示 = 実測 app 5.11492.5。 `~/Library/Logs/Claude/main.log` には `[SessionFileAccess] could not resolve` でなく `[CoworkFilePreview] resolve failed … file_access_invalid_path` が残る。 在る file を絶対 path で指したときは main process が警告を書かずに断る) |
 | 「このファイルは作業ディレクトリの外にあります」 | 連結した path が scope の外 = [§chat-link-rendering-scope](#chat-link-rendering-scope) |
 | 「このファイルはこのセッションのフォルダの外にあります」 + 「ここでは開けませんが、ディスク上にはまだ存在している可能性があります。」 | file が session のフォルダ (始めたフォルダ + app で足したフォルダ) の外。 `additionalDirectories` に在っても出る = [§chat-link-rendering-scope](#chat-link-rendering-scope) |
 | 「見つかりませんでした」 + 「…または作業ディレクトリの外にあります。」 | 上の 2 つのどちらか |
 | 「このファイルが見つからないため、開けません。Claude にファイルの作成を依頼するか、パスを確認してください。」 (参照がリンクでなくなる) | 押す前の有無の確かめで、 どの基準にも file が無かった (app 5.11492.5 から) = 基準の取り違えか、 まだ作っていない file |
 | 「このファイルは、このリモートコントロールセッションを実行しているマシン上にあり、ここからは読み込めませんでした。…」 | [#rc-chat-panel-no-render](#rc-chat-panel-no-render) |
 
-**機械の検査**: Stop hook [`hooks/chat-file-ref-enforce.sh`](../hooks/chat-file-ref-enforce.sh) が、 最終発話の link と inline code のうち「基準フォルダに連結すると無い ∧ transcript に出た cwd か基準フォルダ直下の dir か session の追加フォルダに連結すると在る」 ものを見つけ、 正しい path を添えて 1 回だけ書き直させる。 どこにも無い path (例示)・絶対 path・link の label の中の inline code は見ない。 inline code の形は上の app の式を写し、 本体の git 末尾一致も第 1 段 (tracked → untracked で 1 件に決まる) まで写している (複数一致のときの本体の絞り込みは写さず、 開けない側に数える)。 加えて **意図と違う file が開く形** (基準フォルダに file が在るが、 直近の作業ディレクトリにも同じ相対 path の別の file が在る = 親フォルダと repo の両方に在る `CLAUDE.md` を repo の中で `[CLAUDE.md](CLAUDE.md)` と書いた) も拾う。 ⚠️ worktree の基準移動は写していない = worktree に入った session では、 本体が開ける参照を「開けない」 と言うことがある。 ⚠️ 「session の追加フォルダ」 は transcript の environment snapshot の追加フォルダ (settings の `additionalDirectories` を含む) で、 右パネルの範囲より広い = そこに在る file への書き直しを勧めても右パネルでは開かないことがあり、 そこを指す絶対 path は見ない (直しは未着手)。
+**機械の検査**: Stop hook [`hooks/chat-file-ref-enforce.sh`](../hooks/chat-file-ref-enforce.sh) が、 最終発話の link と inline code のうち「基準フォルダに連結すると無い ∧ transcript に出た cwd か基準フォルダ直下の dir か session の追加フォルダに連結すると在る」 ものを見つけ、 正しい path を添えて 1 回だけ書き直させる。 どこにも無い path (例示)・link の label の中の inline code・scratchpad の形の path は見ない。 **実在する file への参照は絶対 path も含めて実体の場所も見る** = 実体 (symlink を解いた先) が session のフォルダ (始めたフォルダ・app で足したフォルダ・desktop の worktree の元の repo) の実体の外なら、 書き直しを勧めずに、 その file の実体のフォルダ (外を指す symlink の実体、 無ければ git の work tree の最上段) を session に足すよう言い、 足せないときの見せ方を並べる (足したフォルダは次の environment snapshot に入るので、 足した後の turn では拾わない。 app の main process の `containToGrantedRoots` と同じ判定。 symlink の repo の file、 settings の追加フォルダにだけ在る file がこれに当たる)。 inline code の形は上の app の式を写し、 本体の git 末尾一致も第 1 段 (tracked → untracked で 1 件に決まる) まで写している (複数一致のときの本体の絞り込みは写さず、 開けない側に数える)。 加えて **意図と違う file が開く形** (基準フォルダに file が在るが、 直近の作業ディレクトリにも同じ相対 path の別の file が在る = 親フォルダと repo の両方に在る `CLAUDE.md` を repo の中で `[CLAUDE.md](CLAUDE.md)` と書いた) も拾う。 ⚠️ worktree の基準移動は写していない = worktree に入った session では、 本体が開ける参照を「開けない」 と言うことがある。 「app で足したフォルダ」 は transcript の environment snapshot の追加フォルダから settings の `additionalDirectories` (user の設定フォルダと、 始めたフォルダの `.claude/`) を引いた近似 (snapshot には両方が入る = 実測。 両方に在るフォルダは外に数える = 止めすぎの側)。 相対 path は始めたフォルダだけで判定する = app 5.11492.5 の「cd した先・足したフォルダでも探す」 段は写さず、 書き直させる文に「版で変わる」 と書く (その段は遠隔の停止スイッチの下にある。 書き直しの先の絶対 path は、 実体が中なら版に依らず開く)。
 
-**事前の知らせ**: PostToolUse(Bash) hook [`hooks/chat-path-base-nudge.sh`](../hooks/chat-path-base-nudge.sh) が、 作業ディレクトリが基準フォルダから離れた最初の tool call の後に「右パネルの基準は <基準フォルダ> のまま」 を 1 回だけ (session × 作業ディレクトリごと) 知らせる。 harness の「Primary working directory」 通知が入れる間違った前提を、 入った瞬間に打ち消すのが狙い (Stop hook は書いた後に全文を出し直させるので高い)。 効いたかは Stop hook の発火率の前後比較で見る (`calibrate <days>` の率)。 判定の部品 = [`scripts/lib/chat_file_refs.py`](../scripts/lib/chat_file_refs.py) (基準フォルダは transcript の最初の environment snapshot から取る)、 再校正 = `python3 scripts/lib/chat_file_refs.py calibrate <days> [--context]` (新しい session から順に出す。 `--context` で参照の前後の文も出す = 目で仕分けるとき。 出力は private)。
+**事前の知らせ**: PostToolUse(Bash) hook [`hooks/chat-path-base-nudge.sh`](../hooks/chat-path-base-nudge.sh) が、 作業ディレクトリが基準フォルダから離れた最初の tool call の後に「右パネルの基準は <基準フォルダ> のまま」 を 1 回だけ (session × 作業ディレクトリごと) 知らせる。 作業ディレクトリの実体が session のフォルダの外 (同期フォルダへの symlink の repo、 settings にだけ在る追加フォルダ) なら、 文を替えて「このままでは、 ここの file は絶対 path でも右パネルでは開かない。 link で見せる前に <実体のフォルダ> をこの session に 1 回足す」 と知らせる (実例: そのフォルダで「絶対 path で書く」 と知らされ、 書いた link が開かなかった)。 harness の「Primary working directory」 通知が入れる間違った前提を、 入った瞬間に打ち消すのが狙い (Stop hook は書いた後に全文を出し直させるので高い)。 効いたかは Stop hook の発火率の前後比較で見る (`calibrate <days>` の率)。 判定の部品 = [`scripts/lib/chat_file_refs.py`](../scripts/lib/chat_file_refs.py) (基準フォルダは transcript の最初の environment snapshot から取る)、 再校正 = `python3 scripts/lib/chat_file_refs.py calibrate <days> [--context]` (新しい session から順に出す。 `--context` で参照の前後の文も出す = 目で仕分けるとき。 出力は private)。
 
 ## <a id="frontend-split"></a>frontend 切り分け (同じ症状でも 3 系統)
 

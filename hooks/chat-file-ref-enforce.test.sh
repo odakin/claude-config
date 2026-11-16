@@ -14,6 +14,10 @@
 #     (2026-10-13 の実例 = Dropbox の NFD の名前の PDF を山括弧の絶対 path で書いた)。 絶対 path でも拾う。
 # §F 音声・動画が右パネルで鳴らない (2026-11-03 の実例 = 同期フォルダを起点にした配信用の MP3 の path を inline code で書き、
 #     押すと右パネルが読み込めなかった)。 外 (実体の path で判定) / 25 MB 超 / 同じ turn に afplay・open で流した (= 黙る)。
+# §G 実体が session のフォルダの外 (実例 = 同期フォルダへの symlink の repo の PDF を絶対 path で書き、 押すと
+#     「見つかりませんでした」)。 symlink の repo の絶対 path・相対 path / settings にだけ在る追加フォルダ = fire、
+#     実体も中・symlink の repo の中で始めた session・app で足したフォルダ・fenced block・scratchpad = silent。
+#     cd した先からの相対 path は今も書き直させ、 文は「版で変わる」 と言う (app 5.11492.5 の段は写さない)。
 # §C fail-open と配線: stop_hook_active / transcript 不在 / 空入力 / 部品の不在・例外 = 沈黙。 symlink 経由で部品を見つける。
 
 set -uo pipefail
@@ -30,6 +34,7 @@ trap 'rm -rf "$TMP"' EXIT
 # additionalDirectories を読む) / git は $TMP より上の repo を探さない (一時 dir の祖先に .git が在ると、 git でない
 # 基準フォルダの case の参照が `git ls-files` の末尾一致 1 件として黙り、 A1〜A9 が落ちる = 実測)
 mkdir -p "$TMP/home" && export HOME="$TMP/home"
+unset CLAUDE_CONFIG_DIR   # settings の追加フォルダを読む先 (部品の settings_additional_dirs) も HOME の下に固定する
 export GIT_CEILING_DIRECTORIES="$(cd "$TMP" && pwd -P)"
 
 # 歯の検査 (scripts/chat_file_refs.mutants.json → check-foil-teeth.py) は、 修正の一部を外した部品の写しの dir を渡す。
@@ -216,10 +221,48 @@ case_ "F5: 同じ turn に afplay で流した = silent" 0 "聞いてもらっ�
 case_ "F6: 中に見えるが実体は外 (symlink) = fire" 1 "試聴は [ep1](show/sync-refs/配信用/ep1.mp3)" "フォルダ (と scratchpad) の外"
 case_ "F7: open -R (Finder で見せるだけ) は流したと数えない = fire" 1 "聞くなら [ep1]($TMP/sync/配信用/ep1.mp3)" "afplay" \
   "claude-desktop" "$ROOT" "[]" "" "open -R '$TMP/sync/配信用/ep1.mp3'"
-case_ "F8: 音声でない外の絶対 path = silent (従来どおり)" 0 "[memo]($TMP/extra/memo.md) を聞いて"
-case_ "F9: 聞く語の無い置き場所の記録 = silent" 0 "収録の写しは [ep1]($TMP/sync/配信用/ep1.mp3) に置きました。"
+case_ "F8: 音声でない外の絶対 path = fire (実体が外 = 開かない案内、 流す案内でない)" 1 "[memo]($TMP/extra/memo.md) を聞いて" "実体が session のフォルダの外"
+case_ "F9: 聞く語の無い置き場所の記録でも、 外の file への link = fire (押しても開かない link)" 1 \
+  "収録の写しは [ep1]($TMP/sync/配信用/ep1.mp3) に置きました。" "fenced code block"
 case_ "F10: 聞く語の無い同期フォルダ起点の inline code = 従来の書き直しの案内 (流す案内でない)" 1 \
   "写しは ${BT}配信用/ep1.mp3${BT} です。" "直し方" "claude-desktop" "$ROOT" "[\"$TMP/sync\"]"
+
+echo "=== §G 実体が session のフォルダの外 (実例 = 同期フォルダへの symlink の repo の PDF を絶対 path で書いた) ==="
+mkdir -p "$TMP/sync2/review" "$TMP/setonly" "$TMP/home/.claude"
+: > "$TMP/sync2/review/cand.pdf"; : > "$TMP/setonly/m.pdf"
+ln -s "$TMP/sync2" "$ROOT/fs"                                      # repo の場所が同期フォルダへの symlink
+printf '{"permissions":{"additionalDirectories":["%s"]}}\n' "$TMP/setonly" > "$TMP/home/.claude/settings.json"
+case_ "G1: symlink の repo の file を絶対 path で (実例の形) = fire + 実体の path" 1 \
+  "候補: [cand.pdf]($ROOT/fs/review/cand.pdf)" "$TMP/sync2/review/cand.pdf"
+case_ "G2: 同じ file を基準フォルダからの相対 path で = fire" 1 "[cand](fs/review/cand.pdf)" "実体が session のフォルダの外"
+case_ "G3: settings にだけ在る追加フォルダの file の絶対 path = fire (右パネルは settings を数えない)" 1 \
+  "[m]($TMP/setonly/m.pdf)" "実体が session のフォルダの外" "claude-desktop" "$ROOT" "[\"$TMP/setonly\"]"
+case_ "G4: settings にだけ在る追加フォルダを起点にした link = 書き直しを勧めず fire (候補が全部外)" 1 \
+  "[m](m.pdf)" "実体が session のフォルダの外" "claude-desktop" "$ROOT" "[\"$TMP/setonly\"]"
+case_ "G5: 同じ file を symlink で中に置いた絶対 path (実体も中) = silent" 0 "[l]($ROOT/LINKED.md)"
+case_ "G6: symlink の repo の中で始めた session (根の実体 = 同期フォルダ) の相対 path = silent" 0 \
+  "[cand](review/cand.pdf)" "" "claude-desktop" "$ROOT/fs"
+case_ "G7: app で足したフォルダ (snapshot に在り settings に無い) の絶対 path = silent" 0 \
+  "[cand]($TMP/sync2/review/cand.pdf)" "" "claude-desktop" "$ROOT" "[\"$TMP/sync2\"]"
+case_ "G8: symlink の repo の file を fenced block の中に書いた置き場所 = silent" 0 "置き場所:
+${BT}${BT}${BT}
+$ROOT/fs/review/cand.pdf
+${BT}${BT}${BT}"
+SP="/tmp/claude-cfrtest-$$/proj/sess/scratchpad"; mkdir -p "$SP"; : > "$SP/copy.pdf"
+case_ "G9: scratchpad の写しの絶対 path = silent (外に数えない)" 0 "[copy]($SP/copy.pdf)"
+rm -rf "/tmp/claude-cfrtest-$$"
+case_ "G10: cd した先からの相対 path は今も書き直させる (文は「版で変わる」)" 1 "[x](drafts/intro.md)" "版と遠隔の設定で変わる"
+mkdir -p "$ROOT/repo/.claude/worktrees/w1"; : > "$ROOT/repo/main.md"
+case_ "G11: desktop の worktree で始めた session から元の repo の file の絶対 path = silent (元の folder も根)" 0 \
+  "[main]($ROOT/repo/main.md)" "" "claude-desktop" "$ROOT/repo/.claude/worktrees/w1"
+case_ "G12: repo で始めた session から隣の repo の file の絶対 path = fire" 1 \
+  "[intro]($ROOT/book/drafts/intro.md)" "実体が session のフォルダの外" "claude-desktop" "$ROOT/repo"
+case_ "G13: 足すフォルダ = 外を指す symlink の実体 (repo の実体) を示す" 1 \
+  "候補: [cand.pdf]($ROOT/fs/review/cand.pdf)" "足すフォルダ = $(cd "$TMP/sync2" && pwd -P))"
+mkdir -p "$TMP/setonly/proj/.git" "$TMP/setonly/proj/docs"; : > "$TMP/setonly/proj/docs/x.pdf"
+case_ "G14: symlink でない外の file = 足すフォルダは git の work tree の最上段" 1 \
+  "[x]($TMP/setonly/proj/docs/x.pdf)" "足すフォルダ = $(cd "$TMP/setonly/proj" && pwd -P))" "claude-desktop" "$ROOT" "[\"$TMP/setonly\"]"
+rm -f "$TMP/home/.claude/settings.json"
 
 assert "C1: stop_hook_active=true = silent (loop guard)" 0 "$(mkpayload "$TMP/c.jsonl" true)"
 assert "C2: transcript 不在 = silent" 0 "$(mkpayload "$TMP/no-such.jsonl")"

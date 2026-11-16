@@ -15,12 +15,19 @@
 #              ∧ 「transcript に出た cwd か基準フォルダ直下の dir か session の追加フォルダに連結すると在る」
 #          (b) 「基準フォルダに連結すると file が在るが、 直近の cwd (≠ 基準) にも同じ相対 path の別の file が在る」
 #              (= 意図と違う file が開く。 例: 親フォルダと repo の両方に在る CLAUDE.md を repo の中で書いた)
-#   除外 = URL / anchor だけの href / 絶対 path / ~/ / fenced code block の中 (list・引用の中の fence を含む) /
+#          (c) 実在する file への参照 (絶対 path・~/・相対 path) の実体 (symlink を解いた先) が、 右パネルの根
+#              (始めたフォルダ・app で session に足したフォルダ・desktop の worktree の元の repo) の実体の外
+#              (= 同期フォルダへの symlink の repo の file、 settings の追加フォルダにだけ在る file。 app の
+#              containToGrantedRoots と同じ判定。 書き直しを勧めず、 実体のフォルダを session に足させる)。
+#              app で足したフォルダ = transcript の snapshot の追加フォルダ − settings の permissions.additionalDirectories。
+#   除外 = URL / anchor だけの href / fenced code block の中 (list・引用の中の fence を含む) /
 #          link の label の中の inline code (app は別の link にしない = 押すと href が開く) / どこにも無い path /
-#          基準フォルダが git repo で、 path の末尾一致が 1 件に決まる (app の本体がそれを開く)。
+#          基準フォルダが git repo で、 path の末尾一致が 1 件に決まる (app の本体がそれを開く) / scratchpad の形の path。
+#   相対 path は始めたフォルダだけで判定する = app 5.11492.5 の「cd した先・足したフォルダでも探す」 段は写さない
+#          (遠隔の停止スイッチの下にあり版でも変わる。 書き直しの先の絶対 path は版に依らず開く = 止めすぎの側)。
 #   基準フォルダ = transcript の最初の environment snapshot の workingDirectory (古い build の transcript には
 #          snapshot が無いので、 最初に現れた cwd)。
-#   校正 (実測、 desktop transcript の最終発話): 発火は約 8% の turn、 link を含むのは約 1%。
+#   校正 (実測、 desktop transcript の最終発話): 発火は約 6〜7% の turn、 link を含むのは約 2% (実体の判定を足した後)。
 #   link の検出は目視で全件が開けない形 (repo の中からの path / ../ で始まる path / 基準外)。
 #   inline code の検出が大半を占める (= 押せるのに開けない link になっている、 と読む。 リンク化の条件は下の限界を参照)。
 #   再校正 = python3 scripts/lib/chat_file_refs.py calibrate <days>。
@@ -31,7 +38,13 @@
 #
 # ⚠️ 射程の限界:
 #   - Remote Control で別端末から見ている画面では、 正しい path でも開けない (#rc-chat-panel-no-render)。 hook からは見分けられない。
-#   - 基準フォルダの外の file は、 絶対 path に直しても右パネルでは開けないことがある (#chat-link-rendering-scope)。
+#   - app で足したフォルダは近似 (snapshot − settings)。 settings にも在るフォルダを app でも足していると、 開く参照を
+#     「外」 と言う (止めすぎの側、 代償は追記 1 回)。 app の harnessCwd (EnterWorktree などで動く基準) は写していない。
+#   - scratchpad の形の path は外に数えない (show_pane で解決を通る = 実測)。 PDF の native preview が scratchpad を
+#     開くかは未確認 (main process はその経路で一時 dir を根に入れない = コードを読んだだけ)。
+#   - 実体が外の参照の直し方 (部品の OUTSIDE_FIX) = その file の実体のフォルダを request_directory で session に 1 回足す
+#     (足す folder は reason に出す)。 足した folder は次の environment snapshot に入り、 足した後の turn では拾わない (実測)。
+#     auto mode では足す呼び出しを classifier が止めることがある (実測) = そのときの見せ方も reason に並べる。
 #   - どこにも実在しない path の inline code も押せる (開けない) リンクになるが、 正しい path を示せないので拾わない
 #     (= 例示の path。 fenced block に入れるよう規約で扱う)。
 #   - app の本体の git 末尾一致は第 1 段 (tracked → untracked で 1 件) だけ写している。 複数一致のときの本体の
