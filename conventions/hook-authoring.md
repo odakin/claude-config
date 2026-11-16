@@ -260,6 +260,8 @@ origin: 印刷の gate hook の test で、 無効化の env switch を立てた
 
 - 「旧版の `/tmp/…` の path が残っていない」 を確かめるのに `! grep -q /tmp/ "$file"` と書くと、 macOS (一時 dir = `/var/folders/…`) では通り、 Linux の CI (一時 dir = `/tmp/tmp.XXXX`) では、 test が作った正しい path 自体が `/tmp/` を含むので常に落ちる (実測)。 消えたはずの**値そのもの** (例 `<string>/tmp/old.log</string>`) を `grep -qF` で見る。
 - test の中で file を書き換えるときも `sed -i ''` (BSD) / `sed -i` (GNU) の差で片方が落ちる (GNU では `sed: can't read s#…` = 空の引数を script と取り、 script を file 名と取る)。 一時 file に書いて `mv` する。 push 前に GNU の挙動で回す道具 = [`scripts/with-gnu-userland.sh`](../scripts/with-gnu-userland.sh) ([#set-e-test-failure-report](#set-e-test-failure-report))。
+- <a id="pgrep-quiet-bsd-only"></a>`pgrep -q` も BSD (macOS) だけの「出力なし」 で、 Linux の procps の `-q` は `--queue` (値を取る) = 一致を数えられず「見つからない」 側に落ちる (実測)。 `pgrep … >/dev/null 2>&1` と書く。 procps は macOS に無いので、 上の GNU の道具でも再現しない = この差は Linux の CI でしか見えない。
+- <a id="fixture-no-checkout-absolute-path"></a>test の fixture (hook の stdin の JSON など) に、 書いた機械の checkout の絶対 path を書かない (`cwd` など)。 CI の checkout は別の場所にあり、 その path が無いので相対 path が解けず別の分岐に落ちる (実測: 期待 none の case が ask)。 fixture には印 (例 `@FIXTURES@`) を書き、 試験の側が当てる前に今の dir に置き換える (`~` から始まる path なら、 CI が `~` の下に同じ配置を作っている限り通る)。
 
 ## <a id="bash32-heredoc-parser-bug"></a>§1. bash 3.2 の `$(...)` + heredoc body の quote escape parser bug
 
