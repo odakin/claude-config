@@ -218,8 +218,9 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   subagent が仕掛けたものは誰のかを添える) を並べ、 見張りか (掲示板の `watch`・`touching --wait`、 照合の `--wait` / `--wait-due`、
   起動の確かめの `--wait-first-turn`、 Monitor) と Monitor の残り秒を付ける。
   - **締めの後に畳まれる session** (依頼元が archive する子・worker) は、 見張りを全部 `TaskStop <id>` で止め、 もう一度回して残っていないのを見てから終える。
-    掲示板の worker はこれを submit の後に回す (submit の出力は見張りの 1 行を出すが、 依頼元が同じ機械で生きている session なら見張らずに message で知らせる =
-    依頼元の受け取り・差し戻しは依頼元からの message で届く)
+    掲示板の worker はこれを submit の後に回す。 submit の後は依頼元に message で知らせ、 submit の出力が見張りの 1 行を出したら、 依頼元が同じ機械で生きていても見張る
+    (判定を書くのが依頼元と別の検収係の session で、 submit の時点でだれもその役を引き受けていないと、 判定は掲示板にだけ書かれ message では届かない = 実測。
+    見張りの張り直しの検査 = [掲示板の契約](../../ai-collaboration/board/CONTRACT.md#codex-reach))。 依頼が閉じてから締めに入ったなら、 その見張りは終わっている = 数えて残りが無いのを見る
   - **締めの後も続く session** (子を待つ親、 message を送れない相手 〔Codex・別の機械〕 と掲示板でやりとり中の session) は、 まだ答えを待っている見張り
     (動いている子への `--wait` / `--wait-due`、 その相手への `watch` = [掲示板の契約](../../ai-collaboration/board/CONTRACT.md#codex-reach) で唯一の経路) を残し、
     待ち終えた見張り (閉じた依頼・終わった子・用の済んだ Monitor) だけを止める。 残した見張りは名前を最終 message に書く (動いている間はこの session も畳めない)
