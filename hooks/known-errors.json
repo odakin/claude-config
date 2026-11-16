@@ -203,6 +203,21 @@
       "match": "unable to open database file",
       "doc": "conventions/debugging-discipline.md#reading-live-app-sqlite",
       "hint": "他の app が開いている WAL の SQLite を読み取り専用 (?mode=ro) で開いた疑い (書き手が全部閉じると -wal・-shm が消え、 読み取り専用では開けない)。 path と権限を確かめ、 WAL の DB なら ?mode=rw に PRAGMA query_only = ON をかけて開き直す"
+    },
+    {
+      "match": "unknown field(s)",
+      "doc": "conventions/multi-machine-state.md#config-field-needs-reader-first",
+      "hint": "設定 file (掲示板の board.json など) に、 この機械の engine が知らない欄が足された疑い (設定の repo が engine の repo より先に届いた)。 engine の repo (掲示板なら ai-collaboration) を git pull してから打ち直す"
+    },
+    {
+      "match": "grep: invalid option -- P",
+      "doc": "conventions/shell-env.md#bsd-grep-no-pcre",
+      "hint": "macOS の BSD grep は -P (PCRE) を持たない。 同じ command の `| wc -l` などが出した 0 は一致 0 件ではない = 数え直す。 先読み・後読みが要るなら python の re で数える"
+    },
+    {
+      "match": "dependency_file_not_evaluatable",
+      "doc": "conventions/github-security-automation.md#dependency-graph-text-named-manifest",
+      "hint": "Dependabot か依存グラフが依存の file を読めなかった。 run 名が Graph Update で、 落ちた file が依存の file でない text (名前に requirements を含む web 頁の写しなど) なら、 名前から manifest の語を外す"
     }
   ]
 }
