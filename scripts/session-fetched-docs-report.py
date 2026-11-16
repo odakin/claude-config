@@ -17,7 +17,7 @@
   2. 手元の PDF — (a) Read の file_path、 (b) Bash の curl -o / wget -O の書き先、 (c) Bash の command に現れる取り込み口
      (DROP_DIRS = ~/Desktop・~/Downloads) の下の `….pdf`、 (d) arXiv 以外の URL で WebFetch が保存した PDF (結果の「also saved to」 の path)、
      (e) メールの添付を保存した PDF (名前が `download_attachment` で終わる MCP の道具。 結果の「Saved to:」 の path、 無ければ入力の savePath と filename)、
-     (f) PDF の文字を読む道具 (PDF_READER_RE = PyMuPDF の fitz.open・pdfplumber・pypdf・pdftotext など) を呼ぶ Bash の command に現れる `….pdf`
+     (f) PDF の文字を読む道具 (PDF_READER_RE = PyMuPDF の fitz.open・pdfplumber・pypdf・pdftotext など、 層1 の pdf-locator-grep.py も) を呼ぶ Bash の command に現れる `….pdf`
      (取り込み口の外でも。 実測: 原典を `python3 -c` の fitz.open に path で渡して読んだ session で 0 件と出た)。 repo の中の PDF (保存済みの原物を読み直した・組版の生成物) と、
      隣に同じ名前の .tex がある PDF (組版の生成物) は数えない。 path の変数は同じ command で先に代入したものだけ展開し、
      展開できない path と glob は数えない (loop の取得は 1 の番号で拾う)。 引用符で囲んだ path は空白・括弧ごと 1 つに、
@@ -69,8 +69,10 @@ ARXIV_ID_RE = re.compile(
 # 最後の空白の後ろの断片 (`mechanics.pdf`・`.pdf`) が相対 path として当たり、 同じく「もう無い」 と出した
 # PDF の文字を読む道具 (Python の library を -c や heredoc で呼ぶ形と、 command line の道具)。 この印がある command の PDF は
 # 取り込み口の外でも数える (実測: 原典を fitz.open に path で渡して読み、 判定の根拠にした session で 0 件と出た)
+# 頁を読む・語を引く層1 の道具 `pdf-locator-grep.py` (ai-collaboration/scripts) も同じ (実測: 原典をこの道具の --dump・--render
+# だけで読んだ session で、 読んだ PDF が 1 件も出なかった)
 PDF_READER_RE = re.compile(r"\b(?:fitz|pymupdf)\.open\s*\(|\bpdfplumber\.open\s*\(|\bPdfReader\s*\(|\bpypdf\b"
-                           r"|(?:^|[\s;&|(])(?:pdftotext|pdfinfo|pdftoppm|pdfimages|mutool)\s")
+                           r"|(?:^|[\s;&|(])(?:pdftotext|pdfinfo|pdftoppm|pdfimages|mutool)\s|\bpdf-locator-grep\.py\b")
 # WebFetch は PDF を要約に渡せず、 取得物を tool-results の下に保存して結果の末尾にその path を書く
 WEBFETCH_SAVED_RE = re.compile(r"also saved to (\S+?\.pdf)\b", re.I)
 OUTPUT_RE = re.compile(r"\b(?:curl|wget)\b[^\n;|&]*?\s(?:-o|--output|-O|--output-document)\s+(['\"]?)([^\s'\";|&<>]+)\1")
@@ -416,6 +418,15 @@ def selftest():
         call(32, "Bash", {"command": "pdftotext \"" + lib + "/Gone Title Words.pdf\" - | head"})
         Path(lib, "Escaped name here.pdf").write_bytes(b"%PDF-1.4 escaped spaces")
         call(33, "Bash", {"command": "pdfinfo " + lib + "/Escaped\\ name\\ here.pdf"})
+        # 引用符の中に空白のある cd 先の後の相対の path (実測): 前は cd に当たらず、 記録の cwd で解いて ❌ と出した
+        os.makedirs(os.path.join(lib, "two words"))
+        Path(lib, "two words", "inside.pdf").write_bytes(b"%PDF-1.4 read after a quoted cd")
+        call(34, "Bash", {"command": "cd \"" + os.path.join(lib, "two words") + "\" && python3 - <<'EOF'\nimport fitz\n"
+                                     "d = fitz.open('inside.pdf')\nEOF"})
+        # 層1 の頁を読む道具 pdf-locator-grep.py に渡した PDF も読んだ原典 (実測: この道具だけで読んだ session で 0 件と出た)
+        Path(lib, "Located title.pdf").write_bytes(b"%PDF-1.4 read with the locator tool")
+        call(35, "Bash", {"command": "python3 /x/ai-collaboration/scripts/pdf-locator-grep.py \"" + lib
+                                     + "/Located title.pdf\" --dump /tmp/located.txt"})
         Path(proj, sid + ".jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
 
         calls = ssr.read_calls(Path(proj, sid + ".jsonl"))
@@ -465,12 +476,20 @@ def selftest():
         check(esc is not None and esc["mark"] == "⚠️", "バックスラッシュで逃がした空白を戻して読む")
         frag = [k for k in rows if os.path.basename(k) in (".pdf", "paper.pdf", "Words.pdf", "here.pdf") and k.startswith(repo)]
         check(frag == [], "空白の後ろの断片を相対 path として数えない")
+        qcd = rows.get(os.path.join(lib, "two words", "inside.pdf"))
+        check(qcd is not None and qcd["mark"] == "⚠️" and [k for k in rows if k.endswith(os.sep + "inside.pdf")]
+              == [os.path.join(lib, "two words", "inside.pdf")],
+              "引用符の中に空白のある cd 先の後の相対の path は、 その cd 先で解く (記録の cwd で解いて ❌ にしない)")
+        loc = rows.get(os.path.join(lib, "Located title.pdf"))
+        check(loc is not None and loc["mark"] == "⚠️" and "読む道具" in loc["note"],
+              "pdf-locator-grep.py に渡した PDF も読む道具に渡した原典として数える")
         res = []
         _capture(lambda: res.append(report(sid[:8], [Path(t, "projects")], root, True, False, drop_dirs=(drop,))))
-        check(res == [(0, 19)], "保存なし・もう無い = 19 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・"
-              "取得の道具の 5 件・other・vanished・dl・WebFetch の PDF・メールの添付・読む道具に渡した PDF・空白入りの path の 3 件)")
+        check(res == [(0, 21)], "保存なし・もう無い = 21 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・"
+              "取得の道具の 5 件・other・vanished・dl・WebFetch の PDF・メールの添付・読む道具に渡した PDF・空白入りの path の 3 件・"
+              "引用符の cd の後の相対の path・pdf-locator-grep.py に渡した PDF)")
         out = json.loads(_capture(lambda: report(sid[:8], [Path(t, "projects")], root, True, True, drop_dirs=(drop,))))
-        check(out["unsaved"] == 19 and out["repos"] == 1, "json も同じ数")
+        check(out["unsaved"] == 21 and out["repos"] == 1, "json も同じ数")
     print("selftest: " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
 

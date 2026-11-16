@@ -115,8 +115,10 @@ def path_args(cmd, ext):
     return sorted(out)
 CAT_TO_FILE_RE = re.compile(
     r"(?:cat|tee)\s+(?:-a\s+)?>?\s*(['\"]?)([^\s'\";&|<>]+)\1\s*<<-?\s*(['\"]?)(\w+)\3[^\n]*\n(.*?)\n\s*\4\s*(?:\n|$)", re.S)
-# 同じ command の中の `cd <dir> &&` / `cd <dir>;` (記録の cwd は command を打つ前の位置 = この cd を含まない)
-CD_RE = re.compile(r"(?:^|&&|;|\n)\s*cd\s+(['\"]?)([^\s'\";&|<>`(]+)\1\s*(?=&&|;|\n)")
+# 同じ command の中の `cd <dir> &&` / `cd <dir>;` (記録の cwd は command を打つ前の位置 = この cd を含まない)。
+# 引用符で囲んだ cd 先は空白を含んでよい (実測: `cd "…/related papers" && …` に当たらず、 その後の相対の path を
+# 記録の cwd で解いて「もう無い」 と出した)
+CD_RE = re.compile(r"(?:^|&&|;|\n)\s*cd\s+(?:\"([^\"\n]+)\"|'([^'\n]+)'|([^\s'\";&|<>`(]+))\s*(?=&&|;|\n)")
 # 同じ command の中の `NAME=<value>` / `export NAME=<value>` (cat > の書き先の $NAME を展開するため)
 ASSIGN_RE = re.compile(r"(?:^|&&|;|\n)\s*(?:export\s+)?([A-Za-z_]\w*)=(['\"]?)([^\s'\";&|<>`]*)\2(?=\s|;|&&|\n|$)")
 VAR_RE = re.compile(r"\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))")
@@ -206,7 +208,8 @@ def _cwd_at(cmd, pos, cwd):
     """cmd の pos より前にある `cd <dir>` を順に当てた cwd。 cd 先の変数は同じ command で先に代入したものを展開し、
     展開できない変数は path に残す (file_status が「もう無い」 でなく ⚠️ と出す)。 `cd $(…)` は辿らない。"""
     for m in CD_RE.finditer(cmd[:pos]):
-        cwd = _expand(_subst(m.group(2), _vars_at(cmd, m.start())), cwd)
+        target = m.group(1) or m.group(2) or m.group(3)
+        cwd = _expand(_subst(target, _vars_at(cmd, m.start())), cwd)
     return cwd
 
 
