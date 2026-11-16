@@ -152,7 +152,8 @@ engine の名前を含む code / 設定 file は全文を `authority:wiring` と
 掲示板など別sessionから届く作業では、案内文や「続けて」だけを、まだ示していない規則変更の候補の承認へ広げない。
 依頼元が引用した本人の発言も、そのままworkerの裁定として記録しない = 本人の発言が承認になるのは、 本人が答えた窓の会話記録を
 engine が照らしたときだけ (下の [別の窓の答え](#owner-answer-in-another-window))。 裁定が要る差分は、 対象・候補 (全文と SHA-256)・
-失う制約を依頼元に submit し、 依頼元が自分の窓で本人に示す。 本人の具体的な返事を、 worker が既存の CLI で各候補へ結び付ける。
+失う制約を依頼元に submit し、 依頼元が自分の窓で本人に示す。 候補の全文は依頼ごとの新しい dir (中はその提出の file だけ) に置く
+([検収の役への委任](#reviewer-delegation) の 3)。 本人の具体的な返事を、 worker が既存の CLI で各候補へ結び付ける。
 既にある具体的な許可で通常の実装を進められる部分は進める。 worker の窓で本人が答えた承認の照合と最新発言の条件は今のまま。
 
 <a id="owner-answer-in-another-window"></a>**別の窓の答え** (実測: 本人が依頼元の窓で答えた後、 worker の窓へ行って同じ答えを打ち直す往復が続いた):
@@ -160,7 +161,7 @@ worker は `apply --file <対象の絶対 path> --candidate <全文の絶対 pat
 
 1. 名指すのは Claude の session の id の全体 (当てる窓自身でもよい)。 依頼元の会話記録を、 この機械の `~/.claude` と `~/.claude-*` の projects の下だけから探す (環境変数・`--transcript` の指す記録は読まない)。 見つからなければ記録しない = 別の機械の依頼元なら、 worker の窓で今の形に戻る。
 2. 引用が、 その会話記録の本人の発言に verbatim で在る (この窓の承認と同じ読み方 = 別 session の連絡・背景 task の通知・sub-agent の行は本人の発言でない。 短い引用は発言の全体と一致する時だけ)。
-3. その発言が直前の箱のボタンの文と一字一句同じ (押したボタン) なら、 押した箱までの返事 (下の 4 と同じ範囲) に対象の file の名と候補の SHA-256 の頭 8 字以上が出ているときだけ、 本人の答えとして記録する (記録に押したボタンの文を残す)。 出ていなければ記録しない ([mid-turn-text-visibility.md#button-text-not-user-words](mid-turn-text-visibility.md#button-text-not-user-words))。 この窓の承認 (`--owner-session` なし) でも同じで、 `--candidate` の無い承認 (原稿の保護領域) では押したボタンを引かない。
+3. その発言が直前の箱のボタンの文と一字一句同じ (押したボタン) なら、 押した箱までの返事 (下の 4 と同じ範囲) に対象の file の名と候補の SHA-256 の頭 8 字以上が出ているときだけ、 本人の答えとして記録する (記録に押したボタンの文を残す)。 出ていなければ記録しない ([mid-turn-text-visibility.md#button-text-not-user-words](mid-turn-text-visibility.md#button-text-not-user-words))。 箱のボタンで問うときは、 file の名と SHA-256 の頭を箱の recap か ask に書く (箱の網 [`decision-question-jargon.py`](../scripts/decision-question-jargon.py) はその形の承認の問いを止めず、 箱に無い問いを止める = [mid-turn-text-visibility.md#guard-approval-not-by-button](mid-turn-text-visibility.md#guard-approval-not-by-button))。 この窓の承認 (`--owner-session` なし) でも同じで、 `--candidate` の無い承認 (原稿の保護領域) では押したボタンを引かない。
 4. その発言の前 (1 つ前の本人の発言より後) の依頼元の返事の 1 つ (本文か箱の recap・ask) に、 対象の file の名と候補の全文の SHA-256 の頭 8 字以上が出ている = 本人がこの候補を示されて答えた。 最新の 1 つは求めない (依頼元の窓には本人の別件の発言が続く)。 候補が変われば SHA-256 が変わり、 示されたものと違う候補には効かない。
 5. 規則の文書・hook・道具・設定 (`authority:` / `config` の領域) を `--candidate` の全文で当てる承認だけ。 原稿の保護領域は、 本人が裁定した窓で記録する ([manuscript-claim-ownership.md](manuscript-claim-ownership.md))。 `--latest` とも `--reviewer-approval` とも組まない。 その会話で agent が断った件の印がその file に開いていれば記録しない。
 6. 記録は当てる worker の session の承認に置き、 引いた発言の session・時刻・示された SHA-256 の頭を残す。 そのターンの最後の返事に、 引いた発言と対象の file を書く (上の 3 と同じ。 Stop が確かめる)。
@@ -192,6 +193,7 @@ CLI の session 検出・対応する transcript 表現・state の保存先の�
    - event を書いた役が、 その依頼の今の検収役で (役 id で比べる)、 設定の `reviewer_roles` にあり、 worker の役でない
    - event を書いた native session が、 当てる session とも依頼を出した session とも違い (依頼を出した窓の native が依頼に無ければ通さない)、 当てる session がその依頼を引き受けた worker で、 その引き受けの lease が切れていない (依頼元は守られた file の承認を代わらない = 検収の役の窓が落ちていれば本人に聞く)
    - 検収の役の会話記録 (当てる機械の上、 読めない行が途中に無いもの) に、 その窓が打った掲示板の `approve-edit` (その file と候補を名指し、 成功して `posted <event id>` を出したもの。 1 つの単純な command で、 行の続きの `\` は使えるが、 `;`・`&&`・`|`・redirect・変数・置換は付けない) があり、 その窓が候補と対象を書いていない (編集 tool と、 書く形か形の分からない shell) し、 候補の足した行 (6 字以上) を自分で書いてもいない (下書きを書いて worker に写させた形)。 候補と足した行は会話記録の全部で見る。 対象 (と、 それを書きうる dir) は、 その窓がその依頼を引き受けた後の呼び出しだけで見る: 境は、 掲示板の `pickup` の印 (その依頼の `引き受けた:` の note) の id が tool の結果に `posted <id>` と出た最初の呼び出しで、 同じ message の呼び出しは境の後に数える。 印が会話記録に無ければ全部で見る (本人の裁定 = 問い H39「絞る」。 長く続く検収の窓が、 前の検収で対象の repo の試験を回しただけで承認できなくなっていた)
+   - 候補が、 依頼ごとの新しい dir に在る = その dir の中が候補とその提出の deliverables (絶対 path) だけ (`.DS_Store` は除く)。 worker は候補を依頼ごとの新しい dir に `<repo>__<dir>__<name>` の平らな名で置く。 共有の folder (別の note・別の依頼の file が在る dir) に置いた候補は、 検収の役の会話記録を数える前に断る (その folder を名指す検収の役の command = そこに note を書く形も候補の書き込みに数えるので、 書いた者と確かめる者を分けられない。 実測: 検収の役が共有ノートの folder に note を書いただけで、 門が「候補を書いた」 と数えた)
    - 候補の全文の SHA-256 (改行を揃えた text)・属性・基準の版 (HEAD の blob、 git で読めないなら通さない)・止まった領域が event と合い、 承認の後 (同じ秒も後に数える) に差し戻し・取り下げ・受け取り・手放し・担当の替わり・引き受け直し・出し直しが無い
    - 緩和の語で止まった変更なら、 その語が緩めでない理由が event にある
 4. **検収の役がすること**: その依頼で対象の repo の command を打つ前に、 掲示板の `pickup` で引き受けの印を書く (上の 3 の門は、 対象への書き込みを印の後の呼び出しだけで見る)。 止めた例を候補に当て直して新しく通るものが 0 件か、 止める文・求める文を前後で並べて数と範囲が変わらないか、 設定の差分が足すだけかを 1 つ回して、 その結果を event に書く (候補は元の `scripts/` を写した一時 dir で回す = [本人の裁定と候補の記録](#candidate-in-mirror-dir))。 event の候補には worker が提出した file (写しでなく元) を名指す。 対象・候補・それを書きうる dir (対象の repo の root から対象の dir まで・候補の dir。 glob・brace でそこに当たりうる語も) を名指す command は、 読む形と分かる command (`cat`・`diff`・`cmp`・`shasum`・`grep`・git の読む形・守りの道具の `--dry-run`・掲示板の `approve-edit`・`cd`) だけを `;`・`&&`・`|` で繋いだものにし、 path は literal で書く。 出力の redirect・process substitution・heredoc・変数・置換を含むもの、 読む形でない command を 1 つでも含むものは書いたと数える。 script には写しの path を渡し、 写しは `cp` で絶対 path の行き先に作る (写しの dir の中の名と形は元のままでよい。 相対の行き先・glob の行き先と、 hard link・symlink の写しは書いたと数える)。 相対 path の語は、 対象と同じ名なら名指しに数える。 候補の文を自分で書かない (直しが要れば差し戻す)。 回せない・新しく通るものがある・方針と食い違う・本人の見る画面や手間が変わるときは承認しない。 本人の裁定が要る問いは依頼元に渡し、 依頼元が本人に聞く。 本人に聞く問いは、 本人が文字だけで決められる形 (何が止まらなくなるか・例 1 つ・推す答え) にし、 差分の承認を頼まない ([`claude-code-permissions.md#ask-only-owner-judgeable`](claude-code-permissions.md#ask-only-owner-judgeable) と同じ線)。

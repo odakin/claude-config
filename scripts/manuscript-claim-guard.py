@@ -4963,6 +4963,80 @@ def _glob_root(piece: str) -> Path | None:
     return Path(os.path.normpath(base or "/"))
 
 
+def _glob_regex_empty_ranges(pat: str) -> str:
+    """fnmatch の pattern を、 python 3.12 からの fnmatch と同じ読みの正規表現にする (逆向きの範囲 `[6-1]` は何にも
+    当たらない範囲として外し、 範囲が空になった `[…]` は何にも当たらない、 `[!…]` は 1 字の何にでも当たる)。 3.11 までの
+    fnmatch.translate はその範囲をそのまま正規表現にして re.error を出す (CPython の fnmatch._translate の [] の読みの写し)。"""
+    res: list[str] = []
+    i, n = 0, len(pat)
+    while i < n:
+        c = pat[i]
+        i += 1
+        if c == "*":
+            res.append(".*")
+        elif c == "?":
+            res.append(".")
+        elif c == "[":
+            j = i
+            if j < n and pat[j] == "!":
+                j += 1
+            if j < n and pat[j] == "]":
+                j += 1
+            while j < n and pat[j] != "]":
+                j += 1
+            if j >= n:
+                res.append("\\[")  # 閉じない [ は字そのもの
+                continue
+            stuff = pat[i:j]
+            if "-" not in stuff:
+                stuff = stuff.replace("\\", r"\\")
+            else:
+                chunks: list[str] = []
+                k = i + 2 if pat[i] == "!" else i + 1
+                while True:
+                    k = pat.find("-", k, j)
+                    if k < 0:
+                        break
+                    chunks.append(pat[i:k])
+                    i = k + 1
+                    k = k + 3
+                chunk = pat[i:j]
+                if chunk:
+                    chunks.append(chunk)
+                else:
+                    chunks[-1] += "-"
+                for k in range(len(chunks) - 1, 0, -1):  # 逆向きの範囲を外す
+                    if chunks[k - 1][-1] > chunks[k][0]:
+                        chunks[k - 1] = chunks[k - 1][:-1] + chunks[k][1:]
+                        del chunks[k]
+                stuff = "-".join(s.replace("\\", r"\\").replace("-", r"\-") for s in chunks)
+            stuff = re.sub(r"([&~|])", r"\\\1", stuff)
+            i = j + 1
+            if not stuff:
+                res.append("(?!)")
+            elif stuff == "!":
+                res.append(".")
+            else:
+                if stuff[0] == "!":
+                    stuff = "^" + stuff[1:]
+                elif stuff[0] in ("^", "["):
+                    stuff = "\\" + stuff
+                res.append(f"[{stuff}]")
+        else:
+            res.append(re.escape(c))
+    return "".join(res)
+
+
+def _glob_name_match(name: str, pat: str) -> bool:
+    """名が glob の語に当たるか (fnmatchcase)。 python 3.11 までは逆向きの範囲 (`[6-1]` など) で fnmatch が re.error を出し、
+    検収係の会話記録の command の語でこの門が理由なしの traceback で終わった (実測 = shell の python3 が 3.9)。 そのときは
+    3.12 からの fnmatch と同じ読み (_glob_regex_empty_ranges) で照らす = どの python でも同じ答え。"""
+    try:
+        return fnmatch.fnmatchcase(name, pat)
+    except re.error:
+        return re.fullmatch(_glob_regex_empty_ranges(pat), name, re.S) is not None
+
+
 def _involves(word: str, targets: list[Path], rels: list[str], dirs: set[Path]) -> bool:
     """語が対象・候補か、 それを書きうる dir (_guarded_dirs) か、 対象の絶対 path を中に含むか、 相対で対象と同じ名か・
     対象の repo の中の path を含むか。 字句を解いた後の語で見る (盲検の実測: 逆斜線で空白を書いた path を、 解く前の文の
@@ -4984,7 +5058,7 @@ def _involves(word: str, targets: list[Path], rels: list[str], dirs: set[Path]) 
                 return True
             return any(str(x) in word for x in targets)
         if piece and (PurePosixPath(piece).name in {x.name for x in targets}
-                      or any(fnmatch.fnmatchcase(x.name, PurePosixPath(piece).name) for x in targets
+                      or any(_glob_name_match(x.name, PurePosixPath(piece).name) for x in targets
                              if any(c in piece for c in "*?[{"))):
             return True  # 別の dir から相対の名で名指す形
     except (OSError, ValueError):
@@ -5244,6 +5318,38 @@ def _policy_file_problem(base: Path, rd: str) -> str:
     return ""
 
 
+_CANDIDATE_DIR_NOISE = {".DS_Store"}  # Finder が勝手に置く file (中身は候補と関係ない)
+
+
+def _candidate_dir_problem(cand: Path | None, sub: dict) -> str:
+    """候補の dir が、 その依頼の候補を置く dir か = 中に在るのが候補とその提出の deliverables (絶対 path) だけか。 共有の
+    folder (別の note・別の依頼の file が在る dir) に置いた候補は、 その folder を名指す検収係の command (そこに note を
+    書く形) を候補の書き込みと数える = 書いた者と確かめる者を分けられない (実測: 検収係が共有ノートの folder に note を
+    書いただけで、 門が「検収係が候補を書いた」 と数えた)。 その形は、 検収係の会話記録を数える前に理由を名指して断る。
+    候補が絶対 path でなければ見ない (照らす dir が無い)。"""
+    if cand is None:
+        return ""
+    allowed = {cand}
+    for d in sub.get("deliverables") or []:
+        if isinstance(d, str) and d.startswith("/"):
+            p = Path(os.path.expanduser(d))
+            try:
+                allowed.add(p.parent.resolve(strict=False) / p.name)
+            except (OSError, ValueError):
+                continue
+    try:
+        names = sorted(e.name for e in cand.parent.iterdir())
+    except OSError:
+        return f"候補の dir ({cand.parent}) を読めない = 候補の置き場を確かめられない"
+    others = [nm for nm in names if nm not in _CANDIDATE_DIR_NOISE and cand.parent / nm not in allowed]
+    if not others:
+        return ""
+    return (f"候補の dir ({cand.parent}) に、 候補とその提出の file の外のもの ({', '.join(others[:3])}"
+            f"{' ほか' if len(others) > 3 else ''}) が在る = 共有の folder に置いた候補は、 その folder に検収係が書いた note も"
+            " 候補の書き込みに数えるので、 書いた者と確かめる者を分けられない。 検収係が提出を差し戻し (revise)、 worker が"
+            "候補を依頼ごとの新しい dir (中はその提出の file だけ) に置いて出し直し、 検収係がその候補で取り直す")
+
+
 def verify_reviewer_approval(event_id: str, session: tuple[str, str], repo: Path, rel: str, target: Path,
                              new: str, target_mode: str, changes: list[dict], *, base: Path | None = None,
                              home: Path | None = None) -> tuple[dict | None, str]:
@@ -5357,6 +5463,9 @@ def verify_reviewer_approval(event_id: str, session: tuple[str, str], repo: Path
     uses, results = rows
     cand = one("candidate")
     cand_p = Path(cand).resolve(strict=False) if cand.startswith("/") else None
+    problem = _candidate_dir_problem(cand_p, sub)
+    if problem:
+        return None, problem
     if not _posted_receipt(uses, results, event_id, target.resolve(strict=False), cand_p):
         return None, ("検収係の会話記録に、 この event を書いた掲示板の approve-edit (その file と候補を名指し、 成功して"
                       " `posted <event id>` を出したもの) が無い")
@@ -5391,7 +5500,7 @@ def record_reviewer_approval(args: argparse.Namespace, session: tuple[str, str] 
     rid = args.reviewer_approval.strip()
     try:
         extra, why = verify_reviewer_approval(rid, session, repo, rel, target, new, target_mode, changes)
-    except (OSError, subprocess.SubprocessError) as exc:  # 証拠を読めない = 受け付けない (例外で外へ出さない)
+    except (OSError, subprocess.SubprocessError, re.error) as exc:  # 証拠を読めない = 受け付けない (例外で外へ出さない)
         extra, why = None, f"検収係の承認の証拠を読めない ({exc.__class__.__name__})"
     if extra is None:
         print(f"apply: 検収係の承認 {rid} を受け付けない: {why}。 書かず、 記録もしない。", file=sys.stderr)
@@ -7053,7 +7162,7 @@ def reviewer_approval_selftests(check) -> None:
                          wrote_error=False, cand_path=None):
                 n[0] += 1
                 eid = f"20260101T0003{n[0]:02d}Z-claude-apr{n[0]:03d}"
-                cp = cand_path or cands / f"c{n[0]}.txt"
+                cp = cand_path or cands / f"r{n[0]:03d}" / f"c{n[0]}.txt"  # 候補は依頼ごとの dir に 1 つ (置き場の照らし)
                 cp.parent.mkdir(parents=True, exist_ok=True)
                 cp.write_text(cand_text, encoding="utf-8")
                 blob = subprocess.run(["git", "rev-parse", "--verify", "-q", f"HEAD:{rel}"], cwd=work, env=env,
@@ -7484,6 +7593,73 @@ def reviewer_approval_selftests(check) -> None:
                   and _pickup_boundary(b_uses, {"u1": {"text": f"posted {pick_id}9"},
                                                 "u2": {"text": f"posted {other_pick}"}}, b_evs, req_id) is None
                   and _pickup_boundary(b_uses, {"u4": {"text": f"posted {pick_id}"}}, b_evs, "other") is None)
+
+            # 逆向きの文字の範囲 (`[6-1]`): python 3.11 までの fnmatch は re.error を出し、 検収係の会話記録の command の語で
+            # 門が理由なしの traceback で終わった (検収係が shell の python3 = 3.9 で再現)。 3.12 からの fnmatch と同じ読みで照らす
+            def no_regex_error(f):
+                try:
+                    return f()
+                except re.error:
+                    return False
+
+            gre = _glob_regex_empty_ranges
+            check("[reviewer-G1] glob の読み: 逆向きの範囲は何にも当たらず、 [!…] の空の範囲は 1 字の何にでも当たる"
+                  " (3.12 からの fnmatch と同じ)",
+                  no_regex_error(lambda: re.fullmatch(gre("c[9-0].txt"), "c1.txt", re.S) is None
+                                 and re.fullmatch(gre("c[9-01].txt"), "c1.txt", re.S) is not None
+                                 and re.fullmatch(gre("[!6-1]"), "a", re.S) is not None
+                                 and re.fullmatch(gre("a[b-c]*"), "abz", re.S) is not None
+                                 and re.fullmatch(gre("x[6-1"), "x[6-1", re.S) is not None
+                                 and not _glob_name_match("check.sh", "x[6-1]")))
+            real_fnmatchcase = fnmatch.fnmatchcase
+
+            def fnmatchcase_py311(name, pat):  # 3.11 までの fnmatch の形 (逆向きの範囲で re.error) を、 どの python でも再現する
+                for m in re.finditer(r"\[!?\]?[^\]]*\]", pat):
+                    if any(a > b for a, b in re.findall(r"(.)-(.)", m.group(0)[1:-1])):
+                        raise re.error("bad character range")
+                return real_fnmatchcase(name, pat)
+
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, picked(), call("Bash", {"command": "grep -c 'x[6-1]' /tmp/notes.md"}, "0"))
+            fnmatch.fnmatchcase = fnmatchcase_py311
+            try:
+                rc, out = run("hooks/check.sh", cp, eid)
+            except re.error:
+                rc, out = -1, "re.error"
+            finally:
+                fnmatch.fnmatchcase = real_fnmatchcase
+            check("[reviewer-G2] 検収係の command の語に逆向きの範囲 ([6-1]) があっても、 門は例外で終わらずに照らして承認する"
+                  " (python 3.11 までの fnmatch の形)", rc == 0 and (work / "hooks/check.sh").read_text() == hook1)
+            restore()
+            # 候補の置き場: 共有の folder に置いた候補は、 そこに検収係が note を書いただけで「候補を書いた」 と数えた (実測)。
+            # worker は候補を依頼ごとの新しい dir (中はその提出の file だけ) に置き、 門はそうでない置き場を理由を名指して断る
+            shared = root / "shared-notes"
+            note_cmd = f"mkdir -p {shared} && cat > {shared / 'review-note.md'} <<'EOF'\n検収の記録\nEOF"
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False, cand_path=shared / "cand-check.sh")
+            (shared / "review-note.md").write_text("検収の記録\n", encoding="utf-8")
+            window(eid, cp, picked(), call("Bash", {"command": note_cmd}, ""))
+            refused("[reviewer-G3] 候補を共有の folder (候補と提出の file の外のものが在る dir) に置いたら、 検収係の command を"
+                    "数える前に置き場を名指して断る", "hooks/check.sh", hook1, eid, cp, "依頼ごとの新しい dir")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False,
+                               cand_path=shared / "20260101-req001" / "work__hooks__check.sh")
+            window(eid, cp, picked(), call("Bash", {"command": note_cmd}, ""))
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-G4] 候補を依頼ごとの新しい dir に置けば、 その上の共有の folder に検収係が note を書いても承認できる",
+                  rc == 0 and (work / "hooks/check.sh").read_text() == hook1)
+            restore()
+            sub_path = f"{thread}/20260101T000200Z--{sub_id}.json"
+            per5 = root / "per-request-5"
+            commit(board, {sub_path: json.dumps(dict(sub, deliverables=[str(per5 / "results.md"), "plans/results.md"]),
+                                                ensure_ascii=False)})
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False, cand_path=per5 / "work__hooks__check.sh")
+            (per5 / "results.md").write_text("結果\n", encoding="utf-8")
+            (per5 / ".DS_Store").write_text("", encoding="utf-8")
+            window(eid, cp, picked())
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-G5] 依頼ごとの dir の中の、 その提出の file (deliverables の絶対 path) と .DS_Store は置き場の外に数えない",
+                  rc == 0 and (work / "hooks/check.sh").read_text() == hook1)
+            restore()
+            commit(board, {sub_path: json.dumps(sub, ensure_ascii=False)})
             g(board, "rm", "-q", f"{thread}/20260101T000250Z--{pick_id}.json", f"{thread}/20260101T000251Z--{other_pick}.json")
             g(board, "commit", "-qm", "drop pickups")
             tp.unlink(missing_ok=True)
