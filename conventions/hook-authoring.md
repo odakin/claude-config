@@ -34,7 +34,7 @@ hook script の filename suffix で **block するか否か** を機械的に区
 
 | suffix | behavior | 終了経路 | 例 |
 |---|---|---|---|
-| `-nudge` | **non-blocking** (= informational injection only) | exit 0 + stdout に `<system-reminder>...` または `additionalContext` JSON | `pdf-read-fallback-nudge.sh`, `git-state-nudge.sh` |
+| `-nudge` | **non-blocking** (= informational injection only) | exit 0 + stdout に `additionalContext` JSON (PostToolUse の平の stdout は model に届かない = [#posttooluse-plain-stdout-not-delivered](#posttooluse-plain-stdout-not-delivered)。 SessionStart・UserPromptSubmit は平の `<system-reminder>...` も届く) | `bash-search-zero-result-nudge.sh`, `chat-path-base-nudge.sh` |
 | `-guard` | **blocking via PreToolUse permissionDecision** (= ask / deny) | exit 0 + stdout に `{"permissionDecision": "ask"\|"deny"}` JSON | `memory-guard.sh`, `google-url-guard.sh`, `expensive-tmp-guard.sh`, `public-leak-guard.sh`, `commit-msg-leak-guard.sh` |
 | `-enforce` | **blocking via Stop / Pre*ToolUse 非 ask 経路** (= 別 phase での block) | exit 2 または stdout に `{"decision": "block"}` JSON | (⚠️ かつての例 `pdf-open-enforce.sh` は 2026-06-23 に side-effect action へ転換 = 下記注。現在 active な `-enforce` hook は無し) |
 
@@ -885,6 +885,8 @@ hook の効きは build だけでなく **frontend (= terminal CLI / IDE 拡張 
 > **再確認 (2026-10-07、 desktop 埋込 build 2.1.287)**: UserPromptSubmit の additionalContext を prompt の直後に受領 (transcript に `hook_additional_context` / UserPromptSubmit)。 Stop の block は 1 turn に 3 本 (別々の hook) が同時に返り、 3 本とも feedback として届いて同じ turn が続いた (`hook_blocking_error` / Stop × 3)。 表の 2 面は変わらず。
 >
 > **再確認 (2026-10-25、 desktop 埋込 build 2.1.308)**: PreToolUse の JSON の `permissionDecision: deny` で tool は動かない。 marker の無い memory への Write でも、 app の tool (`mcp__ccd_turn__wrap_up` = turn を閉じる欄) でも同じで、 欄は画面に出なかった。 欄の側は、 決まった印を含むときだけ deny する使い捨ての hook を足し、 印を入れた欄で呼んで確かめた (効かなくても出るのは印つきの無害な欄だけ)。 会話記録の tool_result は `is_error: true`、 中身は `PreToolUse:<Tool> hook error: <理由>` = 後の hook は「この呼び出しは deny された」 を is_error で読める。 ⚠️ **何も出さない hook の実行は会話記録に残らない** (`hook_success` などの記録は出力のあった hook だけ) = 黙って通した hook が読み込まれていたかは、 記録からは確かめられない (確かめるなら上の印の形で 1 回 deny させる)。
+>
+> <a id="posttooluse-plain-stdout-not-delivered"></a>**PostToolUse の平の stdout は model に届かない** (desktop 埋込 build で実測): exit 0 の hook が JSON でない文を stdout に出すと、 会話記録には `hook_success` (PostToolUse) として残るが `hook_additional_context` にはならず、 model の context に入らない (同じ session の同じ形の Bash の後に、 JSON の `hookSpecificOutput.additionalContext` を出した別の hook の文は毎回届いた)。 model に知らせる PostToolUse の hook は additionalContext の JSON で出す (今までの文を平のまま出していた hook は、 知らせが一度も届いていなかったことになる = 実測)。 平の stdout が context に入るのは SessionStart と UserPromptSubmit だけ。 確かめ方 = 会話記録の jsonl で、 その hook の文が `attachment.type == "hook_success"` にだけあって `"hook_additional_context"` に無いか (道具の会話記録の検索は hook の注入を読まないので、 jsonl を直に数える)。
 >
 > 帰結: desktop でも「model に届ける」 手段 (additionalContext / block) は使えるが、 「user に見せる」 手段として `systemMessage` は使えない。 実装例 = [`multi-account-machine-surface.md#first-reply-stamp-mechanism`](multi-account-machine-surface.md#first-reply-stamp-mechanism)。
 >
