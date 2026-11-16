@@ -890,6 +890,8 @@ worker の「できた」で閉じると、確認していない成果が完了�
 
 <a id="acceptance-items-with-values"></a>**完了条件に並べるのは、 合否の値 (0・同じ・上限) を書ける項目だけ** — 値の無い量 (頁数・語数の前後) を合否の項目と同じ並びに書くと、 受け手は前の報告の値を期待値と読み、 変わったら異常として調べる (実測)。 前の報告の値を、 次の依頼の期待値に写さない。 組版の例 = [`edit-intent-record.md#page-count-not-a-gate`](../../ai-collaboration/conventions/edit-intent-record.md#page-count-not-a-gate) (掲示板は値の無い頁数・overfull を書いた request に注意を 1 行出す = [`CONTRACT.md#acceptance-value-check`](../../ai-collaboration/board/CONTRACT.md#acceptance-value-check))。
 
+<a id="acceptance-after-owner-correction"></a>**依頼を出した後で本人が依頼の中身を訂正したら、 掲示板の同じ依頼に、 訂正した後の完了条件を note で書き、 受け手と検収役に 1 行知らせる** — 掲示板の完了条件 (`--acceptance`) は依頼の event に書いたまま後から変わらず、 依頼書の file を直しても掲示板には届かない。 検収役は完了条件で照らすので、 そのままだと訂正の前の条件で受け取る (実測: 依頼書の file は訂正の後の commit で直っていたが、 掲示板の完了条件は訂正の前の文のまま残り、 別の依頼の検収の途中で気づいた)。 検収役の側は、 依頼の後の note (受け取りの `--ack-newer` が名指す投稿) と依頼書の file の最新の版を完了条件と並べて読み、 食い違えば受け取る前に依頼元に確かめる。
+
 | 遷移 | 記録する内容と次の責任 |
 |---|---|
 | request → claim | 宛先 session が期限付きで引受。横から別 session が奪わない |
