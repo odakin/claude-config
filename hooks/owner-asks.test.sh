@@ -14,7 +14,7 @@ printf '{"root": "%s", "prefix": {"%s": "Z"}}\n' "$T/board" "$(hostname -s 2>/de
 export BOARD_ASKS_CONFIG="$T/cfg.json" BOARD_ASKS_ENGINE="$ENGINE" BOARD_ASKS_STATE_DIR="$T/state" BOARD_ASKS_VALIDATOR="$T/none.py"
 fail=0
 check() { if eval "$2"; then :; else echo "FAIL: $1"; fail=1; fi; }
-out="$(BOARD_ASKS_PREFIX=Z python3 "$ENGINE" ask --root "$T/board" --session s1 --text '問い一' --recommend 'はい' --ground choice)"
+out="$(BOARD_ASKS_PREFIX=Z python3 "$ENGINE" ask --root "$T/board" --session s1 --about '試験の台帳で立てる話' --text '問い一' --recommend 'はい' --ground choice --prior-term 試験 --prior '無し (見た範囲 = 試験の台帳)')"
 check '問いを立てると印つきの段が出る (中身が先、 印は後ろ)' '[[ "$out" == *"問い一 〔問 Z1〕"* ]]'
 tr="$T/t.jsonl"
 jq -nc '{type:"user",message:{role:"user",content:"見せて"}}' > "$tr"
@@ -42,7 +42,7 @@ out="$(jq -nc --arg t "$tr" '{hook_event_name:"Stop",session_id:"s3",transcript_
 check 'Stop: 印の無い問いは差し戻す' '[ "$(printf "%s" "$out" | jq -r .decision)" = block ]'
 out="$(BOARD_ASKS_CONFIG="$T/missing.json" bash -c "jq -nc '{hook_event_name:\"Stop\",session_id:\"s3\"}' | '$HOOK'")"
 check '設定が無ければ何もしない' '[ -z "$out" ]'
-out="$(env -u BOARD_ASKS_PREFIX python3 "$ENGINE" ask --root "$T/board" --session s4 --text '問い二' --ground fact)"
+out="$(env -u BOARD_ASKS_PREFIX python3 "$ENGINE" ask --root "$T/board" --session s4 --about '試験の台帳で立てる話' --text '問い二' --ground fact)"
 check 'hook が渡した字を engine が残し、 手で打つ ask も同じ字' '[[ "$out" == *"〔問 Z2〕"* ]]'
 # 前の Stop の後の返事だけを読む (app が Stop ごとに書く stop_hook_summary の行が区切り): 印の無い問いで 1 回差し戻した後、
 # 背景の作業の知らせで始まる次の turn に問いが無ければ、 前の段を読み直して差し戻さない (直す前の engine はここで鳴った)
