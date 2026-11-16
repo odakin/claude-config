@@ -102,4 +102,73 @@ class EntryTests(unittest.TestCase):
             self.assertEqual(workflow.read_json(bundle / "attempt.json")["acknowledged_newer"], "abc")
 
 
+class PresendTests(unittest.TestCase):
+    """The binding's pre-send check: preview prints its lines; send refuses before any network call."""
+
+    def setUp(self):
+        from unittest import mock
+        envelope = {"account": "a", "to": ["peer@example.org"], "cc": [], "thread_id": "abc"}
+        self.patches = [mock.patch.object(m.workflow, "read_json", lambda path: envelope),
+                        mock.patch.object(m.workflow, "reviewed", lambda *a: None),
+                        mock.patch.object(m.workflow, "preview", lambda *a: "PREVIEW"),
+                        mock.patch.object(m.workflow, "send", lambda *a: {"sent": True})]
+        for p in self.patches:
+            p.start()
+        self.seen = []
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+
+    def presend(self, ok):
+        def check(envelope, ack, allow):
+            self.seen.append((envelope["to"], ack, allow))
+            return ok, ["📋 lineup line"]
+        return check
+
+    def test_flags_parse_on_preview_and_send(self):
+        a = m.parser().parse_args(["send", "--bundle", "b", "--approved-sha256", "x", "--send",
+                                   "--ack-related", "T-1,T-2", "--allow-no-lineup", "why"])
+        self.assertEqual((a.ack_related, a.allow_no_lineup), ("T-1,T-2", "why"))
+        self.assertEqual(m.parser().parse_args(["preview", "--bundle", "b", "--ack-related", "T-1"]).ack_related, "T-1")
+
+    def test_send_refused_before_network_exits_14(self):
+        import sys
+
+        def no_network(account):
+            raise AssertionError("the gateway must not be built when the pre-send check refuses")
+        argv = ["send", "--bundle", "b", "--approved-sha256", "x", "--send"]
+        err = io.StringIO()
+        saved = sys.argv
+        sys.argv = ["codex-mail"] + argv
+        try:
+            with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+                m.run(no_network, presend=self.presend(False))
+        finally:
+            sys.argv = saved
+        self.assertEqual(caught.exception.code, m.PRESEND_EXIT)
+        self.assertIn("📋 lineup line", err.getvalue())
+        self.assertIn("NOT SENT", err.getvalue())
+
+    def test_send_passes_ack_and_proceeds(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            m.main(lambda account: object(), presend=self.presend(True),
+                   argv=["send", "--bundle", "b", "--approved-sha256", "x", "--send", "--ack-related", "T-1"])
+        self.assertEqual(self.seen, [(["peer@example.org"], "T-1", "")])
+        self.assertIn("sent", out.getvalue())
+
+    def test_preview_prints_lineup_first(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            m.main(lambda account: object(), presend=self.presend(False), argv=["preview", "--bundle", "b"])
+        self.assertEqual(out.getvalue().splitlines()[:2], ["📋 lineup line", "PREVIEW"])
+
+    def test_without_presend_nothing_changes(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            m.main(lambda account: object(), argv=["preview", "--bundle", "b"])
+        self.assertEqual(out.getvalue().strip(), "PREVIEW")
+
+
 if __name__ == "__main__": unittest.main()

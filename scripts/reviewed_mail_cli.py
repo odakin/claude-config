@@ -5,6 +5,14 @@ Commands except `send --send` are read-only on Gmail. A review fingerprint is
 an integrity check, not permission: explicit user send approval remains required.
 `send` exits 6 without an attempt when others wrote in the thread after the
 parent; `--ack-newer NEWEST_ID` passes after reading them.
+
+A binding may pass `presend(envelope, ack_related, allow_no_lineup) -> (ok, lines)`
+(for example a lookup of the open items about the same counterparty and their
+decisions). `preview` prints its lines; `send` runs it after the review check and
+before any network call, and exits 14 without an attempt when it refuses
+(`--ack-related ID,...` names the items read; `--allow-no-lineup REASON` when
+the owner decided to send without the lookup). Without a binding hook nothing
+changes.
 """
 from __future__ import annotations
 
@@ -17,6 +25,11 @@ from pathlib import Path
 import reviewed_mail as workflow
 
 NEWER_EXIT = 6
+PRESEND_EXIT = 14
+
+
+class PresendRefused(Exception):
+    """Send refused by the binding's pre-send check (no attempt made)."""
 
 
 class Gateway:
@@ -106,13 +119,18 @@ def parser(accounts=None):
             q.add_argument("--send", action="store_true", required=True)
             q.add_argument("--ack-newer", default="",
                            help="newest counterpart message ID, after reading it, to keep this parent")
+        if name in ("preview", "send"):
+            q.add_argument("--ack-related", default="",
+                           help="IDs (comma-separated) of the items the binding's pre-send check listed, after reading them")
+            q.add_argument("--allow-no-lineup", default="", metavar="REASON",
+                           help="send although the binding's pre-send check could not run (the owner's decision)")
     q = sub.add_parser("pending", allow_abbrev=False)
     q.add_argument("--root", default=str(Path.home() / ".codex/mail-workflow"))
     return p
 
 
-def main(gateway_factory, accounts=None):
-    a = parser(accounts).parse_args()
+def main(gateway_factory, accounts=None, presend=None, argv=None):
+    a = parser(accounts).parse_args(argv)
     socket.setdefaulttimeout(30)
     if a.command == "pending":
         rows = []
@@ -124,10 +142,16 @@ def main(gateway_factory, accounts=None):
         print(workflow.canonical(rows)); return
     if a.command == "recorded":
         print(workflow.canonical(workflow.recorded(Path(a.bundle)))); return
+    presend_lines = []
     if a.command in {"preview", "send", "verify"}:
-        a.account = workflow.read_json(Path(a.bundle) / "envelope.json")["account"]
+        envelope = workflow.read_json(Path(a.bundle) / "envelope.json")
+        a.account = envelope["account"]
         if a.command == "send":
             workflow.reviewed(Path(a.bundle), a.approved_sha256)  # fail before network
+        if presend is not None and a.command in {"preview", "send"}:
+            ok, presend_lines = presend(envelope, a.ack_related, a.allow_no_lineup)
+            if a.command == "send" and not ok:
+                raise PresendRefused("\n".join(presend_lines))
     if a.command == "search" and not 1 <= a.limit <= 500:
         raise ValueError("limit must be 1..500; narrow the query if complete=false")
     for value in [getattr(a, "message", None), getattr(a, "ack_newer", None)]:
@@ -140,19 +164,25 @@ def main(gateway_factory, accounts=None):
         directory = workflow.prepare(Path(a.bundle), gateway, a.account, a.message,
                   Path(a.reply_file).read_text(), a.signature, a.record_target, a.mode)
         print(workflow.preview(directory, gateway)); return
-    elif a.command == "preview": print(workflow.preview(Path(a.bundle), gateway)); return
+    elif a.command == "preview":
+        for line in presend_lines:
+            print(line)
+        print(workflow.preview(Path(a.bundle), gateway)); return
     elif a.command == "send":
         result = workflow.send(Path(a.bundle), gateway, a.approved_sha256, a.send, a.ack_newer)
     elif a.command == "verify": result = workflow.verify(Path(a.bundle), gateway)
     print(workflow.canonical(result))
 
 
-def run(gateway_factory, accounts=None):
+def run(gateway_factory, accounts=None, presend=None):
     try:
-        main(gateway_factory, accounts)
+        main(gateway_factory, accounts, presend)
     except workflow.NewerCounterpartMessages as exc:
         print(f"{exc}\nNOT SENT: no attempt was recorded; the bundle is unchanged.", file=sys.stderr)
         raise SystemExit(NEWER_EXIT)
+    except PresendRefused as exc:
+        print(f"{exc}\nNOT SENT: the binding's pre-send check refused; no attempt was recorded.", file=sys.stderr)
+        raise SystemExit(PRESEND_EXIT)
     except Exception as exc:
         # Never dump credentials or a raw OAuth HTTP response.
         print(f"ERROR ({type(exc).__name__}): {exc}. If send was attempted, use verify; do not resend.", file=sys.stderr)
