@@ -124,6 +124,24 @@ rm -rf /tmp/plain /tmp/enc-paths
 - Generate and export keys, and commit the rotation, in the owner's terminal (observed: Claude Code's auto mode blocks key generation as a write to a secret store, and right after the rotation an agent-side check that reads HEAD's encrypted files cannot inspect them).
 - Other clones must not pull while still unlocked with the old key: smudging new-key commits fails and changed encrypted files disappear from the worktree (observed). Order: place the new key → `git-crypt lock` → `git pull` (or the follow tool for rewritten history) → `git-crypt unlock ~/.secrets/<repo>.key`. A clone that already broke recovers with `git-crypt lock --force` → `git reset --hard origin/<branch>` → `git-crypt unlock <new key>`. `scripts/git-rewrite-follow.py` stops such a clone before resetting. ⚠️ **`lock --force` restores encrypted files only**: depending on how the clone broke, changes to plaintext files from the new history (`.gitattributes` etc.) and new untracked files can remain, and the follow tool's `reset --keep` then stops on "uncommitted changes overlap" (observed). Check that each leftover matches the new history (`git show origin/<branch>:<path> | cmp - <path>`); if it does, move it aside and rerun the follow. For a file that differs, check whether it is an older version from the new history (`git log -p origin/<branch> -- <path>`) or a local edit before deciding (observed: the partly written copy was a slightly earlier version from the new history).
 
+## <a id="encrypt-existing-files"></a>Encrypting Files That Were Already Committed in Plaintext
+
+When some files of a repo that does not use git-crypt yet (ledgers, lists, records) should be encrypted from now on. Content stays the same:
+
+```bash
+# in a clone with no uncommitted changes. With a reused key, unlock alone installs the key and the filter without init (observed). With a dedicated key, git-crypt init
+git-crypt unlock ~/.secrets/git-crypt.key
+# write the paths in .gitattributes, then re-add the index blobs (adding the attribute alone leaves the index blobs in plaintext)
+git rm --cached -q <path>... && git add .gitattributes <path>...
+for p in <path>...; do git cat-file -p ":$p" | head -c 9 | grep -qa GITCRYPT || echo "PLAINTEXT: $p"; done   # no output = all encrypted
+git commit -m "Encrypt <target> with git-crypt" -- .gitattributes <path>...
+```
+
+- **Check three things**: the worktree reads as plaintext locally / after the push, the remote blob is ciphertext (on GitHub, `gh api repos/<owner>/<repo>/contents/<path>?ref=<branch> -H 'Accept: application/vnd.github.raw' | head -c 9` gives `\0GITCRYPT`) / the content equals the commit before the switch (`cmp <(git show HEAD~1:<path>) <path>`). The readability check (`scripts/check-gitcrypt-readable.py`) covers the local worktree and the committed blobs.
+- **Versions in commits before the switch stay in plaintext.** Removing them needs a history rewrite ([`sensitive-repo-patterns.md`](sensitive-repo-patterns.md), Pattern 2-5). The switch alone only protects future versions.
+- **Other machines' clones get ciphertext in those files on the next pull.** Run `git-crypt unlock <key>` there (with no uncommitted changes). A pull does not unlock (the git-crypt step of `setup.sh` does); until then that machine's readability check reports LOCKED.
+- Writing the targets as name patterns (`sessions/*/*.json` etc.) also encrypts files placed later under the same kind of name. Scripts and the explaining README can stay in plaintext (encrypted, the steps are unreadable to anyone without the key).
+
 ## Setting Up on Another Machine
 
 1. Transfer the key file securely (e.g., encrypted backup, direct copy via SSH)

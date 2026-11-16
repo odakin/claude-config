@@ -125,6 +125,24 @@ rm -rf /tmp/plain /tmp/enc-paths
 - **他の clone は、 古い鍵のまま pull しない** — 新しい鍵の commit を古い鍵で smudge できず、 変わった暗号化 file が作業 tree から消えたまま止まる (実測)。 順序は: 新しい鍵を置く → `git-crypt lock` → `git pull` (書き換えた履歴なら追従の道具) → `git-crypt unlock ~/.secrets/<repo>.key`。 もう壊れた clone は `git-crypt lock --force` → `git reset --hard origin/<branch>` → `git-crypt unlock <新しい鍵>` で戻る (未 commit の変更があれば先に退避)。 追従の道具 (`scripts/git-rewrite-follow.py`) は、 鍵が合わない clone を reset の前に止める。 ⚠️ **`lock --force` が戻すのは暗号化 file だけ** — 壊れ方によっては新しい履歴の平文 file (`.gitattributes` など) の変更と新しい未追跡 file が作業 tree に残り、 追従の `reset --keep` が「未 commit の変更が重なる」 で止まる (実測)。 その時は残った file が新しい履歴の版と同じか (`git show origin/<branch>:<path> | cmp - <path>`) を確かめ、 同じなら退避してから追従をやり直す。 違う file は、 新しい履歴の古い版 (`git log -p origin/<branch> -- <path>` で探す) か手元の編集かを確かめてから扱う (実測では、 途中まで書かれた版が新しい履歴の少し前の版だった)
 - 鍵の配布は 下の §「共有リポでの自動復元」 の形で (暗号化した鍵を共有フォルダに置き、 パスフレーズだけ別経路)
 
+## <a id="encrypt-existing-files"></a>平文で commit 済みの file を後から暗号化する
+
+git-crypt を使っていない repo の一部の file (台帳・一覧・記録) を、 後から暗号化に切り替えるとき。 中身は変えない:
+
+```bash
+# 未 commit の変更なしの clone で。 使い回しの鍵なら init せずに unlock だけで鍵と filter が入る (実測)。 専用の鍵なら git-crypt init
+git-crypt unlock ~/.secrets/git-crypt.key
+# .gitattributes に対象の path を書いてから、 index の blob を入れ直す (属性を足しただけでは、 index の blob は平文のまま)
+git rm --cached -q <path>... && git add .gitattributes <path>...
+for p in <path>...; do git cat-file -p ":$p" | head -c 9 | grep -qa GITCRYPT || echo "PLAINTEXT: $p"; done   # 何も出なければ全部暗号文
+git commit -m "<対象> を git-crypt に切り替える" -- .gitattributes <path>...
+```
+
+- **確かめるのは 3 つ** — 手元の作業 tree が平文で読める / push した後の remote の blob が暗号文 (GitHub なら `gh api repos/<owner>/<repo>/contents/<path>?ref=<branch> -H 'Accept: application/vnd.github.raw' | head -c 9` が `\0GITCRYPT`) / 中身が切り替えの前の commit と同じ (`cmp <(git show HEAD~1:<path>) <path>`)。 読めるかの検査 (`scripts/check-gitcrypt-readable.py`) は、 前の 2 つのうち手元と、 commit 済みの blob を見る
+- **切り替えより前の commit の版は平文のまま残る** — 消すなら履歴の書き換え ([`sensitive-repo-patterns.ja.md#pattern-2-5`](sensitive-repo-patterns.ja.md#pattern-2-5))。 切り替えだけでは「今後の版を守る」 にしかならない
+- **他の機械の clone は、 pull すると対象の file が暗号文になる** — その clone で `git-crypt unlock <鍵>` (未 commit の変更が無い状態で)。 pull だけでは解錠されない (解錠するのは `setup.sh` の git-crypt の段) = それまで、 その機械の読めるかの検査が LOCKED と出す
+- 対象を名の形 (`sessions/*/*.json` など) で書くと、 後で同じ形の名前で置いた file も暗号化される。 script と説明の README は平文に残せる (暗号化すると、 鍵の無い人に手順が読めない)
+
 ## 別端末でのセットアップ
 
 1. 鍵ファイルを安全に転送（暗号化バックアップ、SSH 経由の直接コピー等）
