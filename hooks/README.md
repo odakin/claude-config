@@ -43,6 +43,7 @@ setup.sh が `~/.claude/hooks/` に symlink する hook 群 (`*.sh` / `*.py` の
 - **[foreign-hunk-commit-nudge.test.sh](foreign-hunk-commit-nudge.test.sh)** — engine の selftest + hook 入出力 (相手の hunk → 知らせ / 自分の hunk だけ → 無音 / deny・off / 壊れた入力・engine 不在は無音)
 - **[git-state-nudge.sh](git-state-nudge.sh)** — PostToolUse(Bash): 直近 commit の未 push 検出 + first-sighting で fetch+stale 検出
 - **[git-state-nudge.test.sh](git-state-nudge.test.sh)** — git-state-nudge.sh の self-test (決定的 mock git repo ベース)
+- **[git-write-landed-check.py](git-write-landed-check.py)** — Bash で打った git commit / git push が実際に入ったかを、 走った後に確かめる。
 - **[gmail-read-email-cc-nudge.sh](gmail-read-email-cc-nudge.sh)** — Gmail MCP の read_email の出力のヘッダに Cc 行が無いとき、 「Cc 行が無い ≠ Cc が空」 とヘッダの読み方を 1 行添える (PostToolUse、 layer 1)
 - **[gmail-read-email-cc-nudge.test.sh](gmail-read-email-cc-nudge.test.sh)** — 発火 / 沈黙の検査
 - **[google-url-guard.sh](google-url-guard.sh)** — Google URL 安定性ガード — PreToolUse(Edit|Write|MultiEdit|Bash): /u/N/ 禁止 + `?authuser=<email>` 必須
