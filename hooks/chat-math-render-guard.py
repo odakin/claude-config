@@ -38,7 +38,7 @@ fire = session の entrypoint が claude-desktop / claude-desktop-3p (右パネ�
   地の文の `$$`・中身が省略記号だけの `$…$`。 生の `$` のまま出るのが書き手の意図 (直すものが無い)。
 挙動: fire 時 decision=block + reason (式ごとに 行番号・落ちた理由・直した形・直し方)。 返事の全文は出し直させず、
   崩れた式だけを直した形で並べる追記を書かせる (conventions/hook-authoring.md#stop-hook-addendum-not-reemission)。
-  直した形は `fix_text` (意味を変えない書き換え = 区切り・1 文字の添字の `{}`・`\(` の前の空白) を同じ判定式に通したものだけ出す。
+  直した形は `fix_text` (意味を変えない書き換え = 区切り・1 文字の添字の `{}`・`\\(` の前の空白) を同じ判定式に通したものだけ出す。
   stop_hook_active=true でも返事を判定する (#stop-hook-active-other-hooks): 今の続きの差し戻しの中にこの hook の差し戻しが
   あれば止めず数だけ記録、 他の hook の差し戻しだけなら 1 回止める、 続きの形が分からなければ黙る。
   表示の hook (hooks/chat-math-display-fix.py = MessageDisplay) がこの session で走った印 ($TMPDIR) があれば、 画面に出た

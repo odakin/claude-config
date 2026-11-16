@@ -887,9 +887,19 @@ The managed hook-code inventory is
 [`first_turn_stamp_check.py`](hooks/first_turn_stamp_check.py),
 [`manuscript_claim_guard.py`](hooks/manuscript_claim_guard.py),
 [`board_surface.py`](hooks/board_surface.py),
+[`parent_wrap_observe.py`](hooks/parent_wrap_observe.py),
 [`session_touch.py`](hooks/session_touch.py), and
 [`worker_record_context.py`](hooks/worker_record_context.py); its regression suite is
 [`codex-hooks.test.sh`](hooks/codex-hooks.test.sh).
+
+`parent_wrap_observe.py` runs at Stop and at a resumed SessionStart. Inside the
+workspace, and outside a sealed (`# Isolated`) directory, it asks
+[`codex-thread-close.py`](../scripts/codex-thread-close.py) `parent <thread> --json`
+over the owner-audience boards which accepted workers of this thread are kept
+open only by a missing or stale wrap, and names up to five of them (Stop as
+`systemMessage`, SessionStart as `additionalContext`). It only reports: it
+dispatches nothing and is silent when no board, no worker or no such worker is
+found, or when the checker fails.
 
 `board_surface.py` is the SessionStart adapter of the board engine's
 `board-session-start.py` (layer 1, cloned next to this repository): on the
