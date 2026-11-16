@@ -200,7 +200,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 - 掲示板の依頼の状態 (誰の番か・閉じたか) を SESSION・入口の一覧・TODO に書く前も、 5 の報告と同じく `show --request <id> --sync` で読み直す (実測: 提出の後に相手が受け取って閉じていたのに、 手元の記憶から「相手の番」 と書いて commit し、 書き直しの commit が要った)。
 - メールを送った・受けたなら記録の道具で記録する。
 - <a id="deferrals"></a>この session が記録や返事に書いた先送り (「次に〜するとき」「後で」「推す = 〜 (次の機会に)」) は、 締めの中で今やるか、 期限つきの TODO・plan・掲示板の依頼に載せる。 記録の中の「次に〜とき」 は carrier ではない (次の session はその文を探さない)。 返事の中で自分に約束した先送り (「返事が来たら、 次にこの session で見たときに伝えます」) も同じで、 session は持ち主が閉じる = 待ちを運ぶのは session の外の carrier (新着を拾う surface・期限つき TODO) で、 返事ではその carrier を名指しする (実測)。 拾い方 = 0.3 の `session-claims-report.py` の B
-- 一時 dir (scratchpad・`/tmp`) に置いた成果 (候補・証拠・出力) は、 残すなら repo に移して所在を正本に書き、 要らないなら消す (一時 dir は session の後にだれも見つけられない)。 個人情報を含む複製 (記入済みの様式・刷った PDF) は必ず消す。
+- 一時 dir (scratchpad・`/tmp`・desktop の side session が共有する notes の folder = 家族の session の archive で app が消す、 [`multi-session-coordination.md#side-session-notes-deleted-on-archive`](multi-session-coordination.md#side-session-notes-deleted-on-archive)) に置いた成果 (候補・証拠・出力) は、 残すなら repo に移して所在を正本に書き、 要らないなら消す (一時 dir は session の後にだれも見つけられない)。 掲示板の note・提出が一時 dir の path を指していれば、 repo の path に書き直す。 個人情報を含む複製 (記入済みの様式・刷った PDF) は必ず消す。
 
 ## <a id="commit"></a>4. commit + push
 
