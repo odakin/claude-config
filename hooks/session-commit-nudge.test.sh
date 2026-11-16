@@ -311,6 +311,32 @@ track_edit "$SID" "$REPO15/file.txt"
 OUT="$(stop_check_with "" "" "$SID")"
 assert_nudge "case 15: no engine → the usual dirty line" "$OUT" "$REPO15"
 
+# --- case 16: Bash の後に landed check が知らせた path は、 同じ turn の Stop で数えない ---
+SID="sid-case16-$$"
+REPO16="$(mk_repo case16)"
+echo "x" > "$REPO16/flagged.txt"
+track_edit "$SID" "$REPO16/flagged.txt"
+printf '%s\t%s\n' "$(git -C "$REPO16" rev-parse --show-toplevel)" "flagged.txt" > "$SESSION_TOUCH_STATE_DIR/$SID.landed-flagged"
+OUT="$(stop_check "$SID")"
+assert_silent "case 16a: only the flagged path is dirty → silent" "$OUT"
+if [ ! -f "$SESSION_TOUCH_STATE_DIR/$SID.landed-flagged" ]; then
+  PASS=$((PASS+1)); printf '  ✓ case 16b: the flagged list is cleared at the turn end\n'
+else
+  FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  ✗ case 16b (flagged list left behind)\n"
+  printf '  ✗ case 16b: flagged list left behind\n'
+fi
+echo "y" > "$REPO16/other.txt"
+OUT="$(stop_check "$SID")"
+assert_nudge "case 16c: next turn counts again (flagged list gone)" "$OUT" "case16: 2 file"
+SID="sid-case16d-$$"
+REPO16D="$(mk_repo case16d)"
+echo "x" > "$REPO16D/flagged.txt"
+echo "y" > "$REPO16D/other.txt"
+track_edit "$SID" "$REPO16D/other.txt"
+printf '%s\t%s\n' "$(git -C "$REPO16D" rev-parse --show-toplevel)" "flagged.txt" > "$SESSION_TOUCH_STATE_DIR/$SID.landed-flagged"
+OUT="$(stop_check "$SID")"
+assert_nudge "case 16d: an unflagged dirty path still counts (1 file)" "$OUT" "case16d: 1 file"
+
 # ======================================================================
 echo ""
 echo "=== Result: PASS=$PASS FAIL=$FAIL ==="

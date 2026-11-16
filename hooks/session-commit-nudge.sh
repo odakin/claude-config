@@ -203,6 +203,14 @@ case "$MODE" in
 
     # Build nudge body, listing each dirty repo with file count.
     # 層1 の repo で push できない人の clone は L1_BODY (PR の勧め) に回し、 dirty の行には入れない
+    # 同じ turn の Bash の後に hooks/git-write-landed-check.py が「commit が入っていない」 と窓に知らせた path
+    # (FLAGGED_FILE、 1 行 = repo の root<TAB>path) は数えない (二重に鳴らさない)。 読んだら消す = turn の境目
+    FLAGGED_FILE="$STATE_DIR/$SESSION_ID.landed-flagged"
+    FLAGGED=""
+    if [ -f "$FLAGGED_FILE" ]; then
+      FLAGGED="$(cat "$FLAGGED_FILE" 2>/dev/null || true)"
+      rm -f "$FLAGGED_FILE" 2>/dev/null || true
+    fi
     upstream_pr_engine
     BODY=""
     L1_BODY=""
@@ -217,7 +225,18 @@ case "$MODE" in
           continue
         fi
       fi
-      DIRTY_COUNT="$(git -C "$REPO" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+      if [ -n "$FLAGGED" ]; then
+        # porcelain の path (4 字目から) のうち、 この repo で知らせ済みの path を外して数える
+        REPO_FLAGGED="$(printf '%s\n' "$FLAGGED" | awk -F '\t' -v r="$REPO" '$1 == r { print $2 }')"
+        if [ -n "$REPO_FLAGGED" ]; then
+          DIRTY_COUNT="$(git -C "$REPO" status --porcelain 2>/dev/null | cut -c4- \
+            | grep -vxF "$REPO_FLAGGED" | wc -l | tr -d ' ')"
+        else
+          DIRTY_COUNT="$(git -C "$REPO" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+        fi
+      else
+        DIRTY_COUNT="$(git -C "$REPO" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+      fi
       if [ "$DIRTY_COUNT" -gt 0 ]; then
         BODY="${BODY}  - ${REPO}: ${DIRTY_COUNT} file(s) dirty
 "
