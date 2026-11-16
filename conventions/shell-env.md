@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **Bash tool の `grep -r` で網羅を主張する瞬間** (= ugrep として `.gitignore` を読む、 `#bash-tool-grep-ignores-gitignore`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) + **macOS の unified log を `log show` で読む瞬間** (= zsh の組み込みに取られる、 `#zsh-log-builtin`) + **同じ message に Bash を並べる瞬間** (= `cd` が効かず別の場所で走る、 `#same-message-bash-cd-dropped`) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
+when: PATH 消失・shell 環境変数まわりを触るとき + **user に貼り付けて実行してもらうコマンドを chat に書く瞬間** + **Claude が Bash tool で複数の対象を loop で走査する 1-liner を書く瞬間** (= zsh は未 quote の変数を単語分割しない、 `#claude-issued-shell-commands`) + **Bash tool の `grep -r` で網羅を主張する瞬間** (= ugrep として `.gitignore` を読む、 `#bash-tool-grep-ignores-gitignore`) + **変数の直後に `:` を書く瞬間** (= `"$c:path"` は zsh の修飾子になる) + **macOS の unified log を `log show` で読む瞬間** (= zsh の組み込みに取られる、 `#zsh-log-builtin`) + **同じ message に Bash を並べる瞬間** (= `cd` が効かず別の場所で走る、 `#same-message-bash-cd-dropped`) + **本人に Claude の入力欄の `!` で打ってもらう 1 行を渡す瞬間** (= 端末では履歴展開で別の command が走る、 `#bang-line-not-for-terminal`) (= 行内 `#` / `~` の zsh 固有罠。 コマンドを 1 行でも提示するなら該当)
 category: macos
 summary: シェル環境（PATH 二層防御: .zprofile 修正 + スナップショットパッチ、macOS deny ルール） + ユーザーに貼り付けさせるコマンドの zsh 固有罠 2 件 (= 行内 # はコメントにならない / `env VAR=~/x` は tilde 展開されず literal `~` dir が cwd 配下に生える、 どちらも bash では踏まない非対称。 framework は paste-destined-plain-text.md) + 受け手側の保険 = `.zshrc` に `setopt interactive_comments` (= 1 行で行内/行頭 # とも直るが、 提示先の環境を選べない以上 出し手の規律の代替にはならない) + Claude が発行するコマンドも zsh (= 未 quote の変数は単語分割されず、 cd 失敗後も loop が別の対象を走査して結果を返した 2026-09-11 の 2 件目で規約化。 対象の解決に失敗したら止め、 何を走査したかを印字する。 3 件目 = `"$c:path"` の `:s` が置換修飾子として残りを飲み込み別の object を表示した、 `${c}:path` と書く) + `#ambiguous-identifier-in-issued-commands` = 受け手は shell とは限らない — コマンドに埋める識別子が**受け手の別構文と一致**すると違う対象を指す (= short sha が全桁数字だと `git stash show <N>` が stash index と解釈。 確率的にしか落ちないので CI の flaky に化ける → test には性質そのものを固定する)
 -->
@@ -321,6 +321,17 @@ git stash show --name-only 123456a   # error: 123456a is not a valid reference  
 **背景 (2026-09-12)**: [`scripts/repo-sync-sweep.sh`](../scripts/repo-sync-sweep.sh) の「stash が別 process に pop された」 案内が short sha を埋めており、 CI で 1 回だけ `FAIL: 比較手順が使えない (sha='1168850')`。 再実行で緑になるので flaky に見えた
 
 <a id="stash-show-no-pathspec"></a>**同じ族の近縁 — `git stash show` は path を取らない**: `git stash show -p 'stash@{0}' -- <path>` は `--` の後ろも revision と読み `Too many revisions specified` で rc 1 (実測 git 2.39)。 stash の 1 file だけを見るなら、 stash の commit とその親の diff にする: `git diff 'stash@{0}^1' 'stash@{0}' -- <path>` (未追跡 file を含めた stash の分は `'stash@{0}^3'` 側)。 stash を drop する前に中身を file 単位で確かめる時に踏むが、 実体は **3.7% で user に壊れた手順を渡していた**バグだった。
+
+## <a id="bang-line-not-for-terminal"></a>Claude の入力欄の `!` で打ってもらう 1 行を、 端末に打たせない (履歴展開)
+
+Claude Code の入力欄では、 行頭に `!` を付けた行が shell の command として走る (bash mode)。 本人に「`!` を付けてこの 1 行を打って」 と渡すと、 本人が端末 (Terminal・iTerm の tab) に打つことがある。
+対話の zsh・bash では行頭の `!` は **履歴展開** で、 `!bash ~/x.sh` は「履歴の中で最後に `bash` で始まった command」 に置き換わり、 `~/x.sh` はその後ろに引数として付く = 渡した script でなく、 前に打った別の script が走る
+(実測: 履歴に残っていた、 元に戻せない操作をする古い script が走りかけた。 その script が自分の前提の確かめで途中で止まったので、 何も起きなかった)。
+
+- `!` の 1 行を渡すときは、 打つ場所を名指す (「この会話の入力欄に。 端末ではなく」)。 端末に打ってもらう command には `!` を付けない
+- 同じ Mac の端末の tab に Claude が command を出せるなら、 本人に打たせず tab に出す (本人の操作は承認と code の入力だけ)
+- 本人が端末に打った後なら、 渡した command が走った前提で進めない = 何が走ったか (履歴の該当の行・出力) を先に確かめ、 手順を言い直す
+- 元に戻せない操作をする script は、 違う引数・違う状態で起こされても既定で止まる形 (dry-run が既定・前提の確かめ) にしておく = 誤って起こされても何も起きない
 
 ## <a id="bound-command-runtime"></a>Bind reusable command runtimes at installation
 
