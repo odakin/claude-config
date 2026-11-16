@@ -199,6 +199,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - ⚠️ 比較の記憶を `id()` で引かない。 一時の node の id は使い回されるので、 組むたびに結果が変わる (実測)。 生成の道具は同じ入力で 2 回回し、 頁の文字が一致することを確かめる (`latexdiff-views-check.py --same a.pdf b.pdf`)。
 - ⚠️ 式の中の自作 macro (別名と引数の数) は preamble の `\newcommand` / `\renewcommand` / `\providecommand` と、 `\def` / `\let` の別名 (`\def\hh{\widehat}` / `\let\hh\widehat`) と `\def\X#1#2{…}` の引数の数から読む (`protect` は両版から、 `restore` は diff.tex から)。 区切りのある引数の `\def` (`\def\X#1.{…}`) と `\edef` / `\gdef` は読まないので、 その形の帽子は足した帽子だけが印に入って引数から離れ (`\DIFadd{\hh }x`)、 組版が `Missing { inserted` か `Argument of \mathaccentV has an extra }` で止まる (どちらが出るかは accent の定義による)。 道具の読み戻しは新旧を同じように読み違えるので、 この形を見つけない = 組版の止まりが最初の合図。 diff.tex で印の中で閉じた macro を探し、 両版でその定義を `\newcommand` に書き換えてから `protect` に渡す (実測)。
 - engine ([`latexdiff-review-snapshot.sh`](../scripts/latexdiff-review-snapshot.sh)) には組み込んでいない = repo の手順の script から呼ぶ。
+- <a id="latexdiff-eqtree-moved-sections"></a>節を付録へ丸ごと動かす版 (式が数十本動く) は、 fine の手順の向かない典型 (実測: 動かした式の消された写しで構造の命令 〔`\over`・波括弧〕 が印なしで落ちて無印の検査が数十件になり、 形を書き換えた式を whole に差し替える段は、 消された写しの label が落ちているので次の図・節の label を拾って止まった)。 この道具の経路では、 動かした式は旧の場所に取り消し線・新の場所に下線で出る。 道具が自分で直す形が 2 つある (どちらも実測から): 括弧の macro の 1 字の引数 (`\ab\t` = TeX が読むとおり `\ab{\t}` と読む) と、 latexdiff が placeholder の 3 語目を消した側と足した側の両方の頭に入れた形 (display の後の文が両側で変わった所。 `restore` が語を共通の側へ出してから埋める)。 repo の手順の script が括弧の macro を素の括弧に直す段 (波括弧つきの形だけを直すもの) を持つなら、 1 字の引数はその段の前に波括弧で包む。
 
 ## <a id="latexdiff-views-check"></a>差分 PDF を元の 2 版に読み戻して確かめる (`latexdiff-views-check.py`)
 
@@ -207,6 +208,7 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - 新の側は一致が合格 (数字・括弧・ハイフンを除く)。 合わなければ exit 1。
 - 読み戻しは印の置き場所を見ない — 挿入の位置が一意でない差分は、 印が 1 行ずれても 2 版に同じに読み戻る ([#latexdiff-row-insert-shift](#latexdiff-row-insert-shift))。 合格の後も、 変わった頁を画像で見る ([#latexdiff-render-changes](#latexdiff-render-changes))。
 - 旧の側は読むだけ。 新にしかない display は番号の空行として残り、 新にしかない節と図は label と図そのものが残り、 latexdiff が語の間の空白を追加の側に入れた所は語がつながる (実測)。 出た語がこの 3 つで説明できることを見る。
+- <a id="latexdiff-views-check-deleted-headings"></a>節を消した・動かした差分では、 新の側も一致しない形が 2 つある (実測): latexdiff は消した節の見出しの命令を残すので、 追加だけを残した版はその番号 (`4.2`・`D`) を空の題で刷る。 そのぶん頁番号がずれて、 目次の点線の数が変わる。 この 2 つだけなら `--excuse-headings` で通す (既定は落とす = 付けるのは節を消した・動かした差分だけ)。 目次の頁を除いて、 残る差の字が番号だけの語の差の字とぴったり一致する時だけ通し、 通した番号を印字する。 ほかの語が 1 つでも違えば、 付けていても落ちる。
 - <a id="latexdiff-flatten-bbl"></a>BibTeX の原稿を `latexdiff --flatten` で比べたなら、 2 版も `.bbl` を埋め込んでから渡す — `--flatten` は両版の隣の `.bbl` を差分の本文に埋め込む。 2 版を `\bibliography{…}` のまま渡すと、 道具が 2 版に写すのは差分の側の `.bbl` (埋め込んだ差分に BibTeX を回すと `\bibdata` が無いので空) なので、 2 版に文献表が出ず、 文献表の語の分だけ差が出て落ちる (実測)。 2 版の `\bibliography{…}` をそれぞれの版の `.bbl` の中身で置き換えて渡し、 差分そのものには BibTeX を回さない。
 
 ## <a id="latexdiff-deleted-blank-lines"></a>latexdiff は削除された空行を comment out できない — diff PDF と live で段落の切れ方が違ったら削除空行の残留を疑う (2026-09-08)

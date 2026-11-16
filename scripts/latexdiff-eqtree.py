@@ -347,9 +347,15 @@ def parse_seq(s, i, stop):
             elif kind in DELIM_MACRO:
                 while s[j].isspace():
                     j += 1
-                if s[j] != "{":
-                    raise ValueError("\\%s without a brace argument" % name)
-                kids, i = parse_seq(s, j + 1, "}")
+                if s[j] == "{":
+                    kids, i = parse_seq(s, j + 1, "}")
+                else:
+                    # one-token argument, as TeX reads it: \ab\t, \ab F (rendered back with braces = the same macro call)
+                    mt = CTRL.match(s, j)
+                    tok, i = (mt.group(0), mt.end()) if mt else (s[j], j + 1)
+                    if tok in ("}", "\\\\", "&") or tok.isspace():
+                        raise ValueError("\\%s without an argument" % name)
+                    kids, _ = parse_seq(tok + "}", 0, "}")
                 k = DELIM_MACRO[kind]
                 items.append(Delim(k, kids, "\\" + name + "{", "}"))
             elif name in NEUTRAL:
@@ -1106,9 +1112,24 @@ def protect(op, np, tp, wide=None):
 
 
 # --- filling the placeholders in ---------------------------------------------------------------------
+SPLIT_TAIL = re.compile(r"(EQBLKa(\d+)q\s+EQBLKb\2q)\s*\\DIFdelbegin \\DIFdel\{EQBLKc\2q(\s*)(.*?)\}\\DIFdelend \\DIFaddbegin "
+                        r"\\DIFadd\{EQBLKc\2q\s*", re.S)
+
+
+def join_split_tails(s):
+    """latexdiff can put the third word of a placeholder at the head of both the deleted and the added group, when the
+    text after the display changed on both sides (measured: a display whose following paragraph was replaced).  The
+    word is common to both sides: take it out of the two groups.  (s, n) as re.subn."""
+    return SPLIT_TAIL.subn(lambda m: "%s EQBLKc%sq%s\\DIFdelbegin \\DIFdel{%s}\\DIFdelend \\DIFaddbegin \\DIFadd{"
+                           % (m.group(1), m.group(2), m.group(3), m.group(4)), s)
+
+
 def fill(s, table, moved):
     """Replace placeholders; one that sits inside \\DIFdel{...} or \\DIFadd{...} splits that group."""
     pat = re.compile(r"EQBLKa(\d+)q\s+EQBLKb\1q\s+EQBLKc\1q")
+    s, n = join_split_tails(s)
+    if n:
+        print("placeholders whose third word latexdiff had put in both groups, taken out: %d" % n)
     while True:
         m = pat.search(s)
         if not m:
@@ -1312,6 +1333,24 @@ def selftest():
             "\\sq{\\DIFdel{f}\\DIFadd{g}}" not in r:
         ok = False
         print("\\def / \\let from the preamble:", r)
+    # a delimiter macro with a one-token argument, as TeX reads it (\ab\t = \ab{\t})
+    r = diff_seq(parse(r"\ab\t+\ab F"), parse(r"\ab{\t}+\ab G"))
+    try:
+        check_formula(r, r"\ab\t+\ab F", r"\ab{\t}+\ab G", "selftest")
+    except SystemExit as ex:
+        ok = False
+        print(ex)
+    if "\\DIFdel{F}" not in r or "\\DIFadd{G}" not in r or r.count("\\DIF") != 2:
+        ok = False
+        print("one-token argument:", r)
+    # the third word of a placeholder put by latexdiff at the head of both groups
+    split = ("x EQBLKa7q EQBLKb7q \\DIFdelbegin \\DIFdel{EQBLKc7q\nOld words.}\\DIFdelend \\DIFaddbegin \\DIFadd{EQBLKc7q\n"
+             "New words.}\\DIFaddend y")
+    joined, n = join_split_tails(split)
+    if n != 1 or "EQBLKa7q EQBLKb7q EQBLKc7q\n\\DIFdelbegin \\DIFdel{Old words.}\\DIFdelend \\DIFaddbegin \\DIFadd{New words.}" \
+            not in joined:
+        ok = False
+        print("split placeholder:", n, joined)
     pic = mark_picture("\\node {$f\\fn{a-b}$};\nx", "\\node {$f\\fn{a-c}$};\nx")
     if "\\DIFdel{b}" not in pic or "\\DIFadd{c}" not in pic or not pic.startswith("\\node {$"):
         ok = False

@@ -12,7 +12,7 @@ compile them and the two versions with the same bibliography, and compare the ex
 Characters, not words: line breaks, hyphenation and page order then do not matter.  The check knows
 nothing of how the marks were made.
 
-    latexdiff-views-check.py diff.tex old.tex new.tex [--engine pdflatex]
+    latexdiff-views-check.py diff.tex old.tex new.tex [--engine pdflatex] [--excuse-headings]
     latexdiff-views-check.py --same a.pdf b.pdf     (the same text on every page? for two builds of one input)
     latexdiff-views-check.py --selftest
 
@@ -21,6 +21,13 @@ new.tex must be flat, as given to latexdiff).  Exit 1 if a character other than 
 a hyphen differs on the new side: the new version has to come back exactly.  The old side is printed
 for reading: numbers of displays that exist only in the new version stay as empty numbered lines, and
 a section or caption that exists only there leaves its label, so it does not come back exactly.
+
+--excuse-headings (off by default): a deleted \\section / \\subsection keeps its command in the diff, so the view with
+the deletions dropped prints its number with an empty title (4.2, D) and the page numbers move by one, which changes
+the dot leaders of the table of contents.  With the flag, a new side that differs only there passes: the pages of the
+table of contents are dropped and the characters that still differ must be exactly those of the tokens that are only a
+heading number (printed as excused).  Any other difference still fails.  (Measured on a manuscript whose sections moved
+to an appendix: every difference on the new side was of these two kinds.)
 Convention: conventions/latex.md#latexdiff-views-check.
 """
 import collections
@@ -63,7 +70,32 @@ def compare(view, plain):
     return d, sorted((wa - wb).items()), sorted((wb - wa).items())
 
 
-def run(diff, old, new, engine="pdflatex"):
+HEADING_NO = re.compile(r"^[A-Z](\.\d+)*$|^\d+(\.\d+)+$")      # D, D.1, 4.2 = the number of a heading with an empty title
+
+
+def toc_free_text(pdf):
+    """The text without the pages of the table of contents (their dot leaders follow the page numbers)."""
+    import fitz
+    pages = [p.get_text() for p in fitz.open(pdf)]
+    return re.sub(r"-\n", "", "\n".join(t for t in pages if not re.search(r"Contents|目次", t[:300])))
+
+
+def heading_numbers_only(view, plain):
+    """--excuse-headings: True if, outside the table of contents, the characters that differ are exactly those of
+    tokens that are only a heading number (latexdiff keeps the sectioning command of a deleted section, so the view
+    with the deletions dropped prints its number with an empty title; measured: 4.2, 4.3 and D)."""
+    a, b = toc_free_text(view), toc_free_text(plain)
+    x, y = chars(a), chars(b)
+    d = {c: v for c, v in ((x - y) + (y - x)).items() if c not in NOISE}
+    ta = collections.Counter(t for t in a.split() if HEADING_NO.match(t))
+    tb = collections.Counter(t for t in b.split() if HEADING_NO.match(t))
+    lone = collections.Counter(c for t, n in ((ta - tb) + (tb - ta)).items() for _ in range(n) for c in t if c not in NOISE)
+    print("  outside the table of contents: %s differ; the heading-number tokens account for %s"
+          % (dict(d) or "nothing", dict(lone) or "nothing"))
+    return d == dict(lone), sorted(((ta - tb) + (tb - ta)).elements())
+
+
+def run(diff, old, new, engine="pdflatex", excuse_headings=False):
     d = os.path.dirname(os.path.abspath(diff))
     os.chdir(d)
     s = open(os.path.basename(diff), encoding="utf-8").read()
@@ -85,6 +117,11 @@ def run(diff, old, new, engine="pdflatex"):
         if dc:
             print("  words only in the view:", only_view[:40])
             print("  words only in the version:", only_plain[:40])
+        if tag == "new" and dc and excuse_headings:
+            ok, tokens = heading_numbers_only(view, plain)
+            if ok:
+                print("  excused (--excuse-headings): the table of contents and the heading numbers %s" % tokens)
+                dc = {}
         bad += tag == "new" and bool(dc)
     return 1 if bad else 0
 
@@ -121,8 +158,24 @@ def selftest():
             os.chdir(cwd)
             open(p, "w").write(wrong)
             second = run(p, "o.tex", "n.tex")
+            os.chdir(cwd)
+            # a deleted subsection keeps its command: the view prints "1.2" with an empty title (--excuse-headings)
+            toc = "\\begin{document}\n\\tableofcontents\n\\newpage\n\\section{S}\n"
+            for name, body in (("o", "\\subsection{Alpha}\nOne.\n\\subsection{Beta}\nTwo."), ("n", "\\subsection{Beta}\nTwo.")):
+                open(os.path.join(tmp, name + ".tex"), "w").write(head + toc + body + "\n\\end{document}\n")
+            moved = head + marks + toc + "\\subsection{\\DIFdel{Alpha}}\n\\DIFdel{One.}\n\\subsection{Beta}\n%s\n\\end{document}\n"
+            open(p, "w").write(moved % "Two.")
+            third = run(p, "o.tex", "n.tex")
+            os.chdir(cwd)
+            fourth = run(p, "o.tex", "n.tex", excuse_headings=True)
+            os.chdir(cwd)
+            open(p, "w").write(moved % "Three.")
+            fifth = run(p, "o.tex", "n.tex", excuse_headings=True)
         finally:
             os.chdir(cwd)
+    if (third, fourth, fifth) != (1, 0, 1):
+        print("selftest: --excuse-headings FAILED (%d, %d, %d), expected (1, 0, 1)" % (third, fourth, fifth))
+        return 1
     ok = first == 0 and second == 1
     print("selftest:", "ok" if ok else "FAILED (%d, %d)" % (first, second))
     return 0 if ok else 1
@@ -141,7 +194,7 @@ def main(argv):
     if len(args) != 3:
         print(__doc__)
         return 2
-    return run(*args, engine=engine)
+    return run(*args, engine=engine, excuse_headings="--excuse-headings" in argv)
 
 
 if __name__ == "__main__":
