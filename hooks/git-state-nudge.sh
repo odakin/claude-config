@@ -375,6 +375,15 @@ if command -v jq >/dev/null 2>&1 && [ ! -t 0 ]; then
   fi
 fi
 
+# Landed check: the legacy nudges below print plain stdout, which a
+# PostToolUse hook does not hand back to the window. They are captured here so
+# that, when hooks/git-write-landed-check.py finds a commit or push that did not
+# land, everything goes back as one additionalContext JSON. Otherwise the
+# legacy text is printed unchanged. 正本 = hooks/git-write-landed-check.py の冒頭
+LEGACY_TMP="$(mktemp "${TMPDIR:-/tmp}/git-state-nudge.XXXXXX" 2>/dev/null || echo '')"
+exec 4>&1
+[ -n "$LEGACY_TMP" ] && exec 1>"$LEGACY_TMP"
+
 # Track repos already inspected so we don't double-warn for cwd + git -C
 # pointing at the same place.
 CHECKED_REPOS=""
@@ -512,6 +521,40 @@ if [ -d "$CC_DIR/.git" ]; then
       printf '  - Full details: ~/Claude/claude-config/SESSION.md\n'
     fi
   fi
+fi
+
+# ----------------------------------------------------------------------
+# Landed check: did the commit / push in this command actually land?
+# Prefilter = a superset of the engine's predicate (the words commit / push),
+# so python starts only for those commands (hook-authoring.md#prefilter-superset-of-predicate).
+# ----------------------------------------------------------------------
+exec 1>&4 4>&-
+LEGACY_OUT=""
+if [ -n "$LEGACY_TMP" ]; then
+  LEGACY_OUT="$(cat "$LEGACY_TMP" 2>/dev/null || true)"
+  rm -f "$LEGACY_TMP" 2>/dev/null || true
+fi
+LANDED_MSG=""
+if [ -n "$BASH_CMD" ] && command -v python3 >/dev/null 2>&1 \
+   && grep -qE '(^|[^A-Za-z0-9_-])(commit|push)([^A-Za-z0-9_-]|$)' <<< "$BASH_CMD" 2>/dev/null; then
+  SELF="${BASH_SOURCE[0]}"
+  while [ -L "$SELF" ]; do
+    LINK="$(readlink "$SELF")"
+    case "$LINK" in /*) SELF="$LINK" ;; *) SELF="$(dirname "$SELF")/$LINK" ;; esac
+  done
+  LANDED_ENGINE="$(dirname "$SELF")/git-write-landed-check.py"
+  if [ -f "$LANDED_ENGINE" ]; then
+    LANDED_MSG="$(printf '%s' "$STDIN_JSON" | python3 "$LANDED_ENGINE" 2>/dev/null || true)"
+  fi
+fi
+if [ -n "$LANDED_MSG" ]; then
+  if [ -n "$LEGACY_OUT" ]; then
+    LANDED_MSG="$LANDED_MSG
+$LEGACY_OUT"
+  fi
+  jq -n --arg m "$LANDED_MSG" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $m}}'
+elif [ -n "$LEGACY_OUT" ]; then
+  printf '%s\n' "$LEGACY_OUT"
 fi
 
 exit 0

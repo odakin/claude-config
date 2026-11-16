@@ -151,6 +151,50 @@ else
   fail=$((fail+1)); results+=("❌ T9: git -C follow 不発 (got: ${out:0:120})")
 fi
 
+echo "=== landed check (commit / push が入ったか、 git-write-landed-check.py) ==="
+# 窓に返る形 = additionalContext の JSON。 入った commit は黙り、 入らなかった commit は名指した path を出す。
+LAND="$BASE/land"; git clone -q "$REMOTE" "$LAND"; setup_ident "$LAND"
+printf 'x\n' >> "$LAND/file.md"
+git_quiet "$LAND" commit -qm ok -- file.md
+git_quiet "$LAND" push -q
+out="$(run_hook "$LAND" "git commit -qm ok -- file.md && git push -q")"
+if ! grep -q 'additionalContext' <<< "$out"; then
+  pass=$((pass+1)); results+=("✅ T10: 入った commit + push → landed の知らせなし")
+else
+  fail=$((fail+1)); results+=("❌ T10: 入った commit で知らせが出た (got: ${out:0:160})")
+fi
+printf '#!/bin/sh\nexit 1\n' > "$LAND/.git/hooks/pre-commit"; chmod +x "$LAND/.git/hooks/pre-commit"
+printf 'y\n' >> "$LAND/file.md"
+git -C "$LAND" commit -qm refused -- file.md >/dev/null 2>&1
+out="$(run_hook "$LAND" "git commit -qm refused -- file.md 2>&1 | grep -E 'rejected|ERROR'; git push -q")"
+if printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("commit が入っていない.*file.md")' >/dev/null 2>&1; then
+  pass=$((pass+1)); results+=("✅ T11: 断られた commit (出力を grep で絞った形) → 窓に返る JSON で file.md を名指す")
+else
+  fail=$((fail+1)); results+=("❌ T11: 断られた commit の知らせが無い (got: ${out:0:160})")
+fi
+rm -f "$LAND/.git/hooks/pre-commit"
+git_quiet "$LAND" commit -qm later -- file.md
+printf '#!/bin/sh\nexit 1\n' > "$REMOTE/hooks/pre-receive"; chmod +x "$REMOTE/hooks/pre-receive"
+git -C "$LAND" push -q >/dev/null 2>&1
+out="$(run_hook "$LAND" "git push -q 2>/dev/null | tail -1")"
+rm -f "$REMOTE/hooks/pre-receive"
+if printf '%s' "$out" | jq -e '.hookSpecificOutput.additionalContext | test("push が終わっていない")' >/dev/null 2>&1; then
+  pass=$((pass+1)); results+=("✅ T12: 断られた push → 窓に返る JSON で知らせる")
+else
+  fail=$((fail+1)); results+=("❌ T12: 断られた push の知らせが無い (got: ${out:0:160})")
+fi
+out="$(run_hook "$LAND" "git status --short")"
+if ! grep -q 'additionalContext' <<< "$out"; then
+  pass=$((pass+1)); results+=("✅ T13: commit / push の無い command → landed check は走らない")
+else
+  fail=$((fail+1)); results+=("❌ T13: commit / push の無い command で知らせ (got: ${out:0:160})")
+fi
+if python3 "$(dirname "$HOOK")/git-write-landed-check.py" --selftest >/dev/null 2>&1; then
+  pass=$((pass+1)); results+=("✅ T14: git-write-landed-check.py --selftest")
+else
+  fail=$((fail+1)); results+=("❌ T14: git-write-landed-check.py --selftest が落ちた")
+fi
+
 echo ""
 echo "=== 結果 ==="
 for r in "${results[@]}"; do echo "  $r"; done
