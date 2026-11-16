@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 人 (学生・応募者など) を指す path・台帳の id・commit message を付けるとき (#role-words-in-names) / 履歴から個人情報を消すとき (#history-scrub-identity-from-all-versions) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 較正・再現で読んだ非公開の値を公開 repo の例・selftest に書くとき (#session-carryover-gate) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
+when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 人 (学生・応募者など) を指す path・台帳の id・commit message を付けるとき (#role-words-in-names) / 履歴から個人情報を消すとき (#history-scrub-identity-from-all-versions) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / 暗号化した台帳の文や、 台帳から作った一覧の行を平文に写す commit を止める門を作る・較正するとき (#ledger-and-listing-copy-gate) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 較正・再現で読んだ非公開の値を公開 repo の例・selftest に書くとき (#session-carryover-gate) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
 category: infra
 summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (入室の暗証番号は暗号化 repo にも入れず所在だけ記録 #physical-access-codes、 通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる、 触れない dir の中身を機械で処理する必要が出ても deny を外して戻す形にしない (外れている間は dir 全体が無関係な call にも開く) = user が 1 file だけ許可 scope に複製 → 作業 → 複製と中間生成物を消す、 複製は元の SoT から分岐し記録には file 名も中身も書かない
 -->
@@ -184,6 +184,15 @@ schema (= そもそも書けなくする) で守る。 片方で両方を守ろ�
 
 ⚠️ ASCII だけの識別子 (file 名等) は日本語比率の下限で落ちる。 そこは pattern 照合が担当する
 = **役割分担**であって、 片方の閾値を緩めて両方を拾おうとしない。
+
+### <a id="ledger-and-listing-copy-gate"></a>暗号化した台帳の文と自前の一覧の行を、 平文に写す commit で止める
+
+git-crypt は台帳の path を守るだけで、 台帳の文を別の path に写した平文は守らない (§1)。 写しの経路 (会話記録を語で広く拾った出力・締めの一括の写し・手で書く使い捨ての code) は多く、 どれも agent の手書きなので、 道具の側に網を張っても迂回される。 平文に入る口は commit の 1 つ = commit の門で止める。 規則を 2 つに分ける:
+
+- **自前の道具が出す一覧の行の形** (session の開始に注入する一覧など、 台帳から作った行): 行の構造 (行末の付箋 `[<repo>:<id>]`・メールの要約の行の頭) を、 一覧の書き手の側の module が宣言し、 門はそれを読む。 書き手の試験が「合成の一覧に門が当たる」 を確かめる = 書式を変えると試験が落ち、 形と書式が離れない。 規約・記録が 1〜2 行を引くのは普段の書き方なので、 数行以上の写しで止める。 形を決めたら過去の履歴に当て、 誤報の型を見て締める (実測: 最初の形は、 論文の引用 key `[Surname:2026abc]` と、 道具の版つきの数の表を一覧の行と数えた → 名前と id の字を一覧の実物の字種に締めた)。 書き手の code とその試験は門が見ない (見ない file の一覧も形の module が持つ)。
+- **暗号化した台帳の欄の文の逐語**: 台帳の欄 (題・現在地・問い・決まったこと) の文を上の指紋と同じ窓 (空白を除いた 24 字、 日本語 4 字以上) にし、 平文の追加行と照らす。 窓の重なりは多く、 大半は正当な重なり = 誤報の源は (a) 前から平文に在った文 (b) 記録と台帳の両方に書く決まりの文 (本人の発言の逐語の引用) (c) 作業の repo の状態を、 その repo の記録と台帳の両方に書いた二重の記録。 (a) は数えない: 同じ file の前の版に在る窓と、 前の版の tree の平文に在る文 = `git grep -o -h -F -e <文> … <rev> --` (git-crypt の blob は object store の中で暗号文なので、 tree-ish への grep は平文の file にしか当たらない = 平文の側の索引は持たない。 問う文は 1 commit に 1 回でまとめる)。 (b) は引用の形 (本人「…」) の中を数えない。 (c) は形で分けられないので閾値で通す。
+- **閾値は過去の commit への当て直しで決める**。 台帳の今の版の窓をそのまま当てると、 後で台帳が平文の文を引いた逆向きの重なりまで写しと数える = 窓は、 その commit より前に作られた entry の分だけ数え、 さらに台帳自身の履歴で、 その commit の時点の版にその窓が在ったかを確かめる (`git log -1 --before=<commit の時刻> -- <台帳の file>` の版を `git cat-file --textconv` で読む)。 その時点の版が今の履歴に無い (台帳の file の分け方を変える前など) 窓は、 確かめられない分として別に数える。 閾値は「既知の漏れを止め、 二重の記録の大半を通す」 行数に置き、 手前は file と行番号だけの警告にする (実測: 閾値を下げて増える分は二重の記録だった)。
+- **出力と索引**: 出力は file と行番号と規則の名前だけ ([#decrypted-echo](#decrypted-echo))。 台帳の窓の索引は毎 commit 作り直す (窓の hash を平文の cache に置かない = 暗号化の外に写しを増やさない)。 平文の追加行に日本語の長い行が無い commit では索引を作らない。 台帳を読めない機械 (鍵が無い・YAML の library が無い) では逐語の照合だけを飛ばして 1 行出し、 一覧の形の規則は回す (実測: 索引の段の故障を検査全体の故障として返すと、 一覧の形の当たりまで捨てていた)。
 
 ### <a id="unpublished-text-public-gate"></a>公開 repo には「未公開文書の逐語」 の gate を別に置く (2026-09-13)
 
