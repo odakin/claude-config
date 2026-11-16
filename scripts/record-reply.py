@@ -69,7 +69,10 @@ selftest (= 偽の Gmail + 2 台帳の fixture、 API に触らない): t1 legac
   t17 途中で止まったらこの実行の書き込みを全部戻す / t18 1 つの entry に複数 thread の行 (別 thread の行が今回より
   前 / 後の日付) = 索引は全行の日付順・印は全行の最新・既存の行を落とさない / t19 閉じた子の thread を辿る /
   t20 現在地の鍵 (鍵なし・古い鍵は止めて ✗ の行に現在地、 正しい鍵なら書く、 既定 off・空の現在地は止めない) /
-  t21 空の要約 (印だけの要約は --summary で埋まる、 中身のある要約・inline の要約は変えない、 dry-run は知らせるだけ)。
+  t21 空の要約 (印だけの要約は --summary で埋まる、 中身のある要約・inline の要約は変えない、 dry-run は知らせるだけ) /
+  t22 結ぶ項目の決定欄 (`--decided-field`) を dry-run に全文出す・送った便を承認した本人の答え (`--asks-ledger` = 問いの台帳) が
+  決定欄に無ければ 1 行で知らせる (承認の候補 = 送信の前後の時間内に答えた外への送信の問いで、 key がこの項目を名指すか、
+  他の項目を名指さず同じ session が問うたもの。 止めない)。
 下書き: Gmail は未送信の下書きも thread の message として返す。 lib/gmail_read が既定で除く (= 記録しない・返事の
   判定に入れない)。 下書きを記録してしまった既存の行は --relabel が外す。
 """
@@ -135,6 +138,8 @@ class Config:
     cache_dir: Path = Path.home() / ".cache" / "record-reply"
     month_header: str = "# {year}-{month:02d} mail ledger"
     require_replaces: bool = False           # True = 現在地のある項目を書く --apply に、 dry-run が見せた鍵 (--replaces) を求める
+    decided_field: str = "decided"           # 項目の決定欄 (dry-run に全文を出す。 送った便を承認した本人の答えがここにあるかを照らす)
+    asks_ledger: Path | None = None          # 本人への問いの台帳 (ai-collaboration board_asks.py の JSON lines)。 None = 照らさない
 
     def tzinfo(self):
         if self.tz == "local":
@@ -879,6 +884,80 @@ def replaces_refusal(cfg: Config, todo_id: str, old_ctx: str, given: str | None)
     return None
 
 
+APPROVAL_BEFORE_S = 24 * 3600   # 送った便の何時間前までの本人の答えをその便の承認とみなすか
+APPROVAL_AFTER_S = 3600          # 送信の時刻と答えの記録の時刻のずれ (答えの記録は hook の後で付く)
+_ID_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]+")
+
+
+def _norm_words(s: str) -> str:
+    import unicodedata
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", s or ""))
+
+
+def answered_outbound(path: Path | None) -> list[dict]:
+    """問いの台帳 (board_asks.py の JSON lines) から、 本人が答えた外への送信の問い = [{label, keys, sessions, quote, ts}]。
+    答え = binding が label / order / confirmed で defer でない記録。 読めなければ []。"""
+    if not path or not Path(path).is_file():
+        return []
+    asks: dict[str, dict] = {}
+    out = []
+    try:
+        for line in Path(path).read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("type") == "ask" and r.get("ground") == "outbound":
+                asks[r.get("label")] = r
+            elif r.get("type") == "answer" and r.get("binding") in ("label", "order", "confirmed") and not r.get("defer"):
+                try:
+                    ts = datetime.fromisoformat(str(r.get("created_at", "")).replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    continue
+                for lb in r.get("labels") or []:
+                    a = asks.get(lb)
+                    if a:
+                        out.append({"label": lb, "keys": list(a.get("keys") or []), "quote": str(r.get("quote") or ""),
+                                    "sessions": {a.get("session"), r.get("session")} - {None, ""}, "ts": ts})
+    except OSError:
+        return []
+    return out
+
+
+def approval_gaps(cfg: Config, todo_id: str, ledger: Ledger, plans: list[dict], session: str | None = None) -> list[str]:
+    """今回記録する自分発の message (送った便) を承認した本人の答え (問いの台帳) が、 項目の決定欄に無ければその行。
+    承認の候補 = 送信の APPROVAL_BEFORE_S 前から APPROVAL_AFTER_S 後までに答えた外への送信の問いのうち、 key がこの項目を
+    名指すもの、 または key が他の項目を名指さず問うた session がこの記録の session と同じもの。 決定欄にその問いの印か
+    本人の語がある = 入っている。 知らせるだけ (止めない)。 実測: 送った言い直しの便の承認が項目の現在地にだけ入り、 決定欄の
+    先頭に古い決定が残って、 その間に項目を読んだ窓は古い決定を先頭に読んだ。"""
+    answers = answered_outbound(cfg.asks_ledger)
+    if not answers or todo_id not in ledger.todos:
+        return []
+    sent = [m for p in plans for m in p["msgs"] if m["id"] in p["record"] and owner_from(m.get("from", ""), cfg.owner_tokens)]
+    if not sent:
+        return []
+    session = session or os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("CODEX_THREAD_ID") or ""
+    dec = str((ledger.todos[todo_id][2] or {}).get(cfg.decided_field) or "")
+    ndec = _norm_words(dec)
+    gaps, seen = [], set()
+    for m in sent:
+        t = int(m.get("internalDate") or 0) / 1000
+        for a in answers:
+            if a["label"] in seen or not (t - APPROVAL_BEFORE_S <= a["ts"] <= t + APPROVAL_AFTER_S):
+                continue
+            named = {tok for k in a["keys"] for tok in _ID_TOKEN_RE.findall(str(k)) if tok in ledger.todos}
+            if not (todo_id in named or (not named and session and session in a["sessions"])):
+                continue
+            q = _norm_words(a["quote"])
+            if re.search(rf"(?<![A-Za-z0-9]){re.escape(a['label'])}(?![0-9])", dec) or (q and q in ndec):
+                continue
+            seen.add(a["label"])
+            gaps.append(f"⚠️ 送った便 ({stamp(cfg, m.get('internalDate'))} → {counterpart(cfg, m)}) を承認した本人の答え"
+                        f" 〔問 {a['label']}〕「{a['quote'][:80]}」 が、 項目 {todo_id} の決定欄 ({cfg.decided_field}) に無い ="
+                        " 決定欄に書く (先頭の決定が古いままだと、 次に読む窓が古い決定を引く)")
+    return gaps
+
+
 def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) -> int:
     if ledger.broken:
         for b in ledger.broken:
@@ -938,6 +1017,14 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
             out(f"\n項目 {todo_id} の今の現在地 (上書きされる。 残っている手順は --next に含める):\n  {old_ctx}")
             if cfg.require_replaces or getattr(args, "replaces", None):
                 out(f"  上書きの鍵 = --replaces {context_sig(old_ctx)} (この現在地を読んだ印。 --apply に付ける)")
+    if todo_id:
+        # 決定欄を全文出す = 推す答えと送る便を組む窓は、 この出力を読んで組む (実測: 現在地だけが出ていた出力から、 前の決定と
+        # 額を引かずに推す答えを組み、 食い違う便を外に出した)。 送った便の承認が決定欄に入っていなければ知らせる
+        dec = str((ledger.todos[todo_id][2] or {}).get(cfg.decided_field) or "").strip()
+        out(f"\n項目 {todo_id} の決定欄 ({cfg.decided_field}。 推す答え・送る便はこの決定と照らす):\n  "
+            + (dec.replace("\n", "\n  ") if dec else "(無し)"))
+        for g in approval_gaps(cfg, todo_id, ledger, plans):
+            out(g)
     if todo_id and not args.no_todo and not args.next:
         out("\n結ぶ項目の現在地を書くには --next \"<次の一手 1 行>\" が要る (項目を触らないなら --no-todo)")
         if args.apply:
@@ -1765,6 +1852,53 @@ def _selftest() -> int:
         e21 = next(x for x in _yaml_safe_load(pe.read_text(encoding="utf-8")) if x.get("id") == "2026-09-22-r-thread")
         check(e21["summary"] == "filled by the tool.\n" and any("中身がある" in ln for ln in out_lines),
               "t21 中身が入った後の --summary は使わない (知らせる)")
+
+        # t22 決定欄の表示と、 送った便の承認が決定欄に無いときの知らせ (2026-11-16)
+        (td / "lq" / "inbox").mkdir(parents=True)
+        (td / "lq" / "todo").mkdir()
+        todo_q = td / "lq" / "todo" / "2030-04-01-q.yaml"
+        todo_q.write_text('id: "2030-04-01-q"\ntask: "q"\nstatus: open\nemail_ref: "threadId:aaaa000000000001"\n'
+                          'decided: |\n  2026-09-20 本人「会場の机で」\n', encoding="utf-8")
+        asks = td / "asks.jsonl"
+        asks.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in (
+            {"type": "ask", "label": "Q7", "ground": "outbound", "keys": ["todo:lq:2030-04-01-q"], "session": "s-a"},
+            {"type": "ask", "label": "Q8", "ground": "outbound", "keys": ["session:s-b"], "session": "s-b"},
+            {"type": "ask", "label": "Q9", "ground": "outbound", "keys": ["todo:lq:2030-09-09-other"], "session": "s-b"},
+            {"type": "ask", "label": "Q10", "ground": "choice", "keys": ["todo:lq:2030-04-01-q"], "session": "s-a"},
+            {"type": "answer", "labels": ["Q7", "Q8", "Q9", "Q10"], "quote": "その文で送って", "binding": "label",
+             "session": "s-b", "created_at": "2026-09-22T03:00:00Z"})) + "\n", encoding="utf-8")
+        (td / "lq" / "todo" / "2030-09-09-other.yaml").write_text('id: "2030-09-09-other"\ntask: "o"\nstatus: open\n', encoding="utf-8")
+        cfg_q = Config(root=td, ledgers=["lq"], accounts=("acct-a",), owner_tokens=("owner@",), tz="UTC",
+                       cache_dir=td / "cache", asks_ledger=asks)
+        ns_q = argparse.Namespace(target="2030-04-01-q", todo=None, account=None, next=None, status=None, summary=None,
+                                  slug="q-thread", id=None, ledger_for_new=None, no_todo=True, apply=False, replaces=None)
+        out_lines.clear()
+        os.environ["CLAUDE_CODE_SESSION_ID"], saved_sid = "s-zz", os.environ.get("CLAUDE_CODE_SESSION_ID")
+        try:
+            rc = run_record(cfg_q, ns_q, Ledger(cfg_q), gm, "2026-09-22", pr)
+            text = "\n".join(out_lines)
+            check(rc == 0 and "項目 2030-04-01-q の決定欄 (decided" in text and "本人「会場の机で」" in text,
+                  "t22 dry-run に結ぶ項目の決定欄を全文出す")
+            gaps = [ln for ln in out_lines if "を承認した本人の答え" in ln]
+            check(len(gaps) == 1 and "〔問 Q7〕" in gaps[0] and "その文で送って" in gaps[0],
+                  "t22 送った便を承認した答え (key がこの項目を名指す外への送信の問い) が決定欄に無ければ 1 行で知らせる"
+                  " (他の項目を名指す問い・送信でない問い・別の session の問いは数えない)")
+            gaps_b = approval_gaps(cfg_q, "2030-04-01-q", Ledger(cfg_q), [plan_thread(cfg_q, m1, "acct-a", threads[("acct-a", m1)],
+                                                                                        Ledger(cfg_q), "2030-04-01-q", ns_q)], session="s-b")
+            check(sorted(re.findall(r"〔問 (Q\d+)〕", " ".join(gaps_b))) == ["Q7", "Q8"],
+                  "t22 key が項目を名指さない問いは、 問うた session が記録の session と同じときだけ承認の候補にする")
+            todo_q.write_text(todo_q.read_text(encoding="utf-8").replace("decided: |\n", "decided: |\n  2026-09-22 本人「その文で送って」 (Q7)\n"),
+                              encoding="utf-8")
+            out_lines.clear()
+            run_record(cfg_q, ns_q, Ledger(cfg_q), gm, "2026-09-22", pr)
+            check(not [ln for ln in out_lines if "を承認した本人の答え" in ln], "t22 決定欄に印か本人の語があれば知らせない")
+            check(approval_gaps(Config(root=td, ledgers=["lq"], owner_tokens=("owner@",)), "2030-04-01-q", Ledger(cfg_q), []) == [],
+                  "t22 問いの台帳を渡さなければ照らさない")
+        finally:
+            if saved_sid is None:
+                os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
+            else:
+                os.environ["CLAUDE_CODE_SESSION_ID"] = saved_sid
     finally:
         shutil.rmtree(td, ignore_errors=True)
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")
@@ -1784,7 +1918,9 @@ def build_config(args) -> Config:
                  ctx_reply=args.ctx_reply, ctx_sent=args.ctx_sent, ctx_new_in=args.ctx_new_in,
                  ctx_new_out=args.ctx_new_out, tz=args.tz,
                  cache_dir=Path(args.cache_dir).expanduser(), month_header=args.month_header,
-                 require_replaces=str(args.require_replaces or "").strip().lower() in ("on", "1", "true", "yes"))
+                 require_replaces=str(args.require_replaces or "").strip().lower() in ("on", "1", "true", "yes"),
+                 decided_field=getattr(args, "decided_field", None) or "decided",
+                 asks_ledger=Path(args.asks_ledger).expanduser() if getattr(args, "asks_ledger", None) else None)
     return cfg
 
 
@@ -1827,6 +1963,9 @@ def main(argv=None) -> int:
     ap.add_argument("--ctx-new-in", default=Config.ctx_new_in, help="相手発で、 自分の先行 message が無い (新規の受信・追送)")
     ap.add_argument("--ctx-new-out", default=Config.ctx_new_out, help="自分発で、 相手の先行 message が無い (新規の送信・追送)")
     ap.add_argument("--tz", default="local")
+    ap.add_argument("--decided-field", default="decided", help="項目の決定欄の field (dry-run に全文を出す)")
+    ap.add_argument("--asks-ledger", default="", help="本人への問いの台帳 (board_asks.py の JSON lines)。 渡すと、 送った便を承認した"
+                    " 本人の答えが決定欄に無いときに知らせる")
     ap.add_argument("--cache-dir", default=str(Path.home() / ".cache" / "record-reply"))
     ap.add_argument("--month-header", default="# {year}-{month:02d} mail ledger")
     ap.add_argument("--require-replaces", default="off", help="on = 現在地のある項目を書く --apply に --replaces を求める (shim が渡す)")
