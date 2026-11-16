@@ -737,6 +737,10 @@ sections:
     legacy: "20.5.4"
     level: 3
     title: "20.5.4 派生値を入力の隣に書くなら、 書く時に計算する — 並べた日付と期間は最初から合っていないことがある"
+  - id: premise-dropped-at-copy
+    legacy: "20.6"
+    level: 3
+    title: "20.6 同じ作業の後の変更が、 前の決定の前提を消す — 台帳への写しで理由が落ち、 ぶつかりを格で解く"
   - id: premise-expiry-scope
     legacy: "20.4"
     level: 3
