@@ -1237,6 +1237,8 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
         return row
     landed = [ts for ts, frm in ev["peer_wraps"] if frm == parent_local]  # sent to the child's uds address too
     off = _called_off(ev, parent_local, acts["unwraps"])
+    # wrap requests count from the last accept, not from a later let-go (settled_at): the parent asks for the wrap before
+    # the child releases its last request (measured shape: the wrap request a minute or two before the release)
     wraps = sorted(t for t in acts["wraps"] + ev["wraps"] + landed if t[:19] >= b["accepted_at"][:19] and t > off)
     # a turn end counts only when the child started replying after the request (measured: the child's previous turn
     # ended 3 s after the parent's SendMessage, before the message was delivered)
