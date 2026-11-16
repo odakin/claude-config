@@ -798,6 +798,7 @@ orientation 直後の silent stall (session は running のまま・活動 times
 - **対話係**は、研究の判断、導出、先行研究との比較、原稿や返答書の具体的な文案（英文を含む）を扱う。文章の言い方が論旨・条件・帰属に関わる場合も、対話係が文案を作り、研究者と詰める。
 - **指揮所**は、確定した文案と判断を保ってファイルに反映し、組版・lint・既定の検査、Git、運用記録、実装担当と検収の手配を受け持つ。作業中に研究上の判断や文案の修正が必要になったら、該当箇所と理由を対話係に返す。
 - 引継ぎには、対象と基準版、確定した文案や判断の所在、未決の箇所、必要な検査を示す。差分が作業ツリーにある場合はその状態も伝える。著者の裁定と適用の記録は [原稿の編集権限](manuscript-claim-ownership.md#rule) に従う。モデルと effort は [仕事に合わせて選ぶ](#model-fit-before-sending)。
+- 対話係の窓で著者が答えた候補は、指揮所が別の窓の答えとして記録して当て、同じ窓で commit する ([manuscript-claim-ownership.md#owner-answer-in-another-window-manuscript](manuscript-claim-ownership.md#owner-answer-in-another-window-manuscript))。裁定を別の session に渡すときの形は [tool-call-robustness.md#ruling-belongs-to-the-editing-session](tool-call-robustness.md#ruling-belongs-to-the-editing-session) と [#worker-apply-requester-commits](tool-call-robustness.md#worker-apply-requester-commits)。
 
 ## <a id="remote-handoff-constraints"></a>11. リモート session への hand-off — 物理不在で完了できない step の全分岐着地設計
 
