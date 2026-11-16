@@ -17,7 +17,8 @@
   --label ACCOUNT:NAME   見るラベル (account = gmail_read.service_for の alias)。 repeat 可
   --ledger-glob G        記録の台帳 (YAML) の glob。 repeat 可。 ~ を展開する
   --ack FILE             ack の台帳 (無ければ (b) は空)
-  --ack-snippet          未対応の thread を ack に足す形で出す (件名を見て判断してから reason を書く = 見ずに貼らない)
+  --ack-snippet          未対応の thread を ack に足す形で出す (件名を見て判断してから reason を書く = 見ずに貼らない。
+                         貼る形は id と account / ラベルだけ = 件名・差出人は台帳に写さない)
   --exact-message        message の id が記録に在るものだけを既読にする (thread の id・ack では既読にしない)。
                          受信箱 (--label <account>:INBOX) に使う = 記録済みの thread に後から届いた未記録の返事を既読にしない
                          (未記録の続報を拾う網は未読を手がかりにしているので、 thread 単位の既読化はその網を黙らせる)
@@ -199,8 +200,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"   ? thr={m['threadId']} {h.get('Date', '')[:16]} | {h.get('From', '')[:26]} | {h.get('Subject', '')[:64]}")
                 if m["threadId"] not in seen:
                     seen.add(m["threadId"])
-                    subj = h.get("Subject", "").replace('"', "'")[:60]
-                    snippet.append(f"  - id: \"{m['threadId']}\"   # {acct} / {name} / {subj}\n    reason: \"YYYY-MM-DD <見て決めた理由>\"")
+                    # 件名は上の「?」 の行で見る。 台帳 (平文のことが多い) に貼る形には件名・差出人を入れない
+                    snippet.append(f"  - id: \"{m['threadId']}\"   # {acct} / {name}\n    reason: \"YYYY-MM-DD <見て決めた理由 (件名を写さず種類で)>\"")
             if a.apply and done:
                 ids = [m["id"] for m in done]
                 for i in range(0, len(ids), 500):
