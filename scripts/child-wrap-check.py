@@ -88,7 +88,11 @@ Usage:
         片づけ + 頼みの形 = close_ask) に wrap skill の名が無ければ 1 回目を止め (deny)、 送る文 (WRAP_ASK_TEXT) を返す。 同じ子への
         次の送信 (PRESEND_PASS_MIN 分以内) は通す (別の仕上げなら同じ文で送り直す)。 hook の文・照合の出力が「wrap を頼む」 を
         言うときは、 どれもこの文そのものを出す = 文脈圧縮の後も写せる (実測: 圧縮の後に親が締めの頼みを自分の語で書き、 skill の
-        名が消えた)
+        名が消えた)。 その前に子の model の段 (model_step) も出す = 子の app の記録を読み、 規則が子の tier に wrap の model・effort
+        を決めていれば (--wrap-model か env CHILD_WRAP_MODEL)、 送る前に切り替える 3 手 (set_session_model → set_session_effort →
+        読み直す)。 切り替えは次の turn から効くので、 送った後では wrap の turn に間に合わない
+  --wrap-model 'fable=<model id>:<effort>[,<tier>=…]'   子の tier ごとの wrap の model・effort (個人層の規則の値。 無ければ
+        model の段は「読んで、 規則があれば切り替える」 の一般形)
   child-wrap-check.py --hook-accept --board-root … [--rule …]   PostToolUse(Bash) の hook 用: `board.py accept` で自分の子の
         依頼を受け取った直後に、 子の状態に合わせた 1 行を返す。 締めを渡した依頼 (scripts/wrap-delegate-spec.py の骨の印が
         依頼書・提出・その turn に読んだ file にある) の受け取りなら、 accept_lines の行 (依頼元の --check の 1 行と、 提出の
@@ -208,6 +212,58 @@ def wrap_kind(text: str) -> str:
 # a common word, and the parent rendered it as its everyday word for closing).
 WRAP_ASK_TEXT = ("wrap skill で仕上げてください (Skill tool の skill=wrap。 この session で得た知見・手順・script を上の層の正本へ移し、"
                  " 正本・参照・SESSION を整え、 repo ごとに commit + push して、 移した先を報告)。")
+
+
+def parse_wrap_model(spec: str) -> dict:
+    """'fable=claude-opus-5-5:xhigh[,<tier>=<model>:<effort>]' → {'fable': ('claude-opus-5-5', 'xhigh')}. Bad parts are skipped."""
+    out = {}
+    for part in (spec or "").split(","):
+        tier, _, target = part.strip().partition("=")
+        model, _, effort = target.strip().partition(":")
+        if tier.strip() and model.strip():
+            out[tier.strip().lower()] = (model.strip(), effort.strip())
+    return out
+
+
+# The model and effort a child's wrap turn runs on, by the child's tier: the personal layer's rule passes it (--wrap-model
+# or env CHILD_WRAP_MODEL). Empty = no rule given, and the model step is printed in its general form. Why a step before
+# the ask: wrapping moves and tidies what the session found (an established procedure = the lower tier in
+# conventions/multi-session-coordination.md#model-fit-before-sending), and set_session_model / set_session_effort act
+# from the next turn = a switch after the send is too late for the wrap turn.
+WRAP_MODEL = parse_wrap_model(os.environ.get("CHILD_WRAP_MODEL", ""))
+
+
+def model_step(local: str) -> str:
+    """The step before asking a child to wrap: read its model (the app's record = what the next turn runs on) and, when
+    the rule names a wrap model for its tier, switch while the child is stopped. '' = the rule is given and the child's
+    model needs no switch (its tier is not in the rule, or it already runs on the rule's model and effort)."""
+    try:
+        rec = ds.find(local) if local else None
+    except Exception:
+        rec = None
+    model, effort = str((rec or {}).get("model") or ""), str((rec or {}).get("effort") or "")
+    look = f"`python3 ~/Claude/claude-config/scripts/session-model.py {local or '<子の local_…>'}`"
+    if WRAP_MODEL and model:
+        want = WRAP_MODEL.get(sm.tier(model))
+        if not want or (want[0] == model and want[1] in ("", effort)):
+            return ""
+        m, e = want
+        return (f"先に子の model を切り替える (子の app の記録 = {model}・{effort or '?'}): `set_session_model` ({m})"
+                + (f" → `set_session_effort` ({e})" if e else "")
+                + f" → {look} で app の記録が {m}{'・' + e if e else ''} になったのを見てから送る"
+                " (子が止まっている間に出す = 次の turn から効く。 送った後では wrap の turn に間に合わない)")
+    if WRAP_MODEL:
+        return (f"先に子の model を読む ({look}。 app の記録が読めなかった)。 規則が wrap の model を決めた tier"
+                f" ({'・'.join(f'{t} → {m}' + ('・' + e if e else '') for t, (m, e) in WRAP_MODEL.items())}) なら、"
+                " 子が止まっている間に `set_session_model` → `set_session_effort` で切り替え、 読み直してから送る")
+    return (f"先に子の model を読む ({look}" + (f"、 app の記録 = {model}・{effort or '?'}" if model else "")
+            + ")。 wrap の model・effort を決めた規則があれば、 子が止まっている間に `set_session_model` → `set_session_effort`"
+            " で切り替え、 読み直してから送る (次の turn から効く = 送った後では wrap の turn に間に合わない)")
+
+
+def _then(step: str) -> str:
+    """'<step> → ' or '' (the model step before the send, when there is one)."""
+    return f"{step} → " if step else ""
 # A closing request without the skill's name (「締め (…) をして終えて」「仕上げてください」「片づけて終えて」): the closing word
 # followed in its sentence by a request form. wrap_kind() decides whether the skill is named; a message that names it passes.
 CLOSE_WORD = re.compile(r"締め(?!切)|〆(?!切)|仕上げ|片[づ付]け")  # not 締め切り・〆切 (a deadline)
@@ -869,13 +925,15 @@ def render(rows: list[dict]) -> str:
             lines.append("    " + r["reasons"][0])
             continue
         if wrap_first(r):
-            lines.append(f"    → 次の一手 = 先に wrap skill を頼む (本人に畳むかを聞く前に): 子へ SendMessage で「{WRAP_ASK_TEXT}」"
+            lines.append(f"    → 次の一手 = 先に wrap skill を頼む (本人に畳むかを聞く前に): {_then(model_step(r.get('local') or ''))}"
+                         f"子へ SendMessage で「{WRAP_ASK_TEXT}」"
                          f" と送り、 同じ turn に Bash の run_in_background で `python3 ~/Claude/claude-config/scripts/child-wrap-check.py"
                          f" --wait {r['local']}` を出す")
         elif any(x.startswith(WRAP_MISSING) for x in r.get("reasons") or []):
             # measured: with another reason beside it (the person talking with the child), the parent dropped this one from
             # its question to the person
-            lines.append("    → 次の一手 = 下の理由が片づいてから、 畳む前に wrap skill を頼む (送る文 = 「" + WRAP_ASK_TEXT + "」)。"
+            lines.append("    → 次の一手 = 下の理由が片づいてから、 畳む前に wrap skill を頼む (" + _then(model_step(r.get("local") or ""))
+                         + "送る文 = 「" + WRAP_ASK_TEXT + "」)。"
                          " 本人に畳むかを聞くなら、 「wrap の記録が無い」 も並べて、 理由を全部書く")
         lines.append(f"    動き={r['status']}  最後の turn の終わり={_local_hm(r['last_turn_end']) if r['last_turn_end'] else 'なし'}"
                      f"  wrap={_local_hm(r['last_wrap']) if r['last_wrap'] else 'なし'}"
@@ -1378,8 +1436,11 @@ def _accept_line(r: dict, rule: str, extra: str = "") -> str:
     who = f"子 {r['title'] or r['local']} ({r['local']})"
     tail = f" 規則 = {rule}" if rule else ""
     if r["state"] == "due":
+        step = model_step(r.get("local") or "")
         return (f"🧺 規則 10 の番: {who} の依頼を受け取った (accept)。 この子に開いている依頼は無く、 本人も待っていない。"
-                " この turn のうちに規則 10 の順で畳む = model を確かめる → 子へ SendMessage で"
+                " この turn のうちに規則 10 の順で畳む = "
+                + (_then(step) if step else "子の model は読んだ (wrap の規則の model のまま = 切り替え不要) → ")
+                + "子へ SendMessage で"
                 f"「{WRAP_ASK_TEXT}」 と送る (言い換えない = skill の名が無いと子は skill を起動しない) → 同じ turn に見張り"
                 f" (`python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {r['local']}`) → 起こされたら照合して archive。"
                 " 子の窓の外で出る答え (本人・検収係・共同研究者) を待つだけの当ては、 この子への次の依頼にしない ="
@@ -1481,10 +1542,12 @@ def hook_presend(inp: dict, rule: str) -> str:
         decision = ""
     else:
         seen[local] = now
+        step = model_step(local)
         decision = ("🧺 child-wrap-check: 子 (" + (child.get("title") or local) + ") への締めの頼みに wrap skill の名が無い = 子は"
                     " skill を起動せず、 wrap の記録が残らない (実測: 文脈圧縮の後に締めの頼みを自分の語で書き、 skill の名が消えた)。"
                     f" 送る文 = 「{WRAP_ASK_TEXT}」 (締めの中身を足すなら、 この文の後に書く)。 skill の名を入れて送り直す。"
-                    " wrap でない別の仕上げ (原稿の仕上げなど) なら、 同じ文のまま送り直せば通る (止めるのは子ごとに 1 回)。"
+                    + (f" wrap を頼むなら、 送り直す前に: {step}。" if step else "")
+                    + " wrap でない別の仕上げ (原稿の仕上げなど) なら、 同じ文のまま送り直せば通る (止めるのは子ごとに 1 回)。"
                     + (f" 規則 = {rule}" if rule else ""))
     try:
         os.makedirs(d, exist_ok=True)
@@ -1558,9 +1621,12 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
     if fold:
         lines.append(f"🧺 規則 10 の番の子が {len(fold)} つ、 畳まれないまま残っている (掲示板の依頼は全部受け取り済みか子が手放し、 子は動いておらず本人も待っていない):")
         for r in fold:
+            step = model_step(r["local"]) if r["state"] == "due" else ""
             lines.append(f"- {r['title'] or r['local']} ({r['local']}) — {_settled_words(r)} から {r['hours']} 時間"
-                         + ("、 wrap は終わっている = 照合して archive" if r["state"] == "wrapped" else ""))
-        lines.append(f"この turn のうちに規則 10 の順で畳む (子へ SendMessage で「{WRAP_ASK_TEXT}」 と送る → 同じ turn に見張り"
+                         + ("、 wrap は終わっている = 照合して archive" if r["state"] == "wrapped" else "")
+                         + (f"\n  {step}" if step else ""))
+        lines.append("この turn のうちに規則 10 の順で畳む (子の model を読み、 上に切り替えの段が出た子は先に切り替える →"
+                     f" 子へ SendMessage で「{WRAP_ASK_TEXT}」 と送る → 同じ turn に見張り"
                      " → 照合 → archive。 送る文は言い換えない)。 本人がこの子について別の指示を"
                      "しているなら (例 = 使用量の上限が戻るまで待つ)、 それを本人に 1 行で書いて turn を終える。"
                      + (f" {extra}" if extra else ""))
@@ -1610,10 +1676,15 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--board-root", action="append", default=[])
     ap.add_argument("--rule", default="")
     ap.add_argument("--extra", default="", help="hook の文に足す 1 文 (個人層の規則の要点)")
+    ap.add_argument("--wrap-model", default=None,
+                    help="子の tier ごとの wrap の model・effort = 'fable=<model id>:<effort>[,…]' (個人層の規則の値。 既定 = env CHILD_WRAP_MODEL)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
+    if a.wrap_model is not None:
+        WRAP_MODEL.clear()
+        WRAP_MODEL.update(parse_wrap_model(a.wrap_model))
     RAW_ROOTS[:] = list(a.board_root) + [x for x in (os.environ.get("CHILD_WRAP_BOARD_ROOTS") or "").split(os.pathsep) if x]
     if a.wait_due:
         roots = board_roots(a.board_root)
@@ -2495,6 +2566,40 @@ def selftest() -> int:
         why30 = json.loads(hook_stop(stop_in, [board], "R", "block") or "{}").get("reason", "")
         ok("grace 30: the long-answered child is in the 'fold' part, no 'ask' part",
            cases["said"][0] in why30.split("本人を待っている子")[0] and "本人に 1 行で聞く" not in why30)
+        # the model step before the wrap ask (a switch acts from the next turn = it has to come before the send)
+        ok("parse_wrap_model: tier=model:effort, bad parts skipped",
+           parse_wrap_model(" fable=claude-opus-5-5:xhigh, x, =y, sonnet=m ") == {"fable": ("claude-opus-5-5", "xhigh"), "sonnet": ("m", "")})
+        fl, fc = "local_f1f1f1f1-0000-4000-8000-000000000000", "f1f1f1f1-cccc-4000-8000-000000000000"
+        record(fl, fc, parent_l, model="claude-fable-5-2", effort="max")
+        ol, oc = "local_f2f2f2f2-0000-4000-8000-000000000000", "f2f2f2f2-cccc-4000-8000-000000000000"
+        record(ol, oc, parent_l, model="claude-opus-5-5", effort="xhigh")
+        saved_wm = dict(WRAP_MODEL)
+        WRAP_MODEL.clear()
+        gen = model_step(fl)
+        ok("model step, no rule: read the model (with the app's record) and switch if a rule names one",
+           "session-model.py " + fl in gen and "claude-fable-5-2・max" in gen and "set_session_model" in gen)
+        WRAP_MODEL.update(parse_wrap_model("fable=claude-opus-5-5:xhigh"))
+        sw = model_step(fl)
+        ok("model step, rule given, Fable child → the three moves with the rule's values, before the send",
+           "set_session_model` (claude-opus-5-5)" in sw and "set_session_effort` (xhigh)" in sw
+           and "session-model.py " + fl in sw and "送った後では" in sw)
+        ok("model step, rule given, the child already on the rule's model and effort → nothing", model_step(ol) == "")
+        record(ol, oc, parent_l, model="claude-opus-5-5", effort="max")
+        ok("model step, rule given, an Opus child (its tier not in the rule) → nothing", model_step(ol) == "")
+        ok("model step, rule given, the record unreadable → read it, with the rule's tiers named",
+           "読めなかった" in model_step("local_99999999-0000-4000-8000-000000000000") and "fable → claude-opus-5-5・xhigh"
+           in model_step("local_99999999-0000-4000-8000-000000000000"))
+        acc = _accept_line({"state": "due", "local": fl, "title": "f"}, "R")
+        ok("accept line (due): the switch comes before the SendMessage of the wrap words",
+           "set_session_model" in acc and acc.index("set_session_model") < acc.index(WRAP_ASK_TEXT))
+        acc_o = _accept_line({"state": "due", "local": ol, "title": "o"}, "R")
+        ok("accept line (due), no switch needed → says so, then the SendMessage", "切り替え不要" in acc_o and "set_session_model" not in acc_o)
+        rf = render([dict(r_more, local=fl)])
+        ok("render: the missing wrap first → the switch before the SendMessage",
+           rf.splitlines()[1].strip().startswith("→ 次の一手 = 先に wrap skill を頼む")
+           and rf.index("set_session_model") < rf.index(WRAP_ASK_TEXT))
+        WRAP_MODEL.clear()
+        WRAP_MODEL.update(saved_wm)
         ANSWERED_GRACE_MIN = None
         for v, want in (("none", None), ("", 10.0), ("30", 30.0), ("45", 45.0), ("x", 10.0)):
             os.environ["CHILD_WRAP_ANSWERED_GRACE_MIN"] = v

@@ -40,10 +40,14 @@ subcommand:
   list [--board-root R]... [--all] [--json]   archive されていない対話の thread (アプリの一覧に出る種類) を 1 行ずつ判定
   parent PARENT [--board-root R]... [--json]   親が起票し受理された作業子を読み直す。通知・wrap・archive は行わない
   check THREAD [--board-root R]... [--evidence TEXT] [--json]   1 つを詳しく
-  wrap THREAD [--board-root R]... [--evidence TEXT] [--writer daemon|app]
+  wrap THREAD [--board-root R]... [--evidence TEXT] [--writer daemon|app] [--model M] [--effort E]
       照合の残す理由が「wrap の記録が無い」 だけのときに wrap を頼む。 既定 = 共有の Codex daemon で wrap skill を型つきの
       入力で渡す turn を始める (アプリを前に出さない。 アプリがその thread を持っていれば `codex queue` で予約し、 アプリが
       次の turn として走らせる)。 --writer app = 予約してアプリに開かせる。 頼んだ時刻を台帳に書き、 待つ 1 行を出す。
+      --model / --effort = wrap の turn の model・effort (turn/start が、 その turn から後を上書きする。 規則が wrap に別の
+      model を決めていれば渡す = 物理の model で働いた thread も締めは安い model で)。 予約の経路は文しか渡せないので、
+      指定があれば送らずに止める (アプリで閉じて daemon で頼み直すか、 アプリで model を選んで指定なしで予約する)。
+      台帳に指定した値を残す (確かめた値ではない = 走った model は thread の記録で読む)。
   wait THREAD [--timeout SEC] [--board-root R]...   wrap の依頼の後の turn が終わるまで待ち (daemon が書き手なら手放すまで)、
       照合を出す。 Bash の run_in_background で出す (終わりが指揮役の turn を始める)。
   archive THREAD [--board-root R]... [--evidence TEXT]   照合が通ったときだけ使い捨ての app-server の thread/archive を呼び
@@ -838,10 +842,19 @@ def wrap_skill_path(cwd: str) -> str | None:
     return None
 
 
-def send_wrap(tid: str, cwd: str, writer: str) -> tuple[bool, str]:
+QUEUE_NO_MODEL = ("予約 (`codex queue`) の経路は model・effort を渡せない = 送らない。 アプリで閉じてから daemon で頼み直すか、"
+                  " アプリでその thread の model・effort を選んでから --model / --effort なしの --writer app で頼む")
+
+
+def send_wrap(tid: str, cwd: str, writer: str, model: str = "", effort: str = "") -> tuple[bool, str]:
+    """Start the wrap turn. model / effort (the rule's wrap model, e.g. a cheaper one than the thread worked on) go into
+    turn/start, which overrides them for this turn and the later ones (the thread is archived after the wrap). The queued
+    path (`codex queue`) takes only the text, so with a model or effort asked it does not send."""
     m = _launch_module()
     cli = m.codex_cli()
     if writer == "app":
+        if model or effort:
+            return False, QUEUE_NO_MODEL
         if not cli:
             return False, "Codex の CLI が見つからない"
         ok, out = m.queue_message(cli, tid, WRAP_TEXT)
@@ -859,6 +872,8 @@ def send_wrap(tid: str, cwd: str, writer: str) -> tuple[bool, str]:
         try:
             w.call("thread/resume", {"threadId": tid})
         except RuntimeError as e:
+            if "active writer" in str(e) and (model or effort):
+                return False, "アプリが開いている = " + QUEUE_NO_MODEL
             if "active writer" in str(e) and cli:
                 ok, out = m.queue_message(cli, tid, WRAP_TEXT)
                 return ok, ("アプリが開いている = 予約した (アプリが次の turn として走らせる)" if ok else out)
@@ -866,10 +881,16 @@ def send_wrap(tid: str, cwd: str, writer: str) -> tuple[bool, str]:
         inp = [{"type": "text", "text": WRAP_TEXT}]
         if skill:
             inp.append({"type": "skill", "name": "wrap", "path": skill})
-        w.call("turn/start", {"threadId": tid, "input": inp})
+        turn = {"threadId": tid, "input": inp}
+        if model:
+            turn["model"] = model
+        if effort:
+            turn["effort"] = effort
+        w.call("turn/start", turn)
     finally:
         w.close()
-    return True, "daemon で wrap の turn を始めた" + ("" if skill else " (wrap skill の path が引けず、 依頼文だけ)")
+    return True, ("daemon で wrap の turn を始めた" + ("" if skill else " (wrap skill の path が引けず、 依頼文だけ)")
+                  + (f" (指定 = model {model or '指定なし'}・effort {effort or '指定なし'})" if model or effort else ""))
 
 
 def cmd_wrap(a) -> int:
@@ -879,12 +900,15 @@ def cmd_wrap(a) -> int:
         print(render(res))
         print("⛔ wrap を頼むのは残す理由が「wrap の記録が無い」 だけのとき = 頼まない", file=sys.stderr)
         return 1
-    ok, msg = send_wrap(tid, res["cwd"], a.writer)
+    ok, msg = send_wrap(tid, res["cwd"], a.writer, a.model or "", a.effort or "")
     if not ok:
         print(f"⛔ wrap を頼めない: {msg}", file=sys.stderr)
         return 2
     ledger_append({"event": "wrap_asked", "thread": tid, "title": res["title"], "writer": a.writer, "how": msg,
+                   "model_asked": a.model or "", "effort_asked": a.effort or "",
                    "evidence": a.evidence, "asked_ts": now_ts()})
+    if not (a.model or a.effort):
+        print("  (model・effort の指定なし = thread の今の model で走る。 規則が wrap の model を決めていれば --model / --effort で渡す)")
     print(f"→ {tid[:8]} に wrap を頼んだ ({msg})")
     print(f"→ 同じ turn に Bash の run_in_background で: python3 {__file__} wait {tid}"
           + "".join(f" --board-root '{r}'" for r in (a.board_root or [])))
@@ -1376,6 +1400,78 @@ def _selftest() -> int:
     for cmd in (["add", "b.txt"], ["commit", "-qm", "b"]):
         subprocess.run(["git", "-C", str(clone), *cmd], check=True, env=env)
     check("git: push されていない commit を拾う", any("push されていない" in g for g in git_findings(str(clone), [], [])))
+
+    # the wrap turn's model and effort (the rule's wrap model) go into turn/start; the queued path cannot carry them
+    calls: list = []
+
+    class FakeWS:
+        def __init__(self, sock):
+            pass
+
+        def call(self, method, params):
+            calls.append((method, params))
+            if method == "thread/resume" and params.get("threadId") == "held":
+                raise RuntimeError("thread has an active writer")
+            return {}
+
+        def send(self, msg):
+            pass
+
+        def close(self):
+            pass
+
+    class FakeLaunch:
+        CLIENT = {"name": "t"}
+        WS = FakeWS
+
+        @staticmethod
+        def codex_cli():
+            return "/bin/codex"
+
+        @staticmethod
+        def daemon_socket(start=False):
+            return "/tmp/s"
+
+        @staticmethod
+        def queue_message(cli, tid, text):
+            calls.append(("queue", tid))
+            return True, "Queued message"
+
+        @staticmethod
+        def open_in_app(url):
+            return False
+
+        @staticmethod
+        def reveal_url(tid):
+            return "codex://" + tid
+
+    g = globals()
+    saved_launch, saved_skill = g["_launch_module"], g["wrap_skill_path"]
+    g["_launch_module"], g["wrap_skill_path"] = (lambda: FakeLaunch), (lambda cwd: "/s/wrap/SKILL.md")
+    try:
+        ok_, msg = send_wrap(T, str(work), "daemon", "gpt-6.1-sol", "xhigh")
+        ts = [p for mth, p in calls if mth == "turn/start"]
+        check("wrap: --model / --effort は turn/start に入る (skill の型つきの入力と一緒に)",
+              ok_ and ts and ts[-1].get("model") == "gpt-6.1-sol" and ts[-1].get("effort") == "xhigh"
+              and any(i.get("type") == "skill" for i in ts[-1]["input"]) and "gpt-6.1-sol" in msg)
+        calls.clear()
+        send_wrap(T, str(work), "daemon")
+        ts = [p for mth, p in calls if mth == "turn/start"]
+        check("wrap: 指定が無ければ turn/start に model・effort を入れない (thread の今の model)",
+              ts and "model" not in ts[-1] and "effort" not in ts[-1])
+        calls.clear()
+        ok_, msg = send_wrap(T, str(work), "app", "gpt-6.1-sol", "xhigh")
+        check("wrap: --writer app に model の指定 = 予約は文しか渡せない = 送らない",
+              not ok_ and msg == QUEUE_NO_MODEL and not any(mth == "queue" for mth, _ in calls))
+        calls.clear()
+        ok_, msg = send_wrap("held", str(work), "daemon", "gpt-6.1-sol", "xhigh")
+        check("wrap: アプリが開いている thread に model の指定 = 予約に回さず止める",
+              not ok_ and QUEUE_NO_MODEL in msg and not any(mth in ("queue", "turn/start") for mth, _ in calls))
+        calls.clear()
+        ok_, msg = send_wrap("held", str(work), "daemon")
+        check("foil: 指定なしでアプリが開いている thread は従来どおり予約する", ok_ and any(mth == "queue" for mth, _ in calls))
+    finally:
+        g["_launch_module"], g["wrap_skill_path"] = saved_launch, saved_skill
     print("selftest: " + ("all passed" if ok else "FAILED"))
     return 0 if ok else 1
 
@@ -1398,6 +1494,8 @@ def main(argv=None) -> int:
             p.add_argument("--all", action="store_true", help="畳める thread の根拠も出す")
         if name == "wrap":
             p.add_argument("--writer", choices=("daemon", "app"), default="daemon")
+            p.add_argument("--model", help="wrap の turn の model (turn/start の model。 規則が wrap の model を決めていれば渡す)")
+            p.add_argument("--effort", help="wrap の turn の effort (turn/start の effort)")
         if name == "wait":
             p.add_argument("--timeout", type=int, default=2400)
             p.add_argument("--interval", type=int, default=15)

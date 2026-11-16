@@ -28,7 +28,8 @@ Why (実測): 見え方や model を直すために、 動いている worker �
     1 回目の止めより前だったために 2 回止めた)。 どの子を指すかは見ない (止めた後の本人の発言で通すのと同じ粒度)。
   - archive_session で相手が自分の子 (app の記録の親がこの session、 切り離していない) なら、 子に wrap の記録があり、
     その wrap の turn の後に書いていない (file の編集・commit) かを見る (scripts/child-wrap-check.py の wrap_hold)。 無ければ 1 回目は止め、 照合の理由を全部、 道具の語の
-    まま返し、 送る文の見本 (child-wrap-check.py の WRAP_ASK_TEXT) と見張りの 1 行を出す。 同じ子への 2 回目 (その間に子が新しく
+    まま返し、 子の model の段 (child-wrap-check.py の model_step = 規則が wrap の model を決めていれば送る前に切り替える)、
+    送る文の見本 (child-wrap-check.py の WRAP_ASK_TEXT) と見張りの 1 行を出す。 同じ子への 2 回目 (その間に子が新しく
     書いていない) は通す。 本人がこの窓で、 親の最後の message より後に wrap を省くと言っていれば (NO_WRAP =「wrap なしで」
     「締めは要らない」 など) 1 回目から通す。 本人の「閉じていい」「畳んで」 (CLOSE_WORD) は本人の側の理由だけを通し、 wrap の
     記録の無いことは通さない (実測: 親の本人への問いが「wrap の記録が無い」 を落とし、 本人の「畳んで」 が理由の欠けた問いへの
@@ -463,7 +464,8 @@ def wrap_check(inp: dict, ids: list[str], cw) -> tuple[int, str]:
         reasons = [hold["reason"]]
     return 2, ("🛑 busy-worker-stop-check: 畳もうとした子に wrap の記録が無い (か、 wrap の turn の後に書いた分がある) ので 1 回目は止めた。"
                " 照合の理由 (全部、 道具の語のまま):\n" + "\n".join("  - " + r for r in reasons) + "\n"
-               f"  先に wrap を頼む = 子へ SendMessage で「{cw.WRAP_ASK_TEXT}」 と送り、 同じ turn に Bash の run_in_background で"
+               f"  先に wrap を頼む = {cw._then(cw.model_step(child.get('local_id') or ids[0]))}"
+               f"子へ SendMessage で「{cw.WRAP_ASK_TEXT}」 と送り、 同じ turn に Bash の run_in_background で"
                f" `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {ids[0]}` を出す (起こされた turn の照合が ✅ なら畳む)。"
                " 本人に畳むかを聞くなら、 上の理由を全部書いて聞く (1 つに選ばない)。 本人がこの窓で「wrap なしで」 などと言えば"
                " 1 回目から通る。 理由を全部見た上で畳むなら、 同じ操作をもう一度打てば通る。"

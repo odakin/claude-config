@@ -133,6 +133,9 @@ def skeleton(target: str, quote: str = "") -> str:
         L.append(f"  - `python3 ~/Claude/claude-config/scripts/{cmd}`"
                  + ("  (処分の file 〔.txt〕 を書いて `--check <file>` を通す)" if "--delegated" in cmd else ""))
     L += ["- 掲示板に出した依頼 = 掲示板の `inbox --sync` と `show --request <id>` (closing-sweep.md#collect-from-delegates の 2 行目)",
+          "- worker の model・effort = 締めの model (確立した手順の運用 = 下位の側。 個人層の規則があればその値を掲示板の request の"
+          " `--expect-model` / `--effort` に書く = closing-sweep.md#delegated-sweep)。 対象の session が上位の model でも、 締めは"
+          " それに合わせない",
           "",
           "## (2) 既に済んだもの (拾い直さない・二重に上げない)",
           ""]
