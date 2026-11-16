@@ -22,6 +22,9 @@
     python3 check-md-anchors.py --quiet             # 緑のときは何も言わない
     python3 check-md-anchors.py --suggest           # 壊れた anchor ごとに近い実在 anchor と、 その anchor を持つ別 file を出す
 
+走査する .md = roots の下の全部から、 自分の repo の git が ignore する file (追跡の外の候補の写し・作業の dir) を
+除いたもの (`iter_markdown_sources`、 fix-md-links も同じ列挙を使う。 追跡されている file は ignore の規則に当たっても見る)。
+
 anchor は 明示の `<a id="...">` / `id='...'` と、 見出しから作る GitHub 風 slug の和で判定する
 (slug の計算は `check-inbound-refs.py` の `gh_slug` + `rendered_heading_text` を import して共有 = 2 実装にしない)。
 """
@@ -101,32 +104,98 @@ def resolve(src: Path, path_part: str) -> Path:
     return (src.resolve().parent / unquote(path_part)) if path_part else src.resolve()
 
 
-def iter_markdown_sources(base: Path, repos: list[str]):
+# git env a commit in progress sets (index / dir of THAT repo); inherited, `git -C <other repo>` would
+# read the committing repo's temporary index instead of the other repo's own
+_GIT_REPO_ENV = ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY")
+
+
+def _git_top(d: Path, cache: dict) -> Path | None:
+    """Nearest enclosing work tree (a dir holding `.git`, a dir or a worktree file), or None."""
+    chain = []
+    cur = d
+    while True:
+        if cur in cache:
+            top = cache[cur]
+            break
+        chain.append(cur)
+        if (cur / ".git").exists():
+            top = cur
+            break
+        if cur.parent == cur:
+            top = None
+            break
+        cur = cur.parent
+    for c in chain:
+        cache[c] = top
+    return top
+
+
+def git_ignored(paths: list[Path]) -> set[Path]:
+    """The subset of `paths` that git ignores: untracked AND matched by an ignore rule of its own repo.
+    A tracked file is never reported (git check-ignore's default), so a tracked copy stays checked even
+    where a rule would match it. Paths outside any work tree, and any git failure, count as not ignored
+    (= the scan stays as wide as before)."""
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_REPO_ENV}
+    tops: dict = {}
+    by_top: dict[Path, list[Path]] = {}
+    for p in paths:
+        top = _git_top(p.parent, tops)
+        if top is not None:
+            by_top.setdefault(top, []).append(p)
+    out: set[Path] = set()
+    for top, ps in by_top.items():
+        rels = {}
+        for p in ps:
+            try:
+                rels[str(p.relative_to(top))] = p
+            except ValueError:
+                continue
+        if not rels:
+            continue
+        try:
+            r = subprocess.run(["git", "-C", str(top), "check-ignore", "-z", "--stdin"],
+                               input="\0".join(rels) + "\0", capture_output=True, text=True,
+                               env=env, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode not in (0, 1):
+            continue
+        out.update(rels[x] for x in r.stdout.split("\0") if x in rels)
+    return out
+
+
+def iter_markdown_sources(base: Path, repos: list[str], skip_git_ignored: bool = True):
     """Every .md under the roots, once per REAL file (a symlink to a file that is also reached
     through its own repo is skipped, so it is neither scanned twice nor resolved from the
-    symlink's directory)."""
+    symlink's directory). Files git ignores in their own repo are skipped (2026-11-16): they are
+    machine-local (candidate copies, scratch) = nothing a reader of the repo can follow, and a copy
+    written to be applied elsewhere has links that only resolve at its destination (実測: every
+    --strict failure of one run came from such untracked copies on one machine)."""
     seen: set[Path] = set()
     base_real = base.resolve()
     roots = [base / r for r in repos] if repos else [base]
+    cands: list[Path] = []
     for root in roots:
         for dirpath, dirnames, filenames in os.walk(root):
             dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-            for fn in filenames:
-                if not fn.endswith(".md"):
-                    continue
-                p = Path(dirpath) / fn
-                try:
-                    real = p.resolve()
-                except OSError:
-                    continue
-                if real in seen or (p.is_symlink() and not real.exists()):
-                    continue
-                # a symlink whose target lives OUTSIDE the base belongs to another repo: a repo-local
-                # gate (`--base "$ROOT"`) must not fail for that repo's links
-                if p.is_symlink() and base_real not in real.parents:
-                    continue
-                seen.add(real)
-                yield p
+            cands += [Path(dirpath) / fn for fn in filenames if fn.endswith(".md")]
+    ignored = git_ignored(cands) if skip_git_ignored else set()
+    for p in cands:
+        if p in ignored:
+            continue
+        try:
+            real = p.resolve()
+        except OSError:
+            continue
+        if real in seen or (p.is_symlink() and not real.exists()):
+            continue
+        # a symlink whose target lives OUTSIDE the base belongs to another repo: a repo-local
+        # gate (`--base "$ROOT"`) must not fail for that repo's links
+        if p.is_symlink() and base_real not in real.parents:
+            continue
+        seen.add(real)
+        yield p
 
 
 def is_checkable_fragment(frag: str) -> bool:
@@ -369,6 +438,39 @@ def selftest() -> int:
               not any("secret.md" in k for k in broken))
         check("... they are counted as unchecked instead", LOCKED_REFS == {"r/secret.md": 2})
         check("a plaintext file next to it is still checked", any(k.endswith("plain.md#gone") for k in broken))
+
+    # files git ignores in their own repo are not scanned; a TRACKED file under an ignored pattern still is
+    import subprocess
+    saved = {k: os.environ.get(k) for k in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")}
+    os.environ.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")   # no personal excludes file
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            repo = base / "repo"
+            (repo / "plans" / "x" / "candidates").mkdir(parents=True)
+            (base / "loose").mkdir()
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            (repo / "plans" / "x" / ".gitignore").write_text("candidates/\n", encoding="utf-8")
+            (repo / "plans" / "x" / "candidates" / "copy.md").write_text("[a](#ignored-copy-missing)\n", encoding="utf-8")
+            (repo / "plans" / "x" / "candidates" / "kept.md").write_text("[b](#tracked-copy-missing)\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "-f", "plans/x/candidates/kept.md"], check=True)
+            (repo / "live.md").write_text("[c](#live-missing)\n", encoding="utf-8")
+            (base / "loose" / "n.md").write_text("[d](#outside-repo-missing)\n", encoding="utf-8")
+            broken, _ = scan(base, [])
+            keys = {k.split("#", 1)[1] for k in broken}
+            check("an untracked file git ignores is not scanned", "ignored-copy-missing" not in keys)
+            check("a TRACKED file under an ignored pattern is still scanned  [foil: hiding tracked copies]",
+                  "tracked-copy-missing" in keys)
+            check("an ordinary file of the repo and a file outside any repo are still scanned",
+                  {"live-missing", "outside-repo-missing"} <= keys)
+            every = [p.name for p in iter_markdown_sources(base, [], skip_git_ignored=False)]
+            check("skip_git_ignored=False lists the ignored file too", "copy.md" in every)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
     check("split_target keeps the editor line suffix apart",
           split_target("dir/x.md:12#frag") == ("dir/x.md", ":12", "frag"))
