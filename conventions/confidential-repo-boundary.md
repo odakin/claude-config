@@ -506,6 +506,7 @@ finding は「直す」 か「見た上で残す」 のどちらかで閉じる�
 | 未公開文書の逐語の検査の当たりが、 源の file にも入っている公開の文 (公式の様式・kit の見出し) | 個人層の源の宣言に **`public: <file> sha256:<hex>`** (その公開の file を中身で固定して宣言する、 [`#unpublished-text-public-gate`](#unpublished-text-public-gate)) |
 | 同じ当たりが、 owner の文を公開の文書と非公開の記録の両方に持っている形 | **同じ文を 2 か所に持たない** (非公開の記録の側を公開の文書の節への参照に置き換える) |
 
+- 未公開文書の逐語の当たりが表の「未公開の文」 の行か「両方に持っている」 の行かは、 両側の句が入った commit の日時で決める (`git log -S'<句>' --reverse --format='%h %ad'` を公開の repo と源の repo の両方で回す)。 公開の側が先なら、 源の文書が公開の文を使った二重持ち (漏れではない)。 源の側が先なら、 未公開の文が公開の側に写った漏れ。 1 つの file の当たりでも、 句ごとに向きが分かれることがある (実測) = 当たりごとに見る
 - どの種類の term が当たったかは gate の出力から分からない (件数と file 名だけ) — [`scripts/explain-sensitive-hits.py`](../scripts/explain-sensitive-hits.py) `--repo` が同じ除外を当てた後の残りを種類つき・term を伏せて出す
 - **archived の公開 repo** は push できない。 受理一覧を入れるなら unarchive → commit (message に `[skip ci]` = 古い CI を起こさない) → push → すぐ archive に戻し、 戻ったことを確認する
 - 決着させたら **本番の台帳で** `scan-public-tree.sh --repo <repo> --force` を 1 回通す (= temp の台帳で確かめただけでは進捗にならない)
