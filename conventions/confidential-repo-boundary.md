@@ -526,6 +526,9 @@ replay が見るのは leak の gate だけ: CI の bot (author が `[bot]`) の
 (実測: 公開データを毎日 commit する bot が Tier A/B で十数本止まる判定になったが、 その repo の棚卸しは `generated:` 宣言で決着済で直すものは無かった)、
 原稿の主張の gate は「今の session に著者の承認があるか」 を見るので過去の commit では必ず落ちる = agent session の env を外して人の commit として通す。 一般則 =
 [`docs/convention-design-principles.md#detector-change-breaks-downstream-writers`](../docs/convention-design-principles.md#detector-change-breaks-downstream-writers)。
+<a id="replay-commit-messages"></a>**`replay-public-gate.sh` が通すのは本文 (pre-commit の runner) だけで、 commit message は見ない** = commit message にだけ効く一覧 (個人層が本文の一覧と別に持つ人名の一覧など) を変えた turn は、 replay が全部通っても変えた一覧は確かめていない。
+書き手の repo を cwd にして、 直近の commit message を 1 本ずつ file に書き、 [`scripts/commit-msg-leak-guard-runner.sh`](../scripts/commit-msg-leak-guard-runner.sh) `<message の file> message` に通す (終了値が 0 でない commit が「今なら止まる」)。
+止まるはずの 1 行 (非公開の repo 名など) も同じ形で通し、 門が効いていることを見てから「止まる commit なし」 と書く (実測)。
 
 **照合の形そのもの (検出器の述語) を変えたとき**は、 直近の書き手に加えて、 公開 clone の全履歴の追加行と commit message を新旧の検出器の両方に通し、
 **新版だけが当てた件**を 1 件ずつ読む (公刊物の文・合成例・一般句の一致 = 誤検出、 未公開の逐語 = 直す)。 変えた形を含まない行は新旧で判定が同じなので、
