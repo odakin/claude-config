@@ -21,6 +21,8 @@ null の後は手元の別の情報に倒れる。 規律側 = docs/convention-d
   🔴 MISSING   file は 1 つに解決できた (実在・読める) のに、 節がその file に無い:
                F1 = 節名 (と ' — ' 等で切った前半) が見出し・anchor・太字の段落の頭・表の 1 列目のどこにも無く、 本文にも無い
                F2 = 節名の先頭の語さえ本文に無い (境界が推定なので本文 hit で通す = 確度を守る)
+               見出し = md の `#` と、 txt の `== A. … ==` (検算の出力の形)。 1 字の節名 (`§A`) は見出しの頭で引く。
+               範囲 (`§A–D` / `§B–§D`) が全体で見つからなければ両端を 1 つずつ引き、 両端とも節なら通す
                F3/F4 = anchor が target の (<a id> ∪ GFM 見出し slug) に無い (.md の target だけ)
   🟡 BODY-ONLY F1 の節名が見出し等には無く本文にだけある (節の形になっていない = 数だけ。 --list で一覧)
   📜 RECORD    🔴 のうち source が履歴の記録 (archive・inbox・threads・incidents) か、 冒頭 20 行に
@@ -331,6 +333,8 @@ def gfm_slug(text: str) -> str:
 
 
 RE_HEAD = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
+# txt の見出し `== A. 名前 ==` (検算の出力など)。 md には当てない (md の `==` は setext の下線か本文)
+RE_EQ_HEAD = re.compile(r"^\s{0,3}={2,}\s+(.*?\S)\s*=*\s*$")
 RE_AID = re.compile(r"<a\s+(?:id|name)\s*=\s*[\"']([^\"']+)[\"']", re.I)
 RE_CURLY_ID = re.compile(r"\{#([\w\-]+)\}")
 RE_BOLD_HEAD = re.compile(r"^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s*)*(?:[^\w\s]{1,3}\s*)?\*\*(.+?)\*\*")
@@ -365,6 +369,11 @@ def build_index(text: str, ext: str) -> SectionIndex:
             if in_fence:
                 continue
             m = RE_HEAD.match(line)
+            e = RE_EQ_HEAD.match(line) if not m and ext in (".txt", "") else None
+            if e:
+                ix.struct.append(norm(e.group(1)))
+                ix.raw_heads.append(e.group(1))
+                continue
             if m:
                 h = RE_CURLY_ID.sub("", re.sub(r"<a\s[^>]*>\s*</a>", "", m.group(2))).strip()
                 slug = gfm_slug(h)
@@ -436,8 +445,23 @@ def name_variants(name: str) -> List[str]:
     return out
 
 
+# 節の範囲 `§A–D` / `§B–§D` / `§A-B` / `§3.1–3.4` = 両端が短い節の名前 (英数字と `.`、 4 字まで)
+RE_RANGE = re.compile(r"^§?([0-9A-Za-z][0-9A-Za-z.]{0,3})\s*[-‐‑‒–—―−~〜～]\s*§?([0-9A-Za-z][0-9A-Za-z.]{0,3})$")
+
+
 def match_name(ix: SectionIndex, name: str, bare: bool) -> str:
-    """'struct' / 'body' / 'none'。"""
+    """'struct' / 'body' / 'none'。 範囲 (`A–D`) が全体として見つからなければ、 両端を 1 つずつ節として引く
+    (両端とも節なら 'struct'。 間の節は見ない = 書き手が範囲で指す節の並びは file ごとに違う)。"""
+    k = _match_name_one(ix, name, bare)
+    if k != "none":
+        return k
+    r = RE_RANGE.match(name.strip())
+    if r and all(_match_name_one(ix, end, True) == "struct" for end in r.groups()):
+        return "struct"
+    return k
+
+
+def _match_name_one(ix: SectionIndex, name: str, bare: bool) -> str:
     if bare:
         toks = name.split()
         variants = []
@@ -1228,6 +1252,16 @@ def selftest() -> int:
     expect("--compare: 増えた / 消えた / 行の移動を分ける",
            "== missing: +1 -1 (行の移動 1)" in cmp and any("丙" in x and x.startswith("  +") for x in cmp)
            and any("乙" in x and x.startswith("  -") for x in cmp) and not any("甲" in x for x in cmp))
+    # 節の範囲 (`§A–D`) と txt の `== A. … ==` 見出し (検算の出力)。 陰性対照 = 片端が無い範囲・md の `==`
+    ix_txt = build_index("== A. first ==\nx\n== B. second ==\n\n== D. fourth ==\n", ".txt")
+    expect("txt: `== A. … ==` を節と数える (1 字の節名)", match_name(ix_txt, "A", bare=True) == "struct")
+    expect("範囲: 両端が節なら通す (`A–B` / `B–§D`、 括弧の形も)",
+           match_name(ix_txt, "A–B", bare=True) == "struct" and match_name(ix_txt, "B–§D", bare=True) == "struct"
+           and match_name(ix_txt, "A-D", bare=False) == "struct")
+    expect("範囲: 片端が無ければ通さない (`A–C`)", match_name(ix_txt, "A–C", bare=True) == "none")
+    ix_md = build_index("## A. x\n## B. y\n\n== C. not a heading ==\n", ".md")
+    expect("md: `==` の行は節にしない", match_name(ix_md, "B-C", bare=True) == "none"
+           and match_name(ix_md, "A-B", bare=True) == "struct")
 
     with tempfile.TemporaryDirectory() as td:
         base = Path(td) / "fleet"
