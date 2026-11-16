@@ -50,7 +50,7 @@
     {
       "name": "claim の名の完全な thread id を見ず、 先頭 8 字の一意性だけで役を引く",
       "pairs": [
-        ["(task.startswith(tid) or (unique8 and task.startswith(t8)))", "(unique8 and task.startswith(t8))"]
+        ["native_from_label(task) == tid or (unique8 and not NATIVE_IN_LABEL.search(task)", "(unique8 and not NATIVE_IN_LABEL.search(task)"]
       ],
       "expect_fail": [
         "claim の名が完全な thread id なら、 先頭 8 字が一意でなくても役を引く"

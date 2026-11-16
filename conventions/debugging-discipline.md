@@ -609,6 +609,7 @@ CI が長く red のまま (= 複数 session が red の上に push を積んで
    - **Linux の `/tmp` には他人 (root) の 700 の dir がある** (systemd-private-* など)。 temp dir の親や一時 dir の兄弟を走査する code は、 その下を stat した瞬間に PermissionError を投げる。 macOS の temp の親の下は自分の dir だけなので起きない。 走査の 1 件ずつの確かめを try で包み、 読めない dir は飛ばす。 Python の `Path.exists()` はこの扱いが版で違う (3.12 までは PermissionError を投げ、 3.14 は False を返す = 実測) ので、 版に依らない `stat()` を try で包む
    - **手元にだけ入っていて CI の requirements に無い module** — それを import する selftest は、 CI で途中から exit する。 CI が全部の selftest を回す設計なら module を CI の requirements に足し、 selftest の側は無い python では理由を出して SKIP する (黙って飛ばさない)。 log の最初の 1 行で、 どこまで届いたかを見る (8 の、 届いていない行の診断の取り違え)
    - **CI は本 repo だけを checkout する = 隣の repo (engine を置いた別の repo) を読む check は CI では回らない** — 手元では隣に在るので回る。 selftest がその check を engine の有無で黙って飛ばすと、 その check の label を基準の PASS に要求する検査 (foil の歯の spec = `check-foil-teeth.py`) が CI でだけ spec error になる (実測)。 selftest は飛ばす理由の行を出す。 その check だけで落ちる mutant には spec の `requires` に engine の path を書き (engine の無い場所では理由つきの `[SKIP]` になる)、 ほかの mutant は engine に依らない check で落とす = engine の有無で歯が消える mutant を残さない。 上の module と扱いが違うのは、 版を固定できる module と違い、 隣の repo を CI で clone すると、 その repo の今の変更で本 repo の CI が赤くなるから。 再現は、 隣の repo の無い dir に置いた clean export で回す
+   - **SQLite の版で、 閉じた WAL の DB を読み取り専用で開けるかが違う** — macOS の system の Python の SQLite は `-wal`・`-shm` の消えた WAL の DB を `?mode=ro` で開けず、 CI の Linux の Python 3.12 と Homebrew の Python 3.12 (SQLite 3.53) は開ける (実測)。 開ける環境では代わりの開き方 ([#reading-live-app-sqlite](#reading-live-app-sqlite)) を試験が通らず、 その部品を外した mutant が CI でだけ `[NO-TEETH]` になる。 試験の中で、 その 1 file への読み取り専用の接続を `unable to open database file` で断る差し替えを当て、 どの版でも代わりの開き方を通す (実装の例 = `scripts/lib/codex_threads.py` の selftest)
    - **再現の手**: 手元に CI と同じ版の Python があれば、 その版を `python3` と名乗る shim を置いた dir を PATH の先頭にして、 clean export (`git archive HEAD | tar -x -C <dir>`) の写しで落ちた test を回す = 作業 tree の他人の未 commit の変更も混ざらない。 直す前に同じ落ち方を出してから直す
 
 reflex: CI の修正に着手する瞬間に、 (a) 最新 run を今見たか、 (b) 起点の run と導入 commit が一致したか、 (c) CI の userland で再現したか (「手元で通った」 で止まっていないか)、 (d) test は落ちた行を言うか、 (e) **原因を人から聞いたなら、 log で引き直したか**、 (f) 起点の run と直前の green の image が同じかを見たか。
@@ -713,12 +714,12 @@ Codex の外部 Chromium browser では、公式の profile 選択契約と具�
 
 他の app の状態 DB (SQLite、 WAL mode) を読む道具を書く・直すときの罠。 実装の例 = [`scripts/lib/codex_threads.py`](../scripts/lib/codex_threads.py) の `_open_state`。
 
-- **書き手が全部閉じた WAL の DB は、 読み取り専用 (`?mode=ro`) では開けない** — app が動いたままでも、 最後の接続が閉じると `-wal`・`-shm` が消え、 開くと `unable to open database file` になる (実測)。 SQLite は WAL の DB を読み取り専用で開くのに `-shm` を要し、 読み取り専用では作れない。
+- **書き手が全部閉じた WAL の DB は、 読む側の SQLite の版によって読み取り専用 (`?mode=ro`) では開けない** — app が動いたままでも、 最後の接続が閉じると `-wal`・`-shm` が消え、 macOS の system の Python の SQLite で開くと `unable to open database file` になる (実測)。 この版は WAL の DB を読み取り専用で開くのに `-shm` を要し、 読み取り専用では作れない。 CI の Linux の Python 3.12 と Homebrew の Python 3.12 (SQLite 3.53) は同じ状態を読み取り専用で開ける (実測) = 道具はどちらの版でも読めるように書く。
   - 開けなければ `?mode=rw` (file が無ければ作らない) に `PRAGMA query_only = ON` をかけて開き直す。 普通の `connect(path)` は、 file が消えた瞬間に開くと空の DB を作る。
   - この接続は SQLite の側 file (`-wal`・`-shm`) を作る (中身は書かない)。 道具の説明が「何も書かない」 と言っていたら言い直す。 書けない場所 (書き込みを禁じた sandbox) では側 file を作れず開けない = 「分からない」 として扱う。
   - `immutable=1` は使わない: 読む途中で書き手が書き始めると、 エラーを出さずに壊れた頁を読む。 本物に何も足したくないなら、 DB と `-wal`・`-shm` を一時 dir に写して読む ([`macos-notification-db.md`](macos-notification-db.md) の方式。 写しは写した瞬間の状態)。
 - **「読めない」 を空の一覧で返さない** — 行を返す関数が「読めない」 と「行が無い」 を同じ `[]` で返すと、 呼び元は「生きているものは 0 件」 と読む (実測: 閉じた DB の間、 生存の一覧が 0 本と答えた)。 読めないときは `None` を返し、 空を返す古い関数を残すなら、 区別が要る呼び元は新しい関数を使う。
-- **試験で閉じた WAL の DB を作るときは、 側 file を自分で消す** — macOS の SQLite は最後の接続を閉じても側 file を残す (persistent WAL、 実測) ので、 閉じただけでは「消えた状態」 にならない (側 file を消す SQLite もある = app が同梱した版)。 `PRAGMA wal_checkpoint(TRUNCATE)` の後に閉じ、 `-wal`・`-shm` を消してから読む。 その状態で読み取り専用が実際に開けないことも試験の中で 1 回確かめる (開けてしまう環境では代わりの開き方を通っていない)。
+- **試験で閉じた WAL の DB を作るときは、 側 file を自分で消す** — macOS の SQLite は最後の接続を閉じても側 file を残す (persistent WAL、 実測) ので、 閉じただけでは「消えた状態」 にならない (側 file を消す SQLite もある = app が同梱した版)。 `PRAGMA wal_checkpoint(TRUNCATE)` の後に閉じ、 `-wal`・`-shm` を消してから読む。 その状態で読み取り専用が実際に開けないことも試験の中で 1 回確かめる (開けてしまう環境では代わりの開き方を通っていない)。 開けてしまう版では、 その 1 file への読み取り専用の接続を断る差し替えを試験の中で当て、 代わりの開き方を通す (CI でだけ歯が消える形 = [#linux-only-environment-shapes](#linux-only-environment-shapes))。
 
 ## <a id="aggregate-check-runtime"></a>集計検査の待ち時間
 

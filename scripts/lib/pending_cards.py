@@ -8,7 +8,7 @@
 
 述語:
   - card = `start_session` (旧 `spawn_task`) の結果の `Proposed "<題>" (task_id: task_…)`。 題・時刻・hand-off 文の
-    掲示板の request id (`request \`<id>\``) を持つ。
+    掲示板の request id (`request \\`<id>\\``) を持つ。
   - 押された = (1) app の記録で `spawnedFrom.taskId` がその id の session が在る (押した瞬間にできる、 実測)
     (2) 会話記録の「The user started your proposal task_…」 (起こした側の次の turn に遅れて届く、 実測)
     (3) この session が `start_session` に `proposal_id` を渡して起こした。

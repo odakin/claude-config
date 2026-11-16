@@ -367,12 +367,28 @@ def _selftest() -> int:
             ro_refused = True
         env4 = {"HOME": td, "CODEX_HOME": str(wal)}
         held_wal = lambda _d: f"p1\nn{wal}/thread-writer-locks/{a}.lock\n"
+        real_connect = sqlite3.connect
         if ro_refused:
             checks.append(("closed WAL database: read-only alone refuses it (the case the fallback serves)", True))
         else:
-            print(f"INFO: SQLite {sqlite3.sqlite_version} opened the closed WAL database read-only; fallback not exercised")
-        checks.append(("closed WAL database: rows still read", [r["id"] for r in thread_rows([a], env=env4)] == [a]))
-        checks.append(("closed WAL database: live threads still read", [r["id"] for r in live_threads(env4, held_wal) or []] == [a]))
+            # Some SQLite builds open it read-only (measured: the CI's Linux Python 3.12, and Homebrew's Python 3.12 with
+            # SQLite 3.53), so the fallback would go untested there and its foil mutant would have no teeth. Refuse
+            # read-only on this one file, as macOS's system SQLite does (measured), so the fallback runs on every build.
+            print(f"INFO: SQLite {sqlite3.sqlite_version} opened the closed WAL database read-only; "
+                  "the test refuses read-only on it so the fallback runs")
+            ro_uri = (wal / "state_5.sqlite").resolve().as_uri() + "?mode=ro"
+
+            def refuse_ro(target, *args, **kwargs):
+                if target == ro_uri:
+                    raise sqlite3.OperationalError("unable to open database file")
+                return real_connect(target, *args, **kwargs)
+            sqlite3.connect = refuse_ro
+        try:
+            checks.append(("closed WAL database: rows still read", [r["id"] for r in thread_rows([a], env=env4)] == [a]))
+            checks.append(("closed WAL database: live threads still read",
+                           [r["id"] for r in live_threads(env4, held_wal) or []] == [a]))
+        finally:
+            sqlite3.connect = real_connect
         checks.append(("closed WAL database: the database file is not written", (wal / "state_5.sqlite").read_bytes() == before))
         checks.append(("read-write fallback does not create a missing database",
                        _open_state(wal / "absent.sqlite", 0.2) is None and not (wal / "absent.sqlite").exists()))
