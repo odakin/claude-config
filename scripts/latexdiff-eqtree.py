@@ -36,7 +36,12 @@ and a deleted sentence that cites it prints its old number.  What is not a chang
 of a delimiter (\\pn{..}, ( .. ), \\Big( .. \\Big) are the same bracket), where a row breaks.
 
 A pair with little in common (WHOLE_BELOW) is shown whole, old struck + new underlined.  A display
-latexdiff takes out in one place and puts in at another has moved: struck there, underlined here.
+latexdiff takes out in one place and puts in at another has moved: struck there, underlined here, as the
+text around it.  Displays are paired in order first and then out of order by label (or, unlabeled, by the
+same content), so a display that a moved block passed keeps its partner and stays unmarked; a display whose
+numbered rows went to several displays of the other version is cut at the same rows (split_envs), so a
+display that was only split shows the changed punctuation at the cut.  latexdiff-eqtree-check.py checks a
+finished diff against the two versions on its own.
 Arguments of macros defined in the preamble are read from \\newcommand, \\renewcommand and
 \\providecommand, the aliases \\def\\X{\\Y} and \\let\\X\\Y, and \\def\\X#1#2{..} (protect reads o.tex and
 n.tex, restore reads diff.tex); a \\def with delimited arguments (\\def\\X#1.{..}), \\edef and \\gdef are not read.
@@ -922,7 +927,109 @@ def pair_envs(o, n):
             i += 1
         else:
             j += 1
+    # Out of order: a display that moved past others keeps its label (or, without one, its content).  The order-preserving
+    # pass above keeps the longer of two chains that cross, so the displays of the other chain would be left unpaired and
+    # shown deleted + added where they stand, although their text did not move (measured: a section moved to the
+    # appendix left the displays it passed unpaired).  Pair them here; latexdiff, which aligns the text around the
+    # placeholders, then decides which of the two moved (fill(): a placeholder it takes out and puts in elsewhere).
+    po, pn = {i for i, _ in pairs}, {j for _, j in pairs}
+    cand = []
+    for i in range(N):
+        if i in po:
+            continue
+        for j in range(M):
+            if j in pn:
+                continue
+            if set(o[i]["labels"]) & set(n[j]["labels"]):
+                cand.append((3.0 + env_sim(o[i], n[j]), i, j))
+            elif not o[i]["labels"] and not n[j]["labels"] and o[i]["tree"] and \
+                    seq_canon(o[i]["tree"]) == seq_canon(n[j]["tree"]):
+                cand.append((2.0, i, j))
+    for _, i, j in sorted(cand, key=lambda c: (-c[0], c[1], c[2])):
+        if i not in po and j not in pn:
+            pairs.append((i, j))
+            po.add(i)
+            pn.add(j)
     return pairs
+
+
+ROWSEP = re.compile(r"\\\\\*?(\[[^\]]*\])?")
+ENV_BE = re.compile(r"\\(begin|end)\{[^}]*\}")
+LABEL = re.compile(r"\\label\{([^}]*)\}")
+
+
+def rows_of(src):
+    """The rows of a display body at the top level (not inside braces or a nested environment): [(start, end)];
+    the separator \\\\ of a row lies between its end and the start of the next row."""
+    rows, start, depth, env, i = [], 0, 0, 0, 0
+    while i < len(src):
+        c = src[i]
+        if c == "\\":
+            m = ENV_BE.match(src, i)
+            if m:
+                env += 1 if m.group(1) == "begin" else -1
+                i = m.end()
+                continue
+            if src.startswith("\\\\", i) and depth == 0 and env == 0:
+                m = ROWSEP.match(src, i)
+                rows.append((start, i))
+                start = i = m.end()
+                continue
+            i += 2
+            continue
+        depth += 1 if c == "{" else -1 if c == "}" else 0
+        i += 1
+    rows.append((start, len(src)))
+    return rows
+
+
+def split_envs(src, dst):
+    """A display whose labels went to two or more displays of the other version is cut, on its own side, into as many
+    pieces at the same row boundaries (each numbered row with the unnumbered rows before it), so that each piece pairs
+    with its own display.  Without the cut the display pairs with one of them and the others are shown whole as added,
+    although only the punctuation at the cut changed (measured: a display whose first numbered rows moved to an
+    appendix).  The pieces keep the span of the display: protect() puts their placeholders there in order.
+    Returns the new list of src and a log of the cuts."""
+    dst_of = {lab: j for j, e in enumerate(dst) for lab in e["labels"]}
+    out, log = [], []
+    for e in src:
+        targets = {dst_of[lab] for lab in e["labels"] if lab in dst_of}
+        if len(e["labels"]) < 2 or len(targets) < 2 or \
+                any(not set(dst[j]["labels"]) <= set(e["labels"]) for j in targets):
+            out.append(e)
+            continue
+        rows = rows_of(e["src"])
+        groups, cur, ok = [], [], True
+        for k, (a, b) in enumerate(rows):
+            cur.append(k)
+            labs = LABEL.findall(e["src"][a:b])
+            if labs:
+                t = {dst_of.get(lab) for lab in labs} - {None}
+                if len(t) > 1:
+                    ok = False
+                groups.append([cur, t.pop() if t else None])
+                cur = []
+        if cur and groups:
+            groups[-1][0] += cur
+        for g in range(len(groups)):          # a row whose label went nowhere stays with the rows before it
+            if groups[g][1] is None:
+                groups[g][1] = groups[g - 1][1] if g else next((x[1] for x in groups if x[1] is not None), None)
+        pieces = []
+        for ks, t in groups:
+            if pieces and pieces[-1][1] == t:
+                pieces[-1][0] += ks
+            else:
+                pieces.append([list(ks), t])
+        if not ok or len(pieces) < 2 or len({t for _, t in pieces}) != len(pieces):
+            out.append(e)
+            continue
+        for part, (ks, _) in enumerate(pieces):
+            psrc = e["src"][rows[ks[0]][0]:rows[ks[-1]][1]]
+            tree = parse(psrc)
+            labels = [x.t[7:-1] for x in tree if type(x) is Struct and x.t.startswith("\\label{")]
+            out.append(dict(e, src=psrc, tree=tree, labels=labels, w=seq_w(tree), part=part))
+        log.append([[lab for lab in LABEL.findall(e["src"][rows[ks[0]][0]:rows[ks[-1]][1]])] for ks, _ in pieces])
+    return out, log
 
 
 def width(x, f=1.0):
@@ -1061,6 +1168,12 @@ def protect(op, np, tp, wide=None):
     load_macros(o)
     load_macros(n)
     eo, en = envs(o), envs(n)
+    eo, cut_o = split_envs(eo, en)
+    en, cut_n = split_envs(en, eo)
+    for side, cuts in (("old", cut_o), ("new", cut_n)):
+        for c in cuts:
+            print("display of the %s version cut into %d pieces (labels %s): its labels went to as many displays"
+                  % (side, len(c), " | ".join(",".join(p) for p in c)))
     pairs = pair_envs(eo, en)
     table, rep_o, rep_n = {}, [], []
     report = []
@@ -1070,23 +1183,23 @@ def protect(op, np, tp, wide=None):
         pid += 1
         text, how = render_pair(eo[i], en[j], str(pid) in wide)
         table[str(pid)] = {"text": text, "how": how, "old": render_old(eo[i]), "new": render_new(en[j])}
-        rep_o.append((eo[i]["span"], ph(pid)))
-        rep_n.append((en[j]["span"], ph(pid)))
+        rep_o.append((eo[i]["span"], eo[i].get("part", 0), ph(pid)))
+        rep_n.append((en[j]["span"], en[j].get("part", 0), ph(pid)))
         done_o.add(i)
         done_n.add(j)
         report.append({"id": pid, "how": how, "labels": en[j]["labels"], "old_labels": eo[i]["labels"],
-                       "sim": round(env_sim(eo[i], en[j]), 3)})
+                       "sim": round(env_sim(eo[i], en[j]), 3), "cut": "part" in eo[i] or "part" in en[j]})
     for i, e in enumerate(eo):
         if i not in done_o:
             pid += 1
             table[str(pid)] = {"text": render_old(e), "how": "deleted"}
-            rep_o.append((e["span"], ph(pid)))
+            rep_o.append((e["span"], e.get("part", 0), ph(pid)))
             report.append({"id": pid, "how": "deleted", "labels": [], "old_labels": e["labels"], "sim": 0})
     for j, e in enumerate(en):
         if j not in done_n:
             pid += 1
             table[str(pid)] = {"text": render_new(e), "how": "added"}
-            rep_n.append((e["span"], ph(pid)))
+            rep_n.append((e["span"], e.get("part", 0), ph(pid)))
             report.append({"id": pid, "how": "added", "labels": e["labels"], "old_labels": [], "sim": 0})
     # pictures: the same trick (latexdiff mangles nested tikzpictures)
     to, tn = find_tikz(o), find_tikz(n)
@@ -1094,12 +1207,16 @@ def protect(op, np, tp, wide=None):
         for (a, b), (c, d) in zip(to, tn):
             pid += 1
             table[str(pid)] = {"text": mark_picture(o[a:b], n[c:d]), "how": "picture"}
-            rep_o.append(((a, b), ph(pid)))
-            rep_n.append(((c, d), ph(pid)))
+            rep_o.append(((a, b), 0, ph(pid)))
+            rep_n.append(((c, d), 0, ph(pid)))
 
     def apply(s, reps):
-        for (a, b), ph in sorted(reps, reverse=True):
-            s = s[:a] + ph + s[b:]
+        """The pieces of a cut display share its span: their placeholders go there one per line, in order."""
+        by = {}
+        for span, part, p in reps:
+            by.setdefault(span, []).append((part, p))
+        for (a, b) in sorted(by, reverse=True):
+            s = s[:a] + "\n".join(p for _, p in sorted(by[(a, b)])) + s[b:]
         return s
 
     open(op, "w", encoding="utf-8").write(apply(o, rep_o))
@@ -1351,6 +1468,29 @@ def selftest():
             not in joined:
         ok = False
         print("split placeholder:", n, joined)
+    # displays out of order: one display moved past two; all three keep their partners (the order-preserving pass alone
+    # pairs two and leaves the third deleted + added where it stands)
+    def env(src):
+        tree = parse(src)
+        return {"name": "align", "star": "", "src": src, "span": (len(src), 0), "tree": tree, "w": seq_w(tree),
+                "labels": [x.t[7:-1] for x in tree if type(x) is Struct and x.t.startswith("\\label{")]}
+    o = [env(r"a=b\label{p}"), env(r"c=d\label{q}"), env(r"e=f\label{r}")]
+    n = [env(r"e=f\label{r}"), env(r"a=b\label{p}"), env(r"c=d\label{q}")]
+    if sorted(pair_envs(o, n)) != [(0, 1), (1, 2), (2, 0)]:
+        ok = False
+        print("pairs out of order:", sorted(pair_envs(o, n)))
+    # a display whose numbered rows went to two displays is cut at the same row boundary; a nested environment's \\
+    # does not cut
+    o = [env(r"a&=b,\nonumber\\&=c\label{p}\\ d&=\begin{cases}x\\y\end{cases},\label{q}")]
+    n = [env(r"d&=\begin{cases}x\\y\end{cases}.\label{q}"), env(r"a&=b,\nonumber\\&=c.\label{p}")]
+    cut, log = split_envs(o, n)
+    if [c["labels"] for c in cut] != [["p"], ["q"]] or cut[0]["src"] != r"a&=b,\nonumber\\&=c\label{p}" or \
+            cut[1]["src"].strip() != r"d&=\begin{cases}x\\y\end{cases},\label{q}" or [c["part"] for c in cut] != [0, 1]:
+        ok = False
+        print("cut display:", [(c["labels"], c["src"]) for c in cut])
+    if split_envs(n, cut)[0] != n:     # the other side has nothing to cut
+        ok = False
+        print("cut the side that was not split")
     pic = mark_picture("\\node {$f\\fn{a-b}$};\nx", "\\node {$f\\fn{a-c}$};\nx")
     if "\\DIFdel{b}" not in pic or "\\DIFadd{c}" not in pic or not pic.startswith("\\node {$"):
         ok = False
