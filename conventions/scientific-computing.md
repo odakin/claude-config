@@ -672,6 +672,8 @@ $$
 
 11. <a id="extreme-parameter-reference"></a>**極端な parameter の参照は、 縮尺せずに次元を落として作る**。 被積分関数が、 他の変数を固定すると Gauss 型になる方向 (分散関係の横の成分など) は、 係数の依存を残したまま解析的に積分し、 残りを低次元の滑らかな積分にする。 打ち消し合う巨大な位相は、 共通の位相を代数で落としたうえで、 残りを多倍長 (mpmath の 50〜60 桁) で運ぶ。 縮約は、 何も展開しない積分と一度照合する: 安ければ実の格子の総当たり、 位相が速くて格子が届かない所では、 Gauss 部分の鞍点を通る複素の直線 (最急降下の向き) に沿った積分 (被積分関数が滑らかな鐘形になる。 その直線の上で被積分関数が解析的であることを先に確かめる)。 縮尺した parameter で済ませると、 実際の値では小さい組み合わせが O(1) になり、 照合するつもりの近似と関係の無いずれが出る (実測。 読み方 = ai-collaboration の [`physics-verification-cycle.md#uniform-limit-check`](../../ai-collaboration/conventions/physics-verification-cycle.md#uniform-limit-check))。
 
+12. <a id="det-from-eigenvalue-product"></a>**行列式を固有値の積で出さない — 固有値が倍精度の幅まで開く行列では、 小さい固有値が丸めで混ざる**。 複素対称行列の Gauss 積分で $\sqrt{\det}$ の分枝を取るために、 固有値の主値の平方根を掛ける書き方は、 最小と最大の固有値の比が $10^{-15}$ 程度まで開くと崩れる: 固有値の計算の後退誤差 ($\varepsilon\|A\|$) が小さい固有値と同じ大きさになり、 縮退に近い対が混ざって積が % の桁で狂う (実測: 平方根で 1%)。 LU の行列式 (`numpy.linalg.slogdet`) はこの形の誤差を出さなかった。 絶対値を `slogdet` から取り、 分枝 (符号・位相) だけを固有値の積で決める。 見分ける症状 = 連続な parameter を振ると、 ずれがある値を境に階段状に現れ、 その前後では何桁も一定 (物理の効果なら滑らかに動く)。 理論上 0 に連続につながるはずの極限 (角度 → 0) で、 ずれが不連続に跳ぶのも同じ合図。 同じ行列で `slogdet` と固有値の積を並べて印字すると 1 回で切り分けられる。 他の検算がその道具の積分を「厳密」 側に使っている場合も、 この形の行列に当たる parameter では上の 2 のとおり厳密側を先に疑う。
+
 長い照合 job の進み具合は、 出力を `tail` に流さず `python3 -u … > log` にして log を読む ([`debugging-discipline.md#no-pipe-interactive-script`](debugging-discipline.md#no-pipe-interactive-script) と同じ機構)。
 
 ### <a id="narrow-reweighting-shift"></a>狭い分布に重みをかける展開は、 重みの 1 階の項を落とさない

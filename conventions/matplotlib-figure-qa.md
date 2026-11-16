@@ -65,6 +65,19 @@ def assert_texts_inside(fig, *axes, tol=2.0):
   (導入当日にも「枠内だが領域外」の残余 1 件が実際に出た。gate を過信しない)。
 - 図の外側 (caption との衝突・本文との行かぶり) は文書 layer の担当 =
   [`latex.md#pdf-line-collision-detection`](latex.md#pdf-line-collision-detection)。
+- legend と suptitle も射程外 → 次節の gate で見る。
+
+## <a id="legend-and-suptitle-gate"></a>凡例と上の題の gate (多パネル図)
+
+`assert_texts_inside` は `ax.texts` しか見ないので、 凡例が曲線を覆う・上の題 (suptitle) がパネルの題に重なる、 は素通りする。
+対数軸の曲線が隅まで埋まる多パネル図では、 単パネルの家の様式 (凡例を枠の中) が成り立たないことがある (実測: 3 枚組で、 どのパネルにも凡例の入る空きが無かった)。
+
+- **凡例を枠の中に置くなら**: 各 `Line2D` の data 点を `ax.transData.transform` で画面座標にし、 凡例の `get_window_extent()` の箱の中に入る点が無いことを assert する
+  (枠の外に切られた点 = 縦の範囲の外は除く。 太い線は点より太いので、 窮屈なら箱を少し広げて判定する)。
+- **空きが無ければ図の凡例 (`fig.legend`) を図の下に出し**、 その箱が図の中に収まり、 どのパネルの `ax.get_tightbbox(renderer)` (枠・目盛の字・軸名・パネルの題を含む) とも交わらないことを assert する。 suptitle の箱 (`fig._suptitle.get_window_extent`) も同じ判定に入れる。
+  凡例を外に出したことは、 家の様式から違えた点として script のコメントと報告に理由を書く。
+- **`tight_layout` の機構 fact (matplotlib 3.9 で実測)**: `tight_layout` は suptitle の分の余白を自分で取る。 その上で `rect` の上端を 1 未満にすると余白が二重になり、 題とパネルの間が大きく空く。 凡例を下に出すときは `rect=(0, 下の余白, 1, 1)` から始め、 詰めたいときは上端を 1 より少し大きくして、 上の gate で重なりが無いことを確かめる。
+- gate を足したら、 わざと重ねた配置 (凡例を上にずらす) で落ちることを 1 回確かめる。
 
 ## <a id="figure-replacement-information-audit"></a>既存図の置換は情報 inventory → 一旦 hoist → 明示的に prune
 
