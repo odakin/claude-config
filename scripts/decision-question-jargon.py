@@ -29,7 +29,10 @@
 箱の承認の検査 (2026-11-04、 conventions/mid-turn-text-visibility.md#turn-closing-question-box): turn 終わりの箱 (wrap_up) の ask の
   欄が、 文面の送信・投稿の承認 (「送ってよいか」「この文面で」) か、 本文にある下書き・案・条件 (「下の案」「推す条件で」) を指す
   とき、 箱を止める (permissionDecision = deny、 TOOL_MODE に依らない)。 箱の後の本文は本人に見えないことがあり、 本文を読まない
-  承認になる (実測)。 文面と問いは最終の返事の本文に書き、 箱は要約だけで閉じる。
+  承認になる (実測)。 文面と問いは最終の返事の本文に書き、 箱は要約だけで閉じる。 保護された file を当てる承認 (「当ててよいか」
+  「適用しますか」) は、 箱の recap か ask に当てる file の名と候補の SHA-256 の頭 (8 字以上、 英字 a〜f を含む) が出ていれば
+  止めない (本人の裁定 = ボタンで答えてよい。 守りの道具はその形の押した答えを承認に記録する =
+  conventions/agent-rule-ownership.md#owner-answer-in-another-window の 3)。 送信・投稿の承認は SHA-256 があっても止める。
 
 何を見るか (3 つの面、 どれも「本人が読む問い」):
   Stop                      今の turn の最終 assistant 発話のうち**問いの行** (下の Q_RE) と、 その行に続く字下げの深い行
@@ -271,17 +274,19 @@ def line_notice(refs) -> str:
 
 BOX_MARK = "📨 箱の問いが文面の承認か本文を指しています"
 BOX_RULE = "claude-config/conventions/mid-turn-text-visibility.md#turn-closing-question-box"
-BOX_APPROVAL_RE = re.compile(
+BOX_SEND_RE = re.compile(  # 文面の送信・投稿の承認と、 本文の下書き・案・条件を指す問い (箱の欄に入らない = 本文を読まない承認)
     r"送(?:って|っても|信して|信しても|ります|信します)[^。\n]{0,8}(?:よい|いい|か)"
     r"|投稿(?:して|しても|します)[^。\n]{0,8}(?:よい|いい|か)"
     r"|この(?:下書き|文面|文章)で"
     r"|(?:下|上|本文|返事)の(?:下書き|文面|案|文|推す|条件|答え)"
-    r"|推す(?:条件|答え|案)で"
+    r"|推す(?:条件|答え|案)で", re.I)
+BOX_APPLY_RE = re.compile(
     # 保護された file を当てる承認 (守りの道具が止めた変更の「当ててよいか」 = 差分を読まない承認になる。 2026-11-09、
-    # 箱に出した承認の問いを網が通した実測 = mid-turn-text-visibility.md#box-text-after-not-delivered)
+    # 箱に出した承認の問いを網が通した実測 = mid-turn-text-visibility.md#box-text-after-not-delivered)。 箱に当てる file の名と
+    # 候補の SHA-256 の頭を書いた問いは止めない (box_shows_file_and_sha = 本人の裁定「ボタンで良くない？むしろ」)
     # 変更・file を指す語と、 当てる・適用・反映・承認の求めが同じ問いにあるときだけ (盲検の実測: 語だけで拾うと
     # 「仮の数字を当ててもよいか」「どの部署が承認しますか」 を止め、 「適用してよいか」「反映しますか」 を通した)
-    r"|(?:変更|差分|候補|直し|修正|規則|設定|hook|file|ファイル|守り|\.md|\.py|\.json|\.sh)[^。\n]{0,24}"
+    r"(?:変更|差分|候補|直し|修正|規則|設定|hook|file|ファイル|守り|\.md|\.py|\.json|\.sh)[^。\n]{0,24}"
     # 動詞の直後が許しの求め (てよい・てください・ますか …) のときだけ (盲検の実測: 「更新しても何が起きるか」 を止めた)
     # 許しの語の後は問いの終わり (盲検の実測: 「適用してもいいか判断する基準を」 の情報の問いを止めた)
     r"(?:当て|適用し|反映し|更新し|変え|入れ)(?:て(?:も)?(?:(?:よい|いい|よろしい|大丈夫|構わない)(?:です|でしょう)?か?"
@@ -299,13 +304,35 @@ BOX_APPROVAL_RE = re.compile(
     r"\b(?:change|diff|edit|patch|candidate|fix|rule|hook|setting|file|guard)s?\b"
     r"|\bapprove (?:the|this|these|my) [^.?\n]{0,30}\b(?:change|diff|edit|patch|candidate|fix)s?\b",
     re.I)
+BOX_APPROVAL_RE = re.compile(BOX_SEND_RE.pattern + "|" + BOX_APPLY_RE.pattern, re.I)  # 2 つの枝を合わせた形 (語の照合用)
+# 守りの道具が押したボタンの答えを承認に記録する形 (agent-rule-ownership.md#owner-answer-in-another-window の 3) = 押した箱までの
+# 返事の 1 つ (箱なら recap と ask) に、 当てる file の名と候補の SHA-256 の頭 8 字以上が出ている。 網は形だけを見る (どの file・
+# どの候補の hash かは、 当てる時に守りの道具が候補の全文の SHA-256 で照らす)。 頭は英字 a〜f を 1 字以上含むものだけ
+# (数字だけの 8 字は日付・event id の頭と分けられない。 頭が数字だけなら、 英字が出るまで長く書く)
+# 前後は英数字で区切る (python の \w は日本語の字も含む = 「CLAUDE.mdの変更」 の空白の無い形を拾えない)
+_BOX_FILE_NAME_RE = re.compile(r"(?<![A-Za-z0-9_.-])\.?[A-Za-z0-9_-][A-Za-z0-9_.-]*\.[A-Za-z][A-Za-z0-9]{0,5}(?![A-Za-z0-9_])")
+_BOX_SHA_HEAD_RE = re.compile(r"(?<![0-9a-f])(?=[0-9a-f]*[a-f])[0-9a-f]{8,64}(?![0-9a-f])")
+APPLY_HINT = ("保護された file を当てる承認なら、 箱の recap か ask に当てる file の名と候補の SHA-256 の頭 (8 字以上、 英字 a〜f を"
+              " 含むまで) を書けば、 ボタンで答えてもらってよい (押した答えは守りの道具が承認に記録する ="
+              " claude-config/conventions/agent-rule-ownership.md#owner-answer-in-another-window の 3)")
+
+
+def box_shows_file_and_sha(tool_input) -> bool:
+    """箱の recap と ask (守りの道具が読む返事の 1 つ) に、 file の名と SHA-256 の頭の形が両方あるか。"""
+    ti = tool_input if isinstance(tool_input, dict) else {}
+    text = " ".join(str(ti.get(k) or "") for k in ("recap", "ask"))
+    return bool(_BOX_FILE_NAME_RE.search(text)) and bool(_BOX_SHA_HEAD_RE.search(text.lower()))
 
 
 def box_approval_asks(tool_name: str, tool_input) -> list:
-    """箱の ask の欄のうち、 文面の承認か本文の下書き・案・条件を指す問い (箱だけ。 選択肢 UI は見ない)。"""
+    """箱の ask の欄のうち、 文面の承認か本文の下書き・案・条件を指す問いと、 保護された file を当てる承認のうち箱に file の名と
+    候補の SHA-256 の頭を書いていない問い (箱だけ。 選択肢 UI は見ない)。 file の名と SHA-256 の頭を箱に書いた承認の問いは
+    止めない = 本人の裁定 (ボタンで答えてよい)。 守りの道具は、 その形の押した答えだけを承認に記録する。"""
     if not (tool_name or "").endswith("__wrap_up"):
         return []
-    return [a for a in tool_asks(tool_name, tool_input) if BOX_APPROVAL_RE.search(a)]
+    shown = box_shows_file_and_sha(tool_input)
+    return [a for a in tool_asks(tool_name, tool_input)
+            if BOX_SEND_RE.search(a) or (BOX_APPLY_RE.search(a) and not shown)]
 
 
 SHOW_RULE = "claude-config/conventions/concise-output.md#show-the-text-being-changed"
@@ -492,6 +519,8 @@ def tool_output(inp: dict, terms, pointer):
     if approvals:
         msgs.append(f"{BOX_MARK} (「{approvals[0][:40]}」): 箱の後に書く本文は本人に見えないことがある = 本文を読まない承認になる。"
                     f" 文面・案・条件と問いは最終の返事の本文に書き、 箱は要約だけで閉じる (正本 = {BOX_RULE})")
+        if any(not BOX_SEND_RE.search(a) for a in approvals):
+            msgs.append(APPLY_HINT)
     mode = os.environ.get("DECISION_QUESTION_JARGON_TOOL_MODE", "notice")
     if mode == "deny" or approvals:
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
@@ -798,6 +827,31 @@ def selftest() -> int:
     dec = ((out or {}).get("hookSpecificOutput") or {})
     check(dec.get("permissionDecision") == "deny" and BOX_MARK in dec.get("permissionDecisionReason", "")
           and BOX_RULE in dec.get("permissionDecisionReason", ""), "箱の承認: TOOL_MODE に依らず箱を止める")
+    # 保護された file の承認を箱のボタンで問う形 (本人の裁定「ボタンで良くない？むしろ」、 文と hash は合成)
+    def box2(recap, ask):
+        return box_approval_asks("mcp__ccd_turn__wrap_up", {"recap": recap, "ask": ask})
+    check(not box2("rules-a.md の候補 (SHA-256 c0ffee12ab34) を作った。", "この候補を当ててよいですか？")
+          and not box2("規則の文書の直しの候補を作った。", "notes-b.md の変更 (SHA-256 5eed1234beef) を当てますか？")
+          and not box2("x", "CLAUDE.md の変更 (候補の SHA-256 の頭 0b1c2d3e4f5a) を適用してよいですか？")
+          and not box2("x", "CLAUDE.mdの変更(SHA-256の頭0b1c2d3e4f5a)を当ててよいですか？"),
+          "箱の承認: 当てる file の名と候補の SHA-256 の頭を箱に書いた承認の問いは止めない (ボタンで答えてよい)")
+    check(box2("rules-a.md の候補を作った。", "この候補を当ててよいですか？")
+          and box2("候補 (SHA-256 c0ffee12ab34) を作った。", "この候補を当ててよいですか？")
+          and box2("rules-a.md の候補 (20261116) を作った。", "この候補を当ててよいですか？")
+          and box2("rules-a.md の候補 (c0ffee1) を作った。", "この候補を当ててよいですか？"),
+          "箱の承認: file の名か SHA-256 の頭 (8 字以上・英字を含む) の片方でも無い承認の問いは今どおり止める")
+    check(box2("返事の下書き (SHA-256 c0ffee12ab34) を mail-c.md に書いた。", "この文面で送ってよいですか？")
+          and box2("rules-a.md (SHA-256 c0ffee12ab34)。", "下の案で直しますか？"),
+          "箱の承認: 送信の承認と本文を指す問いは、 file の名と SHA-256 があっても止める")
+    out = tool_output({"tool_name": "mcp__ccd_turn__wrap_up",
+                       "tool_input": {"recap": "rules-a.md の候補を作った。", "ask": "この候補を当ててよいですか？"}}, [], None)
+    why = (((out or {}).get("hookSpecificOutput") or {}).get("permissionDecisionReason") or "")
+    out_ok = tool_output({"tool_name": "mcp__ccd_turn__wrap_up",
+                          "tool_input": {"recap": "rules-a.md の候補 (SHA-256 c0ffee12ab34) を作った。",
+                                         "ask": "この候補を当ててよいですか？"}}, [], None)
+    check("SHA-256 の頭" in why and "owner-answer-in-another-window" in why
+          and ((out_ok or {}).get("hookSpecificOutput") or {}).get("permissionDecision") != "deny",
+          "箱の承認: 止めた注意文に file の名と SHA-256 の頭を箱に書けばボタンでよいことを添え、 書いた箱は止めない")
     print("--- decision-question-jargon selftest:", "PASS" if ok else "FAIL", "---")
     return 0 if ok else 1
 
