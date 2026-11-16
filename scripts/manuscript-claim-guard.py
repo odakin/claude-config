@@ -74,8 +74,8 @@
                                    --reviewer-approval = 本人が任せた範囲 (個人層の reviewer-delegation.json) で、 書いた worker と別の窓の
                                    検収係が掲示板に書いた承認の event (照合 = verify_reviewer_approval、 正本 =
                                    conventions/agent-rule-ownership.md#reviewer-delegation)
-                                   --owner-session claude:<id> --quote '<発言>' = 本人が依頼元の窓で答えた承認 (その窓の会話記録で
-                                   照らす。 規則の文書・hook・道具・設定の --candidate だけ = OWNER_RELAY)
+                                   --owner-session claude:<id> --quote '<発言>' = 本人が別の窓で答えた承認 (その窓の会話記録で
+                                   照らす。 --candidate の全文だけ、 原稿は候補の保護領域ごとの中身に結ぶ = OWNER_RELAY)
                                    承認の記録 + 書込み + 照合を 1 command で。 置換は Edit と同じ (old は 1 回だけ現れる)
   manuscript-claim-guard.py approvals [--session agent:id]    記録済み承認の一覧
   manuscript-claim-guard.py stop claude|codex      Stop の event を stdin で受け、 記録した承認を最後の返事に書いていなければ差し戻す (fail-open)
@@ -1757,10 +1757,51 @@ def protected_changes(rel: str, old: str, new: str, repo: Path | None, cfg: dict
     return changes
 
 
+REGION_ABSENT = "-"  # その領域が無い (消した・まだ無い) ときの中身の hash の代わり (region_sha256 / after_sha256)
+
+
+def manuscript_region_digests(sn: str, macros: frozenset[str] | set[str] | tuple, protect: list[str],
+                              spans: list[tuple[int, int, str]] | None = None,
+                              views: tuple[dict, dict] | None = None, maths: dict[str, str] | None = None) -> dict[str, str]:
+    """原稿の保護領域ごとの中身の hash {領域の名: SHA-256} (別の窓の答えの原稿の承認が候補に結ぶ形 = OWNER_RELAY の 9)。
+    sn = コメント除去済みの全文。 節 (表題・概要・序論・結論・指定節) は manuscript_region_changes と同じ 2 通りの切り方の
+    両方の中身を 1 つの hash に、 label のある式はその式の中身、 label の無い式は同じ名前 (math#<頭 8 字>) の式の中身の
+    多重集合を 1 つの hash にする (同じ式の 1 つを消した変更も、 候補と残りの数が同じなら同じ hash)。 数式を包む macro
+    の定義 (wrapper の領域) は持たない = その変更は別の窓の答えの原稿の承認では通らない (unapproved)。
+    views = 呼び元が切った (原文の切り方, verbatim を空白にした写しの切り方)、 maths = 呼び元が読んだ math_regions
+    (無ければここで切る・読む)。"""
+    out: dict[str, str] = {}
+    cuts = views if views is not None else (prose_region_slices(sn, protect, False), prose_region_slices(sn, protect, True))
+    for k in sorted(set(cuts[0]) | set(cuts[1])):
+        parts = [slices_text(sn, cut[k]) if k in cut else None for cut in cuts]
+        out[k] = hashlib.sha256(json.dumps(parts, ensure_ascii=False).encode("utf-8")).hexdigest()
+    groups: dict[str, list[str]] = {}
+    for k, v in (maths if maths is not None else math_regions(sn, macros, spans)).items():
+        digest = hashlib.sha256(v.encode("utf-8")).hexdigest()
+        if k.startswith("eq:"):
+            out[k] = digest
+        else:
+            groups.setdefault(f"math#{sha8(v)}", []).append(digest)
+    for k, digests in groups.items():
+        out[k] = hashlib.sha256("\n".join(sorted(digests)).encode("utf-8")).hexdigest()
+    return out
+
+
+def candidate_region_digests(rel: str, text: str, repo: Path | None) -> dict[str, str]:
+    """候補の全文 text の保護領域ごとの中身の hash (manuscript_region_changes が変更に付ける after_sha256 と同じ読み方)。"""
+    cfg = load_config(repo)
+    sn = strip_tex_comments(text)
+    macros = wrapper_context(rel, sn, sn, repo, cfg)[0]
+    protect = [p for p in cfg.get("protect_sections", []) or [] if isinstance(p, str)]
+    return manuscript_region_digests(sn, macros, protect, math_spans(sn, macros, dollars=True))
+
+
 def manuscript_region_changes(rel: str, old: str, new: str, repo: Path | None, cfg_eff: dict) -> list[dict]:
     """原稿の保護領域 (表題・概要・序論・結論・指定節・数式・数式を包む macro の定義) の変更だけを列挙する (権限の
     lock は見ない = protected_changes の後半)。 記録 (additive-log) の副作用が無いので、 移動の比較 (moved_changes)
-    が同じ中身を別の path の文脈で何度呼んでもよい。"""
+    が同じ中身を別の path の文脈で何度呼んでもよい。 節と数式の変更には、 変更の後のその領域の中身の hash
+    (after_sha256、 manuscript_region_digests。 領域が無くなれば REGION_ABSENT) を付ける = 別の窓の答えの承認が
+    見せた候補の中身と照らす (unapproved)。 数式を包む macro の定義の変更には付けない。"""
     changes: list[dict] = []
 
     def add(region: str, kind: str, detail: str = "") -> None:
@@ -1783,14 +1824,17 @@ def manuscript_region_changes(rel: str, old: str, new: str, repo: Path | None, c
     so, sn = strip_tex_comments(old), strip_tex_comments(new)
     macros, wrapper_changed = wrapper_context(rel, so, sn, repo, cfg_eff)
     add_wrapper_changes(wrapper_changed)
+    wrapper_count = len(changes)  # ここまで = 数式を包む macro の定義の変更 (after_sha256 を付けない)
     protect = [p for p in cfg_eff.get("protect_sections", []) or [] if isinstance(p, str)]
     spo, spn = math_spans(so, macros, dollars=True), math_spans(sn, macros, dollars=True)
     mo, mn = math_regions(so, macros, spo), math_regions(sn, macros, spn)
     at_o, at_n = {(a, b) for a, b, _ in spo}, {(a, b) for a, b, _ in spn}  # 文書全体の式の位置 (側ごとに 1 回)
     seen: set[tuple[str, str]] = set()
     judged: set[tuple] = set()  # 同じ (名前, 旧の切れ目, 新の切れ目) は 2 通りの切り方で同じ結果 = 1 回だけ比べる
+    new_cuts: dict[bool, dict] = {}  # 新しい側の節の切れ目 (切り方ごと) = 変更の後の中身の hash に使い回す
     for on_view in (False, True):  # 節の切り方 2 通り (原文 = 今までどおり / verbatim を空白にした写し) のどちらかで変われば出す
         qo, qn = prose_region_slices(so, protect, on_view), prose_region_slices(sn, protect, on_view)
+        new_cuts[on_view] = qn
         for k in sorted(set(qo) | set(qn)):
             sig = (k, tuple(qo.get(k, ())), tuple(qn.get(k, ())))
             if sig in judged:
@@ -1835,6 +1879,10 @@ def manuscript_region_changes(rel: str, old: str, new: str, repo: Path | None, c
     for v, c in (cn - co).items():
         for _ in range(c):
             add(f"math#{sha8(v)}", "add")
+    if len(changes) > wrapper_count:
+        digests = manuscript_region_digests(sn, macros, protect, spn, (new_cuts[False], new_cuts[True]), mn)
+        for ch in changes[wrapper_count:]:
+            ch["after_sha256"] = digests.get(ch["region"], REGION_ABSENT)
     return changes
 
 
@@ -2569,6 +2617,12 @@ def unapproved(changes: list[dict], repo: Path | None, session: tuple[str, str] 
                     continue
                 if "target_mode" in ch and a.get("target_mode") != ch["target_mode"]:
                     continue
+            elif isinstance(a.get("region_sha256"), dict):
+                # 別の窓の答えの原稿の承認は、 見せた候補のその保護領域の中身に結ぶ (OWNER_RELAY の 9)。 変更の後の中身が
+                # 候補と違う・中身の hash を持たない変更 (数式を包む macro の定義、 当たらない patch) には効かない
+                after = ch.get("after_sha256")
+                if not isinstance(after, str) or a["region_sha256"].get(ch["region"], REGION_ABSENT) != after:
+                    continue
             if a.get("source") == "reviewer" and reviewer_grant_problem(a, [ch]):
                 continue  # 記録の後に差し戻し・取り下げ・委任の取り消しがあった・床に当たるようになった検収係の承認は使わない
             if any(covers(sel, ch) for sel in a.get("regions", []) if isinstance(sel, str)):
@@ -2655,7 +2709,33 @@ def deny_reason(left: list[dict], session: tuple[str, str] | None) -> str:
     )
     if any(str(c.get("region", "")).startswith("authority:") for c in left):
         parts.insert(len(parts) - 1, delegation_hint())
+    unbound = relay_region_mismatches(left, session)
+    if unbound:
+        parts.insert(1, "別の窓の答えで記録した原稿の承認 (見せた候補の保護領域の中身に結んだもの) はあるが、 中身が候補と違う領域: "
+                     + ", ".join(unbound[:6]) + " = 保護領域を候補のとおりに戻すか、 今の候補の全文と SHA-256 を本人に見せて"
+                     " 答えを取り直す (保護領域の外の本文の直しは、 この承認のまま通る)。\n")
     return "".join(parts)
+
+
+def relay_region_mismatches(left: list[dict], session: tuple[str, str] | None) -> list[str]:
+    """止めた原稿の変更のうち、 別の窓の答えの承認 (region_sha256 を持つ記録) の領域が覆うのに、 変更の後の中身が候補と
+    違って通らなかったものの「file :: 領域」 (OWNER_RELAY の 9。 止めた文で理由を見せる)。"""
+    if not session:
+        return []
+    bound = [a for a in load_approvals(*session) if isinstance(a.get("region_sha256"), dict)]
+    out: list[str] = []
+    for c in left:
+        if c["region"].startswith("authority:") or c["region"] == "config":
+            continue
+        for a in bound:
+            if str(a.get("file", "")).replace("\\", "/") != c["file"].replace("\\", "/"):
+                continue
+            if any(covers(sel, c) for sel in a.get("regions", []) if isinstance(sel, str)):
+                label = f"{c['file']} :: {c['region']}"
+                if label not in out:
+                    out.append(label)
+                break
+    return out
 
 
 def insertion_notice(rows: list[dict]) -> str:
@@ -4024,6 +4104,17 @@ def approve_mode(args: argparse.Namespace) -> int:
     }
     if relay:
         entry.update({"source": "owner-relay", "quote_session": f"{relay[0]}:{relay[1]}", "shown_sha": shown_sha})
+        if any(not (r.startswith("authority:") or r == "config") for r in args.region):
+            # 原稿の保護領域 = 見せた候補の保護領域ごとの中身に結ぶ (OWNER_RELAY の 9)。 当てと commit の照合 (unapproved) が、
+            # 変更の後のその領域の中身と比べる = 候補の保護領域の外 (本文) の直しは取り直しなしで通る
+            try:
+                cp = Path(str(args.candidate))
+                cand_text = cp.read_text(encoding="utf-8")
+                entry["region_sha256"] = candidate_region_digests(rel, cand_text, repo)
+            except (OSError, UnicodeDecodeError, InspectionError) as exc:
+                print(f"approve: 候補 (--candidate) の保護領域を読めない ({exc.__class__.__name__}) = 記録しない。", file=sys.stderr)
+                return 3
+            entry["candidate_sha256"] = hashlib.sha256(cand_text.encode("utf-8")).hexdigest()
     if pressed:
         entry.update({"pressed_button": pressed, "shown_sha": shown_sha})
     if any(r.startswith("authority:") or r == "config" for r in args.region):
@@ -4079,6 +4170,8 @@ def approve_mode(args: argparse.Namespace) -> int:
     with open(ap, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
     where = f"、 本人が答えた窓 = {relay[0]}:{relay[1]}、 示された候補の SHA-256 の頭 = {shown_sha}" if relay else ""
+    if "region_sha256" in entry:
+        where += "、 候補の保護領域ごとの中身に結んだ = 保護領域が候補と違えば当ても commit も止まる"
     print(f"approve: 記録した = {rel} :: {', '.join(args.region)} (著者の発言 {hit[0] or '時刻不明'} 「{said}」{where})")
     shown = collapse_ws(quote)
     shown = shown if len(shown) <= 20 else shown[:20] + "…"
@@ -8002,8 +8095,10 @@ def pressed_button(path: Path | None, lines: list[int], idx: int | None, text: s
 OWNER_RELAY = """本人が別の窓で答えた承認 (approve / apply の --owner-session claude:<その窓の id> と --quote)。
 
 掲示板の依頼の worker (子) の窓で守りの道具に止められた規則の文書・hook・道具・設定の変更を、 本人が依頼元の窓 (指揮役) で
-出した答えで当てる (実測: 本人が指揮役の窓で答えた後、 子の窓へ行って同じ答えを打ち直す往復が続いた)。 記録はこれまでどおり
-当てる session (子) の承認の file に置き、 引いた発言の session と時刻を残す (quote_session / quote_time / shown_sha)。
+出した答えで当てる (実測: 本人が指揮役の窓で答えた後、 子の窓へ行って同じ答えを打ち直す往復が続いた)。 原稿の保護領域も
+同じ形で、 本人が研究の対話係の窓で答えた候補を指揮所の窓が当てて commit する (実測: 指揮所の当てが断られ、 本人と物理を
+話す窓の turn が当てと commit に使われた)。 記録はこれまでどおり当てる session の承認の file に置き、 引いた発言の session と
+時刻を残す (quote_session / quote_time / shown_sha)。
 照らすもの (1 つでも欠ければ記録しない):
   1. --owner-session は Claude の session の id の全体 (uuid)。 当てる session 自身でもよい (本人が話している窓 = 「最新の
      1 つ」 の代わりに下の 4 で、 その答えがこの候補への答えかを確かめる)。 その会話記録は、 この機械の
@@ -8016,8 +8111,8 @@ OWNER_RELAY = """本人が別の窓で答えた承認 (approve / apply の --own
      1 つに、 当てる file の名 (repo からの path か file 名) と、 候補の全文の SHA-256 の頭 8 字以上が出ている = 本人が
      この候補を示されて答えた。 最新の 1 つは求めない (依頼元の窓には本人の別件の発言が続き、 「最新」 では取り直しに
      なる = 実測)。 候補の中身が変われば SHA-256 が変わるので、 示されたものと違う候補には効かない。
-  5. 規則の文書・hook・道具・設定 (authority: / config の領域) を --candidate の全文で当てる承認だけ。 原稿の保護領域は
-     今のとおり本人が裁定した窓で記録する。 --latest とは組まない。 --reviewer-approval とも組まない。
+  5. --candidate の全文で当てる承認だけ (規則の文書・hook・道具・設定 = authority: / config の領域と、 原稿の保護領域)。
+     --candidate の無い承認には使わない。 --latest とは組まない。 --reviewer-approval とも組まない。
   6. この会話で agent が断った件の印 (open_marks) がその file に開いていれば記録しない (止めた窓で差分を見せて引く)。
   7. agent の入口の文書 (CLAUDE.md・AGENTS.md・CONVENTIONS.md)・権限の設定 (.claude/settings*.json・.codex/config*.toml・
      .codex/rules)・配線と守りの設定 (settings-entries.json・.codex/hooks.json・reviewer-delegation.json・.agent-rule-guard.json・
@@ -8028,7 +8123,13 @@ OWNER_RELAY = """本人が別の窓で答えた承認 (approve / apply の --own
      範囲 = 1 つ前の本人の発言より後) の 1 つに file の名と候補の SHA-256 の頭 8 字以上が出ているときだけ、 本人の答えとして
      記録する (記録に pressed_button を残す)。 出ていなければ今までどおり引かない = ボタンの文は agent が書いた文で、
      何に押したかが分からない。 本人の裁定 (実測: 承認の一言をボタンで押して道具に断られ、 打ち直す往復が続いた後)。
-     --candidate の無い承認 (原稿の保護領域) では、 押したボタンは今までどおり引かない。
+     原稿の保護領域を --candidate なしで記録する承認では、 押したボタンは今までどおり引かない。
+  9. 原稿の保護領域の承認は、 記録に候補の保護領域ごとの中身の hash (region_sha256 = candidate_region_digests、 ほかに候補の
+     全文の SHA-256 = candidate_sha256 を控えに残す) を持たせ、 当てと commit の照合 (unapproved) で、 変更の後のその領域の
+     中身 (manuscript_region_changes の after_sha256) と比べる = 見せた候補と保護領域が 1 字でも違えば (英語校正も) 通らない。
+     保護領域の外 (本文) の直しは保護領域の変更を生まないので、 取り直しなしで通る。 数式を包む macro の定義の変更と、 当たら
+     ない patch の変更は中身の hash を持たない = この承認では通らない (本人が答えた窓で記録する)。 「最新の 1 つ」 の代わりに、
+     4 の SHA-256 と、 この中身の結びが古い答えの流用を止める。 Claude の窓の答えだけを照らす (1 と同じ。 Codex の窓は別)。
 正本 = conventions/agent-rule-ownership.md#owner-answer-in-another-window。"""
 
 _FULL_SESSION_ID = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
@@ -8049,10 +8150,9 @@ def owner_relay_session(value: str | None, session: tuple[str, str] | None, args
     if getattr(args, "reviewer_approval", None):
         return None, "--owner-session と --reviewer-approval は組まない (本人の答えか、 任された範囲の検収係の承認か、 どちらか 1 つ)。"
     regions = [str(r) for r in (getattr(args, "region", None) or [])]
-    if not getattr(args, "candidate", None) or not regions or not all(r.startswith("authority:") or r == "config"
-                                                                      for r in regions):
-        return None, ("--owner-session で記録できるのは、 規則の文書・hook・道具・設定 (authority: / config の領域) を"
-                      " --candidate の全文で当てる承認だけ。 原稿の保護領域は、 本人が裁定した窓で記録する。")
+    if not getattr(args, "candidate", None) or not regions:
+        return None, ("--owner-session で記録できるのは、 --candidate の全文で当てる承認だけ (規則の文書・hook・道具・設定は"
+                      " 候補の全文に、 原稿の保護領域は候補の保護領域ごとの中身に結ぶ)。 候補の全文の file を渡す。")
     return relay, ""
 
 
@@ -8354,7 +8454,7 @@ def owner_relay_selftests(check) -> None:
             check("[relay-9] その窓自身でも、 返事に SHA-256 が無ければ記録しない (exit 5)", run(relay=f"claude:{worker}") == 5)
             check("[relay-9] id の全体でない名指し・Codex の窓は記録しない (exit 2)",
                   run(relay=f"claude:{conductor[:8]}") == 2 and run(relay=f"codex:{conductor}") == 2)
-            check("[relay-10] 原稿の保護領域には使わない (exit 2)",
+            check("[relay-10] --candidate の無い原稿の保護領域の承認には使わない (exit 2)",
                   run(region=("abstract",), candidate=None, target="paper.tex") == 2)
             check("[relay-10] --candidate の無い承認には使わない (exit 2)", run(candidate=None) == 2)
             missing = str(_uuid.uuid4())
@@ -8420,6 +8520,201 @@ def owner_relay_selftests(check) -> None:
             told = f"「{collapse_ws(str(relay_e.get('quote')))[:20]}」 を locked.py の承認として記録した"
             check("[relay-13] 引いた発言と file 名を書いた返事なら黙る",
                   relay_e not in undisclosed_approvals("claude", worker, msgs, [told]))
+        finally:
+            os.environ.clear()
+            os.environ.update(saved_env)
+            reset_caches()
+
+
+def owner_relay_manuscript_selftests(check) -> None:
+    """原稿の保護領域の別の窓の答え (OWNER_RELAY の 5・9) を、 合成の会話記録 2 つ (本人が答えた対話係の窓・当てる指揮所の窓)
+    と作業用の repo で確かめる。 鳴る形 = 示した候補の当てと commit・本文だけの直しの commit が通る。 黙る形 = 示したのと違う
+    候補・当てた後の保護領域の直し・SHA の無い返事へのボタン・Codex の窓・中身の hash を持たない変更を通さない。 同じ窓の承認
+    (--owner-session なし) の振る舞いは変えない。"""
+    import contextlib
+    import io
+    import tempfile
+    import uuid as _uuid
+    saved_env = dict(os.environ)
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td).resolve()
+        home = root / "home"
+        repo = root / "repo"
+        repo.mkdir()
+        proj = home / ".claude" / "projects" / "-fixture"
+        proj.mkdir(parents=True)
+        env = dict(saved_env, HOME=str(home), GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1", GIT_AUTHOR_NAME="f",
+                   GIT_AUTHOR_EMAIL="f@example.invalid", GIT_COMMITTER_NAME="f", GIT_COMMITTER_EMAIL="f@example.invalid",
+                   MANUSCRIPT_CLAIM_GUARD_STATE_DIR=str(root / "state"))
+        for key in (*AGENT_ENV_KEYS, "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "CLAUDE_CONFIG_DIR",
+                    "MANUSCRIPT_CLAIM_GUARD_HOME"):
+            env.pop(key, None)
+        os.environ.clear()
+        os.environ.update(env)
+
+        def tex(title="A toy model of heat flow", abstract="We find that the toy lattice conducts heat.",
+                intro="Lattices are useful. We analyse the model.", body="The body text explains the setup.",
+                eq="E = m c^2", concl="The lattice conducts heat."):
+            parts = ["\\documentclass{article}\n\\begin{document}\n", f"\\title{{{title}}}\n\\maketitle\n"]
+            if abstract is not None:
+                parts.append(f"\\begin{{abstract}}\n{abstract}\n\\end{{abstract}}\n")
+            parts += [f"\\section{{Introduction}}\n{intro}\n", f"\\section{{Model}}\n{body}\n",
+                      f"\\begin{{equation}}\n{eq}\n\\end{{equation}}\n"]
+            if concl is not None:
+                parts.append(f"\\section{{Conclusion}}\n{concl}\n")
+            parts.append("\\end{document}\n")
+            return "".join(parts)
+
+        def git_(*a):
+            return subprocess.run(["git", *a], cwd=repo, env=env, check=True, capture_output=True, text=True)
+
+        try:
+            git_("init", "-q")
+            base = tex()
+            (repo / "paper.tex").write_text(base, encoding="utf-8")
+            git_("add", "-A")
+            git_("commit", "-qm", "x")
+            head_text_ = base
+            dialogue, conductor = str(_uuid.uuid4()), str(_uuid.uuid4())
+            cand = root / "cand.tex"
+            cand_text = tex(title="Heat flow on a toy lattice", abstract="We show that the toy lattice conducts heat.",
+                            intro="Lattices are useful. We analyse the model in detail.")
+            cand.write_text(cand_text, encoding="utf-8")
+            sha = hashlib.sha256(cand_text.encode("utf-8")).hexdigest()
+            other = root / "other.tex"
+            other.write_text(tex(title="Another title"), encoding="utf-8")
+            sha_other = hashlib.sha256(other.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+
+            def say(text, ts):
+                return {"type": "user", "timestamp": ts, "message": {"content": text}}
+
+            def reply(text, ts, labels=None):
+                parts = [{"type": "text", "text": text}]
+                if labels is not None:
+                    parts.append({"type": "tool_use", "id": "w", "name": "mcp__ccd_turn__wrap_up",
+                                  "input": {"recap": "候補を組んだ。", "ask": "書き込んでよいですか？",
+                                            "actions": [{"label": x} for x in labels]}})
+                return {"type": "assistant", "timestamp": ts, "message": {"content": parts}}
+
+            def write(sid, rows):
+                p = proj / f"{sid}.jsonl"
+                p.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+                return p
+
+            def dialogue_rows(shown_sha=sha, labels=("書き込んでよい", "先に直したい"), said="書き込んでよい"):
+                shown = f"題・要旨・序論の候補 = paper.tex (SHA-256 {shown_sha[:12]})。" if shown_sha else "題・要旨・序論の候補 = paper.tex。"
+                return [say("いったん当ててみて", "2026-01-01T00:00:00Z"), reply(shown, "2026-01-01T00:01:00Z", labels),
+                        say(said, "2026-01-01T00:02:00Z")]
+
+            def apply_(candidate=cand, relay=None, quote="書き込んでよい"):
+                reset_caches()
+                ns = argparse.Namespace(file=str(repo / "paper.tex"), candidate=str(candidate), old=None, new=None, edits=None,
+                                        dry_run=False, change="題・要旨・序論", quote=quote, latest=False,
+                                        reviewer_approval=None, session=f"claude:{conductor}", transcript=None,
+                                        target_mode=None, owner_session=relay or f"claude:{dialogue}")
+                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    return apply_mode(ns)
+
+            def commit_left(text):
+                """作業ツリーを text にして index に載せ、 指揮所の session の commit の照合で残る変更 (git-precommit と同じ述語)。"""
+                (repo / "paper.tex").write_text(text, encoding="utf-8")
+                git_("add", "paper.tex")
+                reset_caches()
+                return unapproved(changes_for_repo(repo, "index", [], session=("claude", conductor)), repo,
+                                  ("claude", conductor))
+
+            def relay_records():
+                return [a for a in load_approvals("claude", conductor) if a.get("source") == "owner-relay"]
+
+            # 黙る形を先に (記録が残らないことも確かめる)
+            typed = "paper.tex の題・要旨・序論はこれで書き込んでよい"
+            write(dialogue, dialogue_rows(shown_sha=sha_other, labels=None, said=typed))
+            check("[relay-M2] 返事に出た SHA-256 と違う候補は、 打った答えでも指揮所の apply で書かない (exit 5)",
+                  apply_(quote=typed) == 5 and (repo / "paper.tex").read_text(encoding="utf-8") == base
+                  and not relay_records())
+            write(dialogue, dialogue_rows(shown_sha=sha_other))
+            check("[relay-M2] 返事に出た SHA-256 と違う候補は、 押したボタンでも書かない (exit 4 = 押した箱の段で止まる)",
+                  apply_() == 4 and (repo / "paper.tex").read_text(encoding="utf-8") == base and not relay_records())
+            write(dialogue, dialogue_rows(shown_sha=""))
+            check("[relay-M6] ボタンの答えで、 返事に SHA-256 が無ければ書かない (exit 4)",
+                  apply_() == 4 and (repo / "paper.tex").read_text(encoding="utf-8") == base and not relay_records())
+            write(dialogue, dialogue_rows())
+            check("[relay-M7] Codex の session id は断る (exit 2)",
+                  apply_(relay=f"codex:{dialogue}") == 2 and not relay_records())
+            # 鳴る形: 対話係の窓で示した候補を、 指揮所の窓が当てる
+            check("[relay-M1] 対話係の窓で file の名と候補の SHA-256 を示した後の答えで、 指揮所の apply が書く (鳴る)",
+                  apply_() == 0 and (repo / "paper.tex").read_text(encoding="utf-8") == cand_text)
+            recs = relay_records()
+            e = recs[-1] if recs else {}
+            want = candidate_region_digests("paper.tex", cand_text, repo)
+            check("[relay-M1] 記録は指揮所の承認の file に置き、 候補の保護領域ごとの中身の hash と全文の SHA-256 を持つ",
+                  e.get("quote_session") == f"claude:{dialogue}" and e.get("session") == f"claude:{conductor}"
+                  and e.get("pressed_button") == "書き込んでよい" and e.get("candidate_sha256") == sha
+                  and e.get("region_sha256") == want and {"title", "abstract", "intro"} <= set(e.get("regions", []))
+                  and "content_sha256" not in e)
+            check("[relay-M3] 当てた候補のままの commit は、 指揮所の窓で通る (鳴る)", commit_left(cand_text) == [])
+            word = cand_text.replace("in detail", "in depth")
+            left = commit_left(word)
+            check("[relay-M4] 当てた後に序論を 1 語変えた commit は止まる (黙る)",
+                  [c["region"] for c in left] == ["intro"])
+            check("[relay-M4] 止めた文に、 別の窓の答えの承認はあるが中身が候補と違う領域を出す",
+                  "paper.tex :: intro" in deny_reason(left, ("claude", conductor)))
+            check("[relay-M4] 英語校正 (冠詞) だけの直しでも、 当てた後の保護領域の直しは止まる (1 字でも違えば止まる)",
+                  [c["region"] for c in commit_left(cand_text.replace("in detail", "in the detail"))] == ["intro"])
+            check("[relay-M5] 保護領域の外 (本文) だけ直した commit は、 取り直しなしで通る (鳴る)",
+                  commit_left(cand_text.replace("explains the setup", "explains the full setup")) == [])
+            check("[relay-M5] 本文の中の式を直した commit は止まる (式は保護領域 = この承認の領域の外)",
+                  bool(commit_left(cand_text.replace("E = m c^2", "E = 2 m c^2"))))
+            # 古い答えの流用: 同じ発言で別の候補 (示した SHA と違う) は書かない
+            (repo / "paper.tex").write_text(cand_text, encoding="utf-8")
+            git_("add", "paper.tex")
+            cand2 = root / "cand2.tex"
+            cand2.write_text(cand_text.replace("in detail", "carefully"), encoding="utf-8")
+            check("[relay-M11] 同じ答え (押したボタン) を、 示したのと違う次の候補には使えない (exit 4)",
+                  apply_(candidate=cand2) == 4 and (repo / "paper.tex").read_text(encoding="utf-8") == cand_text)
+            write(dialogue, dialogue_rows(labels=None, said=typed))
+            check("[relay-M11] 同じ答え (打った文) を、 示したのと違う次の候補には使えない (exit 5)",
+                  apply_(candidate=cand2, quote=typed) == 5
+                  and (repo / "paper.tex").read_text(encoding="utf-8") == cand_text)
+            # 結論の節を消した候補: 記録の結論は「無い」 = 消した commit は通り、 別の結論を足すと止まる。 (概要を消すと file が
+            # 原稿の範囲から外れ、 commit の検査が全領域の削除として止める = 今までどおり。 ここでは範囲の中に残る形で見る)
+            git_("reset", "-q", "--hard")
+            cand3 = root / "cand3.tex"
+            cand3_text = tex(concl=None, title="No conclusion version")
+            cand3.write_text(cand3_text, encoding="utf-8")
+            sha3 = hashlib.sha256(cand3_text.encode("utf-8")).hexdigest()
+            write(dialogue, dialogue_rows(shown_sha=sha3))
+            check("[relay-M9] 結論を消した候補も、 示した候補なら当てる", apply_(candidate=cand3) == 0)
+            check("[relay-M9] 結論を消したままの commit は通る", commit_left(cand3_text) == [])
+            check("[relay-M9] 消した結論の代わりに別の結論を足した commit は止まる",
+                  [c["region"] for c in commit_left(tex(concl="A new conclusion.", title="No conclusion version"))]
+                  == ["conclusion"])
+            # 中身の hash を持たない変更 (数式を包む macro の定義・当たらない patch) は、 別の窓の答えの承認では通らない
+            ap = approvals_path("claude", conductor)
+            with open(ap, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"v": 1, "repo": str(repo), "file": "paper.tex", "regions": ["math"], "change": "x",
+                                     "quote": "q", "session": f"claude:{conductor}", "source": "owner-relay",
+                                     "region_sha256": {}}, ensure_ascii=False) + "\n")
+            wrap = [{"file": "paper.tex", "region": wrapper_change_region("al"), "kind": "change", "detail": "macro"}]
+            check("[relay-M10] 数式を包む macro の定義の変更は、 別の窓の答えの原稿の承認では通らない",
+                  unapproved(wrap, repo, ("claude", conductor)) == wrap)
+            # 同じ窓の承認 (--owner-session なし) は今のまま = 中身に結ばず、 領域で覆う
+            git_("reset", "-q", "--hard")
+            same = str(_uuid.uuid4())
+            p_same = write(same, [say("序論を書き換えてよい。 paper.tex の序論は任せる", "2026-01-01T00:05:00Z")])
+            reset_caches()
+            ns = argparse.Namespace(file=str(repo / "paper.tex"), region=["intro"], change="序論", latest=True, quote=None,
+                                    session=f"claude:{same}", transcript=str(p_same), candidate=None, target_mode=None,
+                                    owner_session=None)
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc_same = approve_mode(ns)
+            rec_same = load_approvals("claude", same)
+            ch_same = protected_changes("paper.tex", head_text_, tex(intro="An entirely different introduction."), repo)
+            check("[relay-M8] 同じ窓の承認は今のまま記録し、 中身の hash を持たず、 序論の別の書き換えも覆う",
+                  rc_same == 0 and rec_same and "region_sha256" not in rec_same[-1]
+                  and unapproved(ch_same, repo, ("claude", same)) == [])
+            check("[relay-M8] 変更の後の中身の hash は、 節と式の変更に付く (数式を包む macro の定義の変更には付かない)",
+                  all(isinstance(c.get("after_sha256"), str) for c in ch_same))
         finally:
             os.environ.clear()
             os.environ.update(saved_env)
@@ -11174,6 +11469,7 @@ def selftest() -> int:
     reviewer_approval_selftests(check)
     button_press_selftests(check)
     owner_relay_selftests(check)
+    owner_relay_manuscript_selftests(check)
     refusal_tightening_selftests(check)
 
     print(f"selftest: {'FAILED ' + str(len(fails)) if fails else 'ALL PASS'}")
@@ -11197,8 +11493,9 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--session")
     a.add_argument("--transcript")
     a.add_argument("--owner-session", metavar="claude:SESSION_ID",
-                   help="本人が答えた別の窓 (依頼元の指揮役) の session。 --quote をその窓の会話記録で照らす (OWNER_RELAY)")
-    a.add_argument("--candidate", help="権限規約・設定の適用後の全文。承認をこの内容の SHA-256 に束縛する")
+                   help="本人が答えた別の窓 (依頼元の指揮役・研究の対話係) の session。 --quote をその窓の会話記録で照らす (OWNER_RELAY)")
+    a.add_argument("--candidate", help="権限規約・設定の適用後の全文。承認をこの内容の SHA-256 に束縛する"
+                                       " (--owner-session の原稿の承認は、 この候補の保護領域ごとの中身に結ぶ)")
     a.add_argument("--target-mode", choices=["000000", "100644", "100755", "120000"],
                    help="保護 file の Git mode/type。省略時は候補 file の属性を使う。000000 は削除")
     y = sub.add_parser("apply", help="承認の記録 + 候補の書込み + 照合を 1 command で (裁定なしで通る変更なら記録して写す)")
@@ -11217,8 +11514,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="本人が任せた範囲で、 別の窓の検収係が掲示板に書いた承認の event id (--quote / --latest の代わり。"
                         " conventions/agent-rule-ownership.md#reviewer-delegation)")
     y.add_argument("--owner-session", metavar="claude:SESSION_ID",
-                   help="本人が答えた別の窓 (依頼元の指揮役) の session。 --quote をその窓の会話記録で照らし、 その発言の前の返事に"
-                        " file の名と候補の SHA-256 の頭 8 字以上が出ていることを確かめる (OWNER_RELAY)")
+                   help="本人が答えた別の窓 (依頼元の指揮役・研究の対話係) の session。 --quote をその窓の会話記録で照らし、"
+                        " その発言の前の返事に file の名と候補の SHA-256 の頭 8 字以上が出ていることを確かめる。 原稿の保護"
+                        "領域は候補の保護領域ごとの中身に結ぶ (OWNER_RELAY)")
     y.add_argument("--session")
     y.add_argument("--transcript")
     y.add_argument("--target-mode", choices=["100644", "100755"],
