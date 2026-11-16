@@ -55,8 +55,11 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
 `--finished` (掲示板の root は --board-root か env CHILD_WRAP_BOARD_ROOTS = os.pathsep 区切り。 層1 に既定は無い):
   子 = app の記録で spawnedFrom が親で、 独立させていない (lineageDetached でない) もの。 子の依頼 = この機械の instance
   (`claude@<host>`) で子が claim / submit した request (actor.task の頭の transcript id 8 字か actor.session_id で引く)。
-  開いている依頼 = 子が claim して受け取られていないもの + 子が claim に使った役 (role id) か子の id 宛ての、
-  まだ誰も受け取っていない request (次の依頼 = 使い回し)。 状態:
+  開いている依頼 = 子が claim して受け取られておらず、 子が今も持っているもの + 子が claim に使った役 (role id) か子の id
+  宛ての、 まだ誰も受け取っていない request (次の依頼 = 使い回し)。 子が手放した依頼 (release・担当の引き継ぎ・lease の
+  切れた後の別の session の claim = 掲示板が claim を外す 3 つ) は数えない = 子の窓の外の答えを待つ当ては、 待ちを掲示板に
+  残して子を畳み、 答えが来たら新しい窓が引き受ける (実測: 外の答えを待つだけの次の依頼で子が何時間も「開いている」
+  と数えられて残った)。 手放した時刻は受け取りと同じく「片づいた時刻」 で、 Stop の網はその時刻ごとに止め直す。 状態:
     open (開いている依頼がある) / busy / owner (本人待ち) / answered (本人が子の窓で話した後に子が答え終えている = 裁定待ち) /
     due (全部受け取られ、 wrap を頼んでいない = 規則の番) / wrapping (wrap を頼んで子がまだ終えていない) /
     wrapped (wrap が終わっている = 照合して畳む) / no-board (掲示板に子の依頼が無い = 判定しない)
@@ -1058,8 +1061,36 @@ def _actor(e: dict) -> dict:
     return a if isinstance(a, dict) else {}
 
 
+def _by_child(e: dict, cli: str, instance: str) -> bool:
+    """The event was posted by the child on this machine (actor.task starts with its transcript id, or the child posted
+    under its own id)."""
+    a = _actor(e)
+    sid, m = str(a.get("session_id") or ""), ID8.match(str(a.get("task") or ""))
+    return a.get("instance") == instance and ((m and m.group(1) == cli[:8]) or bool(cli and sid == cli))
+
+
+def _let_go_at(es: list[dict], cli: str, instance: str) -> str:
+    """When the child stopped holding this request: it released its claim, the request was handed over to another
+    assignee, or another session claimed it after the child's lease ran out (the board clears the claim on all three).
+    '' while the child holds it. A release is matched to the claim it releases, not to its poster (measured: the child's
+    release carried the task "workflow", and a requester's proxy release its own id)."""
+    held, at = False, ""
+    for e in sorted(es, key=lambda x: str(x.get("created_at") or "")):
+        k, t = e.get("kind"), str(e.get("created_at") or "")
+        if k == "claim":
+            own = _by_child(e, cli, instance)
+            at = "" if own else (t if held else at)
+            held = own
+        elif held and (k == "release" or (k == "handover" and e.get("handover_role") == "assignee")):
+            held, at = False, t
+    return at
+
+
 def board_state(cli: str, events: list[dict], instance: str, as_of: str = "") -> dict:
-    """The child's requests on the board: claimed (this machine), open ones, and when the last of them was accepted."""
+    """The child's requests on the board: claimed (this machine), open ones, the ones it let go of, and when the last of
+    them was settled (accepted, or let go of by the child). A request the child let go of is not the child's open work:
+    the wait lives on the board, and a new window takes the request up (measured: the requester's next request to the
+    child's role, waiting on an answer from outside the child's window, kept the child for hours as "open")."""
     evs = [e for e in events if not (as_of and str(e.get("created_at") or "")[:19] > as_of[:19])]
     by_req: dict[str, list[dict]] = collections.defaultdict(list)
     for e in evs:
@@ -1067,17 +1098,21 @@ def board_state(cli: str, events: list[dict], instance: str, as_of: str = "") ->
             by_req[e["request_id"]].append(e)
     mine, roles = set(), set()
     for e in evs:
-        a = _actor(e)
-        if a.get("instance") != instance or e.get("kind") not in ("claim", "submit") or not e.get("request_id"):
+        if e.get("kind") not in ("claim", "submit") or not e.get("request_id") or not _by_child(e, cli, instance):
             continue
-        sid, m = str(a.get("session_id") or ""), ID8.match(str(a.get("task") or ""))
-        if (m and m.group(1) == cli[:8]) or (cli and sid == cli):
-            mine.add(e["request_id"])
-            if sid and sid != cli:
-                roles.add(sid)
+        sid = str(_actor(e).get("session_id") or "")
+        mine.add(e["request_id"])
+        if sid and sid != cli:
+            roles.add(sid)
     accepted = {rid: max(str(e.get("created_at") or "") for e in es if e.get("kind") == "accept")
                 for rid, es in by_req.items() if any(e.get("kind") == "accept" for e in es)}
-    open_ = sorted(r for r in mine if r not in accepted)
+    released = {}
+    for rid in mine:
+        if rid not in accepted:
+            at = _let_go_at(by_req.get(rid, []), cli, instance)
+            if at:
+                released[rid] = at
+    open_ = sorted(r for r in mine if r not in accepted and r not in released)
     for rid, es in by_req.items():
         if rid in mine or rid in accepted:
             continue
@@ -1086,8 +1121,13 @@ def board_state(cli: str, events: list[dict], instance: str, as_of: str = "") ->
         if tgt and (tgt in roles or tgt == cli):
             open_.append(rid)
     threads = {rid: str(by_req[rid][0].get("thread_id") or rid) for rid in set(mine) | set(open_) if by_req.get(rid)}
-    return {"claimed": sorted(mine), "open": open_, "threads": threads,
-            "accepted_at": max(accepted[r] for r in mine) if mine and not open_ else ""}
+    done = bool(mine) and not open_
+    acc = [accepted[r] for r in mine if r in accepted]
+    return {"claimed": sorted(mine), "open": open_, "threads": threads, "released": sorted(released),
+            "accepted_at": max(acc, default="") if done else "",
+            # the Stop net stops once per (child, settled_at, state): letting go later is a new settle (measured: the
+            # net stopped once at the accept, and stayed silent after the next request was let go of)
+            "settled_at": max(acc + list(released.values()), default="") if done else ""}
 
 
 def children_of(parent_local: str) -> list[dict]:
@@ -1151,9 +1191,10 @@ def parent_actions(parent_path: str, child_local: str, as_of: str = "") -> dict:
 
 def finished_state(child: dict, parent_local: str, parent_path: str, events: list[dict], instance: str,
                    as_of: str = "") -> dict:
-    row = dict(child, parent=parent_local, state="", accepted_at="", reasons=[], hours=None, threads={})
+    row = dict(child, parent=parent_local, state="", accepted_at="", settled_at="", reasons=[], hours=None, threads={})
     b = board_state(child["cli"], events, instance, as_of)
-    row["threads"], row["accepted_at"] = b["threads"], b["accepted_at"]
+    row["threads"], row["accepted_at"], row["settled_at"] = b["threads"], b["accepted_at"], b["settled_at"]
+    row["released"] = [b["threads"].get(r, r) for r in b["released"]]
     if not b["claimed"]:
         row["state"] = "no-board"
         return row
@@ -1167,7 +1208,7 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
         return row
     ev = scan_child(sm.transcript_path(child["cli"]) or "", as_of)
     now = _epoch(as_of) if as_of else time.time()
-    row["hours"] = round((now - _epoch(b["accepted_at"])) / 3600, 1)
+    row["hours"] = round((now - _epoch(b["settled_at"])) / 3600, 1)
     if as_of:
         busy = bool(ev["replies"]) and max(ev["replies"]) > max(ev["stops"], default="")
     else:
@@ -1310,16 +1351,24 @@ STATE_WORDS = {"due": "規則 10 の番 (wrap を頼んでいない)", "wrapped"
                "open": "開いている依頼がある", "busy": "動いている", "no-board": "掲示板に依頼が無い", "archived": "archive 済み"}
 
 
+def _settled_words(r: dict) -> str:
+    """'受け取り HH:MM' or '手放し HH:MM' (the child let go of its last request after the last accept)."""
+    at = r.get("settled_at") or r.get("accepted_at") or ""
+    return ("手放し " if at and at != (r.get("accepted_at") or "") else "受け取り ") + _local_hm(at)
+
+
 def render_finished(rows: list[dict]) -> str:
     lines = []
     for r in rows:
         mark = "🧺" if r["state"] in ("due", "wrapped") else "  "
-        h = f"  受け取り {_local_hm(r['accepted_at'])} から {r['hours']} 時間" if r.get("hours") is not None else ""
+        h = f"  {_settled_words(r)} から {r['hours']} 時間" if r.get("hours") is not None else ""
         lines.append(f"{mark} [{r['state']}] {r['title'] or r['local']} ({r['local']})  親={r['parent']}{h}  — {STATE_WORDS.get(r['state'], '')}")
         for why in r["reasons"]:
             lines.append("      → " + why)
         if r.get("open"):
             lines.append("      → 開いている依頼: " + ", ".join(r["open"]))
+        if r.get("released"):
+            lines.append("      → 子が手放した依頼 (開いている依頼に数えない): " + ", ".join(r["released"]))
     return "\n".join(lines)
 
 
@@ -1331,7 +1380,10 @@ def _accept_line(r: dict, rule: str, extra: str = "") -> str:
                 " この turn のうちに規則 10 の順で畳む = model を確かめる → 子へ SendMessage で"
                 f"「{WRAP_ASK_TEXT}」 と送る (言い換えない = skill の名が無いと子は skill を起動しない) → 同じ turn に見張り"
                 f" (`python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {r['local']}`) → 起こされたら照合して archive。"
-                " 次の仕事に使うなら、 この turn に次の依頼を掲示板に出す (宛先 = その子の役。 道具は開いている依頼と数える)。"
+                " 子の窓の外で出る答え (本人・検収係・共同研究者) を待つだけの当ては、 この子への次の依頼にしない ="
+                " 子に候補の在りか・SHA-256・当てる直前の照らし方・当て方を掲示板の note に残させ、 claim を手放させて畳む"
+                " (道具は手放した依頼を開いている依頼と数えない。 答えが来たら依頼元がその役の新しい窓を起こして当てさせる)。"
+                " 次の仕事に使うなら、 今すぐ始められる次の依頼だけをこの turn に掲示板に出す (宛先 = その子の役。 道具は開いている依頼と数える)。"
                 + (f" {extra}" if extra else "") + tail)
     if r["state"] == "owner":
         return (f"🧺 {who} の依頼を受け取った。 子は本人を待っている ({'; '.join(r['reasons'])[:300]})"
@@ -1471,7 +1523,8 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
     def key(r: dict) -> str:
         late = (r["state"] == "answered" and ANSWERED_GRACE_MIN is None
                 and r.get("answered_min", 0) >= ASK_AFTER_MIN)  # recent → watch, later → ask
-        return f"{r['accepted_at']}|{r['state']}{'+' if late else ''}|{r.get('answered_at') or r.get('wait_since') or ''}"
+        return (f"{r.get('settled_at') or r['accepted_at']}|{r['state']}{'+' if late else ''}"
+                f"|{r.get('answered_at') or r.get('wait_since') or ''}")
 
     new = [r for r in due if seen.get(r["local"]) != key(r)]
     if not new:
@@ -1501,9 +1554,9 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
     watch = [r for r in new if r not in fold and r not in ask and r not in judge]
     lines = []
     if fold:
-        lines.append(f"🧺 規則 10 の番の子が {len(fold)} つ、 畳まれないまま残っている (掲示板の依頼は全部受け取り済みで、 子は動いておらず本人も待っていない):")
+        lines.append(f"🧺 規則 10 の番の子が {len(fold)} つ、 畳まれないまま残っている (掲示板の依頼は全部受け取り済みか子が手放し、 子は動いておらず本人も待っていない):")
         for r in fold:
-            lines.append(f"- {r['title'] or r['local']} ({r['local']}) — 受け取り {_local_hm(r['accepted_at'])} から {r['hours']} 時間"
+            lines.append(f"- {r['title'] or r['local']} ({r['local']}) — {_settled_words(r)} から {r['hours']} 時間"
                          + ("、 wrap は終わっている = 照合して archive" if r["state"] == "wrapped" else ""))
         lines.append(f"この turn のうちに規則 10 の順で畳む (子へ SendMessage で「{WRAP_ASK_TEXT}」 と送る → 同じ turn に見張り"
                      " → 照合 → archive。 送る文は言い換えない)。 本人がこの子について別の指示を"
@@ -2236,6 +2289,31 @@ def selftest() -> int:
         dl, dc = kid("c1000009", list(base), lineageDetached=True)
         event("claim", "20260102T000000Z-claude-0000ee", "2026-01-02T00:01:00", task="c1000009 (opus)", sid="role-proj-chore")
         event("accept", "20260102T000000Z-claude-0000ee", "2026-01-02T01:10:00", task="x", sid="x")
+        # the child let go of a request (released / taken over): the wait lives on the board, the child is folded
+        # (measured shape: the requester's next request to the child's role waited on an answer from outside the child's
+        # window, and the child released it with the task "workflow")
+        RL = {k: f"20260102T000000Z-claude-{0xc0 + i:06x}" for i, k in enumerate(
+            ["rel", "rel2", "relonly", "reclaim", "taken", "relb", "relb2"])}
+        for k, n in [("rel", "c2000001"), ("relonly", "c2000002"), ("reclaim", "c2000003"), ("taken", "c2000004"),
+                     ("relb", "c2000005")]:
+            role = f"role-proj-{k}"
+            event("request", RL[k], "2026-01-02T00:00:00", task="parent", sid=bp_c, assignee={"agent": "claude", "session_id": role})
+            event("claim", RL[k], "2026-01-02T00:01:00", task=f"{n} (opus)", sid=role)
+            if k in ("rel", "relb"):
+                event("submit", RL[k], "2026-01-02T00:50:00", task=f"{n} (opus)", sid=role)
+                event("accept", RL[k], "2026-01-02T01:10:00", task="b0000000 (opus)", sid="role-proj-owner-review")
+            elif k == "relonly":
+                event("release", RL[k], "2026-01-02T00:40:00", task="workflow", sid=role)
+            elif k == "reclaim":
+                event("release", RL[k], "2026-01-02T00:20:00", task="workflow", sid=role)
+                event("claim", RL[k], "2026-01-02T00:30:00", task=f"{n} (opus)", sid=role)
+            else:  # taken: no release; another worker claimed it after the child's lease ran out
+                event("claim", RL[k], "2026-01-02T00:25:00", task="d9999999 (opus)", sid=role)
+            cases[k] = kid(n, list(base))
+        event("request", RL["rel2"], "2026-01-02T01:12:00", task="parent", sid=bp_c,
+              assignee={"agent": "claude", "session_id": "role-proj-rel"})
+        event("claim", RL["rel2"], "2026-01-02T01:13:00", task="c2000001 (opus)", sid="role-proj-rel")
+        event("release", RL["rel2"], "2026-01-02T01:30:00", task="workflow", sid="role-proj-rel")
         rows = {r["local"]: r for r in finished(bp_l, [board])}
         st = {k: rows.get(v[0], {}).get("state") for k, v in cases.items()}
         ok("finished: all accepted, idle, no wrap asked → due", st["due"] == "due")
@@ -2252,6 +2330,22 @@ def selftest() -> int:
            rows.get(rl, {}).get("state") == "wrapping")
         ok("finished --as-of before the accept → open", {r["local"]: r["state"] for r in finished(
             bp_l, [board], as_of="2026-01-02T01:05:00")}.get(cases["due"][0]) == "open")
+        r_rel = rows.get(cases["rel"][0], {})
+        ok("finished: the child let go of its next request (released under the task 'workflow') → due, not open",
+           st["rel"] == "due" and r_rel.get("released") and "手放し" in render_finished([r_rel])
+           and r_rel.get("settled_at", "").startswith("2026-01-02T01:30") and r_rel.get("accepted_at", "").startswith("2026-01-02T01:10"))
+        ok("finished --as-of before the child let go → open", {r["local"]: r["state"] for r in finished(
+            bp_l, [board], as_of="2026-01-02T01:20:00")}.get(cases["rel"][0]) == "open")
+        r_ro = rows.get(cases["relonly"][0], {})
+        ok("finished: released without any accept → due, timed from the release",
+           st["relonly"] == "due" and r_ro.get("settled_at", "").startswith("2026-01-02T00:40") and r_ro.get("hours") is not None)
+        ok("finished: released, then claimed again by the child → open", st["reclaim"] == "open")
+        ok("finished: another worker claimed it after the child's lease ran out → due (the child let go)",
+           st["taken"] == "due" and rows.get(cases["taken"][0], {}).get("settled_at", "").startswith("2026-01-02T00:25"))
+        line_due = _accept_line(rows[cases["due"][0]], "")
+        ok("accept line: a wait outside the child's window → note, release and fold; only work that can start now keeps it",
+           "手放させて畳む" in line_due and "今すぐ始められる次の依頼だけ" in line_due
+           and line_due.index("手放させて畳む") < line_due.index("今すぐ始められる次の依頼だけ"))
         stop_in = {"hook_event_name": "Stop", "session_id": bp_c}
         out = hook_stop(stop_in, [board], "R", "block")
         d = json.loads(out) if out else {}
@@ -2272,6 +2366,18 @@ def selftest() -> int:
            cases["judge"][0] in why and why.index(cases["judge"][0]) > why.index("判断の問いを残している子")
            and "--wait-due " + cases["judge"][0] not in why)
         ok("hook-stop: the second Stop for the same children → silent", hook_stop(stop_in, [board], "R", "block") == "")
+        # the measured order: the net stops at the accept, the requester posts the next request to the child's role and
+        # the child claims it (open = silent), then the child lets it go → the net stops again for the same accept
+        event("request", RL["relb2"], "2026-01-02T01:40:00", task="parent", sid=bp_c,
+              assignee={"agent": "claude", "session_id": "role-proj-relb"})
+        event("claim", RL["relb2"], "2026-01-02T01:41:00", task="c2000005 (opus)", sid="role-proj-relb")
+        ok("hook-stop: the next request to the child's role, claimed by it → open, the Stop stays silent",
+           hook_stop(stop_in, [board], "R", "block") == "")
+        event("release", RL["relb2"], "2026-01-02T01:50:00", task="workflow", sid="role-proj-relb")
+        out_r = hook_stop(stop_in, [board], "R", "block")
+        why_r = json.loads(out_r).get("reason", "") if out_r else ""
+        ok("hook-stop: after the child let go of that request → stops again (the same accept), naming only that child",
+           cases["relb"][0] in why_r and "手放し" in why_r and all(cases[k][0] not in why_r for k in ("due", "wrapd", "rel")))
         os.remove(_state_file(bp_l))
         ok("hook-stop: observe mode → silent (and logged)", hook_stop(stop_in, [board], "R", "observe") == ""
            and os.path.exists(os.path.join(td, "state", "observe.jsonl")))
