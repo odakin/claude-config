@@ -49,6 +49,12 @@ sections:
   - id: figures-in-body-references-last
     level: 2
     title: "本文の図を本文の中に置き、 文献表を付録の後ろに置く — `placeins` の section option と `[tbp]`"
+  - id: landscape-display-page
+    level: 2
+    title: "本文の幅に入らない式 (大きな行列) を、 横置きの 1 頁にして送る"
+  - id: typeset-formula-readback
+    level: 2
+    title: "書き下した式を TeX に写したら、 TeX から読み戻して記号計算と照合する"
   - id: class-conversion-body-check
     level: 2
     title: "原稿の型 (document class) を替えたときに、 本文が変わっていないことを確かめる"
