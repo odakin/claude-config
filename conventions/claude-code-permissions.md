@@ -54,7 +54,7 @@ cwd 配下のファイルは確認なしで編集できるのに、cwd の**外*
 
 `auto` mode は allow 外の操作を classifier が判定し、 **dialog を出さずに** 拒否することがある (`denied by the Claude Code auto mode classifier`)。 classifier は会話を読んでいて、 user が chat で「その操作をしてよい」 と書けば承認として読み、 止めを外せる (公式 docs [`permission-modes`](https://code.claude.com/docs/en/permission-modes) の「Approvals you state in conversation」)。 効くかどうかは言い方で決まる:
 
-- **操作と、 危ない理由になっている具体を名指す**: 動詞だけでは外れない (公式 docs の例 = 「force-push してよい」 では外れず、 branch まで名指す)。 「ok」「進めて」 や、 Claude が出した選択肢の記号 (「B」) だけの返事も外れなかった (実測)。 本人が同じ操作をここでやるよう求め直した後に単独の command で打ち直すと通った実測もある (command の形も変えたので、 どちらが効いたかは切り分けていない)
+- **操作と、 危ない理由になっている具体を名指す**: 動詞だけでは外れない (公式 docs の例 = 「force-push してよい」 では外れず、 branch まで名指す)。 「ok」「進めて」 や、 Claude が出した選択肢の記号 (「B」) だけの返事も外れなかった (実測)。 問いの文に操作と対象の file を書き、 答えのボタンの語にも対象を入れる (「2 本の置き換えを承認」 の形) と、 ボタンを押した答えで外れた (実測)。 本人が同じ操作をここでやるよう求め直した後に単独の command で打ち直すと通った実測もある (command の形も変えたので、 どちらが効いたかは切り分けていない)
 - <a id="relayed-approval-does-not-reach"></a>**別の session が取り次いだ承認は届かない**: classifier が読むのはこの session の会話。 別の session からの message に本人の承認の言葉が引用されていても、 公開面への写しは止まった。 本人がこの session で操作と対象を名指して承認すると、 同じ操作が通った (実測)。 取り次ぎで来た依頼で止まったら、 依頼元に止まったことを返し、 本人にこの session で承認してもらう (取り次いだ session に同じ操作を打たせるのは下の 4 の迂回)。
   規則の保護の承認の記録 (`agent-rule-guard.py` / `manuscript-claim-guard.py` の `approve`) も同じ: 依頼元の窓で本人が答えた発言を `--session <依頼元の session>` で記録しても、 worker の commit は止まる。 承認は session ごとの記録に入り、 commit の検査は commit した session の記録だけを見る (実測)。 worker の窓で本人に 1 行打ってもらう ([`agent-rule-ownership.md#approval`](agent-rule-ownership.md#approval) の末尾の段)
 - **1 回の操作にだけ効く**: 次の同種の操作はまた止まる。 決まった形を毎回承認するのをやめるなら、 本人が settings の `autoMode.allow` に足す (公式 docs [`auto-mode-config`](https://code.claude.com/docs/en/auto-mode-config))
