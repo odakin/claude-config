@@ -49,6 +49,7 @@ summary: 実装に入る前に方針を短く出して本人のフィードバ�
 - **方針の段の下請けは最も重い effort で起こさない** (実装・起草の段が最も重い effort でも、 方針の段はその一段下。 方針は短く、 本人がすぐ直す前提。 実測: 方針だけの段を最も重い effort で起こし、 本人が一段下げた)。
 - **依頼書に、 方針の段か実装の段かを書く** (実装の段なら確認済みの方針の file と本人の確認の発言、 方針の段を立てない作業なら [上の一覧](#no-policy-stage) のどれに当たるかと 1 行の理由 = [`multi-session-coordination.md#orientation-prepay`](multi-session-coordination.md#orientation-prepay))。
 - **同じ仕事を何人かの下請けに並べて書かせるとき**: 並べる前に、 何の誤りを減らすために並べるかを依頼書に書く。 中身 (方針) が決まった後の文の起草は、 1 人が書き、 もう 1 人 (書き手と別の vendor) は書かずに方針と草稿を答える先 (referee など) の原文・共著者の原文と並べて疑う形を既定にし、 集約の表に何本にも共通の中身と少数意見の全件を残す。 理由 = 同じ材料・方針・点検を渡すと違うのは言い回しだけで、 比べは違う所しか拾わない (正本と理由 = [`multi-session-coordination.md#parallel-drafting`](multi-session-coordination.md#parallel-drafting))。
+- <a id="policy-answer-is-not-apply-approval"></a>**方針の確認の発言は、 保護された file (規則・検査・hook・設定) を当てる承認には足りない**: 当てる窓の guard は、 本人の答えの前の返事に当てる file の名と候補の全文の SHA-256 の頭が出ていたかで、 その答えを候補に結ぶ ([`agent-rule-ownership.md#owner-answer-in-another-window`](agent-rule-ownership.md#owner-answer-in-another-window))。 方針の段で候補の全文が既にできていれば、 方針を確かめる問いの返事に file ごとの名と SHA-256 の頭を書いておく = その答えがそのまま当ての承認になる。 書かずに確認の発言だけを実装の依頼に引くと、 worker が当てる段で guard に断られ、 依頼側が候補を示して問い直す往復が 1 回増える (実測)。
 - **受ける側**: 実装を求める依頼書に、 確認済みの方針 (本人の発言の verbatim) も、 方針の段を立てない理由も書いていなければ、 方針だけを提出して止まり、 そのことを提出に書く。
 
 ## <a id="post-implementation-check"></a>実装の後の照合
