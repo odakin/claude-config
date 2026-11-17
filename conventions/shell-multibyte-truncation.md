@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names)
+when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names) + **Python で file の行番号を出すとき** (#python-splitlines-line-numbers) + **PDF から起こした文字列をギリシャ文字で探すとき** (#pdf-text-micro-sign)
 category: infra
 summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 -->
@@ -78,6 +78,16 @@ Python の `re` は既定で Unicode を扱い、 `\w` に仮名・漢字が入�
 Dropbox や macOS から来た file 名は、 「ピ」 を「ヒ + 半濁点」 のように分けた形 (NFD) で持っていることがある。 手で打った語は合成した形 (NFC) なので、 見た目が同じでも byte が違い、 `ls | grep 'コピー'` は **error なしで 0 件**を返す (実測)。
 濁点・半濁点を含む語で file 名を探すときは、 濁点の無い部分の語で引くか、 python で揃えてから比べる: `unicodedata.normalize('NFC', name)`。 path を組み立てるときの形の違いは [`claude-code-permissions.md`](claude-code-permissions.md) の表にある。
 
+## <a id="python-splitlines-line-numbers"></a>Python の `splitlines()` は改頁の文字でも行を割る — `file:行` を出す道具は改行だけで数える
+
+`str.splitlines()` は `\n` のほかに `\r`・`\v`・`\f` (改頁)・`\x1c`〜`\x1e`・`\x85`・`U+2028`・`U+2029` でも行を割る。 file にこれらが 1 つでもあると、 それより後ろの行番号が grep・git・editor の数え方より大きくなり、 error は出ない (実測: 改頁の文字を含む台帳について報告した `file:行` がずれ、 別の session の照合で見つかった)。
+人や他の道具に渡す行番号は `text.split('\n')` で数える (file を `for i, line in enumerate(f, 1)` で読むのも `\n` で割る)。 食い違う文字があるかの確かめ = `len(s.split('\n')) != len(s.splitlines()) + s.endswith('\n')`。
+
+## <a id="pdf-text-micro-sign"></a>PDF から起こした文字列では μ が micro 記号 µ (U+00B5) になることがある — ギリシャ文字の語で探すときは両方を入れる
+
+組版された PDF の文字層 (PyMuPDF・pdftotext の出力) では、 ギリシャ文字の μ (U+03BC) が見た目の同じ micro 記号 µ (U+00B5) で出てくることがある。 μ だけの pattern (`[λμν]` など) は error なしで 0 件を返す (実測: PDF から起こした文字列の添字の µ を、 μ だけの pattern が拾わなかった)。
+PDF 由来の文字列をギリシャ文字の語で探すときは `[μµ]` と両方を書くか、 `unicodedata.normalize('NFKC', s)` で揃えてから比べる (NFKC は µ を μ に写す)。 角括弧に非 ASCII を書くときの locale の罠は上の [#bracket-expression-c-locale](#bracket-expression-c-locale)。
+
 ## まとめ (reflex)
 
 - shell で非 ASCII を切る時は `cut -c` / `head -c` / byte slice を**使わない** → python の文字単位 truncate。
@@ -87,6 +97,8 @@ Dropbox や macOS から来た file 名は、 「ピ」 を「ヒ + 半濁点」
 - 変数の直後に非 ASCII の文字を置くときは `${var}` (UTF-8 の locale では文字が変数名に取り込まれる、 [#unbraced-var-before-multibyte](#unbraced-var-before-multibyte))。
 - 日本語の文の中で英字の語を Python の正規表現で探すときは `\b` を使わず `(?<![A-Za-z])語(?![A-Za-z])` ([#python-word-boundary-cjk](#python-word-boundary-cjk))。
 - macOS の file 名を濁点つきの語で grep して 0 件なら、 NFD を疑う ([#nfd-file-names](#nfd-file-names))。
+- 人や他の道具に渡す行番号は改行だけで数える (`splitlines()` は改頁の文字でも割る、 [#python-splitlines-line-numbers](#python-splitlines-line-numbers))。
+- PDF 由来の文字列を μ で探すときは micro 記号 µ も入れる ([#pdf-text-micro-sign](#pdf-text-micro-sign))。
 
 ## <a id="prose-args-quoting"></a>自然文を CLI 引数で渡すときの quoting — backtick は double quote の中で消える (2026-09)
 
