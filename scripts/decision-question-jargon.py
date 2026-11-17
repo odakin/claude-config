@@ -34,6 +34,13 @@
   止めない (本人の裁定 = ボタンで答えてよい。 守りの道具はその形の押した答えを承認に記録する =
   conventions/agent-rule-ownership.md#owner-answer-in-another-window の 3)。 送信・投稿の承認は SHA-256 があっても止める。
 
+向きの検査 (2026-11-17、 conventions/concise-output.md#question-button-same-words): 箱 (wrap_up の ask × actions の label) と
+  選択肢 UI (question × options の label) で、 ボタンの動詞の打ち消しが問いの終わりの述語に出ているのに、 どのボタンもその打ち消しを
+  持たない (問い「〜に当てないようにしますか」 × [当てる / …]) とき、 本人が見る前に止める (permissionDecision = deny、
+  TOOL_MODE に依らない)。 押した答えがどちらの向きか決まらない (実測)。 述語は日本語に依るので部品 lib/ja_question_direction.py が
+  持つ (読めなければこの検査だけが黙る)。 校正 (箱 600 個) で鳴ったのは実測の 1 個だけ (線引きと誤検出の例 = 部品の docstring)。
+  打ち消しで聞くのが正しいときは、 ボタンにもその打ち消しを置けば通る ([当てない / 当てる])。
+
 何を見るか (3 つの面、 どれも「本人が読む問い」):
   Stop                      今の turn の最終 assistant 発話のうち**問いの行** (下の Q_RE) と、 その行に続く字下げの深い行
                             (= list item の sub-bullet。 問いの item の中身は sub-bullet に書かれることが多い)。 問いでない行は見ない。
@@ -461,7 +468,8 @@ def stop_reason(inp: dict, terms, pointer):
     words = find_jargon(final, terms) if (final and terms and not rerun) else []
     if words:
         parts.append(notice(words, pointer) + "。 前の返事は本人の画面に出ているので本文は出し直さず、 問いの部分だけを普通の語で"
-                     "短い追記に書く (符号を残すなら、 何の話かの説明を直後に添える)。 どの語にも説明が既に添えてあるなら、 その旨の 1 行で終了してよい。")
+                     "短い追記に書く (符号を残すなら、 何の話かの説明を直後に添える)。 " + BOX_WORDS_NOTE + "。"
+                     " どの語にも説明が既に添えてあるなら、 その旨の 1 行で終了してよい。")
     refs = line_refs(final) if (final and not rerun) else []
     if refs:
         parts.append(line_notice(refs) + "。 場所でない (足した行数などの量・表の行の数) なら、 その旨の 1 行で終了してよい。")
@@ -505,6 +513,40 @@ def tool_asks(tool_name: str, tool_input) -> list:
     return [text] if text else []
 
 
+DIR_MARK = "📐 ボタンが問いの向きと逆です"
+# 問いや答え方の追記を求める差し戻しに添える 1 句 (箱は追記より先に本人に出て、 前の問いのまま開いている = 追記の答えの語が
+# 箱のボタンの語と重なると、 本人の一言がどちらの問いへの答えか決まらない。 実測。 concise-output.md#question-button-same-words の 4)
+BOX_WORDS_NOTE = ("turn の終わりの箱 (次の一手の欄) が別の問いで開いているなら、 追記の答え方の語を箱のボタンと違う語にするか、"
+                  " その問いで箱を出し直す")
+
+
+def direction_flips(tool_name: str, tool_input) -> list:
+    """箱 (ask × actions の label) と選択肢 UI (question × options の label) のうち、 ボタンの動詞が問いの終わりの述語では
+    打ち消しで出る組の書き直しの文 (部品 lib/ja_question_direction.py。 部品が読めなければ空 = この検査だけが黙る)。"""
+    try:
+        import ja_question_direction as jqd
+    except Exception:
+        return []
+    ti = tool_input if isinstance(tool_input, dict) else {}
+    name = tool_name or ""
+
+    def labels_of(items):
+        return [o.get("label") for o in (items or []) if isinstance(o, dict) and isinstance(o.get("label"), str)]
+
+    pairs = []
+    if name.endswith("__wrap_up") and isinstance(ti.get("ask"), str):
+        pairs.append((ti["ask"], labels_of(ti.get("actions"))))
+    elif name == "AskUserQuestion":
+        pairs += [(q["question"], labels_of(q.get("options"))) for q in (ti.get("questions") or [])
+                  if isinstance(q, dict) and isinstance(q.get("question"), str)]
+    out = []
+    for q, labels in pairs:
+        hits = jqd.flipped(q, labels)
+        if hits:
+            out.append(jqd.notice(q, hits))
+    return out
+
+
 def tool_output(inp: dict, terms, pointer):
     name, ti = inp.get("tool_name", ""), inp.get("tool_input")
     text = tool_text(name, ti)
@@ -513,7 +555,8 @@ def tool_output(inp: dict, terms, pointer):
     words = find_jargon(text, terms, as_question=True) if terms else []
     units = unshown_change_questions(tool_asks(name, ti), text)
     approvals = box_approval_asks(name, ti)
-    if not words and not units and not approvals:
+    flips = direction_flips(name, ti)
+    if not words and not units and not approvals and not flips:
         return None
     msgs = ([notice(words, pointer)] if words else []) + ([show_notice(units)] if units else [])
     if approvals:
@@ -521,8 +564,9 @@ def tool_output(inp: dict, terms, pointer):
                     f" 文面・案・条件と問いは最終の返事の本文に書き、 箱は要約だけで閉じる (正本 = {BOX_RULE})")
         if any(not BOX_SEND_RE.search(a) for a in approvals):
             msgs.append(APPLY_HINT)
+    msgs += [f"{DIR_MARK}: {f}" for f in flips]
     mode = os.environ.get("DECISION_QUESTION_JARGON_TOOL_MODE", "notice")
-    if mode == "deny" or approvals:
+    if mode == "deny" or approvals or flips:
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                        "permissionDecisionReason": "。 ".join(msgs) + "。 問いと選択肢を書き直してから、 もう一度呼ぶ。"}}
     tail = []
@@ -852,6 +896,32 @@ def selftest() -> int:
     check("SHA-256 の頭" in why and "owner-answer-in-another-window" in why
           and ((out_ok or {}).get("hookSpecificOutput") or {}).get("permissionDecision") != "deny",
           "箱の承認: 止めた注意文に file の名と SHA-256 の頭を箱に書けばボタンでよいことを添え、 書いた箱は止めない")
+    # 向きの検査 (問いの述語の打ち消し × ボタンの肯定形。 文は実測と同じ形の合成)
+    def dir_box(ask, labels):
+        out = tool_output({"tool_name": "mcp__ccd_turn__wrap_up",
+                           "tool_input": {"recap": "直しの候補を作った。", "ask": ask,
+                                          "actions": [{"label": lab} for lab in labels]}}, [], None)
+        return ((out or {}).get("hookSpecificOutput") or {})
+    d = dir_box("校正の例外を見出しにだけ当てないようにしますか？", ["当てる", "例外は残す"])
+    check(d.get("permissionDecision") == "deny" and DIR_MARK in d.get("permissionDecisionReason", "")
+          and "当てない" in d.get("permissionDecisionReason", ""), "向き: 問い「当てない」 × ボタン「当てる」 の箱は TOOL_MODE に依らず止める")
+    check(not dir_box("見出しだけは、 校正の直しでも本人の OK が要るようにしますか？", ["そうする", "今のまま"])
+          and not dir_box("この検査で引かないようにしますか？", ["引かない", "引く"])
+          and not dir_box("見出しに当てないようにしますか？", ["当てないようにする", "当てる"])
+          and not dir_box("指摘は一回ずつ回しますか？", ["回す", "まとめて回す"])
+          and not dir_box("参照を待たずに今から書き始めますか？", ["書き始める", "参照を待つ"]),
+          "向き: 肯定で聞き直した箱・ボタンが打ち消しを繰り返す箱・「一回ずつ」・途中の節の打ち消しは止めない")
+    out = tool_output({"tool_name": "AskUserQuestion", "tool_input": {"questions": [
+        {"question": "この変更を適用しないようにしますか？", "header": "適用",
+         "options": [{"label": "適用する", "description": "x"}, {"label": "今のまま", "description": "y"}]}]}}, [], None)
+    check(((out or {}).get("hookSpecificOutput") or {}).get("permissionDecision") == "deny", "向き: 選択肢 UI も同じ述語で止める")
+    trp = os.path.join(tmp, "stop-words.jsonl")
+    with open(trp, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"type": "user", "message": {"content": "やって"}}, ensure_ascii=False) + "\n")
+        f.write(json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "この依頼を accept してよいですか？"}]}}, ensure_ascii=False) + "\n")
+    r = stop_reason({"transcript_path": trp}, terms, pointer) or ""
+    check("accept" in r and BOX_WORDS_NOTE in r, "Stop の語の差し戻しは、 開いた箱のボタンと違う答えの語にする 1 句を添える")
     print("--- decision-question-jargon selftest:", "PASS" if ok else "FAIL", "---")
     return 0 if ok else 1
 

@@ -515,6 +515,7 @@
 - **[lib/hook-stub.sh](lib/hook-stub.sh)** — lib/hook-stub.sh — hook stub installer 共通の「既存 stub の扱い」 (source して使う、 単体実行しない)
 - **[lib/intersect_sync.py](lib/intersect_sync.py)** — 遅れているだけの clone で、 未 commit の変更が upstream の変更と同じ file に当たって最新化できない形を、
 - **[lib/ja_deadline_dates.py](lib/ja_deadline_dates.py)** — 日本語の文から「期限らしい日付」 を取る共通部品（散文 = task 記録・メモの次の期限 / メール本文 = 入力・提出・申請の〆切。 締切語の隣接・行動語・行動窓の範囲の終端・月の無い日付と相対表現と英文の日付・日付が読めないときの急ぎの語・引用除去・述語の指紋。 docs/convention-design-principles.md#single-deadline-field-many-legs / #elapsed-time-urgency-inversion / #unclassified-defaults-to-loud、 --selftest）
+- **[lib/ja_question_direction.py](lib/ja_question_direction.py)** — 日本語の問いと答えの語の向きの食い違い (問いの中で打ち消した動詞を、 答えが肯定形で持つ) を見つける部品
 - **[lib/launchd_job_log.py](lib/launchd_job_log.py)** — launchd の無人ジョブについて「直近の run が既知の形で失敗したか」 を log 末尾から読む共有判定。
 - **[lib/ledger_page.py](lib/ledger_page.py)** — 行で書かれた台帳を、 一目で読める 1 枚の HTML にする。
 - **[lib/macos_apps.py](lib/macos_apps.py)** — Discover macOS app bundles and read their declared identity without launching them.
