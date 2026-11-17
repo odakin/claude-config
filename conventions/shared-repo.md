@@ -221,6 +221,8 @@ collaborator 本人の連絡先（メールアドレス等）や PII を layer 2
 
 <a id="l2-digest-first-deploy"></a>**初めて配る repo では、 生成してから承認を記録する** (実測): 規則の文書 (CLAUDE.md) の変更に承認を要する guard がある環境で、 空の marker を置いた候補を先に承認すると、 その後の生成で block の中身が変わり、 commit の検査が「承認した候補と違う」 で止まる。 順番は marker を置く → 配布器で生成する → 生成後の全文を候補にして承認を記録する → commit。 配布先の registry に足す変更も同じ commit の範囲に含める。
 
+<a id="l2-digest-guarded-line"></a>**配布 source の守られた行を直したら、 配り先の CLAUDE.md の commit も guard が止める** (実測): source の行が規則の正本を指す参照の行 (guard の守る区画) なら、 source を本人の答えで当てても、 その答えは source の file にしか効かない。 配布器が配り先の CLAUDE.md に書いた同じ行の変更は、 配り先の commit で別に承認を求められる。 本人に問う時点で、 source と配り先の CLAUDE.md を並べて、 1 つの答えで全部を当てられるようにする (配り先の一覧 = 配布器の `--check` が古いと出す target)。 agent の入口の文書は別の窓の答えでは当てない ([`agent-rule-ownership.md#owner-answer-in-another-window`](agent-rule-ownership.md#owner-answer-in-another-window) の 7) ので、 本人と話していない worker は配り先の分を当てずに依頼元へ返す。 止められた変更は配り先の作業ツリーに残さず、 自分が書いた分だけ戻す = 残すと、 その repo で別の窓が打つ commit に巻き込まれる ([`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race))。 戻した後も、 配布器を回し直せば同じ形が出る。
+
 ### <a id="style-checker-mirror"></a>機械化できる style subset は layer 1 engine + layer 2 mirror にする
 
 American spelling のように複数 project で再利用できる検査アルゴリズムは layer 1 に正本を置く。project がその style を採用したという意味上の規則は layer 2 の CLAUDE.md digest が所有し、layer 1 script は選好そのものを全 project へ強制しない。標準 engine は [`scripts/check-american-spelling.py`](../scripts/check-american-spelling.py) で、curated word list、TeX comment / identifier masking、Python figure-string scan、`brit-ok` 例外、positive / negative / scope selftest を所有する。
