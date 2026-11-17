@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき + 格子で評価した曲線から可視度・コントラストを報告するとき・報告値と独立実装が食い違ったとき (#sampled-extremum-metrics) + 打ち切りを変えて数値の収束を確かめるとき・値が動かなくなったのを収束と書く前・打ち切りに依る量の極限からの補正を書く前 (#truncation-dependence) + 全体と内訳を別の経路で計算して表に並べるとき・有限差分で微分のノルムを取るとき (#table-parts-sum-check) + 格子で時間発展させた波束からモーメントを足すとき (#grid-evolution-moments) + 非摂動の計算と 1 次の式を結合を小さくして比べるとき (#coupling-to-zero-intercept) + 狭い分布に重みをかけた量を展開するとき (#narrow-reweighting-shift)
+when: 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき + 格子で評価した曲線から可視度・コントラストを報告するとき・報告値と独立実装が食い違ったとき (#sampled-extremum-metrics) + 打ち切りを変えて数値の収束を確かめるとき・値が動かなくなったのを収束と書く前・打ち切りに依る量の極限からの補正を書く前 (#truncation-dependence) + 全体と内訳を別の経路で計算して表に並べるとき・有限差分で微分のノルムを取るとき (#table-parts-sum-check) + 格子で時間発展させた波束からモーメントを足すとき (#grid-evolution-moments) + 非摂動の計算と 1 次の式を結合を小さくして比べるとき (#coupling-to-zero-intercept) + 狭い分布に重みをかけた量を展開するとき (#narrow-reweighting-shift) + 出力の数を記録 (note) に写したとき・写した数を出力と突き合わせるとき (#note-numbers-against-outputs)
 category: research-domain
 summary: 数値解析 gotchas (scale-dependent default、複素 null、固定変数、比較精度、基底不変検査の死角、閉形式の関数クラス、研究スクリプト索引等、科学計算リポ共通)
 -->
@@ -844,6 +844,8 @@ $$
 検算の出力の記録は `.txt` で置く。 LaTeX を組む repo の `.gitignore` は `*.out`・`*.log` を落とすので、 dir ごと `git add` しても記録だけが黙って入らず、 ノートからの link の検査は file が手元にあるので通る (実測)。 commit の前に `git check-ignore -v <path>` で確かめる。
 
 <a id="freeze-sent-values"></a>値を直しても、 送付済みの文書の値は消さず、 別の一覧に凍結して selftest に残す。 検算 script の期待値を新しい値で上書きすると、 送った文書の数値を再現する手段が消える (実測)。 現行の値の一覧と送付済みの値の一覧を分けてどちらも selftest で回し、 要約の出力は現行の値を先に出す。 同じ量に近似と厳密の 2 つの関数があるときは、 要約が近似の側を出し続けていないかを見る。
+
+<a id="note-numbers-against-outputs"></a>出力の数を記録 (note) に写したら、 記録の側から出力と突き合わせる: `python3 scripts/check-note-numbers.py <note.md> --outputs <出力の file か dir>` が、 記録の小数・百分率のうち出力のどこにも字のまま無いものを行ごとに並べる。 並んだ数は 3 種に分けて読む: 丸めて写した数 (丸め元が出力にあるか見る)、 本文に書いた定数、 出力の数から頭で計算した数 (比・差・範囲)。 最後の種は出力に無い数を記録に足している = 出力にある値のまま書くか、 計算を script に入れて出力に出す (実測: 出力の 2 つの値の比を範囲として書き、 この照合で出力に無いと分かった)。 書き直すたびに回す。 向きは締めの道具の数値照合 ([`lib/output_numbers.py`](../scripts/lib/output_numbers.py) = 出力の数が記録にあるか) の逆で、 両方を回す。 字のままの一致しか見ないので、 同じ字の数が別の量にあっても一致になる = 並ばなかった数が正しい出どころから来た証拠にはならない。
 
 「すべて掲載」を主張する前に、対象 directory と拡張子を宣言し、[check-script-index.py](../scripts/check-script-index.py) で Git 管理対象と非無視の新規ファイルを索引の直接リンクに突き合わせる。索引だけにある名前や、索引から辿れない新規スクリプトを検出できる。使い方・構文上の限界は script の `--help` が正本。網羅性の検査は、各記載の意味の正しさや研究結果の検証を代替しない。
 

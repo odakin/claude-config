@@ -88,6 +88,7 @@
 - **[check-memory-file-bloat.py](check-memory-file-bloat.py)** — memory file (CLAUDE.md / SESSION.md) の肥大 surface。
 - **[check-message-amounts.py](check-message-amounts.py)** — git-crypt で中身を暗号化する repo の commit message に、 金額・為替レートを平文で入れさせない: commit gate (--commit-msg / --text-file、 違反で exit 1) + 過去の message の replay (--replay、 報告だけ)。
 - **[check-mktemp-template.py](check-mktemp-template.py)** — `mktemp` の template で X の後ろに拡張子を付けた書き方を見つける (BSD/macOS で固定名になる)。
+- **[check-note-numbers.py](check-note-numbers.py)** — 記録 (note) に写した小数・百分率が、 それを出した出力に字のまま在るかを行ごとに並べる。 --selftest。
 - **[check-note-quotes.py](check-note-quotes.py)** — Check that a review note's quotations of a manuscript are verbatim and sit on the lines the note cites: every 「…」 (or "…" / “…”) fragment must be a substring of a source file, and a `:NNN「…」` citation must find the fragment on line NNN; --selftest.
 - **[check-novelty-example.py](check-novelty-example.py)** — conventions/novelty-comparison.md の合成の例 (初等力学の周期) の式を数値で確かめる。 --selftest 内蔵。
 - **[check-office-automation-index.py](check-office-automation-index.py)** — Validate office-automation.md against its slug index (office-automation.index.yaml).

@@ -168,7 +168,7 @@ claude-config/
 │   ├── researchmap.md                      # researchmap (researchmap.jp、JST の研究者業績 DB) の閲覧・入力・自動化を扱うとき (業績調査シーズンの一括入力、論文・講演の登録代行、公開 API での確認)
 │   ├── scanned-book-survey.md              # 他人から共有された書籍スキャン PDF の束 (自炊 PDF・参考書の束) を、書誌・刷り色・関連箇所で棚卸しするとき + スキャン PDF から刷り色・奥付・ページ番号を読み取るとき
 │   ├── scheduled-tasks.md                  # scheduled task / launchd routine を作成・管理するとき + 定期 job が毎回読む script を直すとき (#live-script-replace) + 定期 job の間隔では間に合わない仕事を常駐の worker に任せるとき (#resident-worker-from-periodic-job) + 無人 run の log に本報告が残っていないとき・hook が無人の run かを知りたいとき (#headless-log-full-report / #routine-id-marker) + 定期 job の wrapper の終了値を決めるとき・手で確かめる入口を作るとき・手で回した結果が本番と食い違ったとき (#wrapper-exit-and-manual-check)
-│   ├── scientific-computing.md             # 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき + 格子で評価した曲線から可視度・コントラストを報告するとき・報告値と独立実装が食い違ったとき (#sampled-extremum-metrics) + 打ち切りを変えて数値の収束を確かめるとき・値が動かなくなったのを収束と書く前・打ち切りに依る量の極限からの補正を書く前 (#truncation-dependence) + 全体と内訳を別の経路で計算して表に並べるとき・有限差分で微分のノルムを取るとき (#table-parts-sum-check) + 格子で時間発展させた波束からモーメントを足すとき (#grid-evolution-moments) + 非摂動の計算と 1 次の式を結合を小さくして比べるとき (#coupling-to-zero-intercept) + 狭い分布に重みをかけた量を展開するとき (#narrow-reweighting-shift)
+│   ├── scientific-computing.md             # 数値解析・科学計算 code を書くとき、閉形式の成立範囲や研究スクリプトの正本・索引を整えるとき + 格子で評価した曲線から可視度・コントラストを報告するとき・報告値と独立実装が食い違ったとき (#sampled-extremum-metrics) + 打ち切りを変えて数値の収束を確かめるとき・値が動かなくなったのを収束と書く前・打ち切りに依る量の極限からの補正を書く前 (#truncation-dependence) + 全体と内訳を別の経路で計算して表に並べるとき・有限差分で微分のノルムを取るとき (#table-parts-sum-check) + 格子で時間発展させた波束からモーメントを足すとき (#grid-evolution-moments) + 非摂動の計算と 1 次の式を結合を小さくして比べるとき (#coupling-to-zero-intercept) + 狭い分布に重みをかけた量を展開するとき (#narrow-reweighting-shift) + 出力の数を記録 (note) に写したとき・写した数を出力と突き合わせるとき (#note-numbers-against-outputs)
 │   ├── script-layer-placement.md           # personal layer / shared project に script を新設するとき + 同じ役割の script が複数層にあると気づいたとき + generic engine と個別設定を分離するとき
 │   ├── secret-handoff.md                   # secret を user から受け取る・別マシンへ運ぶとき + **token を rotate するとき** (= 分業と主体照合、 #rotation-labor-split) + **暗号化 backup を作る/パスフレーズを失ったとき** (#backup-round-trip / #passphrase-loss-is-recoverable)
 │   ├── semgrep-ci.md                       # Semgrep を CI で運用する・finding を読む/消す・false positive を nosemgrep 注記するとき
@@ -212,7 +212,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (447 file + formcase/ 26 module + lib/ 85 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (448 file + formcase/ 26 module + lib/ 85 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式
