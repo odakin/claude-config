@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: script や git hook の実行が SIGKILL で止まるとき (exit 137 / "Killed: 9" / git の "hook ... died of signal 9") + 同じ中身の script が場所によって kill されたりされなかったりするとき + syspolicyd が重い・メモリが膨らんでいるとき + 別のアプリの起動失敗が大量に続いた後に手元の script が動かなくなったとき
+when: script や git hook の実行が SIGKILL で止まるとき (exit 137 / "Killed: 9" / git の "hook ... died of signal 9"。 しばらく走ってから止まったならメモリ不足の jetsam を先に = #jetsam-not-exec-policy) + 同じ中身の script が場所によって kill されたりされなかったりするとき + syspolicyd が重い・メモリが膨らんでいるとき + 別のアプリの起動失敗が大量に続いた後に手元の script が動かなくなったとき
 category: macos
 summary: macOS は exec 時の malware 判定を file (inode) ごとに覚える。 syspolicyd が詰まって scan に失敗すると、 その判定が kill として残り、 以後その file の exec は即 SIGKILL になる。 中身は無関係なので、 同じ bytes・同じ mode の新しい inode に作り直すと scan し直されて通る (同じ inode への上書きでは直らない)。 診断 = scripts/macos-exec-kill-triage.py、 git hook の直し方 = hook-authoring.md#killed-hook-stub
 -->
@@ -14,6 +14,15 @@ script の実行が何も出力せずに止まり、 終了値が 137 (= SIGKILL
 - 中身 (md5)・xattr (`com.apple.provenance`)・mtime が同じ file どうしで、 kill されるものとされないものがある
 - `bash <script>` で**中身を読ませる**と通る (exec ではないので判定を受けない)
 - kill は 0.00 秒で起き、 その exec について syspolicyd も kernel も何も記録しない
+
+## <a id="jetsam-not-exec-policy"></a>しばらく走ってから 137 で止まったら、 先にメモリ不足 (jetsam) を見る
+
+同じ 137 (traceback も出ない) でも、 interpreter が数十秒走ってから止まったなら、 exec の判定ではなくメモリ不足で kernel に kill された (jetsam) ことがある。 exec の判定は起動の瞬間 (0.00 秒) に起き、 interpreter で読ませれば通る。 jetsam は大きな確保の途中で起き、 interpreter で読ませても同じ所で止まる。 見分け方:
+
+- `/usr/bin/log show --last 5m --style compact --predicate 'eventMessage CONTAINS[c] "jetsam"'` (zsh では `log` が組み込みに取られるので `/usr/bin/log` = [`shell-env.md#zsh-log-builtin`](shell-env.md#zsh-log-builtin)) に `JETSAM_REASON_MEMORY_VMCOMPRESSOR_SPACE_SHORTAGE` が並び、 同じ時刻に常駐の process も一緒に kill されている
+- `sysctl vm.swapusage` の used が total に近い (空きページの数は kill の直後に戻っているので、 見るのは swap の側)
+
+直し方は、 その process が一度に確保する量を減らすこと ([`scientific-computing.md#chunk-wide-broadcasts`](scientific-computing.md#chunk-wide-broadcasts)) で、 file を作り直しても直らない (実測: 背景で回した解析が 2 回、 前景でも 1 回、 起動の数十秒後に 137 で止まり、 log には jetsam の行と swap の残り 1 GB 前後)。
 
 ## <a id="first-look"></a>最初の 1 コマンド
 

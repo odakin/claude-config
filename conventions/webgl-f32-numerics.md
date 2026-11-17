@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: WebGL / GLSL shader で物理量を f32 で計算するとき + 事前計算 table (texture) の定義域の外まで写像を延ばすとき + shader の出力を f64 の参照実装と画素単位で照合するとき + 実時間 simulation の 1 frame の時間予算を決めるとき + table と metadata を静的 hosting で配るとき (#payload-cache-pairing) + 写真の背景を mip つきで引くとき (#derivatives-in-divergent-flow) + 2 つの lookup engine を切り替えるとき (#engine-handoff) + 操作 (推進のキーなど) を始めた瞬間に画面が跳ぶとき・跳ばないことを確かめるとき (#input-starts-from-shown-state) + 観測者を止めた状態 (一時停止) を作る・確かめるとき・動かし直すとき (#paused-state-one-event) + 観測者の計器に残り時間などの量を出すとき (#readout-observer-own) + 押したまま・離した後の操作を headless で確かめるとき (#held-input-checks) + 推力を camera の軸で与えるとき・減衰の無い推力に上限を置くとき (#thrust-in-pilot-frame)
+when: WebGL / GLSL shader で物理量を f32 で計算するとき + 事前計算 table (texture) の定義域の外まで写像を延ばすとき + shader の出力を f64 の参照実装と画素単位で照合するとき + 実時間 simulation の 1 frame の時間予算を決めるとき + table と metadata を静的 hosting で配るとき (#payload-cache-pairing) + 写真の背景を mip つきで引くとき (#derivatives-in-divergent-flow) + 2 つの lookup engine を切り替えるとき (#engine-handoff) + 操作 (推進のキーなど) を始めた瞬間に画面が跳ぶとき・跳ばないことを確かめるとき (#input-starts-from-shown-state) + 観測者を止めた状態 (一時停止) を作る・確かめるとき・動かし直すとき (#paused-state-one-event) + 観測者の計器に残り時間などの量を出すとき (#readout-observer-own) + 押したまま・離した後の操作を headless で確かめるとき (#held-input-checks) + 推力を camera の軸で与えるとき・減衰の無い推力に上限を置くとき (#thrust-in-pilot-frame) + 温度や比のような導いた量を texture に持って mip で引くとき (#mip-weighted-mean) + texture から引いた量に式を掛ける shader を f64 と照合するとき (#probe-sampler-inputs) + 新しい描き方を knob の後ろに入れて既定の絵が変わらないことを確かめるとき (#knob-default-identity)
 category: web
-summary: shader の f32 計算と f64 参照の組み方 — table の端は物理の境界ではない (外は最終行 + 弱い領域の厳密な積分で継ぐ、 近似の差分引き継ぎと分岐点の継ぎ目を避ける) / f32 の条件付け (sin≈1・acos≈1・端点の平方根特異性・冪の溢れ) / f32 emulation を export の関門に / 色でなく計算値を画素に書く probe channel で f64 と照合 / 継ぎ目の画素差は「またがない同じ幅」 と比べる / 時間予算は倍率に比例 / 再生成の最下位桁の揺れで公開資産を churn しない / 照合は色の目印でなく probe で / metadata は毎回再検証し table は内容 hash で取る / 画面微分は分岐した return の前に取り、 mip は方向ベクトルの微分から / engine の切替は frame と f64 との精度で決め理由を残す / 操作で始める状態は画面に出ている観測者から作り、 跳びは基準に依らない量で測る / 止めた状態は時計も全部止めて 1 事象の写真にする / 押したまま・離した後の検査は 2 コマ以上押し、 event と読みを 1 回の呼び出しに、 同じ状態は成分の等号で / camera の軸の推力は操縦者の系の固有加速度として boost し、 中点 kick と γ の上限 / 隠れた pane の GPU 時間は readPixels 同期で測る
+summary: shader の f32 計算と f64 参照の組み方 — table の端は物理の境界ではない (外は最終行 + 弱い領域の厳密な積分で継ぐ、 近似の差分引き継ぎと分岐点の継ぎ目を避ける) / f32 の条件付け (sin≈1・acos≈1・端点の平方根特異性・冪の溢れ) / f32 emulation を export の関門に / 色でなく計算値を画素に書く probe channel で f64 と照合 / 継ぎ目の画素差は「またがない同じ幅」 と比べる / 時間予算は倍率に比例 / 再生成の最下位桁の揺れで公開資産を churn しない / 照合は色の目印でなく probe で / metadata は毎回再検証し table は内容 hash で取る / 画面微分は分岐した return の前に取り、 mip は方向ベクトルの微分から / engine の切替は frame と f64 との精度で決め理由を残す / 操作で始める状態は画面に出ている観測者から作り、 跳びは基準に依らない量で測る / 止めた状態は時計も全部止めて 1 事象の写真にする / 押したまま・離した後の検査は 2 コマ以上押し、 event と読みを 1 回の呼び出しに、 同じ状態は成分の等号で / camera の軸の推力は操縦者の系の固有加速度として boost し、 中点 kick と γ の上限 / 隠れた pane の GPU 時間は readPixels 同期で測る / 導いた量の mip は (重み, 重み × f) で持ち段は page で作る / sampler の入力を probe で返して f64 が同じ段を引く / knob の後ろの変更は変更前の page と画素で比べる
 -->
 # WebGL の f32 数値計算と f64 参照の組み方
 
@@ -60,6 +60,7 @@ shader の実出力を f64 と照合するには、 検証用の uniform で**�
 - 大きな戻り値を file に落とすときは書き写さない → [`preview.md#tool-result-to-file`](preview.md#tool-result-to-file) (大きいと分かっている値は localhost の受け口へ POST、 返してしまった値は transcript から取り出す)。
 - **色や画面上の目印で照合しない**: 目印の色を画面で探す照合は、 無関係な描画の変更 (天球の座標の付け替えなど) で目印が別の場所に移ると、 失敗せずに別のものを測りはじめる (実測: 目印の重力レンズ像を測るはずの照合が、 座標の付け替え後は影の縁の 1 画素を返し続けていた)。 照合は計算値を書いた probe で行う (例: 中央行の計算値が π を横切る位置を画素の間で補間すれば、 目印なしでリングの位置が取れる)。
 - <a id="reference-from-captured-input"></a>**色の変換 (tone map・色の shift など) を照合するときは、 変換の入力の絵と、 変換が使う計算値 (画素ごとの倍率など) を probe で撮り、 f64 の参照は撮った 8 bit の入力から作る。 差は 2 つの集合に分けて読む** — 撮った入力は shader が変換に渡す丸める前の値と最大 0.5 段違う。 そのため (a) 入力の値で式を選ぶ変換 (例 = 2 つの channel の大小で枝を選ぶ) は境の近くで shader と参照が別の枝を取り、 (b) 傾きの大きい変換 (例 = 暗い画素に大きな倍率を掛ける) は 0.5 段の違いを傾きの倍に広げる。 境の近くの画素を数えて別にし、 合否はそれ以外の画素の最大差と、 全体の平均・99.9% 点で決める。 大きな差の画素は、 参照の入力を ±0.5 段動かした出力の幅に shader の値が入るかで確かめる (入れば参照の丸めで、 shader の誤りではない)。 撮る前に、 別の経路で上から塗る物 (重ねて描く sprite・既定で出ている他の物体の像など) を消す = 変換を受けない画素が混ざると、 最大差がその画素で決まる (実測)。
+- <a id="probe-sampler-inputs"></a>**texture から引いた量に式を掛ける shader は、 sampler に渡した入力 (uv・lod) と式の入力 (倍率など) を probe で全画素返し、 f64 は同じ mip の段を同じ規則で引いて照合する** — 色だけを照合すると、 方向の幾何・texture の補間・式の誤差が 1 つの差に混ざる。 probe で shader 自身の uv・lod を返せば、 f64 はそこで同じ texel を引け (wrap と clamp、 段の中の 2 線形と段の間の線形を写す。 RG16F なら texel を half に丸めてから)、 差は補間の丸めと式だけになる。 さらに shader が引いた値そのものも返し、 それを f64 で式に通した差を並べると、 式の側の誤差 (表の補間) と補間の側の誤差が分かれる (実測: 式の側の差は平均 0.000 段、 残りは補間の丸め)。 mip の段は f64 が同じ形で作れるように page で作る ([#mip-weighted-mean](#mip-weighted-mean))。 channel ごとに 1 回描いて全画面を `readPixels` で 1 度に読み、 base64 にして 1 回の呼び出しで返す (1 画素ずつ読むより速く、 全画素で照合できる)。 全部の回を時間を止めた同じ事象から描く ([#paused-state-one-event](#paused-state-one-event))。 g のような 1 を挟んで大きく動く量は log で 24 bit に詰める (例 = `0.25·log2(g) + 4`)。
 
 ## <a id="seam-pixel-diff"></a>継ぎ目の連続性を実画面で測る
 
@@ -103,6 +104,23 @@ headless の検査が同じ頁を状態ごとに開き直すとき、 load の e
 - **画面微分は一様な制御の中で取る**: GLSL ES 3.00 では、 分岐した `return` (影・円盤に当たった画素の早期 return) の後の `dFdx` / 暗黙微分の texture 参照は未定義。 全画素で背景の方向を計算してから、 最後に影・物体・背景を選ぶ形に組む (物体の色は変数に入れて `break`)。 欠損の画素では方向に既定値を入れる (隣の画素の footprint が大きくなるだけ)。
 - **mip level は方向ベクトルの微分から明示する**: 経度の uv は 180° の継ぎ目で跳ぶので、 その微分を使うと継ぎ目に線が出る。 単位方向ベクトル `s` の画面微分は連続なので、 `foot = max(|dFdx(s)|, |dFdy(s)|)`、 `lod = log2(foot · W / 2π)` (W = 画像の横の画素数) を `textureLod` に渡す。 光子リングのように 1 画素が空の広い範囲を掃く所では lod が上がり、 平均の色に寄る (= 正しい平均化)。 極付近の横方向の過小な平均化は残る。
 - 組み替えの前後で、 背景以外の画面が変わっていないことを画素で比べる (浮動小数の丸めで縁の画素が数個入れ替わる程度のはず)。
+
+## <a id="mip-weighted-mean"></a>導いた量 (温度・比) を texture に持って mip で引くときは、 重みと重みを掛けた量で持つ
+
+texture に色でなく導いた量 (画素ごとの温度・色の比など) を持たせると、 GPU の縮小 (mip と 3 線形の補間) はその量を重みなしで平均する。 暗い画素の量 (8 bit の丸めで大きくぶれる) が明るい画素と同じ重みで混ざり、 明るい星の色が変わる。
+
+- **(重み, 重み × f(量)) の 2 つで持つ**: 縮小はどちらも線形に平均するので、 足もとの量は f⁻¹(第 2 / 第 1) になり、 どの段でも同じ規則になる。 重みは光の量のような加えられる量にする。
+- **f は、 元の画素ごとに式を当ててから平均した参照と比べて選ぶ** (texel を 1 つの量で読むのは近似で、 f で誤差が変わる)。 量そのもの・log・逆数・読みが逆に引く座標 (色の比) を並べ、 偏移の大きさを何通りか変えて差を見る (実測: 読みの座標の平均が、 温度の平均の半分の差だった。 平均した色をそのまま読むのは一番悪かった)。
+- **mip の段は自分で作る**: RG16F・RG32F は拡張なしでは color-renderable でないので `generateMipmap` が断る。 `texStorage2D` で段の数を取り、 page の中で 2×2 の平均で段を作って `texSubImage2D` で 1 段ずつ入れる (RG16F には FLOAT の配列を渡せる)。 f64 の参照も同じ足し算の順で段を作れば、 照合で GPU の補間をそのまま写せる ([#probe-sampler-inputs](#probe-sampler-inputs))。 `generateMipmap` の縮小の重みは実装に任されていて、 f64 で写せない。
+- **payload の画像を page で読むときは色の変換を切る**: `createImageBitmap(blob, {colorSpaceConversion: "none", premultiplyAlpha: "none"})` → canvas の `getImageData` で byte を取り、 色の chunk (gAMA・iCCP・sRGB) を持たない PNG で書く。 読んだ byte の channel ごとの和を page から返し、 file の和と照らす (実測: 一致)。 1 つの値に 8 bit より多く要るなら、 bit を channel に分けて詰める (page で数に戻してから float の texture に入れるので、 GPU の補間は詰めた形に掛からない)。
+
+## <a id="knob-default-identity"></a>新しい描き方を knob の後ろに入れたら、 knob を入れない絵が変更の前と画素で同じことを確かめる
+
+既定の絵を変えずに新しい描き方を足すとき (knob・隠しトグルの後ろ):
+
+- 変更の前の page (基準の commit の html と、 同じ payload) を一時 dir に写して別の port で出し、 今の page と同じ状態の一覧 (既定の視点、 既存の効果を on にした視点、 別の背景) で、 dithering を切った全画面の `readPixels` を byte で比べる。 shader の関数を切り出す・分岐を足す変更でも、 knob を入れない側は byte まで同じになる (実測)。 違ったら丸めの順が変わった所を探す。
+- 新しい payload は knob を入れたときに初めて読み、 読めなければ今の描き方のまま console に 1 行出す (公開の頁の既定の読み込みと大きさが変わらない)。
+- 1 コマの時間は、 描くたびに 1 画素の `readPixels` で待って、 数十コマを何回か測り、 中央値と幅で前後を比べる (回ごとに 0.5 ms ほどぶれる。 実測)。
 
 ## <a id="engine-handoff"></a>2 つの lookup engine の切替は frame と精度で決める
 
