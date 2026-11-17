@@ -58,6 +58,9 @@ sections:
   - id: align-split-tag-orphan
     level: 2
     title: "長い display の式番号が下の行に回るのは amsmath の標準 — 欠陥として報告しない (2026-09-12、 著者裁定)"
+  - id: align-overfull-row-bisect
+    level: 2
+    title: "display の overfull がどの行かは、 写しで行を短くして切り分ける — log の行番号は display の終わりを指す"
   - id: qed-alone-after-display
     level: 2
     title: "証明が数式で終わると ■ だけが次の頁に回る — `\\qedhere` は番号つきの式の番号を消す"
