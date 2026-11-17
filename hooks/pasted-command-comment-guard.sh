@@ -26,6 +26,8 @@
 # 述語 (2026-09-09 に transcript 59 本 / 2026-07-22..09-09 の 49 日で実測校正):
 #   fire = (assistant の当ターン text に貼り付け指示語) ∧
 #          (fenced block 内に 実行系コマンド行 + 行内 `#`  または 行頭 `#` 行)
+#          ただし言語名なし・未知の言語名の block は、 実行系の行を持つときだけ見る
+#          (下の「射程の限界」 の 2 項目め)
 #   実測: fired = 3 日分 / 49 日 (INLINE 3 行 = 2026-09-09 の事故そのもの、
 #   FULLLINE 2 行 = 08-24 / 09-05)。 貼り付け指示語 filter を外しても hit 数は
 #   同じ = filter は真陽性を落とさず FP だけ削る (= 実測 FP 0)。
@@ -49,7 +51,16 @@
 #   - 貼り付け指示語 regex は **日本語のみ実データ校正済** (49 日 / 真陽性 3 / FP 0)。
 #     英語 cue は推定で足してあるだけなので、 英語 session で FP が出たら削る方向で
 #     調整すること (= 校正データが無い部分は「効く」 と主張しない)。
-#   - 明示された非 shell 言語の fence は飛ばす。言語なし・shell・未知の指定は従来の検査を保つ。
+#   - 明示された非 shell 言語の fence は飛ばす。shell の言語名 (bash / sh / zsh / shell /
+#     console) の fence は従来どおり全部の行を見る (実行させない code を shell の fence に
+#     入れない規約 = shell-env.md#file-content-not-in-shell-fence と揃える)。
+#   - 言語名なし・未知の言語名の fence は、 実行系の行 (既知のコマンド語・`VAR=値` の前置・
+#     path の起動・`$ ` の prompt・語 + `-` の flag) を 1 行も持たなければ飛ばす。 貼る文面
+#     (SNS の投稿文・メールの文面) の行頭の `#` (ハッシュタグ・見出し) をコマンドの注釈と
+#     読まないため (実測: 投稿文の末尾のハッシュタグの行を止めた)。 実行系の行を 1 行でも
+#     持てば、 その fence の行頭 `#` も行内 `#` も従来どおり見る。
+#     射程の外 = 実行系の行を持たない fence に、 既知のコマンド語でも flag 付きでもない
+#     コマンド (`uv run x.py` など) と行頭 `#` だけがある形は鳴らない。
 
 set -uo pipefail
 
@@ -80,6 +91,14 @@ FULLLINE_HASH_RE = re.compile(r"^\s*#(?!!)")       # 行頭 # 単独行
 FENCE_RE = re.compile(r"^\s*(" + chr(96) + r"{3,}|~{3,})(.*)$")
 NON_SHELL = set("diff patch python py yaml yml json text txt markdown md javascript js "
                 "typescript ts ruby rb html css sql xml toml ini c cpp rust go java latex tex".split())
+SHELL_LANG = set("bash sh zsh shell console".split())
+# 言語名なし・未知の fence を「コマンドの枠」 と見なす行 (1 行でもあれば全部の行を見る)
+CMDLIKE_RE = re.compile(
+    r"^\s*(?:(?:%s)\b" % CMD +
+    r"|[A-Za-z_][A-Za-z0-9_]*=\S*\s+\S"                      # VAR=値 cmd
+    r"|(?:\./|\.\./|~/|/[A-Za-z]|\"?\$HOME\b|\"?\$\{?[A-Za-z_])"  # path・$変数 の起動
+    r"|\$\s+\S"                                               # $ の prompt
+    r"|[A-Za-z][\w.+-]*\s+--?[A-Za-z])")                     # 語 + flag
 PASTE_CUE = re.compile(
     # 日本語 (2026-09-09 に transcript 49 日で校正、 真陽性 3 / FP 0)
     r"実行して|打って|貼って|貼り付け|ターミナル|コピペ|流して|叩いて|"
@@ -107,29 +126,39 @@ def strip_quoted(line):
     return "".join(out)
 
 
-def scan(text):
-    if not PASTE_CUE.search(text):
-        return None
-    fence = None
-    inspect = False
+def fences(text):
+    """(言語名, 中の行の list) を fence ごとに返す。 閉じない fence は text の終わりまで。"""
+    fence, language, body = None, "", []
     for ln in text.split("\n"):
         match = FENCE_RE.match(ln)
         if match:
             delimiter, info = match.groups()
             if fence is None:
-                fence = delimiter
+                fence, body = delimiter, []
                 language = info.strip().split()[0].lower() if info.strip() else ""
-                inspect = language not in NON_SHELL
             elif delimiter[0] == fence[0] and len(delimiter) >= len(fence) and not info.strip():
+                yield language, body
                 fence = None
-                inspect = False
             continue
-        if fence is None or not inspect:
+        if fence is not None:
+            body.append(ln)
+    if fence is not None:
+        yield language, body
+
+
+def scan(text):
+    if not PASTE_CUE.search(text):
+        return None
+    for language, body in fences(text):
+        if language in NON_SHELL:
             continue
-        if CMD_RE.match(ln) and INLINE_HASH_RE.search(strip_quoted(ln)):
-            return ln.strip()[:120]
-        if FULLLINE_HASH_RE.match(ln) and ln.strip() != "#":
-            return ln.strip()[:120]
+        if language not in SHELL_LANG and not any(CMDLIKE_RE.match(ln) for ln in body):
+            continue  # 言語名なし・未知で実行系の行が無い = 貼る文面 (投稿文・メール) の枠
+        for ln in body:
+            if CMD_RE.match(ln) and INLINE_HASH_RE.search(strip_quoted(ln)):
+                return ln.strip()[:120]
+            if FULLLINE_HASH_RE.match(ln) and ln.strip() != "#":
+                return ln.strip()[:120]
     return None
 
 

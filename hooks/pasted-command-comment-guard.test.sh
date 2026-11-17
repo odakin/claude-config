@@ -9,6 +9,9 @@
 #     quote 内 `#` / fence 外 / stop_hook_active / transcript 不在 = silent を固定化。
 # §C 行頭 # 単独行も fire (= 「注釈を独立行に逃がす」 では直らないことの固定化)。
 # §D 英語 chat の貼り付け指示語 (= 層1 hoist で追加。 cue は推定なので FP 監視対象)。
+# 末尾の python の段: fence の言語名ごとの扱い。 言語名なし・未知の fence は実行系の行を
+#     持つときだけ見る (貼る文面 = SNS の投稿文・メールの文面の行頭 # を拾わない、 実測)、
+#     shell の言語名の fence は全部の行を見る。 射程の外 (実行系と見なさない形) も 1 件固定する。
 
 set -uo pipefail
 
@@ -165,6 +168,24 @@ cases += [
     ('quoted hash', '貼って\n```sh\nprintf "%s" "# fine"\n```', False),
     ('no cue', '```sh\ngit status # explanation\n```', False),
     ('clean shell', '貼って\n```bash\ngit status\n```', False),
+    # 言語名なし・未知の fence: 実行系の行があれば行頭 # も見る
+    ('unlabelled comment + VAR= prefix', '貼って実行して\n```\n# ログインし直す\nCLAUDE_CONFIG_DIR="$HOME/.x" claude auth login\n```', True),
+    ('unlabelled comment + ./script', '貼って\n```\n# 入れ直す\n./setup.sh\n```', True),
+    ('unlabelled comment + $HOME script', '貼って\n```\n# 走らせる\n"$HOME/x/run.sh"\n```', True),
+    ('unlabelled comment + $ prompt', '貼って\n```\n# 確かめる\n$ uv run check.py\n```', True),
+    ('unlabelled comment + word and flag', '貼って\n```\n# 止める\npkill -f watcher\n```', True),
+    ('unknown lang comment + command', '貼って\n```unknown-language\n# 説明\ngit status\n```', True),
+    # shell の言語名の fence は、 実行系の行が無くても全部見る (shell-env.md#file-content-not-in-shell-fence)
+    ('bash fence hashtags only', '貼って\n```bash\n#ポッドキャスト #科学\n```', True),
+    ('bash fence script body shown', '貼って\n```bash\n#!/usr/bin/env bash\n# 説明\nset -u\n```', True),
+    # 言語名なし・未知で実行系の行が無い = 貼る文面 (投稿文・メール・見出し)
+    ('unlabelled social post with hashtags', '下の文面を貼って投稿してください\n```\n新しい回を公開しました\n\nhttps://example.org/ep/1/\n\n#ポッドキャスト #科学\n```', False),
+    ('unlabelled mail with heading line', '貼って送ってください\n```\n件名: 打ち合わせ\n\n# 議題\n1. 日程\n```', False),
+    ('unlabelled markdown draft', '貼り付けてください\n```\n# 見出し\n本文です。\n```', False),
+    ('unknown lang social post', '貼って\n```mastodon\n#ポッドキャスト #科学\n```', False),
+    ('english social post', 'Paste this into the post:\n```\nNew episode is out!\n#podcast #science\n```', False),
+    # 射程の外 (既知): 既知のコマンド語でも flag 付きでもないコマンドと行頭 # だけの fence は鳴らない
+    ('known gap: unlisted command without flag', '貼って\n```\n# 説明\nuv run check.py\n```', False),
 ]
 with tempfile.TemporaryDirectory() as directory:
     transcript = Path(directory) / 'transcript.jsonl'
