@@ -67,6 +67,9 @@ sections:
   - id: align-overfull-row-bisect
     level: 2
     title: "display の overfull がどの行かは、 写しで行を短くして切り分ける — log の行番号は display の終わりを指す"
+  - id: display-continuation-phantom
+    level: 2
+    title: "括弧の中で折った式の続きの行は `&\\phantom{…}` で括弧の中身の頭に揃える — 固定の字下げ (`\\quad`・`\\qquad`) にしない"
   - id: qed-alone-after-display
     level: 2
     title: "証明が数式で終わると ■ だけが次の頁に回る — `\\qedhere` は番号つきの式の番号を消す"
