@@ -133,6 +133,12 @@ sections:
   - id: threshold-by-root-not-grid
     level: 2
     title: "符号や大小が変わる点は、 格子の値から読まずに根で出す"
+  - id: table-corners-as-nodes
+    level: 2
+    title: "表で関数を引く (逆引きも) ときは、 折れ目を表の点にし、 確かめの掃引で折れ目を通る"
+  - id: chunk-wide-broadcasts
+    level: 2
+    title: "(点の数) × (求積の点) の配列は、 点の側で分けて作る"
   - id: sampled-extremum-metrics
     level: 2
     title: "格子で標本化した曲線の極値から作る量 (可視度・コントラスト・ピーク比) は格子に依る — 表に写す前に収束を確かめる"
