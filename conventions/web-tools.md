@@ -598,7 +598,10 @@ frameset の app では空文字と ref 無しが返る。 読み書きは `java
 - **`#` だけ違う URL への `navigate` はページを読み直さない**（古い版が表示されたまま）。作り直したページを確かめるときは
   `location.reload()` を使う
 - **ロボット判定（Turnstile 等）は自動操作では通れない**（トークンが発行されない、実測）。**突破しようとしない**。
-  判定を通った送信の確認は人に頼む（[`static-site-form-backend.md#turnstile`](static-site-form-backend.md#turnstile)）
+  判定を通った送信の確認は人に頼む（[`static-site-form-backend.md#turnstile`](static-site-form-backend.md#turnstile)）。
+  読むだけの頁（出版社の投稿規定など）が判定で止まったときも同じで、Web アーカイブなどの写しへ回り込まない
+  （権限の判定がこの回り込みを止める、実測。消えた頁の写しを探す [#dead-society-pdf](#dead-society-pdf) とは別）。
+  読めなかったことと、そのために確かめていないことを記録に書き、読む段を人が自分の browser で開ける段に回す
 
 ## <a id="google-sites-editor"></a>Google サイト（新しい版）の編集画面を内蔵 Browser pane で操作する
 
