@@ -44,7 +44,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 
 | 集めるもの | 引き方 |
 |---|---|
-| user の発言 (訂正・決定・依頼) | `python3 scripts/search-agent-transcripts.py --session <id8> --role user --regex .` (圧縮の前も含めて時刻順に全部) |
+| user の発言 (訂正・決定・依頼) | `python3 scripts/search-agent-transcripts.py --session <id8> --role user --regex . --limit 0` (`--limit` の既定は 200 件 = 長い session では前の方だけが出る。 切ったときは最後に件数を知らせる。 圧縮の前も含めて時刻順に全部) |
 | その場で書いた script (file に書いたもの + heredoc・`-c` で流したもの) | `python3 scripts/session-scripts-report.py <id8>` = 1 本ずつ、 commit 済み (✅) / repo の中で未 commit (🟡) / repo の外 (⚠️) / 流しただけで file に無い (⚠️) を出す。 ✅ でないものは 1 本ずつ、 1 の表の [#evidence-scripts](#evidence-scripts) の行で決める |
 | 根拠の無い検算の主張と先送り (返事と記録に書いた文) | `python3 scripts/session-claims-report.py <id8>` = 「手で確かめて一致」「独立に再現」 のうち根拠の file を指さない行 (A) と、 「次に〜とき」「後で」 のうち carrier を指さない行 (B) と、 「足したものは無い」「すべて記録済み」 のうち下の照合を指さない行 (C)。 誤検出は出るので 1 行ずつ読み、 A は 1 の表の [#unbacked-checks](#unbacked-checks)、 B は 3 の [#deferrals](#deferrals)、 C は下の「研究の中身」 の行の照合で決める |
 | 答えの無い箱の問い (turn 終わりの箱で問い、 本人の答えが無いまま流れたもの) | `python3 scripts/session-open-questions-report.py <id8>` = 1 件ずつ読み、 まだ要る問いは TODO の `ask` に写す (箱の問いは次の自動の turn で画面から消える。 記録に残らないので誰も問い直さない。 実測) |

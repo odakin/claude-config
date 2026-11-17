@@ -810,15 +810,23 @@ def main(argv=None) -> int:
     if a.tool_runs:
         hits = tool_runs(a.pattern, regex=a.regex, agent=a.agent, since=a.since, until=a.until,
                          session=a.session, context=a.context, claude_dir=claude_dirs,
-                         codex_dir=codex_dirs, limit=a.limit, tally=tally)
+                         codex_dir=codex_dirs, limit=0, tally=tally)
     else:
         hits = search(a.pattern, regex=a.regex, role=a.role, agent=a.agent, since=a.since, until=a.until,
                       session=a.session, context=a.context, include_injected=a.include_injected,
-                      claude_dir=claude_dirs, codex_dir=codex_dirs, limit=a.limit, tally=tally)
+                      claude_dir=claude_dirs, codex_dir=codex_dirs, limit=0, tally=tally)
+    # --limit で切ったときは黙らない = 長い session の締めで、 前の方だけ読んで
+    # 「会話はここで終わり」 と読む事故があった (実測: 既定の 200 件が会話の途中で尽きた)
+    total = len(hits)
+    if a.limit and total > a.limit:
+        hits = hits[:a.limit]
     for ts, ag, sid, r, snip in hits:
         print(f"{ts[:19]}  {ag:6}  {sid}  {r:9}  {snip}")
     if not hits:
         print("(このマシンの記録には見つからない)", file=sys.stderr)
+    if a.limit and total > a.limit:
+        print(f"… 先頭の {a.limit} 件だけ出した (全 {total} 件)。 全部 = --limit 0、 範囲を切る = --since / --until",
+              file=sys.stderr)
     msg = _report(tally)
     if msg:
         print(msg, file=sys.stderr)

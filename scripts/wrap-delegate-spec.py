@@ -125,7 +125,7 @@ def skeleton(target: str, quote: str = "") -> str:
          "- worker にとって closing-sweep.md の「この session」 はこの session = 0.3・0.5 の道具をこの id で回す"
          " (圧縮の前の分も記録から読む = 依頼元の記憶や要約から拾わない):",
          ]
-    for cmd in (f"search-agent-transcripts.py --session {id8} --role user --regex .",
+    for cmd in (f"search-agent-transcripts.py --session {id8} --role user --regex . --limit 0",
                 f"session-scripts-report.py {id8}", f"session-claims-report.py {id8}",
                 f"session-open-questions-report.py {id8}", f"session-fetched-docs-report.py {id8}",
                 f"session-reply-knowledge-report.py {id8} --delegated",
