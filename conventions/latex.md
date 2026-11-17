@@ -8,7 +8,7 @@ summary: LaTeX 固有規約（物理リポで参照）
 LaTeX を含むリポで適用。CLAUDE.md から参照: `~/Claude/claude-config/conventions/latex.md`
 
 ## <a id="equation-safety"></a>式の安全規則
-- **原稿の表題・概要・序論・結論・式を AI agent が変える条件は [`manuscript-claim-ownership.md#rule`](manuscript-claim-ownership.md#rule) が正本** (著者の項目ごとの裁定 = 著者の発言の verbatim。 変更は提案として出す。 印字しない指示は直接書く許可ではない。 英語校正は可)。 機械 gate = `scripts/manuscript-claim-guard.py`。
+- **原稿の表題・概要・序論・結論・式を AI agent が変える条件は [`manuscript-claim-ownership.md#rule`](manuscript-claim-ownership.md#rule) が正本** (著者の項目ごとの裁定 = 著者の発言の verbatim。 変更は提案として出す。 印字しない指示は直接書く許可ではない。 英語校正は可 (表題を除く))。 機械 gate = `scripts/manuscript-claim-guard.py`。
 
 ## <a id="bare-parenthetical-crossrefs"></a>裸の括弧参照と `\labelcref`・`\eqref` の置き場所の検出、保持検査
 

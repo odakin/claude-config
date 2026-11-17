@@ -17,7 +17,8 @@
                   display 環境を 1 引数の macro で包む原稿 (\\newcommand{\\al}[1]{\\begin{align}#1\\end{align}} 型) は、
                   その macro の引数も同じ識別で式として読み、 原稿の範囲 (.sty / .cls を含む) でその macro の定義が
                   変わる変更も math#<hash> として止める (拾い方 = wrapper_context)
-     列挙した英米綴り・冠詞・句読点・大文字小文字・ハイフン・空白・コメントだけの差分は通す。
+     列挙した英米綴り・冠詞・句読点・大文字小文字・ハイフン・空白・コメントだけの差分は通す。 表題は空白とコメントの
+     差だけを通す (冠詞・大文字小文字・句読点・ハイフン・綴りの差も表題の変更 = title_changed)。
      原稿の file の移動 (同じ commit、 または同じ apply_patch の Move to: で path A が消え、 まだ無かった path B に現れる)
      は A の全領域の削除 + B の全領域の追加とせず、 同じ原稿の書き換えとして比べる (moved_changes、 finding は B に付く)。
      中身が同じで、 範囲と数式を包む macro の文脈も移動先で変わらなければ 0 件。 A にあって B で同じ名前で保護され続け
@@ -800,6 +801,13 @@ def prose_tokens(raw: str, macros: frozenset[str] | set[str] | tuple = ()) -> li
             continue
         toks.append(low)
     return toks
+
+
+def title_changed(old: str, new: str) -> bool:
+    """表題の文字の変更 (空白の差だけは変更でない)。 表題には英語校正の免除 (copyedit_only) を当てない = 題は語が少なく、
+    冠詞を落とす・頭文字を変えるだけで見出し調に変わる (実測 = 冠詞の削除と頭文字の大文字化だけの題の変更が、
+    英語校正として承認なしに通った)。 呼び元はコメントを除いた文を渡す。"""
+    return collapse_ws(old) != collapse_ws(new)
 
 
 def copyedit_only(old: str, new: str, macros: frozenset[str] | set[str] | tuple = ()) -> bool:
@@ -1844,6 +1852,8 @@ def manuscript_region_changes(rel: str, old: str, new: str, repo: Path | None, c
                 kind = "add"
             elif k not in qn:
                 kind = "delete"
+            elif k == "title" and title_changed(slices_text(so, qo[k]), slices_text(sn, qn[k])):
+                kind = "change"  # 表題は英語校正の免除を当てない (title_changed)
             elif not copyedit_only(slices_text(so, qo[k]), slices_text(sn, qn[k]), macros):
                 kind = "change"
             elif lost_formula_bodies(so, qo[k], at_o, macros) != lost_formula_bodies(sn, qn[k], at_n, macros):
@@ -2685,7 +2695,7 @@ def deny_reason(left: list[dict], session: tuple[str, str] | None) -> str:
             "  1. 変更を提案として本人に見せる (会話に diff、 または作業ノート)。 本文・規約には書かない。\n"
             "  2. 本人がその変更をはっきり承認したら、 その発言を verbatim で引く。\n"
             "  「直して」「改善して」「確かめて」 のような一般的な依頼は、 主張の削除・書き換えや規則の変更の承認ではない。"
-            " 依頼の範囲を自分で解釈して承認を作らない。 英語校正 (綴り・冠詞・句読点) だけなら承認は要らない。\n"
+            " 依頼の範囲を自分で解釈して承認を作らない。 英語校正 (綴り・冠詞・句読点) だけなら承認は要らない (表題を除く)。\n"
         )
     parts.append(
         f"記録: {engine_cmd()} approve --file <repo 相対 path> {regions} --change '<何を変えるか 1 行>' --quote '<本人の発言そのもの>'\n"
@@ -8775,6 +8785,14 @@ def selftest() -> int:
     check("近い綴りでも意味の反転は校正でない",
           not copyedit_only("The model is stable.", "The model is unstable.") and
           not copyedit_only("The rate grows.", "The rate drops."))
+    print("[表題は英語校正の免除を当てない]")
+    check("表題の冠詞の削除 → title:change", ch(paper.replace("A toy model of heat flow", "Toy model of heat flow")) == ["title:change"])
+    check("表題の頭文字の大文字化 → title:change", ch(paper.replace("A toy model of heat flow", "A Toy Model of Heat Flow")) == ["title:change"])
+    check("表題のハイフン → title:change", ch(paper.replace("heat flow", "heat-flow", 1)) == ["title:change"])
+    check("表題の空白・改行の差 → 0 件", ch(paper.replace("A toy model of heat flow", "A toy model\n  of heat flow")) == [])
+    check("表題の行末のコメントの追加 → 0 件",
+          ch(paper.replace("\\title{A toy model of heat flow}", "\\title{A toy model of heat flow% note\n}")) == [])
+    check("概要・序論の冠詞は今までどおり通す (表題だけ)", ch(paper.replace("Lattices are useful.", "The lattices are useful.")) == [])
     print("[表の行送り \\\\[…] は式の始まりでない]")
     table = (
         "\\documentclass{article}\n\\begin{document}\n"
