@@ -173,7 +173,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
      同じ知見なら自分では書かず、 足りない根拠だけを持ち主に渡す。
      別の知見なら `touching --path <file> --wait` を background で回し、 起きたら file を読み直してから書く
      (並列中の「まだ無い」 は数分で腐る = [`multi-session-coordination.md#absence-check-staleness`](multi-session-coordination.md#absence-check-staleness))。
-   - 持ち主が居ない (落ちた session) なら待たない。 file を読み直し、 相手の未 commit の hunk が混ざっていれば
+   - 持ち主が居ない (落ちた session) なら待たない。 居るかは `python3 scripts/session-model.py <id>` の status で見る (`(not live)` なら居ない。 掲示板の 🔴 と手放すときの「次の持ち主」 の行は、 持ち主が終わっていても出る = 実測)。 file を読み直し、 相手の未 commit の hunk が混ざっていれば
      [`multi-session-coordination.md#temp-index-commit`](multi-session-coordination.md#temp-index-commit) で自分の分だけを commit する。
    - 途中で書く file が増えたら、 書く前に同じ command で足す。
 3. **手放す** — 4 の push の後に、 commit を `untouch --reference '<repo>@<commit>'` に並べて手放す。
