@@ -111,7 +111,13 @@ def path_args(cmd, ext):
         spans.append((m.start(), m.end()))
     for m in bare.finditer(cmd):
         if not any(a <= m.start(1) < b for a, b in spans):
-            out.append((m.start(1), unquote_path(m.group(1))))
+            val, pos = m.group(1), m.start(1)
+            # shell の代入 `NAME=<path>` は値の側だけが path (実測: `f=~/x/y.pdf; … "$f"` の代入の語ごと
+            # 相対 path と読み、 cwd に繋いで「もう無い」 と出した)
+            assign = re.match(r"[A-Za-z_]\w*=", val)
+            if assign:
+                val, pos = val[assign.end():], pos + assign.end()
+            out.append((pos, unquote_path(val)))
     return sorted(out)
 CAT_TO_FILE_RE = re.compile(
     r"(?:cat|tee)\s+(?:-a\s+)?>?\s*(['\"]?)([^\s'\";&|<>]+)\1\s*<<-?\s*(['\"]?)(\w+)\3[^\n]*\n(.*?)\n\s*\4\s*(?:\n|$)", re.S)
@@ -631,6 +637,9 @@ def selftest():
         check([v for _, v in pa] == ["a b/x y.pdf", "c (d) .pdf", "e f.pdf", "g.pdf"] and
               [pos for pos, _ in pa] == [pa_cmd.index("a b/"), pa_cmd.index("c (d)"), pa_cmd.index("e\\ f"), pa_cmd.index(" g.pdf") + 1],
               "path_args = 引用符の中は空白・括弧ごと 1 つ、 逃がした空白は戻す、 URL は除く、 裸の語も拾う")
+        as_cmd = 'f=~/p/x.pdf; ls -la "$f"; python3 -c "import fitz; fitz.open(\'$f\')"'
+        check(path_args(as_cmd, "pdf") == [(as_cmd.index("~/p"), "~/p/x.pdf")],
+              "path_args = 裸の代入 NAME=<path> は値の側だけを path に読む (代入の語ごと相対 path にしない)")
         inline = inline[:-1]
         check(set(files) == {os.path.join(repo, "kept.py"), os.path.join(repo, "dirty.py"), tmpscript,
                              os.path.join(repo, "gen.sh"), os.path.join(repo, "sub", "gen2.sh")},
