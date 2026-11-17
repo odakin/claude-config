@@ -795,12 +795,13 @@ orientation 直後の silent stall (session は running のまま・活動 times
 
 ### <a id="research-dialogue-and-conductor"></a>研究の対話係と指揮所の分担
 
-研究の対話係と指揮所を置くときは、研究者との対話を続ける役と、確定した内容の反映を進める役を分ける。
+研究の対話係と指揮所を置くときは、対話係の窓を、最も能力の高い model に任せるべき仕事 = 研究と作文だけに使い、残りの仕事はすべて指揮所に渡す。対話係の turn は、研究者が待っている時間であり、最も高い model の時間でもある。
 
-- **対話係**は、研究の判断、導出、先行研究との比較、原稿や返答書の具体的な文案（英文を含む）を扱う。文章の言い方が論旨・条件・帰属に関わる場合も、対話係が文案を作り、研究者と詰める。
-- **指揮所**は、確定した文案と判断を保ってファイルに反映し、組版・lint・既定の検査、Git、運用記録、実装担当と検収の手配を受け持つ。作業中に研究上の判断や文案の修正が必要になったら、該当箇所と理由を対話係に返す。
+- **対話係**は、研究と作文だけをする: 研究の判断、導出、先行研究との比較、原稿や返答書の具体的な文案（英文を含む）。文章の言い方が論旨・条件・帰属に関わる場合も、対話係が文案を作り、研究者と詰める。次の仕事は対話係の窓でしない: ファイルへの反映と Git (取り込みを含む)、記録や来歴の調べ (裁定の記録の有無・差分の出所・参照の棚卸し・過去の発言の検索)、組版と検査、共同研究者への発信、締めの記録と知見の書き込み。研究の途中で気づいたこれらは、自分で調べずに 1 行で指揮所に渡し、どちらに当たるか迷う仕事も指揮所に渡す (実測: 対話係の窓が原稿の当てと commit、記録の調べ、Git の配送、規則の文書への追記を受け持った回が重なり、研究者が分担の外れとして指摘した)。
+- **指揮所**は、確定した文案と判断を保ってファイルに反映し、組版・lint・既定の検査、Git、運用記録、実装担当と検収の手配を受け持つ。作業中に研究上の判断や文案の修正が必要になったら、該当箇所と理由を対話係に返す。対話係が議論に要る記録 (基準版・過去の決定・差分) を頼んだら、調べて短く返す。対話係の窓にファイルの移動・commit・push とその点検を頼まない: 対話係は置いた場所 (共有のメモの置き場か作業用の一時 dir の path) を渡すだけで、repo へ移して commit・push し、点検するのは指揮所 (共有のメモの置き場は session の家族の archive で消える = [#side-session-notes-deleted-on-archive](#side-session-notes-deleted-on-archive)。実測: 指揮所の頼みで対話係の窓が材料を repo に写して commit・push し、commit の後の点検の結果まで研究者に報告した)。
 - 引継ぎには、対象と基準版、確定した文案や判断の所在、未決の箇所、必要な検査を示す。差分が作業ツリーにある場合はその状態も伝える。著者の裁定と適用の記録は [原稿の編集権限](manuscript-claim-ownership.md#rule) に従う。モデルと effort は [仕事に合わせて選ぶ](#model-fit-before-sending)。
 - 対話係の窓で著者が答えた候補は、指揮所が別の窓の答えとして記録して当て、同じ窓で commit する ([manuscript-claim-ownership.md#owner-answer-in-another-window-manuscript](manuscript-claim-ownership.md#owner-answer-in-another-window-manuscript))。裁定を別の session に渡すときの形は [tool-call-robustness.md#ruling-belongs-to-the-editing-session](tool-call-robustness.md#ruling-belongs-to-the-editing-session) と [#worker-apply-requester-commits](tool-call-robustness.md#worker-apply-requester-commits)。
+- <a id="research-dialogue-setup"></a>**立てるとき**: 対話係を起こす依頼書には 6 つを書く: 役 (研究と作文だけ。指揮所としての登録をしない) / 最初に読むもの (基準版は起こす側が名指す) / 今ある材料 (研究者が取り上げると言うまで窓から始めない) / 窓でする仕事と指揮所に渡す仕事 (上の線) / 指揮所への渡し方 (上の引継ぎの中身を、決まったものごとに) / 完了条件 (窓を閉じるときは決まったことと未決の一覧を指揮所に渡し、記録は指揮所が書く)。依頼書の置き場は、その中身を読める人で決める: 共同研究者と共有の repo には研究者だけの判断や個人の記録の所在を書けないので、そのときは研究者の個人の層に置き、起動の hand-off が依頼書を名指す形で渡す (依頼の本文の文の中に path を書くだけでは、worker の手順に依頼書が載らない = 実測)。掲示板の道具で起こすなら、依頼に対話係の印 (`request --dialogue`) を付ける: 道具が worker に渡す起動の文から commit・push の行と「この窓で研究者に問わない」の行を外し、repo のファイルを書かず置いた場所を指揮所に渡す文に替える ([CONTRACT.md#dialogue-worker-handoff](../../ai-collaboration/board/CONTRACT.md#dialogue-worker-handoff))。役の名から対話係かを推さない = 印の無い依頼は、名が対話係に見えても道具は 1 行知らせるだけで、起動の文は他の worker と同じになる。
 
 ## <a id="remote-handoff-constraints"></a>11. リモート session への hand-off — 物理不在で完了できない step の全分岐着地設計
 

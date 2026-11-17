@@ -20,6 +20,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
   当たるなら、 **公開層に上げる文のうち事実を含みうるもの**を絞り、 残りは plan か TODO に積んで次の session に回す。
   これは漏洩の対策であって作業量の上限ではない = 技術の仕組み (道具・hook・検査) や手順の一般形を作ることは、 この条件でも絞らない。
   同じ時間帯に走っている他の締めとは、 1.5 の宣言で書く file を分ける。
+- <a id="dialogue-window-sweep"></a>**研究の対話係の窓で締めを頼まれたら、 締めは一覧を作って指揮所に渡すところまで** ([multi-session-coordination.md#research-dialogue-and-conductor](multi-session-coordination.md#research-dialogue-and-conductor) の対話係の窓 = 研究と作文だけをする窓): 0.3 の集め方で、 決まったこと・未決の論点・残したい知見と手順の一覧を作り、 1 から 4 の段 (正本・参照・SESSION・TODO への書き込み、 commit + push) は指揮所に渡す。 一覧は指揮所への 1 通にし、 長ければ共有のメモの置き場か作業用の一時 dir の 1 file にして path を渡す。 指揮所が一覧を正本に移し、 対話係の窓は指揮所が返した結果の path を提出に使う (実測: 対話係の窓が締めで規則の文書に追記して commit し、 分担の外れになった)。
 - <a id="delegated-sweep"></a>**ある session の締めを別の worker に渡す** (元の session が止まった・context が大きい・別 vendor に任せる) ときは、 渡す先は自分で締めを回せる session にし (subagent に渡すと、 その締めで得た知見がまた依頼元の締めに積もる = [multi-session-coordination.md#self-closing-delegate](multi-session-coordination.md#self-closing-delegate))、 依頼の spec に 3 つ書く:
   (1) 対象の session の完全な id と記録の種類 (Claude Code か Codex)。 worker にとって上の「この session」 は対象の session で、 その種類の道具で読む = Claude の session なら 0.3・0.5 の道具を対象の id で回し、 0.95 の inventory (Codex の session 用) は使わない
   (2) 既に済んだ拾い出し (考え方・研究の中身の回収など) の結果の file。 それを入力にして拾い直させない
