@@ -20,6 +20,7 @@ summary: 研究スライドの技術規約 (= Beamer の build・font・section�
 - **LuaLaTeX + metropolis** を基本にする。`\documentclass[aspectratio=169,11pt]{beamer}` で 16:9。
 - **欧文(Fira)**: metropolis は Fira を `\iffontsavailable` で**安全判定**し、無ければ警告して fallback(ハードエラーにならない)。LuaLaTeX なら luaotfload が **TeX 同梱の `fira` パッケージ**を名前解決するので、**system フォント install 不要**で Fira が出る。(XeLaTeX 経路では system に Fira が要ることがある。)
 - **日本語(CJK)**: LuaLaTeX + `\usepackage{luatexja}` + `\usepackage[haranoaji,deluxe]{luatexja-preset}`。**TeX 同梱の原ノ味ゴシック(Harano Aji)**を使うので install 不要。`deluxe` で複数ウェイト(和文太字)が効く。XeLaTeX 代替は `xeCJK` + system 和文(例: ヒラギノ)。
+  - <a id="beamer-japanese-gothic"></a>⚠️ **beamer の欧文が sans でも、 和文は明朝のまま出る** (実測: 地の文の一部と太字の題が明朝になった。 組版の error も警告も出ない)。 luatexja の和文の既定の族は明朝で、 beamer の `\sffamily` に付いてこない。 preset の後に和文を全部ゴシックに決める: `\setmainjfont{HaranoAjiGothic-Regular.otf}[BoldFont=HaranoAjiGothic-Bold.otf]` と同じ形の `\setsansjfont{…}`、 `\renewcommand{\kanjifamilydefault}{\gtdefault}`。 確かめは頁を画像にして和文の字形を見る (§9)
 
 ## 2. 配色(アクセント)
 
@@ -255,6 +256,8 @@ python-pptx の notes part を Keynote が拒否する上の既知事例を否�
 1. **型 = 主張と証拠** (Michael Alley の assertion–evidence): 本文の頁の題は動詞のある 1 文の主張 (2 行まで)、 本体は図か大きな数字 = 証拠。 箇条書きは最小にする ([`giving-talks.md`](giving-talks.md) の図 > 言葉 > 式と同じ向き)
 2. **認知の負荷を減らす** (Mayer のマルチメディア学習の原則): 飾り・重複を削る (coherence) / いまどのメッセージかの目印を毎頁に置く (signaling = 題の上の小さな見出し + 右上の現在地の線) / 凡例をやめて図に直接ラベル (spatial contiguity) / メッセージごとに扉 (segmenting、 扉の形 = §5)
 3. **色 = 地 + 2 色** (構造と強調): 色覚の違いに配慮した対 (Okabe–Ito の青と橙など)、 本文と地のコントラスト比を 7:1 以上 (WCAG AAA)。 図の色を deck の token と同じ値にする
+   - <a id="okabe-ito-text-contrast"></a>Okabe–Ito の色はそのままでは白地の字に足りない (WCAG の式で計算: 青 `#0072B2` 5.2:1、 朱 `#D55E00` 3.9:1)。 線と点 (図の部分は 3:1 = WCAG 1.4.11) にはそのまま使い、 字には同じ色相の濃い版を token に分けて置く (例: 青 `#005A8C` 7.4:1、 朱 `#8F3D00` 7.4:1)。 token ごとの比を script で出して記録の隣に置く。 Okabe と Ito の原典の頁は色の値を図でしか持たない = 16 進の値は配布物の表 (R・Python の palette) で確かめる
+   - 2 色に意味を 1 つずつ持たせ、 全頁で変えない (例: 青 = 片方の条件、 朱 = もう片方の条件)。 図の線・点・その語の字を同じ意味の色で塗ると、 凡例なしで頁をまたいで読める。 飾りに同じ色を使うと意味がぶれる
 4. **主題を意匠にする**: 講演の主題から 1 つのモチーフを決め、 全頁に控えめに通す (合成例: 主題が「流れ」 なら下端に細い流線、 表紙だけ一面に)。 モチーフは現在地の目印 (2 の signaling) を兼ねられる (合成例: 主題が「対称と破れ」 なら下端に頁の数だけ同じ点を並べ = ずらしても同じ並び、 今の頁の点だけ色と大きさを変える = その頁が並びの対称を破る。 `\inserttotalframenumber` と `\insertframenumber` から tikz で描く)
 5. **文字の階層は太さで**: 同梱のフォントで install 不要 = 欧文と数字は Inter (TeX Live 同梱。 本文と題の font に `Numbers=Tabular` を付けない = 下の罠のハイフンの幅)、 和文は原ノ味ゴシック (`deluxe` で極太まで)。 見出し Bold、 断言と大きな数字 Heavy / Black、 本文 Regular。 <a id="subtitle-smaller-than-title"></a>**表題と副題を同じ大きさで並べない** = 副題は主題の 0.5〜0.65 倍で一段細く組む (大きさと太さの差が副題を表すので、 「―」「：」「～…～」 の区切りの記号は要らない)。 同じ大きさで改行だけで続けると、 どこまでが題か読めない (実測)。 ポスター・チラシの表題も同じ
 6. **頁の種類を絞る**: 表紙・断言・討論のお題 = 全面の hero / 数字 = 大きな数字だけの頁 / 並列の 3 項目 = カード (bento) / 扉 = 大きな番号 + 全メッセージ
@@ -271,6 +274,7 @@ python-pptx の notes part を Keynote が拒否する上の既知事例を否�
   - 題の 1 行に入る字数を、 組む前に計算する: 和文は全角 1 字 = 字の大きさの幅なので、 本文の幅を字の大きさで割る (合成例: 16:9 の 160 mm の幅から左右の余白 12 mm ずつを引いた 136 mm に 17.5 pt の題 = 約 6.2 mm/字 → 21 字)。 題が 2 行に折れると、 その頁の本体が 1 行分 (約 8 mm) 下がり、 図の頁の下がはみ出す = 図の頁の題は 1 行に収まる字数で書く
   - 頁は上から詰める = `\documentclass[...,t]{beamer}`。 縦の中央寄せのままだと、 長い頁の下が切れる
   - 文を 1 語でも足したら頁を画像にし直す (§9): 高さを揃えたカード (`equal height group`) は 1 枚が 1 行伸びると全部伸び、 下の注記が隅のモチーフに重なる。 組版は error 無しで通る
+  - <a id="numbers-from-source-note-only"></a>研究の数字を載せるデッキは、 正本の note に書かれた値と文だけを載せる。 note の表から自分で出した比・範囲の上限 (「N〜M 倍」「X 以下」) は note に無い主張になり、 note を正とする依頼元に外すよう言われる (実測)。 強調したい比があるなら、 表の行そのもの (二つの値) を並べて読む人に比を見せる。 載せた数字は、 頁の断片と note の断片の対で照合する script を deck の隣に置く (外した言い方も「戻ったら止める」 一覧に入れる)
   - 討論の頁の問いは、 物理の未解決の問いにする。 手順の選択 (どれを採るか・節を残すか) や、 対称性から自動で従うことは並べない (「自明すぎる」 と言われる)
   - 会合の後に送るデッキは、 表紙を「会合の後」 の形にし、 状態は送る時点のものを書く
   - file 名は中身が分かる名前にする (`<project>-<主題>-<日付>.tex`)。 `status.tex` のような名前は、 同じ dir に次のデッキが来たときに区別できない

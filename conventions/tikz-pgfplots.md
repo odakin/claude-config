@@ -357,6 +357,14 @@ $A \supset B \supset C$ の鎖が長い名前で横に伸びて不格好なと�
 - 確かめは render の数値で = 帯の外の地だけの列 (左右の端) を y で細かく刻んで隣どうしの差を読む (目視は暗い地の段差を見落とす。 明るさを持ち上げた比較画像なら見える)
 - ⚠️ `current page` (`remember picture, overlay`) を使う図は **2 回組むまで座標が決まらない** = 写しを 1 回だけ組んで測ると、 地のグラデーションも段差も出ず「段差 0」 に見える (実測)。 build と同じ回数組んでから測る
 
+## <a id="computed-coordinate-units"></a>計算した座標に単位を付けない = `x=1mm` の図で数だけを渡す
+
+macro の引数や式から座標を作るとき、 `({#1+1.04*\s}mm,#3mm)` のように式の外に単位を付けると、 `! Package PGF Math Error: Unknown operator 'm' or 'mm'` で止まる (実測)。 式の括弧と単位の並びを pgfmath が 1 つの式として読めない。
+
+- 図を `[x=1mm, y=1mm]` で開き、 座標は数だけで書く。 式は先に `\pgfmathsetmacro{\xa}{#1+1.04*\s}` で数にして `(\xa,#3)` と渡す
+- 半径も同じ: `circle[radius=\r]` に数を渡す (単位は x の長さになる)
+- beamer の `background` template の中に描く飾り (頁ごとの目印・線) は、 この形の macro に 1 つにまとめ、 頁ごとにその macro を呼ぶ
+
 ## サイクル: 「compile 成功」 ≠ 「visual 成功」
 
 TikZ / pgfplots の edit 直後、 `lualatex` exit code 0 + log error 0 でも **以下は普通に起きる**:
