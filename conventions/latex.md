@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check) + 英文だけを直した候補 (今 → 案 の組を当てた写し) の PDF を確かめるとき (#prose-pass-pdf-word-diff) + TeXShop で保存した原稿の JIS の外の文字が `\UTF{…}` の形に書き換わったとき (#texshop-ptex-utf-output) + 数式の書体 (math alphabet) を替える候補を作って見せるとき (#typeface-candidate) + pdfLaTeX で組んでいた文書を LuaLaTeX に移すとき (#from-pdflatex)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check) + 英文だけを直した候補 (今 → 案 の組を当てた写し) の PDF を確かめるとき (#prose-pass-pdf-word-diff) + TeXShop で保存した原稿の JIS の外の文字が `\UTF{…}` の形に書き換わったとき (#texshop-ptex-utf-output) + 数式の書体 (math alphabet) を替える候補を作って見せるとき (#typeface-candidate) + pdfLaTeX で組んでいた文書を LuaLaTeX に移すとき (#from-pdflatex) + 本文の幅に入らない式 (大きな行列) を横置きの頁にして送るとき (#landscape-display-page) + 書き下した式を TeX に写した後に照合するとき (#typeset-formula-readback)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -251,6 +251,22 @@ fine は token の平らな列を比べるので、 `_{a` のような波括弧�
 - <a id="float-too-large"></a>図を足す・大きくする・caption を伸ばした turn は、 頁より高い float も確かめる: TeX は `LaTeX Warning: Float too large for page by <長さ>` を出して頁に置くだけで、 caption が頁の下端を越えても未定義参照の数にも `Overfull \hbox` の数にも出ない (実測: その 2 つが 0 の確認で通した図の caption が、 頁番号に重なっていた)。 同じ道具が `.log` のこの警告も数え、 あれば exit 1。 直し方 = 図の幅を縮める・panel の並べ方を変える (列を増やして段を減らす)・caption を詰める。
 
 **文献表の位置**: 物理 (特に素粒子) の原稿では 本文 → 謝辞 → 付録 → 文献表 の順が多く、 雛形によっては文献表が付録の前にある。 どちらに置くかは著者の家風と投稿先の指定で決める。 付録の後ろへ移すときは `\bibliographystyle{…}` と `\bibliography{…}` の 2 行を `\end{document}` の直前へ動かす (付録の中の `\cite` も同じ文献表に入る)。 上の道具は source の位置 (付録の前 / 後ろ) も出す。
+
+## <a id="landscape-display-page"></a>本文の幅に入らない式 (大きな行列) を、 横置きの 1 頁にして送る
+
+**場面**: 10 列を越える行列のように、 本文の幅に入らない 1 つの式を、 その頁だけ横置き (`pdflscape` の `landscape`) にし、 前の頁は本文で埋めたいとき。 横置きの頁を本文の流れの中に置くと、 式の直前で頁が切れて前の頁が白く残る。
+
+- **送る呼び出しの位置**: `\afterpage{…}` は、 呼んだ行が載る頁でなく、 呼んだ時点で組んでいる頁の後に中身を出す (中身を output routine の次の回に積むだけ)。 段落の中で呼ぶと、 その段落の行はまだ頁に積まれていないので 1 つ前の頁の後に出て、 式を案内する文より前に式の頁が来る (実測)。 頁の中身は式を案内する所で `\gdef\X{…}` にしておき、 `\afterpage{\X}` は案内の段落が頁に積まれた後 (別行立ての式の直後か、 次の段落との間) で呼ぶ。
+- **式番号**: 送った式の番号は組んだ時点で振られ、 その間にある式が先の番号を取る。 案内の所で `\stepcounter{equation}\xdef\Xno{\theequation}` として番号を取り、 送った式は `\tag{\Xno}\label{…}` にする。 番号は本文の順のまま、 `\eqref` は横置きの頁に飛ぶ。
+- **その頁だけ余白を狭めて戻す**: `\usepackage[pass]{geometry}` と `\newgeometry`・`\restoregeometry`。 `\afterpage` は中身を group の中で実行するので、 中で `\restoregeometry` を呼ぶと設定の一部が group を出たところで戻り、 次の縦置きの頁が横置きの頁の高さのまま組まれる。 本文が紙の下端を越えて頁番号が消え、 log には何も出ない (実測)。 `\aftergroup\restoregeometry` にし、 続けて `\aftergroup` で、 `\global\@colht\textheight\global\@colroom\textheight\global\vsize\textheight` を 1 つにまとめた macro を当てる (preamble の `\makeatletter` の中で定義する)。
+- **確かめ**: 頁数・`Overfull`・未定義参照に加えて、 縦置きの全頁で本文の上端・下端と頁番号の位置が同じかを PDF から読む (例 = PyMuPDF で頁ごとの text block の y の範囲と最後の block を出す)。 横置きの頁の次の頁だけが違えば、 上の戻し損ね。 横置きの頁が 2 枚になって 1 枚目が空なら、 式が頁の高さを越えている (log の `Overfull \vbox`)。
+- **収め方**: 要素の中を段ごとに積む (`array` を入れ子にする) と、 分数の行の分母が次の行の上付きに触れる (array の行は、 中身が支柱より高いと隙間なしに積まれる) = その行の後だけ `\\[2pt]` で空ける。 行列の中の分数を斜線の形にすると行は低くなるが、 幅は広がる (実測) = 幅で詰まっているときは使わない。 字の大きさは文書の取り決めの下限まで、 余白と列の間 (`\arraycolsep`) はその頁だけで詰める。
+
+## <a id="typeset-formula-readback"></a>書き下した式を TeX に写したら、 TeX から読み戻して記号計算と照合する
+
+- 記号計算で確かめた式を手で TeX に写す (行列の要素・係数を書き下す) と、 写した後の TeX は記号計算の検査の外にある。 組む source から式を読み取り (文書の macro を記号計算の式に直す小さな変換器)、 記号計算の参照との差が 0 になるかを見る。 要素の核 (足のついた計量など) は因子ごとに別の記号にすると、 係数の誤りと核の誤りの両方が出る。
+- 同じ値が 2 か所 (行列の要素と、 足を書いた和の係数) に出るなら、 両方を読み取って互いにも比べる。
+- 照合が誤りを拾うことを確かめる: 符号・係数・足を 1 つずつ変えた写しで回し、 その箇所が不一致と出るのを見る。 一致の側だけで済ませない = 変換器の誤りで正しい式が不一致と出ることもある (実測)。
 
 ## <a id="class-conversion-body-check"></a>原稿の型 (document class) を替えたときに、 本文が変わっていないことを確かめる
 
