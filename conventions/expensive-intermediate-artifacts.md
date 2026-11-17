@@ -75,6 +75,8 @@ CLI tool に出力先 path を渡す前に問う:
 
 `*.log` 等 global gitignore で除外される拡張子を experiment dir で track したい場合は、 リポローカル `.gitignore` で `!<dir>/**/*.log` exception を追加。 OCR / ML 系 log は debug trace (NPE / warning / metric) を含むため reference 価値あり、 安易に ignore しない。
 
+<a id="global-ignore-silent-skip"></a>**dir ごとの `git add <dir>` (と `git add .`) は、 global gitignore に掛かる file (`*.out`・`*.log` など) を何も言わずに飛ばす** — file を名指した `git add <file>` は止まって `-f` を求めるが、 dir で足すと何も出ない。 README や記録がその出力を指していても commit に入らず、 push の後の clone では欠ける (実測: 測定の出力 `*.out` を根拠の dir に置いて dir ごと足し、 README が指す出力の無いまま push した)。 置いた後に `git status --short --ignored -- <dir>` (`!!` の行が飛ばされる file) か `git check-ignore -v <file>` で確かめ、 残すなら `git add -f <file>` で足すか、 上の段落のとおり repo の `.gitignore` に `!` の行を足す。
+
 ---
 
 ## <a id="snapshot-artifact-naming"></a>Snapshot artifact の命名 (= 入力状態を filename に焼く)
