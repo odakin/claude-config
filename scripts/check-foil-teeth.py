@@ -36,6 +36,15 @@ unittest の試験に当てるとき: `"run": "python3 <試験の file> -v <Clas
 (行頭一致で読むため) = 外した結果が assertion で落ちる形に mutant を作る。 試験の file は target と同じ dir に置く
 (写しは target の親 dir だけ)。
 
+selftest が target の dir からの相対 path で隣の repo・上の dir を読むとき: 写しの dir からはその path が見えず、
+その読みに頼る check が基準で落ちて `[BASE-RED]` になり、 どの mutant も測れなくなる (実測)。 読む先を env で
+渡せる作りなら `"run": "env <変数>={spec_dir}/<元の場所からの相対 path> python3 {} --selftest"` で元の場所を渡す
+(mutant ごとの `requires` は mutant を飛ばすだけで、 基準の check は救わない)。
+
+selftest に当てる mutant が試験を例外で止めると、 その後ろの check の行が出ず、 expect_pass が当たらない
+(= 独立を測れない)。 外した版で値が無くなる所 (立たなかった・空の結果) を試験が読んで先へ進むなら、 試験の側で
+既定の値に倒して後ろの check まで回す (実測)。
+
 検査 (外れたら exit 1、 spec の誤りは exit 2):
 
 | 何を | なぜ |
