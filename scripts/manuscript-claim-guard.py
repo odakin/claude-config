@@ -63,8 +63,12 @@
   (公開 repo に著者の発言を書かない)。 監査の本体は transcript。 記録したら、 そのターンの最後の返事に引いた発言と対象の
   file を書く (Stop が確かめ、 無ければ 1 回差し戻す = 意味の取り違えを著者がその場で見る。 後から記録を読む前提にしない)。
 
-原稿の範囲 (scope): repo の `.claude/manuscript-guard.json` があればそれ (include / exclude / protect_sections /
-  disabled。 math_macros = 定義を自動で拾えない数式の wrapper macro の名前)、 無ければ既定 = abstract 環境を持つ .tex と、 そこから \\input / \\include / \\subfile される .tex。
+原稿の範囲 (scope): 既定 = abstract 環境を持つ .tex と、 そこから \\input / \\include / \\subfile される .tex。 repo の
+  `.claude/manuscript-guard.json` があれば、 その欄で変える: include = 書いた glob の file だけを範囲にする (既定の数え方を
+  使わない) / extra_include = 既定の数え方に足す glob (当たる .tex を abstract を持つ .tex と同じく原稿の起点にする =
+  abstract の無い正誤表などを 1 件ずつ足す。 include と同じ設定には書けない) / exclude / protect_sections / disabled /
+  math_macros = 定義を自動で拾えない数式の wrapper macro の名前。 include と extra_include の同居と知らない欄 (綴りの
+  誤り) は config-invalid。
 
 使い方:
   manuscript-claim-guard.py hook claude|codex      PreToolUse の event を stdin で受け deny JSON を出す
@@ -842,7 +846,8 @@ class InspectionError(RuntimeError):
 # (selftest が自分の source を読んで確かめる = 表に無い止め方・使われない行があると赤)。
 _AGENT, _OWNER, _EITHER = "agent が直せる", "本人の操作が要る", "agent が確かめ、 直せなければ本人"
 INSPECTION_REASONS: dict[str, tuple[str, str, str]] = {
-    "config-invalid": ("repo の .claude/manuscript-guard.json が壊れている (JSON でない・object でない・値の型が違う)",
+    "config-invalid": ("repo の .claude/manuscript-guard.json が壊れている (JSON でない・object でない・値の型が違う・"
+                       "知らない欄・include と extra_include の同居)",
                        "設定を直す (設定は lock の下 = 本人の裁定で)", _OWNER),
     "repo-undetermined": ("編集先の Git repository を決められない",
                           "git が起動するか確かめて、 同じ操作をやり直す", _EITHER),
@@ -873,6 +878,14 @@ INSPECTION_REASONS: dict[str, tuple[str, str, str]] = {
                            "hook の配線 (settings) を確かめる (設定は lock の下 = 本人の裁定で)", _OWNER),
 }
 
+MANUSCRIPT_CONFIG_KEYS = frozenset({"include", "extra_include", "exclude", "protect_sections", "math_macros", "disabled"})
+
+
+def extra_roots(cfg: dict) -> tuple[str, ...]:
+    """設定の extra_include の glob (abstract を持つ .tex と同じく原稿の起点にする)。"""
+    return tuple(cfg.get("extra_include") or ())
+
+
 def load_config(repo: Path | None, text_override: str | None = None) -> dict:
     if text_override is not None:
         raw = text_override
@@ -886,7 +899,13 @@ def load_config(repo: Path | None, text_override: str | None = None) -> dict:
         raise InspectionError("config-invalid") from exc
     if not isinstance(cfg, dict):
         raise InspectionError("config-invalid")
-    for key in ("include", "exclude", "protect_sections", "math_macros"):
+    # 知らない欄は止める (綴りを誤った extra_include が黙って何もしない = 範囲が既定に戻るのを塞ぐ)
+    if set(cfg) - MANUSCRIPT_CONFIG_KEYS:
+        raise InspectionError("config-invalid")
+    # include (= その file だけ) と extra_include (= 既定に足す) は意味が逆向き = 同居させない
+    if cfg.get("include") and cfg.get("extra_include"):
+        raise InspectionError("config-invalid")
+    for key in ("include", "extra_include", "exclude", "protect_sections", "math_macros"):
         if key in cfg and (not isinstance(cfg[key], list) or
                            any(not isinstance(x, str) for x in cfg[key])):
             raise InspectionError("config-invalid")
@@ -991,16 +1010,16 @@ def reset_caches() -> None:
     _TEX_TEXT_CACHE.clear()
 
 
-_INPUT_CACHE: dict[tuple[str, str], set[str]] = {}
+_INPUT_CACHE: dict[tuple[str, str, tuple[str, ...]], set[str]] = {}
 _TEX_TEXT_CACHE: dict[tuple[str, str], dict[str, str]] = {}
 
 
-def input_graph(repo: Path, revision: str = "worktree") -> set[str]:
-    """abstract を持つ .tex から \\input 等で辿れる repo 相対 path の集合 (起点を含む)。"""
-    key = (str(repo), revision)
+def input_graph(repo: Path, revision: str = "worktree", extra: tuple[str, ...] = ()) -> set[str]:
+    """abstract を持つ .tex (と extra の glob に当たる .tex) から \\input 等で辿れる repo 相対 path の集合 (起点を含む)。"""
+    key = (str(repo), revision, tuple(extra))
     if key in _INPUT_CACHE:
         return _INPUT_CACHE[key]
-    _INPUT_CACHE[key] = tex_reach(tex_texts(repo, revision))
+    _INPUT_CACHE[key] = tex_reach(tex_texts(repo, revision), tuple(extra))
     return _INPUT_CACHE[key]
 
 
@@ -1036,9 +1055,11 @@ def tex_texts(repo: Path, revision: str = "worktree") -> dict[str, str]:
     return texts
 
 
-def tex_reach(texts: dict[str, str]) -> set[str]:
-    """.tex の中身 {path: 中身} のうち、 abstract を持つ .tex から \\input 等で辿れる path の集合 (起点を含む)。"""
-    roots = [f for f, t in texts.items() if "\\begin{abstract}" in strip_tex_comments(t)]
+def tex_reach(texts: dict[str, str], extra: tuple[str, ...] = ()) -> set[str]:
+    """.tex の中身 {path: 中身} のうち、 abstract を持つ .tex (と設定の extra_include に当たる .tex) から \\input 等で
+    辿れる path の集合 (起点を含む)。"""
+    roots = [f for f, t in texts.items()
+             if "\\begin{abstract}" in strip_tex_comments(t) or any(fnmatch.fnmatch(f, g) for g in extra)]
     seen: set[str] = set()
     stack = list(roots)
     while stack:
@@ -1079,9 +1100,12 @@ def manuscript_in_scope(repo: Path | None, rel: str, old: str, new: str, cfg: di
     inc = cfg.get("include") or []
     if inc:
         return any(fnmatch.fnmatch(rel, g) for g in inc)
+    extra = extra_roots(cfg)
+    if any(fnmatch.fnmatch(rel, g) for g in extra):
+        return True
     if "\\begin{abstract}" in strip_tex_comments(old) or "\\begin{abstract}" in strip_tex_comments(new):
         return True
-    return repo is not None and any(rel in input_graph(repo, rev) for rev in ("worktree", "HEAD", "index"))
+    return repo is not None and any(rel in input_graph(repo, rev, extra) for rev in ("worktree", "HEAD", "index"))
 
 
 # 原稿の範囲で wrapper の定義を読むための cache (1 回の検査の process の間だけ。 hook-authoring.md#hook-cost-per-item)
@@ -1222,10 +1246,10 @@ def _closure(rkey: str, universe: dict[str, str], by_name: dict[str, list[str]],
 
 def manuscript_component(repo: Path, bi: int, base: dict[str, str], rel: str, rel_text: str, cfg: dict,
                          tracked: frozenset[str] = frozenset()) -> set[str]:
-    """rel を含む原稿の file の集合 (原稿 = abstract を持つ .tex か設定 include の .tex から辿れる file)。 base =
-    source_bases の bi 番目の版、 rel だけ rel_text に置き換えて辿る。 rel を含む原稿が無ければ空。 exclude は
+    """rel を含む原稿の file の集合 (原稿 = abstract を持つ .tex か設定 include / extra_include の .tex から辿れる file)。
+    base = source_bases の bi 番目の版、 rel だけ rel_text に置き換えて辿る。 rel を含む原稿が無ければ空。 exclude は
     保護する範囲を外す設定で、 定義を探す起点からは外さない。 起点は追跡 file と rel だけ (tracked)。"""
-    include = cfg.get("include", []) or []
+    include = list(cfg.get("include", []) or []) + list(extra_roots(cfg))
 
     def is_root(f: str, text: str) -> bool:
         return (f.endswith(".tex") and (f in tracked or f == rel)
@@ -2030,20 +2054,22 @@ def reach_changes(repo: Path, mode: str, rels: dict[str, str], configs: list[dic
       - 入る file (HEAD に在って読み込みに無く、 commit の後に読み込みに入る、 abstract の無い file) = commit の後の全領域の
         add。 原稿に入っていなかった file の主張を \\input 1 行で原稿に足す経路 (移動の扱いの「新たに保護される領域」 と同じ)
     commit で消える file・現れる file は対象外 (削除・追加・移動は path ごとの比較と moved_changes が持つ)。 範囲を設定の
-    include で決める repo (読み込みに依らない)・disabled・exclude の file は見ない。"""
+    include で決める repo (読み込みに依らない)・disabled・exclude の file は見ない。 extra_include の file は abstract を
+    持つ .tex と同じく起点に数える (設定ごとに起点が違うので、 到達範囲は設定ごとに出す)。"""
     if all(cfg.get("disabled") is True or cfg.get("include") for cfg in configs):
         return {}  # 範囲が読み込みに依らない = 版の .tex を読みに行かない (git の呼び出しを増やさない)
     before_t = tex_texts(repo, "HEAD")
     after_t = commit_tex_texts(repo, mode, rels)
-    before, after = tex_reach(before_t), tex_reach(after_t)
-    detached = sorted(p for p in before - after if p in after_t)
-    attached = sorted(p for p in after - before
-                      if p in before_t and "\\begin{abstract}" not in strip_tex_comments(after_t[p]))
     out: dict[str, list[dict]] = {}
     seen: set[tuple[str, str, str, str]] = set()
     for cfg in configs:
         if cfg.get("disabled") is True or cfg.get("include"):
             continue
+        extra = extra_roots(cfg)
+        before, after = tex_reach(before_t, extra), tex_reach(after_t, extra)
+        detached = sorted(p for p in before - after if p in after_t)
+        attached = sorted(p for p in after - before
+                          if p in before_t and "\\begin{abstract}" not in strip_tex_comments(after_t[p]))
         excluded = cfg.get("exclude", []) or []
         for p, old, new, note in ([(p, before_t[p], "", "原稿の読み込みから外れる") for p in detached]
                                   + [(p, "", after_t[p], "原稿の読み込みに入る") for p in attached]):
@@ -3759,8 +3785,11 @@ def changes_for_repo(repo: Path, mode: str, paths: list[GitPathspec | GitNames |
     before_tex = {p for p in tree if p.endswith(".tex")}
     after_tex = (before_tex - vanished) | {p for p in appeared if p.endswith(".tex")}
     if pairs:  # 原稿の読み込みの到達範囲 (input_graph) の commit の前と後。 後は index (作業ツリーを含む commit は両方に在るもの)
-        graph_before = input_graph(repo, "HEAD")
-        graph_after = input_graph(repo, "index") if mode == "index" else input_graph(repo, "index") & input_graph(repo, "worktree")
+        # 起点 = abstract を持つ .tex と、 HEAD と新しい設定のどちらかの extra_include に当たる .tex (広い方に倒す)
+        extra = tuple(sorted({g for c in configs for g in extra_roots(c)}))
+        graph_before = input_graph(repo, "HEAD", extra)
+        graph_after = (input_graph(repo, "index", extra) if mode == "index"
+                       else input_graph(repo, "index", extra) & input_graph(repo, "worktree", extra))
     for src_rel, dst_rel in pairs:
         if not move_keeps_inputs(src_rel, dst_rel, gone[src_rel], came[dst_rel], before_tex, after_tex, moved):
             continue  # 子原稿を読み込みの外へ出す移動 = path ごとのまま
@@ -3900,7 +3929,8 @@ def _hook(agent: str, event: dict) -> int:
         before_tex = {p for p in head_tree(s[1]) | set(_index_entries(s[1])) if p.endswith(".tex")} | {s[2]}
         if not move_keeps_inputs(s[2], d[2], s[3], d[4], before_tex, (before_tex - {s[2]}) | {d[2]}, {s[2]: d[2]}):
             continue  # 子原稿を読み込みの外へ出す移動 = path ごとのまま
-        if (s[2] in input_graph(s[1], "worktree") | input_graph(s[1], "HEAD")
+        extra = extra_roots(load_config(s[1]))
+        if (s[2] in input_graph(s[1], "worktree", extra) | input_graph(s[1], "HEAD", extra)
                 and "\\begin{abstract}" not in strip_tex_comments(d[4])):
             continue  # 親の読み込みで原稿に入る子原稿の移動は、 編集の時点では親の \input を確かめられない = path ごと (commit で判定)
         s[5] = [c for c in s[5] if not manuscript_finding(c)]
@@ -9292,6 +9322,22 @@ def selftest() -> int:
           or len(protected_changes("notes/n.tex", note, note.replace("q=1", "q=2"), None, {"include": ["notes/*.tex"]})) == 2)
     check("設定 exclude で範囲外", protected_changes("src/main.tex", paper, paper.replace("b + c", "b - c"), None,
                                                     {"exclude": ["src/*"]}) == [])
+    check("設定 extra_include で、 abstract の無い .tex が範囲内",
+          len(protected_changes("notes/n.tex", note, note.replace("q=1", "q=2"), None, {"extra_include": ["notes/*.tex"]})) == 2)
+    check("設定 extra_include は既定に足す (abstract を持つ原稿は範囲に残る。 include なら範囲外)",
+          protected_changes("src/main.tex", paper, paper.replace("b + c", "b - c"), None, {"extra_include": ["notes/*.tex"]}) != []
+          and protected_changes("src/main.tex", paper, paper.replace("b + c", "b - c"), None, {"include": ["notes/*.tex"]}) == [])
+    reach_texts = {"p.tex": paper, "e/err.tex": "\\input{e/body}\n", "e/body.tex": "x\n", "loose.tex": "y\n"}
+    check("extra_include の file は起点 (その \\input の先も範囲)",
+          tex_reach(reach_texts) == {"p.tex"} and tex_reach(reach_texts, ("e/err.tex",)) == {"p.tex", "e/err.tex", "e/body.tex"})
+    for bad_cfg, why in (('{"include": ["a.tex"], "extra_include": ["b.tex"]}', "include と extra_include の同居"),
+                         ('{"extra_includes": ["b.tex"]}', "知らない欄 (綴りの誤り)"),
+                         ('{"extra_include": "b.tex"}', "extra_include が list でない")):
+        try:
+            load_config(None, bad_cfg)
+            check(f"設定の検査: {why} は config-invalid", False)
+        except InspectionError as exc:
+            check(f"設定の検査: {why} は config-invalid", exc.code == "config-invalid")
     check("protect_sections で追加の節",
           [c["region"] for c in protected_changes("src/main.tex", paper, paper.replace("can change freely", "x"), None,
                                                    {"protect_sections": ["^setup$"]})] == ["section:setup"])
@@ -11371,13 +11417,25 @@ def selftest() -> int:
         (mv / "book/main.tex").write_text(book.replace("\\input{ch/intro}\n", ""), encoding="utf-8")
         mg("add", "book/main.tex")
         check("読み込みから外す: \\input の行を消す commit は子原稿の領域の delete を出す", staged() == detach_rows)
+        # 範囲の設定は、 設定だけを commit する (-- path) = 外す commit を stage に残したまま確かめる
+        # (設定と一緒に commit すると stage が空になり、 道具が何をしても [] = 試験が性質を確かめない)
         (mv / CONFIG_REL).parent.mkdir(parents=True, exist_ok=True)
         (mv / CONFIG_REL).write_text(json.dumps({"include": ["book/*.tex"]}), encoding="utf-8")
         mg("add", CONFIG_REL)
-        mg("commit", "-qm", "glob scope")
+        mg("commit", "-qm", "glob scope", "--", CONFIG_REL)
         reset_caches()
+        check("範囲の設定だけを commit した後も、 外す commit は stage に残る (下の 2 つの試験の前提)",
+              mg("diff", "--cached", "--name-only").stdout.split() == ["book/main.tex"]
+              and mg("show", "--name-only", "--format=", "HEAD").stdout.split() == [CONFIG_REL])
         check("範囲を設定の include で決める repo は読み込みの差を見ない (子原稿は glob で範囲に残る)", staged() == [])
-        mg("reset", "-q", "--soft", "HEAD~1")
+        # extra_include = 既定の数え方に足す: 起点が増えるだけで、 読み込みの差は見続ける (include と逆)
+        (mv / CONFIG_REL).write_text(json.dumps({"extra_include": ["notes/*.tex"]}), encoding="utf-8")
+        mg("add", CONFIG_REL)
+        mg("commit", "-qm", "extra scope", "--", CONFIG_REL)
+        reset_caches()
+        check("extra_include の設定でも、 読み込みから外す commit は子原稿の領域の delete で止める",
+              "extra_include" in mg("show", f"HEAD:{CONFIG_REL}").stdout and staged() == detach_rows)
+        mg("reset", "-q", "--soft", "HEAD~2")
         mg("rm", "-q", "--cached", CONFIG_REL)
         (mv / CONFIG_REL).unlink()
         reset_caches()
