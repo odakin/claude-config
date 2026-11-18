@@ -5,7 +5,9 @@
 拾う数値は小数点以下が 2 桁以上か指数表記で、重複を除いて出現順に最大 8 個
 (呼び手は result_numbers の k で変更可)。前後が語の文字・点・コロン・slash
 なら拾わず、直前の hyphen も除く。時刻・版番号・file 名に埋め込まれた数や
-arXiv の番号の形 (4 桁 . 4〜5 桁) は除く。これは文字の形の判定であり、
+arXiv の番号の形 (4 桁 . 4〜5 桁) は除く。指数は 3 桁まで、小数点の無い
+指数表記は 7 字以上なら除く (e を 1 つ含む 16 進の id = commit の短い hash
+や読んだ印の鍵を数と読んだ、実測)。これは文字の形の判定であり、
 計算結果かどうかを意味で判断しない。整数だけ・小数 1 桁だけは拾わない。
 
 記録を探すのは呼び手が渡す repo の追跡済み作業ツリー。対象の拡張子は
@@ -34,8 +36,10 @@ def _git(args, cwd):
         return 1, ""
 
 
-NUMBER_RE = re.compile(r"(?<![\w.:/-])[-+]?\d+\.\d{2,}(?:[eE][-+]?\d+)?(?![\w.:/])"
-                       r"|(?<![\w.:/-])[-+]?\d+(?:\.\d+)?[eE][-+]?\d+(?![\w.:/])")
+NUMBER_RE = re.compile(r"(?<![\w.:/-])[-+]?\d+\.\d{2,}(?:[eE][-+]?\d{1,3})?(?![\w.:/])"
+                       r"|(?<![\w.:/-])[-+]?\d+(?:\.\d+)?[eE][-+]?\d{1,3}(?![\w.:/])")
+
+HEX_ID_MIN_LEN = 7     # git の短い hash の長さ。 小数点の無い指数表記がこの長さ以上なら 16 進の id と見る
 
 
 
@@ -53,6 +57,8 @@ def result_numbers(out, k=8):
     for m in NUMBER_RE.finditer(out or ""):
         v = m.group(0).lstrip("+")
         if ARXIV_ID_RE.fullmatch(v):
+            continue
+        if "." not in v and len(v.lstrip("-")) >= HEX_ID_MIN_LEN:
             continue
         if v not in seen:
             seen.append(v)
@@ -112,6 +118,10 @@ def selftest():
     assert result_numbers("ids 2102.12032 and 1809.04285, value 0.0785") == ["0.0785"]
     assert result_numbers("+0.5615 0.5615 -0.5615 3 0.2") == ["0.5615", "-0.5615"]
     assert result_numbers(" ".join("0.%02d" % n for n in range(10))) == ["0.%02d" % n for n in range(8)]
+    # e を 1 つ含む 16 進の id (長い指数 / 7 字以上の整数の仮数) は数と読まない、 普通の指数表記は拾い続ける
+    assert result_numbers("key 9e934033 commit 60056e62 then 6e23 1e-10 2.5E+03 1.23e-100") == [
+        "6e23", "1e-10", "2.5E+03", "1.23e-100"]
+    assert result_numbers("value 1.5e1234") == []
     with tempfile.TemporaryDirectory() as tmp:
         assert _git(["init", "-q"], tmp)[0] == 0
         Path(tmp, "note.md").write_text("weight = 0.2394; rounded = 0.7895; longer = 0.561512\n", encoding="utf-8")
