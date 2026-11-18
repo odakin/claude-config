@@ -350,11 +350,14 @@
 - **[public-precommit-runner.sh](public-precommit-runner.sh)** — 公開リポ pre-commit gate（Tier A 構造 / B literal / C private repo 名 / D 未公開文書の逐語 + local-only 機密 / E 活動の事実）
 - **[public-precommit-runner.test.sh](public-precommit-runner.test.sh)** — self-tests for the file-body pre-commit gate
 - **[python-pin-floor.py](python-pin-floor.py)** — requirements.txt の固定した依存 (name==version) が要る Python の版の下限と、 wheel が揃う版の上限を PyPI から出し、 宣言 (.python-version) と照合する
+- **[quote-doc-block.py](quote-doc-block.py)** — 規約・規則の markdown から、 節 (anchor・見出し)・箇条の 1 項・その中の引用の塊を逐語で抜き、 依頼の文に逐語で入っているかを確かめる (別の agent への依頼に規約の指示を要約せず差し込むため、 --selftest)。
 - **[read-plot-axes.py](read-plot-axes.py)** — 公開図 (PDF / PNG) を pixel から数値に読み戻す — 枠・目盛りを検出して軸を較正し、点と境界線を data 座標で返す。
 - **[record-reply.py](record-reply.py)** — mail を thread 単位で台帳に記録する engine (entry に印と索引、 結ぶ項目の現在地。 既定 dry-run)。
 - **[replace-line.py](replace-line.py)** — 一意 prefix assert 付きの 1 行置換 (= 「検証してから書く」 の機械化)。
 - **[replay-public-gate.sh](replay-public-gate.sh)** — 公開 repo の直近の commit を「今の」 pre-commit gate に通し直し、 今なら止まる commit を出す
 - **[replay-session-scripts.py](replay-session-scripts.py)** — 一時 dir に書いて消えた script を、 その session の会話記録の Write / Edit を順に当て直して復元する。--selftest 内蔵。
+- **[reply-new-material-check.py](reply-new-material-check.py)** — LaTeX の返答書を答えごとに読み、 referee が読んだ投稿版に無い節・図・式を使う答えの中に「新しい」 と言う句があるか、 返答書の記号が返答書の中の初出で定義されているかを数える (engine = scripts/lib/reply_letter.py、 --selftest)。
+- **[reply-position-refs.py](reply-position-refs.py)** — LaTeX の返答書の中で、 返答書の中の位置を指す句 (see the end of this letter / below / above / see our reply to R2) と `\ref` を一覧にし、 指す先が残っているかを数える (engine = scripts/lib/reply_letter.py、 --selftest)。
 - **[repo-python-env.test.sh](repo-python-env.test.sh)** — repo の Python の入口 (templates/shared-project/python-env/py = 各 repo の tools/py) の検査。 偽の interpreter と偽の uv で、 venv を作る・追従させる・版が無ければ止まる・作り直しの失敗で元に戻す・機械の arch (arm64 / Intel / 見ない) に合わない候補を起動しない・lock・Windows (Git Bash) と Linux (WSL・Debian・musl) を REPO_PY_OS で模した挙動を確かめる
 - **[repo-sync-sweep.sh](repo-sync-sweep.sh)** — <root>/*/ の git repo を並列 fetch し behind-only は自動で最新化する engine (tracked-dirty は upstream と同じ file が無ければ stash せずに ff、 ff が断ったときだけ stash→ff-merge→pop、 並列起動は repo 単位の lock で排他、 手当ての要る repo は 1 行ずつ返す)
 - **[repo-sync-sweep.test.sh](repo-sync-sweep.test.sh)** — repo-sync-sweep.sh の test (一時 dir の bare remote + clone で各状態・並列起動・lock・stash の空振りを検証)
@@ -550,6 +553,7 @@
 - **[lib/rc_server_state.py](lib/rc_server_state.py)** — Remote Control サーバーの中身を log と process から読み、 古い server を無人で起こし直す部品 (fleet-heartbeat が使う)
 - **[lib/recorded_ids.py](lib/recorded_ids.py)** — mail ledger の「記録済み message / thread id」 の書式の契約と harvest (単一 home)。
 - **[lib/relay_check.py](lib/relay_check.py)** — surface した item を「この session で人に伝えたか」 と「同じ案件かもしれない別の item」 を判定する共通部品
+- **[lib/reply_letter.py](lib/reply_letter.py)** — LaTeX で書いた返答書 (referee への point-by-point の返信) を、 答えの単位・文・原稿への参照・記号に分ける engine (CLI = scripts/reply-new-material-check.py と scripts/reply-position-refs.py)。
 - **[lib/repo_roots.py](lib/repo_roots.py)** — 走査の root を 1 つの repo として見るか、 直下の子の repo を数えるかの共通の判定 (repo を並べた作業ルートを fleet scan する道具が使う)。
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
 - **[lib/seal_artifact.py](lib/seal_artifact.py)** — 画像の押印 (ハンコ画像) が入った成果物に、作る時に印を付け、出口で見つける。
