@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics) + 積分路や規約で分けた項に物理の名前を付けたとき・分解の恒等式から測定の予言を立てるとき・近似と全体を比 (割合) で比べるとき (#decomposition-label-check) + 平面波で書いた関係 (ユニタリ性・光学定理) を外線が波束の振幅に使う式を確かめるとき (#plane-wave-relation-between-packets) + 外線が波束の振幅を、 時間積分に上下限を付けて出すとき (#finite-interval-wave-packet-amplitude) + 論文の図の曲線が caption の言う式で描かれているかを確かめるとき (#figure-curve-vs-equation) + 自分の数値解を論文の図 (raster の図も) と重ねて照らすとき (#raster-figure-overlay) + 他の論文の観測の上限・見込みを自分の量と並べるとき (#quoted-bound-definition)
+when: 論文 merger 等の構造 issue を体系 audit するとき + 自分の 2 点関数・自己エネルギーを文献の結果と比べるとき (#offshell-2pt-literature-comparison) + 出版済みの論文の正誤表の本文を書く・縮めるとき (#erratum-text) + 高階微分の逆伝播関数でどちらの極が負ノルムかを言う前 (#negative-norm-pole-assignment) + 統計量で型 (外れ値・ばらつき・2 群) を分けると書く前・その較正を組むとき (#classifier-claim-calibration) + 測定や総説を読み込んだ表の入力が今も最新かを投稿の前に確かめるとき (#input-freshness-audit) + 表の入力を直した後に何が動くかを確かめるとき (#input-fix-propagation) + 測定の表で 1 測定を名指す・抜く案を書く前 (#named-measurement-needs-physics) + 積分路や規約で分けた項に物理の名前を付けたとき・分解の恒等式から測定の予言を立てるとき・近似と全体を比 (割合) で比べるとき (#decomposition-label-check) + 平面波で書いた関係 (ユニタリ性・光学定理) を外線が波束の振幅に使う式を確かめるとき (#plane-wave-relation-between-packets) + 外線が波束の振幅を、 時間積分に上下限を付けて出すとき (#finite-interval-wave-packet-amplitude) + 論文の図の曲線が caption の言う式で描かれているかを確かめるとき (#figure-curve-vs-equation) + 自分の数値解を論文の図 (raster の図も) と重ねて照らすとき (#raster-figure-overlay) + 他の論文の観測の上限・見込みを自分の量と並べるとき (#quoted-bound-definition) + 見積もりを別の前提に広げて「この数は変わらない」 と書く前 (#newly-binding-limit-after-assumption-change)
 category: paper
 summary: multi-paper merger 等の forward ref / 重複 subsection / structure issue を Phase1 機械検出 + Phase2 section-by-section AI 精読 + findings.yaml で体系 audit
 -->
@@ -854,6 +854,18 @@ origin: 2026-09-12、長く改稿を重ねた原稿で、共著者が外部 tool
 - 科研費調書での現れ方と、分野の「欠落」主張の姉妹規律 =
   [kakenhi-proposal.md#mock-review-and-claims](kakenhi-proposal.md#mock-review-and-claims) /
   [kakenhi-proposal.md#absence-claim-adjacent-field](kakenhi-proposal.md#absence-claim-adjacent-field)。
+
+## <a id="newly-binding-limit-after-assumption-change"></a>前提を広げて「この数は変わらない」 と書く前に、 前の前提で効かなかった上限を数え直す
+
+**Pattern**: 見積もりを別の前提に広げるとき (止まっていた量が動く・新しい項が入る・別の時期まで延ばす)、 「この最大値は変わらない、 上限 L と因子 F だけで決まるから」 と書きがち。 ところが前の前提で効かなかった上限は、 効かなかった理由が前の前提そのものにあることが多い。 量の時間変化や速度に比例する上限は、 量が止まっている前提では 0 で効かないが、 量が動く前提では最も強い上限になりうる。 「変わらない」 の理由に挙げた上限 L は前と同じでも、 結論は変わる。
+
+**Check (「変わらない」「同じ」 と書く前に 1 回)**:
+1. 前の前提で「効かない」 として落とした上限を列挙する。 特に、 前の前提で 0 か小さかった量 (時間変化・速度・勾配・新しい項の大きさ) に比例するもの。
+2. 新しい前提で、 それぞれの大きさを 1 回計算し、 理由に挙げた上限と比べる (数値の code を残す)。
+3. 「変わらない」 は、 理由に挙げた上限が新しい前提でも最も強いと確かめてから書く。 確かめていなければ「この上限だけでは変わらない」 と範囲を書くか、 数を出さない。
+4. その段落を報告・検討の記録から起こしたなら、 段落の文ごとに、 元の記録の留保 (「別の上限が効く」「確かめていない」) と照らす ([#derived-claim-vs-source-caveats](#derived-claim-vs-source-caveats) と同じ形の、 自分の記録版)。
+
+実測: 見積もりの範囲を断る段落の案が「今の最大は変わらない」 と書き、 その案を起こした当の記録が、 同じ前提で時間変化の上限が効き最大が下がると書いていた。 独立の検算で、 その上限が結論を変えることを確かめた。
 
 ## <a id="novelty-calibrated-to-venue"></a>新規性は venue の型で測る — AI の評価は安全側に倒れる (2026-09-12)
 
