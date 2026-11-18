@@ -2029,6 +2029,14 @@ def selftest() -> int:
             os.makedirs(d)
         os.environ.update(CLAUDE_SESSIONS_DIR=sdir, CLAUDE_PROJECTS_DIR=pdir, CLAUDE_DESKTOP_SESSIONS_DIR=ddir,
                           CHILD_WRAP_REPOS_GLOB=os.path.join(td, "none", "*", ".git"))
+        # the question ledger is read state too: every case reads the stub engine's ledger in the temp board, never a real
+        # one (conventions/hook-authoring.md#sibling-engine-stub-in-selftest); the real engine is tried once near the end
+        stub = os.path.join(td, "stub_asks.py")
+        with open(stub, "w", encoding="utf-8") as fh:
+            fh.write(STUB_ASKS_ENGINE)
+        saved_engine, saved_ledger_env = os.environ.get("CHILD_WRAP_ASKS_ENGINE"), os.environ.pop("BOARD_ASKS_LEDGER", None)
+        os.environ["CHILD_WRAP_ASKS_ENGINE"] = stub
+        _ASKS_ENGINE.clear()
         parent_l, parent_c = "local_00000000-0000-4000-8000-000000000000", "00000000-aaaa-4000-8000-000000000000"
         kids = {"answered": "11111111", "overridden": "22222222", "busy": "33333333", "nowrap": "44444444"}
 
@@ -2840,15 +2848,9 @@ def selftest() -> int:
         # ---- the requester's question to the person, tied to the child's request in the board's question ledger ----
         # (measured: the child was folded between a question and its answer a minute later, and a new window raised after
         # the answer read the earlier window's context again). The stub engine has the ledger engine's shape (ledger_path,
-        # load, state, SETTLED); the real one runs below when the sibling checkout is there.
-        stub = os.path.join(td, "stub_asks.py")
-        with open(stub, "w", encoding="utf-8") as fh:
-            fh.write(STUB_ASKS_ENGINE)
+        # load, state, SETTLED, set from the start of the cases); the real one runs below when the sibling checkout is there.
         os.makedirs(os.path.join(board, ".local"), exist_ok=True)
         ledger = os.path.join(board, ".local", "asks.jsonl")
-        saved_engine, saved_ledger_env = os.environ.get("CHILD_WRAP_ASKS_ENGINE"), os.environ.pop("BOARD_ASKS_LEDGER", None)
-        os.environ["CHILD_WRAP_ASKS_ENGINE"] = stub
-        _ASKS_ENGINE.clear()
         qp_l, qp_c = "local_d0000000-0000-4000-8000-000000000000", "d0000000-aaaa-4000-8000-000000000000"
         record(qp_l, qp_c)
         transcript(qp_c, [])
