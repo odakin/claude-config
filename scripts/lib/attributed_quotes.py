@@ -49,6 +49,18 @@
   - 帰属は語の有無だけ。 自分の文を引いた引用に帰属の語が同じ文にあると failure に出る (読んで外す)。
   - 原文の訳 (英文の原文を日本語で括ったもの) は原文に無いと出る = 規約どおり (訳は括らず、 原文の語で引く)。
   - 部分文字列なら一致とする = 文脈から切り離した引用 (主節を落として従属節だけ引く) は通る。 意味の照合は人が読む。
+
+評価する文書の句 (subjects):
+  照らす文が、 ある文書を評価する文 (批判役の判定・査読の所見) のときは、 評価する文書 (返答書の写しなど) の句と原文
+  (referee の報告など) の句を同じ段落で引く。 帰属は近くの語で見るので、 評価する文書の句まで原文の話し手に帰したと
+  数える (実測: 判定の file では、 この形の引用が「他人に帰して原文に無い」 に多く出た)。 呼び手が評価する
+  文書を subjects に渡すと、 原文に無く評価する文書にある引用を「評価する文書の句」 (status = subject) として分け、
+  failure に数えない。 原文にある引用は今までどおり一致。 原文にも評価する文書にも無い引用は今までどおり failure。
+  評価する文書は LaTeX のことが多いので、 そのままの形と、 comment・\\cite{K} (→ [K])・$・字体と改行の命令・命令の名・
+  波括弧を外した形の両方で照らす。 ⚠️ 評価する文書の句に帰属の語が付いているのは、 評価する文書が原文の話し手の言葉を
+  言い換えた句を、 評価する文が話し手の言葉として扱っている形のこともある (それ自体が誤り) = 報告に帰属の語つきで
+  1 行ずつ出す。 失敗に数えないのは、 機械では「評価する文書の句として引いた」 と「話し手の言葉と取り違えた」 を
+  分けられないから (読んで決める)。 送信の道具 (discord-post.py・送信の CLI) は subjects を渡さない = 今までどおり。
 """
 from __future__ import annotations
 
@@ -106,7 +118,7 @@ class Quote:
     text: str                 # 引用の中身 (送る文の字面)
     form: str                 # "bracket" | "block"
     attrib: str | None        # 帰属の語 (None = 帰属の語なし)
-    status: str = ""          # "ok" | "ok-case" | "missing" | "order" | "short"
+    status: str = ""          # "ok" | "ok-case" | "missing" | "order" | "short" | "subject" (評価する文書の句)
     missing: list[str] = field(default_factory=list)  # 原文に無かった片 (寄せた形)
     pieces: int = 1           # 照らした片の数 (2 以上 = 原文の同じ段落に順に)
 
@@ -130,6 +142,21 @@ def _corpora(sources: list[str]) -> list[str]:
         if joined != raw:
             out.append(norm(joined))
     return out
+
+
+TEX_WRAP = re.compile(r"\\(?:emph|text(?:it|bf|rm|sf|tt|sc|sl|up|normal)?|math(?:rm|it|bf|sf|tt|cal)|mbox|hbox|"
+                      r"(?:sub)*section|paragraph|label|ref|eqref)\*?(?![A-Za-z])")
+
+
+def _subject_variants(raw: str) -> list[str]:
+    """評価する文書の照らす形: そのままと、 LaTeX を外した形 (comment・\\cite{K} → [K]・$・字体と改行の命令・書体と見出しの
+    命令の名・波括弧を外し、 ほかの命令は名だけ残す = \\chi → chi。 評価する文は記号を名で書くことが多い)。"""
+    tex = TEX_COMMENT.sub("", raw)
+    tex = re.sub(r"\\cite[a-z]*\*?(?:\[[^\]]*\])*\{([^{}]*)\}", r"[\1]", tex)
+    tex = TEX_SPACE.sub(" ", TEX_STYLE.sub("", tex)).replace("$", "")
+    tex = re.sub(r"\\([A-Za-z]+)\*?", r"\1", TEX_WRAP.sub("", tex))
+    tex = re.sub(r"[{}]", "", tex)
+    return [raw] if tex == raw else [raw, tex]
 
 
 def _paragraphs(sources: list[str]) -> list[str]:
@@ -301,12 +328,17 @@ def find_quotes(text: str, extra_attrib: tuple[str, ...] = (), all_quotes: bool 
 
 def check_text(text: str, sources: list[str], extra_attrib: tuple[str, ...] = (),
                all_quotes: bool = False, min_chars: int = 5,
-               quote_macros: tuple[str, ...] = (), quote_envs: tuple[str, ...] = ()) -> list[Quote]:
-    """送る文の引用それぞれに status を付けて返す。 sources = 原文の中身 (file の文字列) の list。"""
+               quote_macros: tuple[str, ...] = (), quote_envs: tuple[str, ...] = (),
+               subjects: list[str] = ()) -> list[Quote]:
+    """送る文の引用それぞれに status を付けて返す。 sources = 原文の中身 (file の文字列) の list。 subjects = 評価する文書の
+    中身の list (原文に無くここにある引用を status = subject に分ける。 渡さなければ今までどおり)。"""
     corpora = _corpora(sources)
     folded = [c.casefold() for c in corpora]
     paras = _paragraphs(sources)
     folded_paras = [p.casefold() for p in paras]
+    subj_raw = [v for s in subjects for v in _subject_variants(s)]
+    s_corpora, s_paras = _corpora(subj_raw), _paragraphs(subj_raw)
+    s_folded, s_folded_paras = [c.casefold() for c in s_corpora], [p.casefold() for p in s_paras]
     out = []
     for q in find_quotes(text, extra_attrib, all_quotes, quote_macros, quote_envs):
         frags, _short = _fragments(q.text, min_chars)
@@ -322,6 +354,10 @@ def check_text(text: str, sources: list[str], extra_attrib: tuple[str, ...] = ()
         else:
             q.missing = [f for f in frags if not any(_find_one(f.casefold(), c, 0) >= 0 for c in folded)]
             q.status = "missing" if q.missing else "order"
+            s_exact, s_fold = (s_corpora, s_folded) if len(frags) == 1 else (s_paras, s_folded_paras)
+            if subjects and (any(_find_ordered(frags, c) for c in s_exact)
+                             or any(_find_ordered([f.casefold() for f in frags], c) for c in s_fold)):
+                q.status, q.missing = "subject", []
         out.append(q)
     return out
 
@@ -342,7 +378,8 @@ def _clip(s: str, n: int = 80) -> str:
     return s if len(s) <= n else s[:n - 1] + "…"
 
 
-def format_report(quotes: list[Quote], label: str = "送る文") -> list[str]:
+def format_report(quotes: list[Quote], label: str = "送る文", with_subject: bool = False) -> list[str]:
+    """with_subject = 評価する文書を渡した回 (要約の行に「評価する文書の句」 の数を足す。 渡さない回の行は今までどおり)。"""
     lines = []
     for q in quotes:
         where = f"{label}:{q.line}"
@@ -353,6 +390,10 @@ def format_report(quotes: list[Quote], label: str = "送る文") -> list[str]:
                 lines.append(f"    無い片: {_clip(f)!r}")
         elif q.status in ("missing", "order"):
             lines.append(f"△ {where} 「{_clip(q.text)}」 = 原文に無い。 帰属の語なし = 他人の文として照らしていない")
+        elif q.status == "subject":
+            who = (f"帰属の語「{q.attrib}」 つき = 評価する文書の句をその話し手の言葉として扱っていないかを読む" if q.attrib
+                   else "帰属の語なし")
+            lines.append(f"◇ {where} 「{_clip(q.text)}」 = 原文に無く、 評価する文書にある句 ({who})")
         elif q.status in ("ok", "ok-case"):
             what = ("原文の部分文字列" if q.pieces < 2
                     else f"片 {q.pieces} つが原文の同じ段落に順にある (片の間は照らしていない)")
@@ -362,8 +403,13 @@ def format_report(quotes: list[Quote], label: str = "送る文") -> list[str]:
     nf = len(failures(quotes))
     nu = sum(1 for q in quotes if not q.failure and q.status in ("missing", "order"))
     ns = sum(1 for q in quotes if q.status == "short")
+    nsub = sum(1 for q in quotes if q.status == "subject")
+    subj = ""
+    if with_subject or nsub:
+        na = sum(1 for q in quotes if q.status == "subject" and q.attrib)
+        subj = f"評価する文書の句 {nsub} (うち帰属の語つき {na}) / "
     lines.append(f"引用 {n} 件: 他人に帰して原文に無い {nf} / 帰属の語なしで原文に無い {nu} / "
-                 f"短くて照らしていない {ns} / 一致 {n - nf - nu - ns}")
+                 f"短くて照らしていない {ns} / {subj}一致 {n - nf - nu - ns - nsub}")
     return lines
 
 
@@ -508,6 +554,36 @@ def selftest() -> int:
     expect("a named speaker who 言い切る is still attributed", q.attrib is not None and q.failure)
     q = one("「全体に偏りが小さい」 と言っている。")
     expect("plain と言っている stays an attribution", q.attrib == "と言" and q.failure)
+    # 評価する文書の句 (subjects): 判定の file が評価する文書 (返答書の写し) の句と原文の句を同じ段落で引く形 (合成)
+    reply = ("\\section*{Reply}\n% drafting note: keep this short\n"
+             "We agree that the restriction matters~\\cite{Ex2020}, and we now show the $\\chi^2$ for \\emph{all} stations.\n"
+             "\nThe northern subset is a check, not the main result.\n")
+    verdict = ("referee の問い「the sample is restricted to the northern stations」 に、 返答は"
+               "「We agree that the restriction matters [Ex2020]」 と答え、 referee の言う「the northern subset is a check」 を"
+               "前提にしている。 referee は「the bias is small everywhere」 とも言う。 返答の「the chi^2 for all stations」 は"
+               "式の名を文字で書いたもの。")
+    plain = check_text(verdict, [src])
+    with_s = check_text(verdict, [src], subjects=[reply])
+    st = lambda qs: [(q.status, bool(q.attrib)) for q in qs]
+    expect("without subjects: quotes of the reply near 'referee' fail as before (the gate is unchanged)",
+           [q.text[:9] for q in failures(plain)] == ["We agree ", "the north", "the bias "])
+    expect("with subjects: the referee's own words stay ok, the reply's phrases become 'subject'",
+           st(with_s) == [("ok", True), ("subject", True), ("subject", True), ("missing", True), ("subject", False)])
+    expect("with subjects: a quote in neither the source nor the subject still fails",
+           [q.text for q in failures(with_s)] == ["the bias is small everywhere"])
+    expect("subjects: TeX comment, \\cite, $, \\emph and the backslash of \\chi are taken off before matching",
+           with_s[1].status == "subject" and with_s[4].status == "subject")
+    rep = format_report(with_s, "verdict", with_subject=True)
+    expect("report: a subject phrase with an attribution word is listed with that word, and counted apart",
+           sum(1 for s in rep if s.startswith("◇")) == 3 and sum(1 for s in rep if "帰属の語「referee」 つき" in s) == 2
+           and rep[-1].endswith("評価する文書の句 3 (うち帰属の語つき 2) / 一致 1"))
+    expect("report without subjects keeps its old summary line",
+           format_report(plain, "verdict")[-1] == "引用 5 件: 他人に帰して原文に無い 3 / 帰属の語なしで原文に無い 1 / "
+                                                   "短くて照らしていない 0 / 一致 1")
+    q = check_text('The referee writes "northern subset ... a check"', [src], subjects=[reply])[0]
+    expect("subjects: fragments are matched in order in one paragraph of the subject", q.status == "subject")
+    q = check_text('The referee writes "a check ... northern subset"', [src], subjects=[reply])[0]
+    expect("subjects: fragments out of order in the subject still fail", q.failure and q.status != "subject")
     print("selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

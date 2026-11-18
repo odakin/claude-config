@@ -14,7 +14,13 @@ conventions/rebuttal-letter.md#pre-send-verification-sheet (送る前の照合�
   python3 check-attributed-quotes.py --draft msg.txt --source decision.txt [--source other.txt]
                                      [--attrib <名前> ...] [--all] [--min-chars 5] [--json]
   python3 check-attributed-quotes.py --draft reply.tex --source decision.txt --quote-macro Q [--quote-env referee]
+  python3 check-attributed-quotes.py --draft verdict.md --source decision.txt --subject reply.tex
   python3 check-attributed-quotes.py --selftest
+  --subject = 照らす文が評価している文書 (批判役の判定が評価した返答書の写しなど、 複数可)。 原文に無くこの文書にある
+             引用を「評価する文書の句」 (◇) として分け、 終了値に数えない (帰属の語つきなら、 評価する文書の句を原文の
+             話し手の言葉として扱っていないかを読む印つきで出す)。 原文にもこの文書にも無い引用は今までどおり ✗。
+             判定の file は評価する文書の句と原文の句を同じ段落で引くので、 渡さないと評価する文書の句まで ✗ に出る (実測)。
+             送信の門 (--quote-source) は渡さない = 送る文の検査は今までどおり。
   --attrib = 帰属の語に足す語 (人名など。 規約の側に名前を書かず、 呼び手が渡す)
   --all    = 帰属の語に依らず、 全部の引用を他人に帰した引用として照らす
   --quote-macro / --quote-env = LaTeX の返答書が referee の文を引くのに定義した macro (\\Q{…} なら Q) と環境の名前。
@@ -37,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--draft", type=Path, help="送る文の下書き (UTF-8)")
     ap.add_argument("--source", type=Path, action="append", default=[], help="原文の file (複数可)")
+    ap.add_argument("--subject", type=Path, action="append", default=[],
+                    help="照らす文が評価している文書 (返答書の写しなど、 複数可)。 そこにある句を評価する文書の句として分ける")
     ap.add_argument("--attrib", action="append", default=[], help="帰属の語に足す語 (人名など)")
     ap.add_argument("--all", action="store_true", help="全部の引用を他人に帰した引用として照らす")
     ap.add_argument("--quote-macro", action="append", default=[],
@@ -51,19 +59,20 @@ def main(argv: list[str] | None = None) -> int:
         return aq.selftest()
     if not a.draft or not a.source:
         ap.error("--draft と、 少なくとも 1 つの --source が要る")
-    for p in [a.draft, *a.source]:
+    for p in [a.draft, *a.source, *a.subject]:
         if not p.is_file():
             ap.error(f"file が無い: {p}")
     read = lambda p: p.read_text(encoding="utf-8", errors="replace")
     quotes = aq.check_text(read(a.draft), [read(p) for p in a.source], tuple(a.attrib),
                            all_quotes=a.all, min_chars=a.min_chars,
-                           quote_macros=tuple(a.quote_macro), quote_envs=tuple(a.quote_env))
+                           quote_macros=tuple(a.quote_macro), quote_envs=tuple(a.quote_env),
+                           subjects=[read(p) for p in a.subject])
     if a.json:
         print(json.dumps([dict(line=q.line, text=q.text, form=q.form, attrib=q.attrib,
                                status=q.status, missing=q.missing, failure=q.failure)
                           for q in quotes], ensure_ascii=False, indent=1))
     else:
-        print("\n".join(aq.format_report(quotes, label=a.draft.name)))
+        print("\n".join(aq.format_report(quotes, label=a.draft.name, with_subject=bool(a.subject))))
     return 1 if aq.failures(quotes) else 0
 
 
