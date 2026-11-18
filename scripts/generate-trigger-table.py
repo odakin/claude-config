@@ -23,6 +23,9 @@ usage:
   generate-trigger-table.py --selftest
 
 源の表 = SRC の最初の markdown table (header 行 + 区切り + 行)。 3 列未満の行は exit 2 で止める。
+相対 link は SRC の dir から TARGET の dir への相対に書き直す (relink)。 生成の結果を本物の TARGET に書かずに
+候補として作るとき (保護された file を別の窓が当てる前の候補など) は、 SRC と TARGET を repo と同じ相対の配置で
+一時 dir に写してから回す (TARGET だけを一時 dir に置くと、 link が一時 dir からの path に化けた = 実測)。
 public-safe / stdlib only。 path は呼び手 (利用者の shim) が渡す。
 """
 from __future__ import annotations
