@@ -106,6 +106,14 @@ harness によっては、 turn の終わりに「次の一手」 の箱 (要約
   - <a id="guard-approval-not-by-button"></a>守りの道具 (guard) に記録させる承認 (守られた file・設定の変更の承認) を箱のボタンで問うときは、 その返事 (本文か箱の recap・ask) の 1 つに、 当てる file の名と候補の全文の SHA-256 の頭 (8 字以上) を書く — 押された答えは、 押した箱までの返事にそれが出ているときだけ、 承認を記録する道具が本人の答えとして記録する (押したボタンの文を記録に残す)。 出ていなければ、 直前のボタンの文と一字一句同じ発言は記録せず、 本人に自分の言葉で打ち直してもらう往復が 1 回増える (実測)。 本人の裁定 = 承認はボタンで答えてよい (実測: ボタンで押した承認の一言を道具が断り、 打ち直す往復が続いた後)。 箱のボタンで問うときは、 file の名と SHA-256 の頭を箱の recap か ask に書く (本文に書いても守りの道具は照らせるが、 質問つきの箱の turn の本文は本人に届かないことがある = [#box-text-after-not-delivered](#box-text-after-not-delivered)。 箱の網は、 箱にそれが無い承認の問いを止め、 有る問いは止めない)。 原稿の保護領域の承認は候補の全文の hash を持たないので、 今のまま本文で問い、 本人が打つ発言で返してもらう。 照らし方の正本 = [`agent-rule-ownership.md#owner-answer-in-another-window`](agent-rule-ownership.md#owner-answer-in-another-window) の 3。
 - 箱の要約も user が読む文なので、 判断を仰ぐ文と同じく作業側の符号・略語で書かない ([`concise-output.md#decision-questions`](concise-output.md#decision-questions)。 実測: user に通じなかった「現在地」 の 1 つは箱の要約だった)。
 
+## <a id="silent-turn-end"></a>文を書かずに turn を終える形 (別の session の知らせで始まった turn など)
+
+本人に伝えることの無い turn を、 本人への文を書かずに終える規則を置くときに当たる、 harness と desktop app の挙動 (実測と、 desktop app の本体を読んだ結果):
+
+- **長く文を書かずに tool を回すと、 harness が「しばらく本人に何も言っていない」 の注入を入れる** (「The user hasn't heard from you in a while — say in a few words what you're doing」、 会話記録では `attachment.type == "silent_turn_reminder"` の行。 実測) = 黙って終えたい turn でも、 長ければこの注入に押されて途中の文が出る。 短い turn (見張りの出し直し・受け取りの 1 件) では出ない見込み。
+- **desktop app は、 文の無い turn の終わりでも session の記録を進める** = 記録の turn の数と最後の turn の時刻 (`lastTurnEdgeAt`) が進み、 左の一覧の並びはその時刻なので、 文が無くても行は上がる。 一覧の状態の行の文は、 turn を閉じる箱の要約の 1 文目で、 箱を呼ばなければ前の状態の行のまま。 問いもボタンも無い要約だけの箱は、 箱を描かない (desktop app の本体と、 app が session に渡す説明の文を読んだ結果。 文の無い turn の終わりに未読の印と通知が付くかは画面で確かめていない)。
+- 規則にするときの形 = 仕事を振り分ける窓 (指揮役) で、 知らせで始まった turn を、 本人に決めてもらうこと・頼まれた成果物・本人の手が要る不調が無ければ黙って終える形にするなら、 箱は問いの無い要約だけで呼ぶ (呼ばない形は「turn を閉じる箱で閉じる」 という app の決まりと食い違う)。
+
 ## 規律
 
 1. **user が受け取るべきもの (文面 deliverable・結論・判断材料・訂正) は、
