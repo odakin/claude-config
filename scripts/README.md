@@ -353,6 +353,7 @@
 - **[python-pin-floor.py](python-pin-floor.py)** — requirements.txt の固定した依存 (name==version) が要る Python の版の下限と、 wheel が揃う版の上限を PyPI から出し、 宣言 (.python-version) と照合する
 - **[quote-doc-block.py](quote-doc-block.py)** — 規約・規則の markdown から、 節 (anchor・見出し)・箇条の 1 項・その中の引用の塊を逐語で抜き、 依頼の文に逐語で入っているかを確かめる (別の agent への依頼に規約の指示を要約せず差し込むため、 --selftest)。
 - **[read-plot-axes.py](read-plot-axes.py)** — 公開図 (PDF / PNG) を pixel から数値に読み戻す — 枠・目盛りを検出して軸を較正し、点と境界線を data 座標で返す。
+- **[rebase-candidate.py](rebase-candidate.py)** — 全文の候補を、 動いた今の土台の版の上に作り直す (前の土台と前の候補の差の塊を、 今の土台の同じ文にちょうど 1 回ずつ当てる)。
 - **[record-reply.py](record-reply.py)** — mail を thread 単位で台帳に記録する engine (entry に印と索引、 結ぶ項目の現在地。 既定 dry-run)。
 - **[replace-line.py](replace-line.py)** — 一意 prefix assert 付きの 1 行置換 (= 「検証してから書く」 の機械化)。
 - **[replay-public-gate.sh](replay-public-gate.sh)** — 公開 repo の直近の commit を「今の」 pre-commit gate に通し直し、 今なら止まる commit を出す
