@@ -13,7 +13,9 @@ referee には読めない (実測)。 批判役は返答書と referee の報�
      Appendix) を今の原稿の .aux で番号から引き、 投稿版の .aux に無い節・図・表 (題・caption で照らす) と式 (label で照らす)
      を「投稿版に無い」 とする。 その参照を含む文 (列挙の 1 項目も 1 文) に新しいと言う句 (既定 = new / added / after our
      submission / not in the submitted … / updated arXiv version …、 --new-phrase で足す) が無い答えを出す。 同じ答えの中で
-     別の文が言っていれば、 その答えは通す (言った文を示す)。 今の原稿に無い番号も出す。
+     別の文が言っていれば、 その答えは通す (言った文を示す)。 今の原稿に無い番号も出す。 所有の語か文献の番号が前にある
+     参照 (`its Sec. 3.2` / `\\cite{x}, Sec. 2` / `[12], Fig. 4`) は引いた論文の番号として照らさず、 数と行だけを出す
+     (自分の原稿の節と読んだ = 実測)。 後ろに置いた形 (`Sec. 3 of Ref. [12]`) は見分けない。
   2. 返答書の中の記号 (式の中の記号。 referee の引用・文献表は除く) の初出を探し、 初出の近く (同じ答えの 160 字以内) に
      定義 (`X = …` の左辺に X だけ / 「the rate $X$」 のような同格 / 「$X$ denotes」) があるかを見る。 慣習の記号は
      --conventional '<正規表現>' (記号の key に当てる。 key の形 = `Gamma_X`・`DeltaT_max,j`) で外す。
@@ -82,11 +84,14 @@ def analyse(reply: str, current: rl.ManuscriptIndex, submitted: rl.ManuscriptInd
         return True
     answers = rl.segment_answers(text, quote_macro, item_macro)
     new_re = re.compile("|".join(new_phrases), re.I)
-    out = {"answers": [], "unresolved": [], "outside_answers": [], "symbols": []}
+    out = {"answers": [], "unresolved": [], "outside_answers": [], "symbols": [], "foreign_refs": []}
     for a in answers:
         sents = rl.sentence_spans(text, a.start, a.end)
         uses = []
         for r in rl.find_refs(text, a.start, a.end):
+            if r.foreign:   # 引いた論文の節・図・式 (`its Sec. 3.2`) = 自分の原稿と照らさない
+                out["foreign_refs"].append({"answer": a.label, "ref": r.raw, "line": rl.line_of(text, r.pos)})
+                continue
             it = current.items.get((r.kind, r.number))
             if not it:
                 out["unresolved"].append({"answer": a.label, "ref": r.raw, "kind": r.kind, "number": r.number,
@@ -115,7 +120,7 @@ def analyse(reply: str, current: rl.ManuscriptIndex, submitted: rl.ManuscriptInd
     covered = [(a.start, a.end) for a in answers] + [a.quote_span for a in answers]
     b0, b1 = rl.body_span(text)
     for r in rl.find_refs(text, b0, b1):
-        if any(s <= r.pos < e for s, e in covered):
+        if r.foreign or any(s <= r.pos < e for s, e in covered):
             continue
         it = current.items.get((r.kind, r.number))
         out["outside_answers"].append({"ref": r.raw, "line": rl.line_of(text, r.pos),
@@ -160,6 +165,7 @@ def analyse(reply: str, current: rl.ManuscriptIndex, submitted: rl.ManuscriptInd
         "new_not_said": sum(1 for x in out["answers"] if not x["new_said"]),
         "unresolved": len(out["unresolved"]),
         "symbols_not_defined_at_first_use": len(out["symbols"]),
+        "foreign_refs": len(out["foreign_refs"]),
     }
     return out
 
@@ -179,6 +185,9 @@ def render(res: dict) -> str:
         why = ("label の付いた式に無い番号 (label の無い式かもしれない)" if x["kind"] == "equation"
                else "今の原稿の .aux に無い番号")
         lines.append(f"  ? {x['answer']} 行 {x['line']}: {x['ref']} は{why}")
+    if res.get("foreign_refs"):
+        lines.append(f"  (引いた論文の番号として照らさなかった参照 {len(res['foreign_refs'])} 件: "
+                     + ", ".join(f"行 {x['line']} {x['ref']}" for x in res["foreign_refs"][:6]) + ")")
     for x in res["outside_answers"]:
         if x["new"] or not x["resolved"]:
             tag = "投稿版に無い" if x["new"] else ("label の付いた式に無い番号" if "Eq" in x["ref"] else "今の原稿に無い番号")
@@ -264,6 +273,18 @@ def selftest() -> int:
                    conventional=[], new_phrases=DEFAULT_NEW)
     check(not any(x["kind"] == "equation" for x in res3["answers"]) and res3["relabeled_equations"] == ["eq:added"],
           "投稿の後に label だけを足した式は新しいと出さない")
+    # 引いた論文の節・図・式 (所有の語・文献の番号が前にある) は自分の原稿と照らさない。 自分の原稿の参照は出し続ける
+    cited = SELF_REPLY.replace(
+        "Yes; this is shown in Sec.~II\\,A, where the rate $\\kappa_j$ is used.",
+        "Yes; its Sec.~3.2 shows the limit, and Ref.~\\cite{x}, Sec.~5 and [12], Fig.~4 agree. "
+        "This is shown in Sec.~II\\,A, where the rate $\\kappa_j$ is used.")
+    res4 = analyse(cited, cur, sub, submitted_tex=SELF_SUB_TEX, quote_macro="Q", item_macro="A", referee_macro="R",
+                   font_macros=set(), conventional=[], new_phrases=DEFAULT_NEW)
+    got4 = {(x["answer"], x["number"]): x["new_said"] for x in res4["answers"]}
+    check(sorted(x["ref"] for x in res4["foreign_refs"]) == ["Fig.~4", "Sec.~3.2", "Sec.~5"]
+          and not any(x["ref"] in ("Sec.~3.2", "Sec.~5", "Fig.~4") for x in res4["unresolved"]),
+          "its / \\cite{…} / [12] の後の参照は引いた論文の番号 = 照らさず、 今の原稿に無い番号にも出さない")
+    check(got4.get(("A1-1", "II\\,A")) is False, "同じ答えの自分の原稿の新しい節は出し続ける")
     return 0 if ok else 1
 
 

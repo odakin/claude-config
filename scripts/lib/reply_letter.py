@@ -185,6 +185,14 @@ class Ref:
     number: str         # 寄せた番号 (例 = "IIB"、 "2"、 "12")
     raw: str
     pos: int
+    foreign: bool = False   # 所有の語 (its / their / 文献の番号) が前にある = 引いた論文の節・図・式 (自分の原稿の番号でない)
+
+
+# 参照の語の直前が所有の語か文献の番号 (`its Sec. 3.2` / `\cite{x}, Sec. 2` / `[12], Fig. 4` / `Ref. 12, Eq. (3)`)。
+# 間に置けるのは空白・`~`・`\,`・comma・開き括弧だけ (`\cite{x}. Sec. II …` のように文が切れれば外さない)
+FOREIGN_BEFORE = re.compile(
+    r"(?:\b(?:its|their|his|her)|\\cite[a-zA-Z]*\*?(?:\[[^\]]*\])*\{[^}]*\}|\[\d+(?:\s*[,–-]\s*\d+)*\]"
+    r"|\bRefs?\.(?:~|\\,|\\ |\s)*\d+)(?:'s)?(?:~|\\,|\\ |\s|,|\()*$", re.I)
 
 
 def find_refs(text: str, start: int = 0, end: int | None = None) -> list[Ref]:
@@ -234,8 +242,9 @@ def find_refs(text: str, start: int = 0, end: int | None = None) -> list[Ref]:
                     j += sep.end()
                     continue
                 break
+        foreign = bool(FOREIGN_BEFORE.search(text[max(0, m.start() - 80):m.start()]))
         for n, p in nums:
-            out.append(Ref(kind=kind, number=norm_num(n), raw=text[m.start():j].strip(), pos=m.start()))
+            out.append(Ref(kind=kind, number=norm_num(n), raw=text[m.start():j].strip(), pos=m.start(), foreign=foreign))
     return out
 
 
