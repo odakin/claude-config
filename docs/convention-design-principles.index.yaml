@@ -997,6 +997,10 @@ sections:
     legacy: "8.97"
     level: 3
     title: "8.97 規則の務めを肩代わりする道具が落ちたら、 知らせは残った務めとそれを果たす 1 行を言う — 「今までどおりで出す」 は、 読んだ側の計画になる"
+  - id: seen-set-forgets-hidden-items
+    legacy: "8.98"
+    level: 3
+    title: "8.98 見張りの「出した」 の記録を今の一覧で刈ると、 一時的に一覧から外れる項目を忘れる — 鍵を「項目 + その状態にした書き込み」 にし、 一覧に無いことでは忘れない"
   - id: environment-literal-placement
     legacy: "24"
     level: 2
