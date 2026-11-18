@@ -1,7 +1,7 @@
 {
   "_comment": "child-wrap-check.py の「hand-off の手順 0 で止まった turn は本人待ちに数えない」 と「依頼元の答えを数え、 本人だけが答えられる問いは残す」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。 依頼元の本人への問いに結ばれた子を畳む番に数えない判定 (asked / relay) の歯も持つ。",
   "target": "child-wrap-check.py",
-  "run": "python3 {} --selftest",
+  "run": "env CHILD_WRAP_SANDBOX_TOOL={spec_dir}/../../ai-collaboration/scripts/make-review-sandbox.py python3 {} --selftest",
   "fail_marker": "NG: ",
   "pass_marker": "ok: ",
   "mutants": [
@@ -138,6 +138,33 @@
     {"name": "答えを子に送った後も答えを送る番と読む",
      "pairs": [["             and t[\"answered_at\"][:19] > (b[\"settled_at\"] or \"\")[:19] and not sent_after(t[\"answered_at\"])]\n", "             and t[\"answered_at\"][:19] > (b[\"settled_at\"] or \"\")[:19]]\n"]],
      "expect_fail": ["relay control: the requester sent the answer, the child applied and stopped → due"],
-     "expect_pass": ["relay: the person answered and nothing went to the child since"]}
+     "expect_pass": ["relay: the person answered and nothing went to the child since"]},
+    {"name": "wrap の依頼の見分けで第三者の宛先 (には・へは・にも) を見ない",
+     "pairs": [["        if THIRD_DATIVE.search(WRAP_SENTENCE_END.split(t[:m.start()])[-1]):\n", "        if False:\n"]],
+     "expect_fail": ["wrap_kind: 「worker には wrap を頼みます」"],
+     "expect_pass": ["wrap_kind: 「あなたには」「最後には」"]},
+    {"name": "締めの道具だけ回した子を、 締めをしていない子と同じ文で出す",
+     "pairs": [["        runs = [(t, n) for t, n in ev.get(\"close_runs\", []) if t > req]\n", "        runs = []\n"]],
+     "expect_fail": ["no wrap skill but the closing tools ran"],
+     "expect_pass": ["no wrap and no closing tools"]},
+    {"name": "親の窓の本人の「閉じて」 を見ずに話している途中で残す",
+     "pairs": [["    if talking and not consent:\n", "    if talking:\n"]],
+     "expect_fail": ["the person said 「…閉じて。」 in the parent's window"],
+     "expect_pass": ["kept as talking (control)"]},
+    {"name": "子の最後の返事が続ける形でも畳んでよいと出す",
+     "pairs": [["    cont = _continue_later(ev, c[\"parent\"])\n", "    cont = \"\"\n"]],
+     "expect_fail": ["the child's last reply goes on"],
+     "expect_pass": ["is not the going-on form"]},
+    {"name": "子が掲示板で宣言した touch を見ない",
+     "pairs": [["    if held:\n        reasons.append(f\"子が掲示板で宣言した file", "    if False:\n        reasons.append(f\"子が掲示板で宣言した file"]],
+     "expect_fail": ["the child still declares a file on the board"],
+     "expect_pass": ["holds nothing → foldable"]},
+    {"name": "中身が upstream にある未 push の commit も残す理由にする",
+     "pairs": [["    bad = [x for x in commits if not x[\"pushed\"] and not x.get(\"landed\")]", "    bad = [x for x in commits if not x[\"pushed\"]]"]],
+     "expect_fail": ["the check names only the commit whose change is not upstream"]},
+    {"name": "盲検の判定の窓を見分けず wrap の記録を求める",
+     "pairs": [["    jd = judge_window(ev)\n    wr = (_judge_text", "    jd = None\n    wr = (_judge_text"]],
+     "expect_fail": ["collected and unchanged → foldable without a wrap"],
+     "requires": ["{spec_dir}/../../ai-collaboration/scripts/make-review-sandbox.py"]}
   ]
 }

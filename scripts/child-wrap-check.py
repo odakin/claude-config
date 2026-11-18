@@ -48,6 +48,19 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
     取り消した (「wrap の依頼は取り消します」) 依頼と、 それより前の子の wrap の起動は数えない
   - 「Try again」: app が API の誤り (接続が切れた等) の後に入れる再試行の 1 行。 本人の新しい発言ではないので、
     上の 2 つのどちらにも数えない (実測: 子が答え終えて止まっているのに、 これ 1 行で「話している途中」 と出ていた)
+  - wrap の記録が無いとき、 子が締めの報告の道具 (CLOSE_TOOL_RUN) だけを回していれば「skill なしで締めの道具だけ回した」 と
+    添えて分ける (止めるのは同じ。 実測: 2 つの子が skill を起動せずに道具だけ回し、 締めをしていない子と同じ文で出た)
+  - 盲検の判定の窓 (子の cwd が review sandbox の root の下で、 その slug の台帳がある = judge_window): wrap を頼まず、
+    sandbox が回収済み (か閉じた) で回収の後に変わっていないことを終えた根拠にする (wrap は repo と規約を読み、 次の回の判定が
+    独立でなくなる = ai-collaboration conventions/cold-eyes-isolation.md#revised-target-second-round)。 --finished も同じ
+  - 「本人と話している途中」 は、 子の窓の本人の最後の発言より後に、 本人が親の窓で畳んでよいと言っていれば (archive の hook と
+    同じ語 = busy-worker-stop-check の close_consent、 本人の発言の読み手 = lib/owner_turn.py) 理由にしない (実測: 親の窓の
+    「子をぜんぶwrapさせてから閉じて。」 の後も 10 分残した)
+  - 子が掲示板で宣言した file (touch) を手放していない (--board-root か env CHILD_WRAP_BOARD_ROOTS があるときだけ読む)、
+    子の最後の返事が続きをする形 (CONTINUE_LATER) = 締めの途中かも → 残す (実測: 「…同期待ちで止まっています … 終わったら
+    続きを書きます」 の 2 分後に畳まれ、 宣言も未 commit の file も残った)
+  - push されていない commit でも、 同じ patch (patch-id) か、 変えた file の中身が upstream にあれば (rebase の前の写し)
+    理由にしない (_landed。 実測: 中身が push 済みの写し 3 本を「push されていない」 と出した)
 判定: 動いていない・wrap の記録がある・push されていない commit が無い・本人待ちの問いも話の途中も無い = 畳んでよい。
 見ないもの: 掲示板の依頼が受理されたか (受理は親自身の操作。 `--finished` は掲示板を読む)、 子が commit しなかった変更
   (同じ作業木を共有すると帰属できない)、 trailer の hook が入っていない repo の commit。
@@ -134,6 +147,10 @@ sys.path.insert(0, os.path.join(HERE, "lib"))
 import desktop_sessions as ds  # noqa: E402
 import session_background_tasks as sbt  # noqa: E402
 import session_model as sm  # noqa: E402
+try:
+    import owner_turn as _ot  # noqa: E402  (the person's prompts in the parent's window)
+except Exception:  # pragma: no cover - an older checkout without the module: the parent's window is not read
+    _ot = None
 
 _spec = _ilu.spec_from_file_location("busy_worker_stop_check", os.path.join(HERE, "busy-worker-stop-check.py"))
 _bw = _ilu.module_from_spec(_spec)
@@ -191,6 +208,14 @@ WRAP_REQ_NEAR = re.compile(r"^[\s`'\"]*(?:skill(?:\s*tool)?\s*)?(?:[をで]\s*|�
 WRAP_COMMAND_HEAD = re.compile(r"(?:^|\n)[ \t]*/$")
 WRAP_REQ_SENTENCE = re.compile(r"ください|下さい|お願い|please", re.I)
 WRAP_SENTENCE_END = re.compile(r"[。\n!?！？]")
+# the word after a third party marked as the one asked (「worker には wrap を頼みます」 told to another session = the sender
+# will ask that worker; read as asking the recipient, measured). Not 「あなたには」「最後には」 (the recipient / an adverb).
+THIRD_DATIVE = re.compile(r"(?<!あなた)(?<!貴方)(?<!そちら)(?<!君)(?<!最後)(?<!最初)(?<!終わり)(?<!後)(?:には|へは|にも)\s*$")
+# the closing sweep's report tools (conventions/closing-sweep.md): a child that ran them without the wrap skill closed
+# by hand, which the wrap record does not show (measured: two children ran the tools after the wrap request and never
+# started the skill; the check said only "no wrap record", the same as for a child that did not close at all)
+CLOSE_TOOL_RUN = re.compile(r"(?:session-(?:reply-knowledge|scripts|claims|open-questions|fetched-docs)-report"
+                            r"|subagent-reports|headless-worker-reports)\.py")
 
 
 def wrap_kind(text: str) -> str:
@@ -209,6 +234,8 @@ def wrap_kind(text: str) -> str:
         if neg:
             kind = "retract" if neg.group("retract") or (neg.group("mada") and neg.group("notyet")) else kind
             continue
+        if THIRD_DATIVE.search(WRAP_SENTENCE_END.split(t[:m.start()])[-1]):
+            continue  # a third party is the one asked (「worker には wrap を頼みます」) = a mention to this recipient
         strong = before.endswith("/") or before.rstrip().endswith("`") or re.match(r"`?\s*skill", after, re.I) \
             or re.search(r"(?:please|run|invoke)\s+(?:the\s+)?[`/]?$", before, re.I)
         if (WRAP_REQ_NEAR.match(after) or WRAP_COMMAND_HEAD.search(t[:m.start()])
@@ -461,7 +488,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
     The app's retry line after an API error ("Try again") goes to `retries`, not to the person's prompts."""
     out = {"first": "", "replies": [], "stops": [], "human": [], "said": [], "peers": [], "asks": [], "wraps": [],
            "retries": [], "peer_wraps": [], "peer_unwraps": [], "model_checks": [], "claims": [], "step0_handoff": False,
-           "starts": [], "texts": [], "writes": []}
+           "starts": [], "texts": [], "writes": [], "close_runs": [], "cwd": ""}
     try:
         fh = open(path, encoding="utf-8", errors="replace")
     except (OSError, TypeError):
@@ -481,6 +508,8 @@ def scan_child(path: str, as_of: str = "") -> dict:
             kind = e.get("type")
             if ts and not out["first"]:
                 out["first"] = ts
+            if not out["cwd"] and isinstance(e.get("cwd"), str):
+                out["cwd"] = e["cwd"]  # where the window runs (a sealed review sandbox = a blind judge window)
             if kind == "user" and ts and _turn_start(e):
                 out["starts"].append(ts)
             if kind == "assistant" and ts:
@@ -537,6 +566,9 @@ def scan_child(path: str, as_of: str = "") -> dict:
                             out["model_checks"].append(ts)
                         if CLAIM_RUN.search(cmd):
                             out["claims"].append(ts)
+                        run = CLOSE_TOOL_RUN.search(cmd)
+                        if run:
+                            out["close_runs"].append((ts, run.group(0)))
                 elif kind == "user" and e.get("isMeta") and b.get("type") == "text":
                     t = b.get("text", "")
                     if t.startswith("Base directory for this skill:") and re.search(r"/skills/wrap\s", t[:300]):
@@ -708,14 +740,61 @@ def _talking_text(talking: dict) -> str:
 
 def _git(repo: str, *args: str) -> tuple[int, str]:
     try:
-        r = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, timeout=20)
+        r = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, errors="replace", timeout=20)
         return r.returncode, r.stdout
     except (OSError, subprocess.SubprocessError):
         return 1, ""
 
 
+def _upstream_ref(repo: str) -> str:
+    """The repo's upstream branch (the current branch's @{u}, else origin/HEAD), '' when none."""
+    for args in (("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"), ("rev-parse", "--abbrev-ref", "origin/HEAD")):
+        rc, out = _git(repo, *args)
+        if rc == 0 and out.strip() and out.strip() != "origin/HEAD":
+            return out.strip()
+    return ""
+
+
+LANDED_MIN_LINE = 4  # an added line shorter than this (「}」「fi」 or blank) says nothing about where the change went
+
+
+def _landed(repo: str, sha: str) -> str:
+    """How an unpushed commit's change is upstream anyway ('' = it is not): 'patch-id' = an equivalent patch is on the
+    upstream branch (git cherry), 'content' = every file it changed is upstream as the commit left it, or holds the
+    commit's added lines (upstream edited it further). Measured: copies of pushed commits made before a rebase were
+    reported as unpushed (two with the same patch-id as the upstream commit, one whose file upstream had one line more)."""
+    up = _upstream_ref(repo)
+    if not up:
+        return ""
+    rc, out = _git(repo, "cherry", up, sha, sha + "^")
+    if rc == 0 and out.strip().startswith("-"):
+        return "patch-id"
+    rc, names = _git(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", sha)
+    files = [n for n in names.splitlines() if n]
+    if rc != 0 or not files:
+        return ""
+    for f in files:
+        rc1, mine = _git(repo, "show", f"{sha}:{f}")
+        rc2, theirs = _git(repo, "show", f"{up}:{f}")
+        if rc1 != 0:  # the commit deleted the file: landed when upstream has no such file either
+            if rc2 == 0:
+                return ""
+            continue
+        if rc2 != 0:
+            return ""
+        if mine == theirs:
+            continue
+        _rc, diff = _git(repo, "show", "--format=", "-U0", sha, "--", f)
+        added = [x[1:] for x in diff.splitlines() if x.startswith("+") and not x.startswith("+++")
+                 and len(x[1:].strip()) >= LANDED_MIN_LINE]
+        if not added or not set(added) <= set(theirs.splitlines()):
+            return ""
+    return "content"
+
+
 def child_commits(cli: str, since: str) -> list[dict]:
-    """The child's commits in every repo (by the Agent-Session trailer), newest first, with whether each is pushed."""
+    """The child's commits in every repo (by the Agent-Session trailer), newest first, with whether each is pushed and,
+    for an unpushed one, whether its change is upstream anyway (`landed`, see _landed)."""
     pattern = os.environ.get("CHILD_WRAP_REPOS_GLOB") or os.path.expanduser("~/Claude/*/.git")
     out = []
     for g in sorted(glob.glob(pattern)):
@@ -725,7 +804,7 @@ def child_commits(cli: str, since: str) -> list[dict]:
             sha, _, at = line.partition(" ")
             if sha:
                 pushed = bool(_git(repo, "branch", "-r", "--contains", sha)[1].strip())
-                out.append({"at": at, "sha": sha, "repo": repo, "pushed": pushed})
+                out.append({"at": at, "sha": sha, "repo": repo, "pushed": pushed, "landed": "" if pushed else _landed(repo, sha)})
     out.sort(key=lambda x: x["at"], reverse=True)
     return out[:MAX_COMMITS]
 
@@ -851,10 +930,17 @@ def _wrap_reason(ev: dict, parent: str, earlier_wraps: list[str] | tuple = ()) -
     notice, a thank-you) does not count: replayed on past archives, reading "a message after the wrap" as
     unwrapped work stopped folds after such notices (measured)."""
     if not ev["wraps"]:
+        # the closing tools run without the skill = closed by hand, told apart from no closing at all (the plain reason).
+        # Both still keep the child (the wrap record is what the archive needs); only the words differ.
+        req = max((ts for ts, frm in ev["peer_wraps"] if frm == parent), default="") if parent else ""
+        runs = [(t, n) for t, n in ev.get("close_runs", []) if t > req]
+        by_hand = (f" (skill なしで締めの道具だけ回した = {_local_hm(runs[-1][0])} に "
+                   f"{'・'.join(dict.fromkeys(n for _t, n in runs))}。 wrap skill の起動 〔Skill tool の skill=wrap〕 は無い)"
+                   if runs else "")
         # measured: a parent passed --since 10 minutes after its wrap request, and the wrap run fell outside the window
-        return WRAP_MISSING + (f" (--since より前の {_local_hm(max(earlier_wraps))} に wrap の記録がある = --since が"
-                               " wrap の依頼より後になっている。 --since を渡さなければ、 道具が子の窓に届いた依頼の時刻から数える)"
-                               if earlier_wraps else "")
+        return WRAP_MISSING + by_hand + (f" (--since より前の {_local_hm(max(earlier_wraps))} に wrap の記録がある = --since が"
+                                         " wrap の依頼より後になっている。 --since を渡さなければ、 道具が子の窓に届いた依頼の時刻から数える)"
+                                         if earlier_wraps else "")
     late = late_writes(ev)
     if late:
         return (f"{WRAP_MISSING} (最後の wrap {_local_hm(max(ev['wraps']))} の後の作業が wrap されていない = その turn が終わった後に、"
@@ -862,10 +948,118 @@ def _wrap_reason(ev: dict, parent: str, earlier_wraps: list[str] | tuple = ()) -
     return ""
 
 
+def _owner_close_after(parent_path: str, since: str, as_of: str = "") -> str:
+    """The time of the person's prompt in the parent's window, after `since`, that says the child may be folded ('' when
+    none): the person's prompts read with lib/owner_turn.py, the words with the archive guard's close_consent (the check
+    and the guard read the same words). Measured: the person's 「子をぜんぶwrapさせてから閉じて。」 in the parent's window
+    did not end "talking with the child" (a talk in the child's window days before), and the check held the fold 10 minutes."""
+    if not parent_path or not since or _ot is None:
+        return ""
+    try:
+        hits = [e["ts"] for e in _ot.owner_entries(parent_path)
+                if e.get("ts") and e["ts"][:19] > since[:19] and (not as_of or e["ts"][:19] <= as_of[:19])
+                and _bw.close_consent(e.get("text") or "")]
+    except Exception:
+        return ""
+    return max(hits, default="")
+
+
+CHECK_ROOTS: list[str] = []  # board roots for the plain check (--board-root / env CHILD_WRAP_BOARD_ROOTS); none = not read
+TOUCH_HOURS = 12  # a touch declaration older than this holds nothing (the board's own default = a session that died)
+NONE_TOUCH = "(none)"  # the board's touch set of a session that holds nothing any more
+
+
+def child_touches(cli: str, events: list[dict], instance: str, as_of: str = "") -> list[str]:
+    """Paths the child still declares on the board: its latest touch note per thread (not `(none)`, not older than
+    TOUCH_HOURS). A child folded while it holds one stopped mid-write (measured: a worker declared its files, replied
+    that it was waiting for the declaration to sync, and was archived as done with the files uncommitted)."""
+    per: dict = {}
+    for e in sorted((e for e in events if e.get("kind") == "note" and e.get("touches") and _by_child(e, cli, instance)),
+                    key=lambda e: str(e.get("created_at") or "")):
+        at = str(e.get("created_at") or "")
+        if as_of and at[:19] > as_of[:19]:
+            continue
+        per[((e.get("project") or {}).get("key"), e.get("thread_id"))] = (at, [p for p in e["touches"] if p != NONE_TOUCH])
+    ref = _epoch(as_of) if as_of else time.time()
+    return sorted({p for at, ps in per.values() if ref - _epoch(at) < TOUCH_HOURS * 3600 for p in ps})
+
+
+# the child's last reply says it goes on (「…同期待ちで止まっています … 終わったら続きを書きます」): folding it is early
+# (measured, the same scene). Not 「検収を待っています」 (a finished worker waiting for review is foldable).
+CONTINUE_LATER = re.compile(r"続き(?:を|は)?(?:書き|進め|やり|再開し)ます|終わったら(?:続き|再開|書き)"
+                            r"|(?:同期|宣言|許可|反映|返事|応答)の?待ちで止まって")
+
+
+def _continue_later(ev: dict, parent: str) -> str:
+    """The reason when the child's last text says it goes on and neither the parent nor the person wrote after it, else ''."""
+    at, text = max(ev.get("texts") or [], default=("", ""))
+    m = CONTINUE_LATER.search(text or "")
+    if not m or any(ts > at for ts, frm in ev["peers"] if frm == parent) or any(h > at for h in ev["human"]):
+        return ""
+    return (f"子の最後の返事 ({_local_hm(at)}) が続きをする形 (「…{text[max(0, m.start() - 20):m.end() + 10]}…」) ="
+            " 締めの途中で止まっているかも → 子に続けさせるか、 終えたかを聞いてから畳む")
+
+
+JUDGE_DONE = ("collected", "closed")  # the sandbox states that end a blind judge window (collected or closed, unchanged since)
+_SANDBOX_TOOL: list = []
+
+
+def _sandbox_tool():
+    """The review sandbox tool (ai-collaboration scripts/make-review-sandbox.py beside this repo, or env
+    CHILD_WRAP_SANDBOX_TOOL), loaded once; None when absent (then no child reads as a judge window = fail-open)."""
+    if not _SANDBOX_TOOL:
+        path = os.environ.get("CHILD_WRAP_SANDBOX_TOOL") or os.path.join(
+            HERE, os.pardir, os.pardir, "ai-collaboration", "scripts", "make-review-sandbox.py")
+        mod = None
+        try:
+            spec = _ilu.spec_from_file_location("make_review_sandbox", path)
+            mod = _ilu.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+        except Exception:
+            mod = None
+        _SANDBOX_TOOL.append(mod)
+    return _SANDBOX_TOOL[0]
+
+
+def judge_window(ev: dict) -> dict | None:
+    """{'slug', 'state', 'changed'} when the child is a sealed blind judge window = its cwd is under the review sandbox
+    root (env CHILD_WRAP_SANDBOX_ROOT, else the tool's DEFAULT_ROOT) and that slug has a ledger; None otherwise. Such a
+    window is folded without a wrap (the wrap reads the repo and the rules = the next round would not be independent;
+    ai-collaboration conventions/cold-eyes-isolation.md#revised-target-second-round): what ends it is the sandbox
+    collected (or closed) and unchanged since."""
+    cwd = ev.get("cwd") or ""
+    mod = _sandbox_tool() if cwd else None
+    if mod is None:
+        return None
+    try:
+        root = os.path.realpath(os.path.expanduser(os.environ.get("CHILD_WRAP_SANDBOX_ROOT") or str(mod.DEFAULT_ROOT)))
+        rel = os.path.relpath(os.path.realpath(cwd), root)
+        if rel == "." or rel.startswith(os.pardir):
+            return None
+        slug = rel.split(os.sep)[0]
+        st = mod.sandbox_state(mod.Path(root), slug)
+    except Exception:
+        return None
+    if not st.get("ledger"):
+        return None
+    return {"slug": slug, "state": str(st.get("state") or ""), "changed": len(st.get("changed") or [])}
+
+
+def _judge_text(jd: dict) -> str:
+    """'' when the judge window's sandbox is collected (or closed) and unchanged; else the reason to keep it for now."""
+    if jd["state"] in JUDGE_DONE:
+        return ""
+    what = {"uncollected": "回収されていない", "empty": "まだ何も書いていない (判定の途中か)",
+            "changed_after_collect": f"回収の後に変わった ({jd['changed']} file)",
+            "changed_after_close": f"閉じた後に変わった ({jd['changed']} file)"}.get(jd["state"], jd["state"])
+    return (f"盲検の判定の窓 (sandbox {jd['slug']}) = wrap は頼まない。 sandbox が{what} → `make-review-sandbox.py collect"
+            f" {jd['slug']} --into <回収先>` で回収してから畳む (回収済みで回収の後に変わっていなければ畳んでよい)")
+
+
 def wrap_hold(target: str) -> dict:
     """The cheap wrap part of check_child, for the archive guard (scripts/busy-worker-stop-check.py): {"found", "child":
-    the app record's parent and detached flag, "reason": '' or the WRAP_MISSING reason, "last_msg": the parent's last
-    message as it landed}."""
+    the app record's parent and detached flag, "reason": '' or the WRAP_MISSING reason (for a blind judge window, '' when
+    its sandbox is collected and unchanged, else the collection's reason), "last_msg": the parent's last message as it landed}."""
     c = locate(target)
     if not c:
         return {"found": False, "reason": "", "parent": "", "last_msg": ""}
@@ -874,8 +1068,10 @@ def wrap_hold(target: str) -> dict:
     ev["wraps"] = [w for w in ev["wraps"] if w > off]
     last_msg = max((ts for ts, frm in ev["peers"] if frm == c["parent"] and ts), default="") if c["parent"] else ""
     late = late_writes(ev)
-    return {"found": True, "reason": _wrap_reason(ev, c["parent"]), "parent": c["parent"], "last_msg": last_msg,
-            "local": c["local"], "first": ev["first"], "key": max(late) if late else (max(ev["wraps"], default="") or ev["first"])}
+    jd = judge_window(ev)
+    return {"found": True, "reason": _judge_text(jd) if jd else _wrap_reason(ev, c["parent"]), "parent": c["parent"],
+            "last_msg": last_msg, "local": c["local"], "first": ev["first"], "judge": jd,
+            "key": max(late) if late else (max(ev["wraps"], default="") or ev["first"])}
 
 
 def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since: str = "") -> dict:
@@ -923,18 +1119,28 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
         reasons.append(f"依頼元の go を待って止まっている ({_local_hm(gw['at'])} に hand-off の手順 0 = model・effort が頼んだ値と違う"
                        " で止まり、 その後に親の message が無い。 本人待ちではない)")
     talking = owner_after_parent(ev, c["parent"], _epoch(as_of) if as_of else None)
-    if talking:
+    # the person said in the parent's window, after the last word in the child's window, that the child may be folded
+    consent = _owner_close_after(c["parent_path"], talking["at"], as_of) if talking else ""
+    if talking and not consent:
         reasons.append(_talking_text(talking))
-    wr = _wrap_reason(ev, c["parent"], earlier_wraps) if need_wrap else ""
+    jd = judge_window(ev)
+    wr = (_judge_text(jd) if jd else _wrap_reason(ev, c["parent"], earlier_wraps)) if need_wrap else ""
     if wr:
         reasons.append(wr)
-    bad = [x for x in commits if not x["pushed"]]
+    held = child_touches(c["cli"], load_board(CHECK_ROOTS, ev["first"][:19]), instance_name(), as_of) if CHECK_ROOTS else []
+    if held:
+        reasons.append(f"子が掲示板で宣言した file (touch) を手放していない: {', '.join(held[:4])}{' ほか' if len(held) > 4 else ''}"
+                       " (書く途中で止まったかも = 子の最後の返事を読み、 終えたなら子に手放させてから畳む)")
+    cont = _continue_later(ev, c["parent"])
+    if cont:
+        reasons.append(cont)
+    bad = [x for x in commits if not x["pushed"] and not x.get("landed")]
     if bad:
         reasons.append("push されていない commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}" for x in bad))
     return {"target": target, "found": True, "ok": not reasons, "reasons": reasons, "local": c["local"], "title": c["title"],
             "status": c["status"], "archived": c["archived"], "last_wrap": max(ev["wraps"], default=""),
             "last_turn_end": max(ev["stops"], default=""), "commits": commits, "open_ask": ask, "go_wait": gw,
-            "background": bg, "unanswered_send": pend, "as_of": as_of}
+            "background": bg, "unanswered_send": pend, "as_of": as_of, "judge": jd, "close_consent": consent}
 
 
 WRAP_MISSING = "wrap の記録が無い"
@@ -970,8 +1176,16 @@ def render(rows: list[dict]) -> str:
         lines.append(f"    動き={r['status']}  最後の turn の終わり={_local_hm(r['last_turn_end']) if r['last_turn_end'] else 'なし'}"
                      f"  wrap={_local_hm(r['last_wrap']) if r['last_wrap'] else 'なし'}"
                      + ("  (archive 済み)" if r["archived"] else ""))
+        if r.get("judge"):
+            lines.append(f"    盲検の判定の窓 (sandbox {r['judge']['slug']}、 {r['judge']['state']}) = wrap は頼まない"
+                         " (回収済みで回収の後に変わっていないことを終えた根拠にする)")
+        if r.get("close_consent"):
+            lines.append(f"    本人が親の窓で {_local_hm(r['close_consent'])} に畳んでよいと言った = 子の窓の本人の発言は理由にしない")
         if r["commits"]:
-            lines.append("    commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}{'' if x['pushed'] else ' (未 push)'}"
+            mark = lambda x: ("" if x["pushed"] else  # noqa: E731
+                              f" (未 push だが中身は upstream にある = {'patch-id が同じ' if x.get('landed') == 'patch-id' else 'file の中身'})"
+                              if x.get("landed") else " (未 push)")
+            lines.append("    commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}{mark(x)}"
                                                  for x in r["commits"][:8]) + (" ほか" if len(r["commits"]) > 8 else ""))
         if r.get("background") is None and not r.get("as_of"):
             lines.append("    (子の背景の作業は数えられなかった = ✅ でも app が断ることがある。 断られたら子に自分の背景の作業を並べてもらう)")
@@ -1453,6 +1667,15 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
         row["state"], row["wait_since"] = "relay", relay[-1]["answered_at"]
         row["reasons"].append(_relay_text(relay[-1]))
         return row
+    # a blind judge window is folded without a wrap: collected and unchanged = wrapped (check and archive), else due with
+    # the collection as its step (no wrap request = the next round stays independent)
+    jd = judge_window(ev)
+    if jd:
+        row["judge_sandbox"] = jd["slug"]
+        row["state"] = "wrapped" if jd["state"] in JUDGE_DONE else "due"
+        if row["state"] == "due":
+            row["reasons"].append(_judge_text(jd))
+        return row
     # a turn end counts only when the child started replying after the request (measured: the child's previous turn
     # ended 3 s after the parent's SendMessage, before the message was delivered)
     last = wraps[-1] if wraps else ""
@@ -1610,6 +1833,11 @@ def keep_for_answer_text() -> str:
 def _accept_line(r: dict, rule: str, extra: str = "") -> str:
     who = f"子 {r['title'] or r['local']} ({r['local']})"
     tail = f" 規則 = {rule}" if rule else ""
+    if r["state"] == "due" and r.get("judge_sandbox"):
+        return (f"🧺 規則 10 の番: {who} の依頼を受け取った (accept)。 この子は盲検の判定の窓 (sandbox {r['judge_sandbox']}) ="
+                " wrap は頼まない (model も切り替えない)。 この turn のうちに sandbox を回収し (`make-review-sandbox.py collect"
+                f" {r['judge_sandbox']} --into <回収先>`)、 戻すのに要るもの (session id・slug・model と effort・機械) を依頼の thread に"
+                " note で書いてから、 照合して archive する。" + (f" {extra}" if extra else "") + tail)
     if r["state"] == "due":
         step = model_step(r.get("local") or "")
         return (f"🧺 規則 10 の番: {who} の依頼を受け取った (accept)。 この子に開いている依頼は無く、 本人も待っていない。"
@@ -1805,9 +2033,14 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
     if fold:
         lines.append(f"🧺 規則 10 の番の子が {len(fold)} つ、 畳まれないまま残っている (掲示板の依頼は全部受け取り済みか子が手放し、 子は動いておらず本人も待っていない):")
         for r in fold:
-            step = model_step(r["local"]) if r["state"] == "due" else ""
+            jsb = r.get("judge_sandbox")
+            step = model_step(r["local"]) if r["state"] == "due" and not jsb else ""
             lines.append(f"- {r['title'] or r['local']} ({r['local']}) — {_settled_words(r)} から {r['hours']} 時間"
-                         + ("、 wrap は終わっている = 照合して archive" if r["state"] == "wrapped" else "")
+                         + ("、 wrap は終わっている = 照合して archive" if r["state"] == "wrapped" and not jsb else "")
+                         + (f"、 盲検の判定の窓 (sandbox {jsb}) = wrap は頼まない。 "
+                            + ("回収済みで回収の後に変わっていない = 照合して archive" if r["state"] == "wrapped"
+                               else f"`make-review-sandbox.py collect {jsb} --into <回収先>` で回収してから照合して archive")
+                            if jsb else "")
                          + (f"\n  {step}" if step else ""))
         lines.append("この turn のうちに規則 10 の順で畳む (子の model を読み、 上に切り替えの段が出た子は先に切り替える →"
                      f" 子へ SendMessage で「{WRAP_ASK_TEXT}」 と送る → 同じ turn に見張り"
@@ -1877,6 +2110,7 @@ def main(argv: list[str]) -> int:
         WRAP_MODEL.clear()
         WRAP_MODEL.update(parse_wrap_model(a.wrap_model))
     RAW_ROOTS[:] = list(a.board_root) + [x for x in (os.environ.get("CHILD_WRAP_BOARD_ROOTS") or "").split(os.pathsep) if x]
+    CHECK_ROOTS[:] = board_roots(a.board_root) if RAW_ROOTS else []  # the plain check reads the child's touches there
     if a.wait_due:
         roots = board_roots(a.board_root)
         if not a.targets or not roots:
@@ -2974,6 +3208,188 @@ def selftest() -> int:
             os.environ["CHILD_WRAP_ANSWERED_GRACE_MIN"] = v
             ok(f"env grace {v!r} → {want}", _grace_from_env() == want)
         os.environ.pop("CHILD_WRAP_ANSWERED_GRACE_MIN", None)
+        # --- the tool fixes of 2026-11 (each with the real form that must still keep the child) ---
+        ANSWERED_GRACE_MIN = None
+        ok("wrap_kind: 「worker には wrap を頼みます」 told to another session is not a request to the recipient",
+           wrap_kind("worker には wrap を頼みます。") != "request" and wrap_kind("検収係の窓にも wrap を頼みます") != "request")
+        ok("wrap_kind: 「あなたには」「最後には」 + wrap, and the ask text, are still requests",
+           wrap_kind("あなたには wrap をお願いします") == "request" and wrap_kind("最後には wrap をお願いします") == "request"
+           and wrap_kind(WRAP_ASK_TEXT) == "request")
+        fx_p_l, fx_p_c = "local_9a000000-0000-4000-8000-000000000000", "9a000000-aaaa-4000-8000-000000000000"
+        record(fx_p_l, fx_p_c)
+        transcript(fx_p_c, [])
+
+        def fx_kid(n8: str, rows: list[dict], num: int, parent_local: str = fx_p_l) -> str:
+            local, cli = f"local_{n8}-0000-4000-8000-000000000000", f"{n8}-cccc-4000-8000-000000000000"
+            record(local, cli, parent_local)
+            live(num, cli, local, "idle")
+            transcript(cli, rows)
+            return local
+
+        def bash(ts: str, cmd: str) -> dict:
+            return {"type": "assistant", "timestamp": ts, "message": {"content": [
+                {"type": "tool_use", "id": "b" + ts[-6:-1], "name": "Bash", "input": {"command": cmd}}]}}
+
+        def said(ts: str, text: str) -> dict:
+            return {"type": "assistant", "timestamp": ts, "message": {"content": [{"type": "text", "text": text}]}}
+
+        brief = [u("2026-01-05T00:00:00Z", "依頼", origin={"kind": "human"}), reply("2026-01-05T00:05:00Z"),
+                 stop("2026-01-05T00:05:01Z")]
+        # closing by hand: the report tools ran after the wrap request, the skill did not
+        hand = fx_kid("9a000068", brief + [peer("2026-01-05T00:10:00Z", WRAP_ASK_TEXT, fx_p_l),
+                                           bash("2026-01-05T00:11:00Z", "python3 ~/Claude/claude-config/scripts/session-reply-knowledge-report.py --check x"),
+                                           reply("2026-01-05T00:12:00Z"), stop("2026-01-05T00:12:01Z")], 901)
+        hr = check_child(hand)["reasons"]
+        ok("no wrap skill but the closing tools ran → told apart (skill なしで締めの道具だけ), still kept",
+           any(x.startswith(WRAP_MISSING) and "skill なしで締めの道具だけ回した" in x for x in hr))
+        ok("no wrap and no closing tools → the plain reason (control)",
+           WRAP_MISSING in check_child(ids("nowrap")[0])["reasons"])
+        # the person's 「閉じて」 in the parent's window after the talk in the child's window
+        p69_l, p69_c = "local_9a690000-0000-4000-8000-000000000000", "9a690000-aaaa-4000-8000-000000000000"
+        record(p69_l, p69_c)
+        talk = fx_kid("9a000069", brief + [u("2026-01-05T00:20:00Z", "これ直して", origin={"kind": "human"}),
+                                           reply("2026-01-05T00:25:00Z"), stop("2026-01-05T00:25:01Z"),
+                                           peer("2026-01-05T00:40:00Z", WRAP_ASK_TEXT, p69_l), skill_wrap("2026-01-05T00:41:00Z"),
+                                           reply("2026-01-05T00:42:00Z"), stop("2026-01-05T00:42:01Z")], 902, p69_l)
+        transcript(p69_c, [u("2026-01-05T00:30:00Z", "まだ閉じないで", origin={"kind": "human"})])
+        ok("the person talked in the child's window, no fold word after it in the parent's → kept as talking (control)",
+           any("話している途中" in x for x in check_child(talk)["reasons"]))
+        transcript(p69_c, [u("2026-01-05T00:30:00Z", "子をぜんぶwrapさせてから閉じて。", origin={"kind": "human"})])
+        r69 = check_child(talk)
+        ok("the person said 「…閉じて。」 in the parent's window after it → not talking, foldable",
+           not any("話している途中" in x for x in r69["reasons"]) and r69["ok"] and r69["close_consent"])
+        transcript(p69_c, [u("2026-01-05T00:15:00Z", "子をぜんぶwrapさせてから閉じて。", origin={"kind": "human"})])
+        ok("a fold word before the person's last word in the child's window does not count",
+           any("話している途中" in x for x in check_child(talk)["reasons"]))
+        # the child's last reply says it goes on
+        goes = fx_kid("9a0000c6", brief + [peer("2026-01-05T00:10:00Z", WRAP_ASK_TEXT, fx_p_l), skill_wrap("2026-01-05T00:11:00Z"),
+                                           said("2026-01-05T00:12:00Z", "掲示板への宣言が同期待ちで止まっています。 終わったら続きを書きます。"),
+                                           stop("2026-01-05T00:12:01Z")], 903)
+        ok("the child's last reply goes on (「…終わったら続きを書きます」) → kept",
+           any("続きをする形" in x for x in check_child(goes)["reasons"]))
+        done = fx_kid("9a0000c7", brief + [peer("2026-01-05T00:10:00Z", WRAP_ASK_TEXT, fx_p_l), skill_wrap("2026-01-05T00:11:00Z"),
+                                           said("2026-01-05T00:12:00Z", "提出しました。 依頼元の検収を待っています。"),
+                                           stop("2026-01-05T00:12:01Z")], 904)
+        ok("a finished child's 「検収を待っています」 is not the going-on form → foldable", check_child(done)["ok"])
+        # the child still declares a path on the board
+        tb = os.path.join(td, "touch-board")
+        os.makedirs(os.path.join(tb, "events", "proj", "th"))
+        saved_inst = os.environ.get("CHILD_WRAP_INSTANCE")
+        os.environ["CHILD_WRAP_INSTANCE"] = "claude@fixture"
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+
+        def touch_note(name: str, touches: list[str], at: str) -> None:
+            with open(os.path.join(tb, "events", "proj", "th", f"{stamp}-{name}.json"), "w", encoding="utf-8") as fh:
+                json.dump({"kind": "note", "created_at": at, "touches": touches, "project": {"key": "proj"}, "thread_id": "th",
+                           "actor": {"agent": "claude", "instance": "claude@fixture", "task": "9a0000c7 (opus)",
+                                     "session_id": "role-proj-x"}}, fh)
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        touch_note("a", ["proj-repo/notes.md"], now_iso)
+        CHECK_ROOTS[:] = [tb]
+        ok("the child still declares a file on the board (touch) → kept",
+           any("touch" in x and "proj-repo/notes.md" in x for x in check_child(done)["reasons"]))
+        touch_note("b", [NONE_TOUCH], time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 1)))
+        ok("... after a (none) touch note the child holds nothing → foldable", check_child(done)["ok"])
+        CHECK_ROOTS[:] = []
+        if saved_inst is None:
+            os.environ.pop("CHILD_WRAP_INSTANCE", None)
+        else:
+            os.environ["CHILD_WRAP_INSTANCE"] = saved_inst
+        # unpushed commits whose change is upstream anyway (patch-id / file content)
+        g = os.path.join(td, "g")
+        os.makedirs(g)
+        genv = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t", "GIT_COMMITTER_NAME": "t",
+                "GIT_AUTHOR_EMAIL": "t@" + "example.invalid", "GIT_COMMITTER_EMAIL": "t@" + "example.invalid"}
+        saved_genv = {k: os.environ.get(k) for k in genv}
+        os.environ.update(genv)
+        try:
+            def gx(repo: str, *a: str) -> str:
+                r = subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True)
+                assert r.returncode == 0, (a, r.stderr)
+                return r.stdout.strip()
+            rem = os.path.join(td, "rem.git")
+            subprocess.run(["git", "init", "-q", "--bare", "-b", "main", rem], check=True)
+            ra, rb = os.path.join(g, "a"), os.path.join(td, "b")
+            for p in (ra, rb):
+                subprocess.run(["git", "clone", "-q", rem, p], check=True, capture_output=True)
+            for f, body in (("x.txt", "one\n"), ("y.txt", "base\n"), ("z.txt", "base\n")):
+                with open(os.path.join(rb, f), "w") as fh:
+                    fh.write(body)
+            gx(rb, "add", "-A")
+            gx(rb, "commit", "-q", "-m", "base")
+            gx(rb, "push", "-q", "origin", "main")
+            gx(ra, "pull", "-q", "origin", "main")
+            kc = "9a0000ab-cccc-4000-8000-000000000000"
+            trailer = f"\n\nAgent-Session: claude:{kc}"
+
+            def change(repo: str, f: str, body: str, msg: str) -> str:
+                with open(os.path.join(repo, f), "w") as fh:
+                    fh.write(body)
+                gx(repo, "commit", "-q", "-am", msg)
+                return gx(repo, "rev-parse", "--short", "HEAD")
+            same = change(ra, "x.txt", "one\ntwo shared line\n", "x" + trailer)
+            own = change(ra, "y.txt", "base\nonly here line\n", "y" + trailer)
+            cont = change(ra, "z.txt", "base\ncontent line moved\n", "z" + trailer)
+            change(rb, "x.txt", "one\ntwo shared line\n", "x upstream")
+            change(rb, "z.txt", "base\ncontent line moved\none more upstream line\n", "z upstream")
+            gx(rb, "push", "-q", "origin", "main")
+            gx(ra, "fetch", "-q", "origin")
+            os.environ["CHILD_WRAP_REPOS_GLOB"] = os.path.join(g, "*", ".git")
+            cm = {x["sha"]: x for x in child_commits(kc, "2026-01-01T00:00:00")}
+            ok("an unpushed copy with the same patch upstream → landed by patch-id",
+               not cm[same]["pushed"] and cm[same]["landed"] == "patch-id")
+            ok("an unpushed commit whose file upstream holds its added lines (and one more) → landed by content",
+               cm[cont]["landed"] == "content")
+            ok("a commit whose change is nowhere upstream → not landed (still 'push されていない')",
+               not cm[own]["pushed"] and cm[own]["landed"] == "")
+            fx_kid("9a0000ab", brief, 905)
+            rr = check_child("local_9a0000ab-0000-4000-8000-000000000000")["reasons"]
+            ok("the check names only the commit whose change is not upstream",
+               any(x.startswith("push されていない commit") and own in x and same not in x and cont not in x for x in rr))
+        finally:
+            os.environ["CHILD_WRAP_REPOS_GLOB"] = os.path.join(td, "none", "*", ".git")
+            for k, v in saved_genv.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        # a sealed blind judge window: folded without a wrap once its sandbox is collected and unchanged
+        sbt_mod = _sandbox_tool()
+        if sbt_mod is None:
+            print("SKIP: the review sandbox tool (sibling ai-collaboration checkout) is absent; the judge window cases need it")
+        else:
+            import contextlib
+            import io
+            sroot = os.path.join(td, "sbx")
+            os.environ["CHILD_WRAP_SANDBOX_ROOT"] = sroot
+            spec_f = os.path.join(td, "judge-spec.md")
+            with open(spec_f, "w", encoding="utf-8") as fh:
+                fh.write("# spec\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                sbx = str(sbt_mod.create(sbt_mod.Path(sroot), "j1", sbt_mod.Path(spec_f), []))
+            jrows = [dict(r, cwd=sbx) for r in brief + [reply("2026-01-05T00:30:00Z"), stop("2026-01-05T00:30:01Z")]]
+            judge = fx_kid("9a0000d1", jrows, 906)
+            with open(os.path.join(sbx, "results.md"), "w", encoding="utf-8") as fh:
+                fh.write("# results\n")
+            rj = check_child(judge)
+            ok("a judge window not collected yet → kept for the collection, no wrap asked",
+               any("盲検の判定の窓" in x and "回収されていない" in x for x in rj["reasons"])
+               and not any(x.startswith(WRAP_MISSING) for x in rj["reasons"]) and not wrap_first(rj))
+            with contextlib.redirect_stdout(io.StringIO()):
+                sbt_mod.collect(sbt_mod.Path(sroot), "j1", sbt_mod.Path(os.path.join(td, "judge-dest")))
+            rj = check_child(judge)
+            ok("collected and unchanged → foldable without a wrap", rj["ok"] and rj["judge"]["state"] == "collected")
+            ok("the archive guard's part says the same (no reason)", wrap_hold(judge)["reason"] == "")
+            with open(os.path.join(sbx, "results.md"), "a", encoding="utf-8") as fh:
+                fh.write("one more line\n")
+            ok("written to after the collection → kept again",
+               any("回収の後に変わった" in x for x in check_child(judge)["reasons"]))
+            ok("an ordinary child (cwd outside the sandbox root) is not a judge window",
+               judge_window({"cwd": td}) is None and check_child(hand)["judge"] is None)
+            jline = _accept_line({"state": "due", "judge_sandbox": "j1", "title": "t", "local": judge}, "R")
+            ok("the accept line for a judge window: collect and archive, no wrap request",
+               "wrap は頼まない" in jline and WRAP_ASK_TEXT not in jline and "collect j1" in jline)
+            os.environ.pop("CHILD_WRAP_SANDBOX_ROOT", None)
         for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR", "CHILD_WRAP_REPOS_GLOB",
                   "CHILD_WRAP_INSTANCE", "CHILD_FINISHED_STATE_DIR"):
             os.environ.pop(k, None)
