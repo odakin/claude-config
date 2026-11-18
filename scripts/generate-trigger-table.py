@@ -11,6 +11,9 @@ CLAUDE.md には marker の間に **1 列目 / 2 列目 / 3 列目の 1 文目 (
 3 列目の縮め方 (決定的・機械的、 文は 1 字も変えない):
   「。」 の直後の空白で文に分け、 1 文目と ⚠️ を含む文を元の順で残す。 「。」 の無い cell はそのまま。
   ⚠️ を残すのは、 表の ⚠️ が「読む前に知っておく行動制約」 として置かれたものだから (経緯は ⚠️ を含まない)。
+  括弧 (丸括弧・〔〕・「」 など) の中の「。」 + 空白でも文は切れる。 切れ目の片側だけが残ると、 生成した行に
+  閉じない括弧が残る (実測)。 その切れ目は --write / --check のたびに行の名と前後の抜粋を ⚠️ で出す
+  (終了値は変えない = 警告だけ。 直し方 = 源の括弧の中の「。」 を「、」 にする)。 code span (`…`) の中の括弧は数えない。
 
 marker (target の中、 手編集禁止):
   <!-- AUTO-TABLE:<name> BEGIN ... -->
@@ -70,6 +73,43 @@ def compact(cell: str) -> str:
     return " ".join(keep)
 
 
+BRACKET_PAIRS = {"(": ")", "（": "）", "〔": "〕", "「": "」", "『": "』", "【": "】"}
+CLOSERS = set(BRACKET_PAIRS.values())
+
+
+def broken_splits(cell: str) -> list[str]:
+    """compact が括弧の中で文を切り、 切れ目の片側だけを残す所 (= 生成した行に閉じない括弧が残る所) の前後の抜粋を返す。
+
+    切れ目の両側が残る (どちらも ⚠️ を含む) か両側が落ちるなら、 生成した行の括弧は壊れないので数えない。
+    code span (`…`) の中の括弧は数えない。 閉じ括弧は stack の頭と対になるときだけ外す (対にならない閉じは無視)。"""
+    text = cell.strip()
+    parts = SENT_SPLIT.split(text)
+    if len(parts) < 2:
+        return []
+    kept = [i == 0 or "⚠️" in p for i, p in enumerate(parts)]
+    cuts = [m.start() for m in SENT_SPLIT.finditer(text)]
+    want = set(cuts)
+    depth_at = {}
+    stack: list[str] = []
+    in_code = False
+    for i, ch in enumerate(text):
+        if i in want:
+            depth_at[i] = len(stack)
+        if ch == "`":
+            in_code = not in_code
+        elif in_code:
+            continue
+        elif ch in BRACKET_PAIRS:
+            stack.append(BRACKET_PAIRS[ch])
+        elif ch in CLOSERS and stack and stack[-1] == ch:
+            stack.pop()
+    out = []
+    for k, pos in enumerate(cuts):
+        if depth_at.get(pos, 0) > 0 and kept[k] != kept[k + 1]:
+            out.append(text[max(0, pos - 24):pos + 24].replace("\n", " "))
+    return out
+
+
 LINK_RE = re.compile(r"\]\(([^)\s]+)\)")
 
 
@@ -115,6 +155,10 @@ def run(src: Path, target: Path, name: str, write: bool) -> int:
     except SystemExit as e:
         print(f"❌ {e}")
         return 2
+    for a, _b, c in rows:
+        for ex in broken_splits(c):
+            print(f"⚠️ 括弧の中の「。」 で文が切れ、 生成した行に閉じない括弧が残る: 行「{a}」 … {ex} …"
+                  f" (直し方 = 源 {src.name} の括弧の中の「。」 を「、」 にする)")
     if new == old:
         print(f"✅ {target.name} AUTO-TABLE:{name}: in sync ({len(rows)} 行、 {len(block.encode('utf-8'))} B)")
         return 0
@@ -193,6 +237,26 @@ def selftest() -> int:
         check(r.returncode == 0 and "[`a.md`](a.md#x)" in t and "[b](../other/b.md)" in t and "(https://e.invalid/p)" in t and "(#only)" in t,
               "源が sub dir: 相対 link を target の dir から見た形に (anchor 保持、 http / #only は不変)")
         check(relink("x [a](a.md)", Path("/r/c"), Path("/r/c")) == "x [a](a.md)", "relink: 同じ dir なら不変")
+        # 括弧の中の「。」 で切れて片側だけ残る所を警告する (実測 = 生成した行に閉じない括弧が残った)
+        check(len(broken_splits("**A** (= x。 y)。 B")) == 1, "broken_splits: 丸括弧の中で切れて後ろが落ちる = 1 件")
+        check(broken_splits("**A** (= x、 y)。 B") == [], "broken_splits: 括弧の中が「、」 なら 0 件")
+        check(broken_splits("**A**。 ⚠️ C (p。 ⚠️ q)。 D") == [], "broken_splits: 切れ目の両側が残るなら 0 件")
+        check(broken_splits("**A**。 要約 (p。 q)。 D") == [], "broken_splits: 切れ目の両側が落ちるなら 0 件")
+        check(len(broken_splits("**A**。 ⚠️ C 「p。 q」。 D")) == 1, "broken_splits: 「」 の中でも数える")
+        check(len(broken_splits("**A**。 要約 (p。 ⚠️ q)。")) == 1, "broken_splits: 前が落ちて後ろが残る (閉じだけ残る) も 1 件")
+        check(broken_splits("**A** `(x`。 B") == [], "broken_splits: code span の中の括弧は数えない")
+        check(broken_splits("**A**") == [], "broken_splits: 切れ目が無ければ 0 件")
+        src3 = tmp / "src3.md"
+        src3.write_text("| 規約 | ファイル | 適用タイミング |\n|---|---|---|\n"
+                        "| 壊れ | [`a.md`](a.md) | **読む** (= x。 y)。 要約 |\n", encoding="utf-8")
+        tgt.write_text("<!-- AUTO-TABLE:rr BEGIN -->\n<!-- AUTO-TABLE:rr END -->\n", encoding="utf-8")
+        r = subprocess.run([sys.executable, __file__, "--source", str(src3), "--target", str(tgt), "--name", "rr", "--write"],
+                           capture_output=True, text=True)
+        check(r.returncode == 0 and "⚠️ 括弧の中の「。」" in r.stdout and "行「壊れ」" in r.stdout,
+              "--write: 括弧の中で切れる行を ⚠️ で出す (終了値は 0 のまま)")
+        r = subprocess.run([sys.executable, __file__, "--source", str(src3), "--target", str(tgt), "--name", "rr", "--check"],
+                           capture_output=True, text=True)
+        check(r.returncode == 0 and "⚠️ 括弧の中の「。」" in r.stdout, "--check: 同期していても括弧の警告は出す")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("selftest:", "ALL PASS" if ok else "FAIL")
