@@ -119,7 +119,7 @@ def analyse(reply: str, current: rl.ManuscriptIndex, submitted: rl.ManuscriptInd
             continue
         it = current.items.get((r.kind, r.number))
         out["outside_answers"].append({"ref": r.raw, "line": rl.line_of(text, r.pos),
-                                       "resolved": bool(it), "new": bool(it and rl.is_new(it, submitted))})
+                                       "resolved": bool(it), "new": bool(it and new_item(it))})
     # 記号
     conv = [re.compile(c) for c in conventional]
     sub_keys: set[str] = set()
