@@ -16,14 +16,16 @@ cross-machine state の不可視問題 (multi-account-machine-surface.md #honest
   から --min-commit-interval-hours 経過時のみ commit。 変化なし & 期間内なら working
   tree に触らない (= 他の git 機構を汚さない)。 liveness の上限 = interval + cron 周期。
 - **fail-open**: 何が起きても exit 0 (= cron を止めない)。 push 失敗は local commit を
-  残して次 beat で再 push。 commit 後の pull は `--rebase --autostash` — 他 session が
-  無関係な dirty file を残置していると autostash なしでは rebase が拒否され、 beat が
-  local commit に積み上がるだけで push されない = fleet からこのマシンが silent 死に
-  見え、 このマシン自身の fleet view も stale 化する (= 双方向の盲目)。 failure mode の
-  正本 = conventions/multi-machine-state.md#fleet-heartbeat 設計原則 5。
-  autostash でも越えられない時 (upstream が足した file と同じ名前の untracked の file が
-  作業木に居る等) は、 その回の beat の commit を外し (file は未 commit で残す)、 git の
-  理由の行を返り値に載せる = 手元に commit を積んで分岐させない。
+  残して次 beat で再 push。 commit 後に upstream が進んでいれば載せ直す — 他 session が
+  無関係な dirty file を残置していると rebase が拒否され、 beat が local commit に積み上がる
+  だけで push されない = fleet からこのマシンが silent 死に見え、 このマシン自身の fleet view
+  も stale 化する (= 双方向の盲目)。 failure mode の正本 = conventions/multi-machine-state.md#fleet-heartbeat
+  設計原則 5。 dirty file は退避しない (autostash は相手の変更を stash して戻す = 相手の file に
+  conflict が入りうる、 conventions/multi-session-coordination.md#autostash-foreign-wip): dirty が無ければ rebase、
+  在れば beat の commit を外して upstream へ早送り (merge --ff-only = 相手の変更と upstream の変更が同じ
+  file に当たらない時だけ通る) してから commit し直す。 載せ直せない時 (早送りが拒まれる・upstream が足した
+  file と同じ名前の untracked の file が作業木に居る等) は、 その回の beat の commit を外し (file は未 commit で
+  残す)、 git の理由の行を返り値に載せる = 手元に commit を積んで分岐させない。
 - server の実況は **launchd loaded/pid + server ログ末尾の marker parse** で判定
   (= "Connected" / "Not logged in" / "too old" / "Enable Remote Control?" を新しい順に
   評価)。 process が生きていても auth 失効で cycling している状態を検出できるのが肝。
@@ -970,13 +972,64 @@ def undo_own_commit(repo: Path, own: str, rel: str) -> str:
     return "beat commit undone, file left modified" if rc1 == 0 and rc2 == 0 else "undo of the beat commit failed"
 
 
-def sync_after_commit(repo: Path, pre: dict, own: str = "", rel: str = ""):
-    """commit の後・push の前。 upstream が普通に進んでいれば自分の commit を載せ直す (旧 pull --rebase と同じ)。 preflight から
+def foreign_wip(repo: Path, rel: str) -> list[str]:
+    """tracked の未 commit の変更 (stage 済みも) のうち、 beat の file (rel) 以外の path。 untracked は数えない
+    (rebase も早送りも untracked を退避しない。 同じ名前の file を upstream が足した時は git が止める = 下の理由の行)。
+    status が読めなければ「在る」 と見る (= 退避しうる操作に進まない側に倒す)。"""
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "-z", "--untracked-files=no"],
+                           capture_output=True, text=True, errors="replace", timeout=30)
+    except Exception:
+        return ["(git status failed)"]
+    if r.returncode != 0:
+        return ["(git status failed)"]
+    toks, out, i = r.stdout.split("\0"), [], 0
+    while i < len(toks):
+        t = toks[i]
+        i += 1
+        if len(t) < 4:
+            continue
+        if t[0] in "RC":            # rename / copy は次の token が元の path
+            i += 1
+        if t[3:] != rel:
+            out.append(t[3:])
+    return out
+
+
+def ff_and_recommit(repo: Path, own: str, rel: str, target: str, msg: str, wip: list[str]):
+    """他の session の未 commit の変更が tree に在る時の載せ直し: rebase も autostash もしない (相手の変更を退避して戻すと、
+    pop の conflict が相手の file に入り、 退避の間は相手の変更が tree から消える = multi-session-coordination.md#autostash-foreign-wip)。
+    beat の commit を外し、 upstream へ早送り (merge --ff-only。 相手の変更と upstream の変更が同じ file に当たらない時だけ git が
+    通し、 相手の変更はそのまま残る) してから beat を commit し直す。 早送りできなければ beat を外したまま理由を返す (次の beat で
+    出し直す = 手元に commit を積まない)。 None = 載せ直せた。"""
+    shown = ", ".join(wip[:3]) + (f" +{len(wip) - 3}" if len(wip) > 3 else "")
+    head = f"deferred (other sessions' uncommitted changes in the tree: {shown}; no rebase, no autostash"
+    undone = undo_own_commit(repo, own, rel)
+    if not undone.startswith("beat commit undone"):
+        return f"{head}; {undone}; retry next beat)"
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "merge", "--ff-only", "-q", target],
+                           capture_output=True, text=True, errors="replace", timeout=60)
+        rc, err = r.returncode, r.stderr + r.stdout
+    except Exception as exc:
+        rc, err = 1, f"error: {type(exc).__name__}"
+    if rc != 0:
+        return f"{head}; fast-forward refused: {rebase_failure_reason(err)}; {undone}; retry next beat)"
+    git(repo, "add", rel)
+    rc, _ = git(repo, "commit", "-q", "-m", msg, "--", rel)
+    if rc != 0:
+        return f"{head}; fast-forwarded, but the beat re-commit failed; file left modified; retry next beat)"
+    return None
+
+
+def sync_after_commit(repo: Path, pre: dict, own: str = "", rel: str = "", msg: str = "fleet-heartbeat"):
+    """commit の後・push の前。 upstream が普通に進んでいれば自分の commit を載せ直す。 preflight から
     ここまでの間に forced update が来ていれば載せ直さない (次の beat が中身で揃える)。 push 範囲に旧世代の commit / blob が在れば
     push しない。 止めた時だけ理由の文字列を返す。
-    載せ直しに失敗した回は、 その回の beat の commit (own) を外して理由を返す: 残すと毎回 1 本ずつ手元に積もり、 clone が
-    upstream と分岐する (実測 = 作業木に upstream が足した file と同じ名前の untracked の写しが居て、 checkout が毎回止まった。
-    conventions/multi-session-coordination.md#unattended-writer-stale-base)。"""
+    載せ直しは、 他の session の未 commit の変更が tree に無ければ rebase (autostash なし)、 在れば ff_and_recommit (早送りして
+    commit し直す = 相手の変更を退避しない)。 載せ直しに失敗した回は、 その回の beat の commit (own) を外して理由を返す:
+    残すと毎回 1 本ずつ手元に積もり、 clone が upstream と分岐する (実測 = 作業木に upstream が足した file と同じ名前の
+    untracked の写しが居て、 checkout が毎回止まった。 conventions/multi-session-coordination.md#unattended-writer-stale-base)。"""
     up = pre["upstream"]
     remote = up.split("/", 1)[0]
     git(repo, "fetch", "-q", remote, timeout=_rf.FETCH_TIMEOUT)
@@ -984,16 +1037,22 @@ def sync_after_commit(repo: Path, pre: dict, own: str = "", rel: str = ""):
     if after and before and after != before and not _rf.is_ancestor(repo, before, after):
         return "committed locally; deferred (forced update arrived during the beat: no rebase, the next beat follows it)"
     if after and not _rf.is_ancestor(repo, after, "HEAD"):
-        try:
-            r = subprocess.run(["git", "-C", str(repo), "rebase", "--autostash", "-q", after],
-                               capture_output=True, text=True, errors="replace", timeout=60)
-            rc, err = r.returncode, r.stderr + r.stdout
-        except Exception as exc:
-            rc, err = 1, f"error: {type(exc).__name__}"
-        if rc != 0:
-            git(repo, "rebase", "--abort")
-            return (f"deferred (rebase onto upstream failed: {rebase_failure_reason(err)}; "
-                    f"{undo_own_commit(repo, own, rel)}; retry next beat)")
+        wip = foreign_wip(repo, rel)
+        if wip:
+            note = ff_and_recommit(repo, own, rel, after, msg, wip)
+            if note:
+                return note
+        else:
+            try:
+                r = subprocess.run(["git", "-C", str(repo), "rebase", "-q", after],
+                                   capture_output=True, text=True, errors="replace", timeout=60)
+                rc, err = r.returncode, r.stderr + r.stdout
+            except Exception as exc:
+                rc, err = 1, f"error: {type(exc).__name__}"
+            if rc != 0:
+                git(repo, "rebase", "--abort")
+                return (f"deferred (rebase onto upstream failed: {rebase_failure_reason(err)}; "
+                        f"{undo_own_commit(repo, own, rel)}; retry next beat)")
     head = _rf.rev(repo, "HEAD")
     _rc, br = git(repo, "symbolic-ref", "--short", "-q", "HEAD")
     branch = br.strip() or "HEAD"
@@ -1056,21 +1115,22 @@ def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_pr
 
     fpath.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n")
     git(repo, "add", rel)
+    msg = f"fleet-heartbeat: {data['host']}"
     # path を付けて自分の file だけを commit する (付けないと、 他の session が git add した file を index ごと beat の commit に吸う = 実測)
-    rc, _ = git(repo, "commit", "-q", "-m", f"fleet-heartbeat: {data['host']}", "--", rel)
+    rc, _ = git(repo, "commit", "-q", "-m", msg, "--", rel)
     if rc != 0:
         return "commit failed (fail-open)"
-    # --autostash: 他 session が残した無関係な dirty file で rebase が
-    # 拒否されると、 beat が local commit に積み上がるだけで push されず
-    # 他マシンから silent 死に見える (2026-07-10 実測 RCA: dirty 残置 2 日で
-    # divergence 76/12 まで雪だるま化)。 autostash なら dirty をまたいで流れる。
+    # 他 session が残した無関係な dirty file で載せ直しが拒否されると、 beat が local commit に積み上がるだけで push されず
+    # 他マシンから silent 死に見える (2026-07-10 実測 RCA: dirty 残置 2 日で divergence 76/12 まで雪だるま化)。 そこで
+    # 載せ直しは dirty file を退避せず (autostash は相手の変更を stash して戻す = 相手の file に conflict が入りうる)、 dirty が在れば
+    # 早送りして beat を commit し直し、 できない回は beat を外して次で出し直す (sync_after_commit)。
     # 2026-09-29: 載せ直すのは upstream が普通に進んだ時だけ (forced update = 書き換えなら載せ直さない、 sync_after_commit)。
     if pre is not None and pre.get("upstream"):
-        note = sync_after_commit(repo, pre, own=_rf.rev(repo, "HEAD"), rel=rel)
+        note = sync_after_commit(repo, pre, own=_rf.rev(repo, "HEAD"), rel=rel, msg=msg)
         if note:
             return note
-    else:
-        git(repo, "pull", "--rebase", "--autostash", "-q")
+    elif not foreign_wip(repo, rel):
+        git(repo, "pull", "--rebase", "-q")      # 部品の無い古い checkout の経路。 dirty が在れば載せ直さない (push が拒まれれば次の beat)
     rc, _ = git(repo, "push", "-q", timeout=90)
     return "committed+pushed" if rc == 0 else "committed (push failed, retry next beat)"
 
@@ -1188,6 +1248,46 @@ def _selftest_rewrite(td: Path):
         r = beat(mac_ut, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
         assert r == "committed+pushed", r
         assert g1(mac_ut, "rev-parse", "HEAD~1") == added and g1(rem, "rev-parse", "main") == g1(mac_ut, "rev-parse", "HEAD")
+        n += 1
+        # (E) 他の session の未 commit の変更 (stage 済みと未 stage) が居る Mac で upstream が進んだ = rebase も autostash もせず、
+        # beat を外して早送りしてから commit し直す。 相手の変更はそのまま残り (stage もそのまま)、 stash を使わない
+        mac_e, other_e = td / "mac-e", td / "other-e"
+        for m in (mac_e, other_e):
+            subprocess.run(["git", "clone", "-q", str(rem), str(m)], check=True)
+        up_e = wc(other_e, {"b.txt": "upstream moves\n"}, "upstream moves")
+        g1(other_e, "push", "-q", "origin", "main")
+        (mac_e / "a.txt").write_text("their work in progress\n")
+        (mac_e / "c.txt").write_text("staged by them\n")
+        g1(mac_e, "add", "c.txt")
+        r = beat(mac_e, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        assert r == "committed+pushed", r
+        assert g1(mac_e, "rev-parse", "HEAD~1") == up_e and g1(rem, "rev-parse", "main") == g1(mac_e, "rev-parse", "HEAD"), \
+            g1(mac_e, "log", "--oneline", "-3")
+        assert g1(mac_e, "show", "--name-only", "--format=", "HEAD").split() == [f"fleet/{hostname_short()}.json"]
+        assert (mac_e / "a.txt").read_text() == "their work in progress\n", "相手の未 stage の変更が消えた"
+        assert g1(mac_e, "diff", "--cached", "--name-only").split() == ["c.txt"], "相手の stage が崩れた"
+        assert not g1(mac_e, "stash", "list"), "stash を使った"
+        n += 1
+        # (F) 相手の変更と upstream の変更が同じ file に当たる = 早送りが拒まれる。 beat を外して手元に積まず、 相手の変更を残し、
+        # 相手の変更が無くなった次の beat で (rebase で) 出す
+        mac_f, other_f = td / "mac-f", td / "other-f"
+        for m in (mac_f, other_f):
+            subprocess.run(["git", "clone", "-q", str(rem), str(m)], check=True)
+        up_f = wc(other_f, {"a.txt": "upstream edits a\n"}, "upstream edits a")
+        g1(other_f, "push", "-q", "origin", "main")
+        (mac_f / "a.txt").write_text("their edit of a\n")
+        head_before = g1(mac_f, "rev-parse", "HEAD")
+        r = beat(mac_f, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        assert r.startswith("deferred (other sessions' uncommitted changes in the tree: a.txt") \
+            and "fast-forward refused" in r and "beat commit undone" in r, r
+        assert g1(mac_f, "rev-parse", "HEAD") == head_before, "載せ直せなかった beat の commit が手元に残った"
+        assert (mac_f / "a.txt").read_text() == "their edit of a\n" and not g1(mac_f, "stash", "list")
+        assert sorted(s.strip() for s in g1(mac_f, "status", "--porcelain").splitlines()) == \
+            sorted(["M a.txt", f"M fleet/{hostname_short()}.json"])
+        g1(mac_f, "checkout", "--", "a.txt")
+        r = beat(mac_f, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        assert r == "committed+pushed", r
+        assert g1(mac_f, "rev-parse", "HEAD~1") == up_f and g1(rem, "rev-parse", "main") == g1(mac_f, "rev-parse", "HEAD")
         n += 1
     finally:
         for k, v in saved.items():
