@@ -352,6 +352,7 @@ create + UI で開く検証で associatedWithDeveloper 永続フラグによる 
 - 共有カレンダー命名: `{共同研究者名}{自分の名字}共同研究`
 - イベント作成時は日時・タイトル・参加者をユーザーに確認してから作成
 - <a id="calendar-identify-meeting-from-source"></a>**メールを起点に次回の会議を登録する場合**は、本文の付議先で対象を特定し、主催者の最新の開催案内で日時・会場・形式を照合する。依頼中の通称と候補の定例枠が一致しても、元のメールに別の付議先が出ていれば、そちらの開催案内を先に探す。
+- <a id="calendar-connection-info-later-mail"></a>**オンライン会議の接続情報 (URL・ミーティング ID・パスコード) が後から別のメールで届いたら**、その便を処理する時点で、その会議の予定の説明に書き足し、出所 (差出人・受信日時・メール ID) を添える。予定を登録した時点では接続情報がまだ無いことが多く (当日の朝に届く形を実測)、登録の段だけで閉じると予定には「オンライン」としか残らず、会議の直前にメールを探すことになる。場所の欄が空か「オンライン」だけなら、場所にも URL を入れる。他人と共有しているカレンダーでは、パスコードを書く前に誰が読めるかを確かめる。
 - <a id="calendar-unintended-meet-link"></a>**対面や手元用の予定**を Codex の Google Calendar 接続ツールで作る際は `add_google_meet: false` を明示し、保存後に読み戻して会議リンクを確認する。実測では値が未指定の作成で Meet が付き、更新時に `false` を渡した後も既存のリンクは残った。
   - 自分で作成した個人用の予定から意図しないリンクを外す場合は、対象のカレンダーとイベント ID を GET で照合してから、[Calendar API の `events.patch`](https://developers.google.com/workspace/calendar/api/v3/reference/events/patch) に `conferenceDataVersion=1` と本文 `{"conferenceData": null}` を渡す。自分だけの予定を通知を送らず訂正する場合の値は `sendUpdates=none`。再取得して `conferenceData` と `hangoutLink` が消え、日時・通知が保たれていることを確認する。
 
