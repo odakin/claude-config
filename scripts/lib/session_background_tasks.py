@@ -22,7 +22,8 @@ How:
     (`<session>/subagents/agent-<id>.jsonl`) にある = 両方を読み、 どれが仕掛けたかを `by` に出す。 `self` は
     subagent から回しても親の session を指す (env の session id が親の)。
   - 見張り = Monitor と、 command の形が WATCH_FORMS (掲示板の watch・touching --wait、 照合の --wait / --wait-due、
-    起動の確かめの --wait-first-turn) のもの (引用符の中の語は見ない)。 ほかは計算などとして「止めない」 側に出す。
+    起動の確かめの --wait-first-turn、 一般形 = `*-watch.sh` の script と、 `.py` の道具の名の直後の `watch` の段) のもの
+    (引用符の中の語は見ない)。 ほかは計算などとして「止めない」 側に出す。
   - session が turn の途中 (registry の status が busy / waiting) なら、 出力の file を持つのに会話記録に背景の記録の
     無い shell (= 前景の command) は数えない。 file を持たず照合できない shell は数える (照合し損ねた Monitor を落とさない)。
 読めないとき (ps・lsof が無い、 registry に pid が無い) は None = 「無い」 と言わない。 見ないもの: workflow・cron の
@@ -65,6 +66,11 @@ WATCH_FORMS = (
     re.compile(r"\bboard\.py\b[^\n|;&]*?\stouching\b[^\n|;&]*?\s--wait\b"),
     re.compile(r"\bchild-wrap-check\.py\b[^\n|;&]*?\s--wait(?:-due)?\b"),
     re.compile(r"\bsession-launch-check\.py\b[^\n|;&]*?\s--wait-first-turn\b"),
+    # the general forms of the other layers' watches: a `*-watch.sh` script and a tool's `watch` subcommand right after
+    # its name (measured: an inbox watch script and another tool's `watch` run, both started in the background, were
+    # sorted as "not a watch", so the closing step left them running and they blocked the requester's archive)
+    re.compile(r"\b[\w.-]+-watch\.sh\b"),
+    re.compile(r"\b[\w.-]+\.py['\"]?\s+watch(?:\s|$)"),
 )
 SOON_S = 60  # a watch that expires within this many seconds: wait instead of asking anyone to stop it
 
@@ -483,6 +489,11 @@ def selftest() -> int:
         got = list_tasks(row=idle, path=tr, procs=procs, files=files, now=now, me=207)
         by = {t["id"]: t for t in got or []}
         ok("the board watch is a watch", by.get("bwatch01", {}).get("watch") is True)
+        ok("the general forms: a *-watch.sh script and a tool's watch subcommand are watches",
+           is_watch("bash", "bash ~/x/scripts/inbox-desk-watch.sh role-a") and is_watch("bash", "python3 ~/x/scripts/desk-tool.py watch --desk d1"))
+        ok("... a calculation, a watch word as an option value, and one inside a quoted summary are not",
+           not is_watch("bash", "python3 heavy.py --n 3") and not is_watch("bash", "python3 tool.py run --mode watch")
+           and not is_watch("bash", "python3 board.py note --summary 'watch it'"))
         ok("the moved-to-background calculation is not a watch", by.get("bcalc002", {}).get("watch") is False)
         ok("the Monitor (no file) is matched by its command, with seconds left",
            by.get("bmon0003", {}).get("kind") == "monitor" and by["bmon0003"]["expires_in"] == 60)
