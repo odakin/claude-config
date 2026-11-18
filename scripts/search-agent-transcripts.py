@@ -43,7 +43,9 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
 
 既定の挙動:
   - 役割は user だけ (--role any で全部)。 harness が差し込んだ user 側の文
-    (system-reminder・command 表示・AGENTS.md 指示・文脈圧縮の要約。 INJECTED_PREFIXES) は除く (--include-injected で含める)
+    (system-reminder・command 表示・AGENTS.md 指示・文脈圧縮の要約。 INJECTED_PREFIXES) は除く (--include-injected で含める)。
+    発言の先頭に付いた system-reminder の塊だけは外して、 残りの本人の文を読む (own_text = 別の session が起こした窓の
+    最初の依頼文は app の system-reminder を先頭に付けて記録される)
   - 同じ agent・役割・時刻・本文の重複は 1 回だけ出す (Codex の記録は同じ発言を複数回持つことがある)。
     時刻が違えば同じ文面でも別の発言として全部出す (「送って」 を 2 回打てば 2 行)
   - 行を JSON として読む前に、 素の行に対して文字列の有無を先に見る (大きな記録でも速い)。
@@ -109,6 +111,24 @@ from time_bound import bound_utc as _bound, out_of_range as _out_of_range  # noq
 
 # harness が user 役で差し込む文の書き出し (system-reminder・command 表示・AGENTS.md 指示・文脈圧縮の要約)
 INJECTED_PREFIXES = ("<", "# AGENTS.md", "This session is being continued from a previous conversation")
+# 発言の先頭に app が付けた system-reminder の塊 (1 つ以上)
+_LEADING_REMINDERS_RE = re.compile(r"(?:\s*<system-reminder>.*?</system-reminder>)+\s*", re.S)
+
+
+def own_text(tx: str) -> str | None:
+    """user 役の text から harness の差し込みを外した本人の文 (本人の文が無ければ None)。
+
+    別の session が起こした窓 (desktop の start_session) の最初の依頼文は、 app が先頭に
+    system-reminder (Linked sessions now …) を付けた 1 つの文字列で記録される (実測)。
+    先頭が `<` の発言を丸ごと外すと、 その窓の依頼文が締めの集め (closing-sweep.md 0.3) から黙って落ちる =
+    先頭の system-reminder の塊だけを外し、 残りが本人の文ならそれを読む。 残りが無いか、 残りも差し込みの形
+    (task-notification など) なら None。
+    """
+    m = _LEADING_REMINDERS_RE.match(tx)
+    rest = tx[m.end():] if m else tx
+    if not rest.strip() or rest.lstrip().startswith(INJECTED_PREFIXES):
+        return None
+    return rest
 # 別 session に貼られた会話の抜粋で、 一致の直前に来る話者ラベル (`[12] user: `)
 QUOTED_SPEAKER_RE = re.compile(r"\[\d+\]\s*(?:user|assistant)\s*:\s*$")
 # 行頭・行末の錨 (^ / $ / \A / \Z / \z)。 [^…] の ^ にも当たるが、 その時は先読みを止めるだけ (結果は同じ)
@@ -334,8 +354,10 @@ def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | Non
             if r is None or (role != "any" and r != role):
                 continue
             for tx in texts:
-                if r in ("user", "developer") and not include_injected and tx.lstrip().startswith(INJECTED_PREFIXES):
-                    continue
+                if r in ("user", "developer") and not include_injected:
+                    tx = own_text(tx)
+                    if tx is None:
+                        continue
                 m = rx.search(tx) if rx is not None else None
                 i = m.start() if m is not None else tx.find(pattern)
                 if i < 0:
@@ -460,6 +482,11 @@ def selftest() -> int:
         (cl / "aaaaaaaa-1111.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in [
             {"type": "user", "timestamp": "2099-01-01T00:00:00Z", "message": {"content": "りんごは赤にしよう"}},
             {"type": "user", "timestamp": "2099-01-01T00:00:01Z", "message": {"content": "<system-reminder>りんご</system-reminder>"}},
+            # 別の session が起こした窓の最初の依頼文 = 先頭に app の system-reminder が付いた 1 つの文字列
+            {"type": "user", "timestamp": "2099-01-01T00:00:03Z", "message": {
+                "content": "<system-reminder>\nぶどうの窓の一覧\n</system-reminder>\nぶどうを洗って"}},
+            {"type": "user", "timestamp": "2099-01-01T00:00:04Z", "message": {
+                "content": "<system-reminder>a</system-reminder>\n<task-notification>ぶどうの通知</task-notification>"}},
             {"type": "assistant", "timestamp": "2099-01-01T00:00:02Z", "message": {"content": [{"type": "text", "text": "りんごは赤で記録します"}]}},
             {"type": "user", "timestamp": "2099-01-03T00:00:00Z", "message": {"content": "みかんの話"}},
             {"type": "user", "timestamp": "2099-01-03T00:05:00Z", "message": {"content": "みかんの話"}},
@@ -493,6 +520,10 @@ def selftest() -> int:
             check("Codex の session id を file 名から取る", h[1][2] == "00000000"),
             check("--role any で assistant も出る", len(search("りんご", **{**base, "role": "any"})) == 3),
             check("--include-injected で注入文も出る", len(search("りんご", **{**base, "include_injected": True})) == 3),
+            check("先頭に system-reminder を付けた依頼文は本人の文だけを読む (残りも差し込みなら外す)",
+                  [x[4] for x in search("ぶどう", **base)] == ["ぶどうを洗って"]),
+            check("--include-injected では先頭の system-reminder も残す",
+                  len(search("ぶどう", **{**base, "include_injected": True})) == 2),
             check("--since で日付を絞る", [x[1] for x in search("りんご", **{**base, "since": "2099-01-02"})] == ["codex"]),
             check("--since・--until に日時の先頭を渡す (同じ日の中で絞る)",
                   [x[0] for x in search("みかん", **{**base, "since": "2099-01-03T00:01"})] == ["2099-01-03T00:05:00Z"]

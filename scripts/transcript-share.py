@@ -18,7 +18,7 @@ subcommand:
 
 書き出すもの / 書き出さないもの:
   - 入れる = 本人の発言 (user)・agent の返事の文 (assistant)・agent に渡した指示と親の写し (parent)。
-    harness が差し込んだ文 (system-reminder など、 search-agent-transcripts.py の INJECTED_PREFIXES) は入れない
+    harness が差し込んだ文 (system-reminder など、 search-agent-transcripts.py の own_text が外す分) は入れない
   - 入れない = 道具の呼び出しと結果 (メールの本文・file の中身・token が出うる所。 大きさも 99% 以上がここ)
   - **除外** (--exclude-path / --exclude-word): 次のどれかに当たる session は丸ごと書かない (前に書いた file も消す)
       ① 作業の場所 (cwd) が --exclude-path を含む
@@ -181,8 +181,10 @@ def extract(agent: str, files, tally, exclude_paths, exclude_words):
             r = "parent"
         ts = rec.get("timestamp") or ""
         for tx in texts:
-            if r in ("user", "developer") and tx.lstrip().startswith(SAT.INJECTED_PREFIXES):
-                continue
+            if r in ("user", "developer"):
+                tx = SAT.own_text(tx)  # 先頭の system-reminder だけを外す (別の session が起こした窓の依頼文を落とさない)
+                if tx is None:
+                    continue
             if r == "developer":
                 continue  # Codex の規約の注入 (本人の発言ではない)
             if r in ("user", "parent") and any(w in tx for w in (*exclude_paths, *exclude_words)):
