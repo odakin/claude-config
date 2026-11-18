@@ -106,12 +106,19 @@ def reason_for(active: list[dict], due: list[dict], second: list[dict], need_lin
             "   - 「withdrawn」 が返った依頼は、 元と同じ入力で start_session を 1 枚ずつ出し直す (initiation = own_initiative。 "
             "title・prompt・background・context・model・effort・name・use_worktree を変えない。 元の呼び出しが context に無ければ写しを Read する): "
             f"{_card_list(latest, copies)}\n"
-            "   - 押されていた返事 (「is no longer pending」、 旧い app では「already started」) が返った依頼は出し直さない (本人が押した = worker が起きている)。\n"
+            "   - 押されていた・押した瞬間の返事 (「is no longer pending」「has just clicked Start」、 旧い app では「already started」) が返った依頼は出し直さない (本人が押した = worker が起きている)。\n"
+            "   - 「already dismissed」 (本人が閉じた)・「No pending task」 (app に card が無い) が返った依頼も出し直さない。\n"
+            "   - 「Not withdrawn: … edited …」 (本人が文を編集した) が返った依頼は出し直さず、 card の上で押すか閉じるよう本人に頼む。\n"
             "   取り下げと出し直しを同じ応答に並べない (結果を読む前に出し直すと、 本人がその間に押した card と 2 人目の worker になる)。")
     if second:
         out.append(
             "⚠️ 同じ依頼の card が押された後に出た card が残っています (押すと同じ依頼の 2 人目の worker になる)。 "
             f"dismiss_task で取り下げ、 出し直さない: {_card_list(second)}")
+    edited = [ch["latest"] for ch in active if ch["status"] == "edited"]
+    if edited and (need_line or due):
+        out.append(
+            "本人が文を編集した card は、 取り下げも出し直しもしない (その card だけが本人の書いた文で起こせる = app の返事)。 "
+            f"返事で、 card の上で Start を押すか、 要らなければ閉じるよう本人に頼む: {_card_list(edited)}")
     if n and (need_line or due):
         out.append("返事の終わりに次の 1 行をそのまま足す (本文は出し直さない。 既に点呼の行があって数が違うだけなら、 この行の数に直す):\n"
                    f"  {pc.rollcall_line(active)}\n" + _box_text(n))
@@ -475,6 +482,64 @@ def selftest() -> int:
         pn2 = tn2.write(d)
         check("取り下げが今の文の「is no longer pending」 → 押された (取り下げたままの知らせも出ない)",
               _run_stop(pn2, active=True) == "" and pc.chains(pc.load_entries(pn2))[0]["status"] == "started")
+
+        # dismiss_task の返事 7 通り (app 本体の表の文) と、 旧い文 1 通り。 期待 = 鎖の状態 / 次の turn で出し直しを求めるか
+        forms = [
+            ("withdrawn", "Task {t} withdrawn. The card is no longer shown to the user. Continue your current work.",
+             "withdrawn"),
+            ("already_started", "Task {t} is no longer pending, so there is nothing to withdraw: the user started it as a new "
+             "session, or sent it to this one, which starts none.", "started"),
+            ("already_started (旧い文)", "Task {t} was already started by the user — it's no longer pending and can't be "
+             "withdrawn.", "started"),
+            ("starting", "The user has just clicked Start on task {t}, so it is being launched and was not withdrawn; if that "
+             "launch fails, your withdrawal is applied and the card is removed. Do not re-flag it.", "started"),
+            ("edited_start", "Not withdrawn: the user edited the message of {t} and has just clicked Start on it, so it is being "
+             "launched with what they wrote.", "started"),
+            ("already_dismissed", "Task {t} was already dismissed. Nothing was changed.", "closed"),
+            ("not_found", "No pending task with id {t}. Possible causes include it never being queued in this session. "
+             "Do not re-flag it. Nothing was changed.", "closed"),
+            ("edited", "Not withdrawn: the user edited the message of {t}, so only its card starts it, with what they wrote. "
+             "Ask them to press Start there, or to dismiss it if they no longer want it.", "edited"),
+        ]
+        for k, (label, reply, want) in enumerate(forms):
+            tid = f"task_form{k}"
+            tf = _T(now - 3600)
+            tf.event()
+            tf.card(tid, f"[local推奨] 返事の形 {k}", None)
+            tf.say(f"{mark} 1 枚: 返事の形 {k}")
+            tf.event()
+            tf.say("見張り。")
+            tf.feedback(_reason(_run_stop(tf.write(d))))
+            tf.tool("mcp__ccd_session__dismiss_task", {"task_id": tid}, reply.format(t=tid))
+            tf.say(f"{mark} 1 枚: 返事の形 {k}")
+            pf = tf.write(d)
+            st = pc.chains(pc.load_entries(pf))[0]["status"]
+            after = _run_stop(pf, active=True)
+            tf.event()
+            tf.say("次の turn。")
+            nxt = _reason(_run_stop(tf.write(d)))
+            if want == "withdrawn":
+                ok = st == "withdrawn" and "出し直していません" in _reason(after)
+            elif want == "edited":
+                ok = (st == "edited" and after == "" and pc.REISSUE_HEAD not in nxt and "編集した" in nxt
+                      and "1 枚: 返事の形" in nxt)
+            else:
+                ok = st == want and after == "" and nxt == ""
+            check(f"取り下げの返事「{label}」 → {want}", ok)
+        te = _T(now - 3600)
+        te.event()
+        te.card("task_edok", "[local推奨] 編集済み", None)
+        te.say("x")
+        te.event()
+        te.say("見張り。")
+        te.feedback(_reason(_run_stop(te.write(d))))
+        te.tool("mcp__ccd_session__dismiss_task", {"task_id": "task_edok"}, forms[-1][1].format(t="task_edok"))
+        te.event()
+        te.say(f"card の上で押してください。\n{mark} 1 枚: 編集済み")
+        pe = te.write(d)
+        check("編集された card は点呼の行があれば黙る (取り下げも出し直しも求めない)", _run_stop(pe) == "")
+        check("編集された card の依頼は見張りが拾い直さない側 (押されていない card と同じ)",
+              [c["status"] for c in pc.cards(pc.load_entries(pe))] == ["edited"])
 
         # 起きた session を本人が消した後: 押された印は起こした側の app の記録に積まれた知らせだけ
         tg = _T(now - 3600)

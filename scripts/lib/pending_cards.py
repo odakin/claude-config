@@ -14,9 +14,12 @@
   - 押された = (1) app の記録で `spawnedFrom.taskId` がその id の session が在る (押した瞬間にできる、 実測)
     (2) 会話記録の「The user started your proposal task_…」 (起こした側の次の turn に遅れて届く、 実測)、 届く前は
     起こした側の app の記録に積まれた同じ文 (起きた session が消されると (1) が消える = こちらでしか分からない、 実測)
-    (3) この session が `start_session` に `proposal_id` を渡して起こした (4) `dismiss_task` が押されていた返事
-    (今の文 = 「is no longer pending」、 旧い文 = 「already started」) を返した。
-  - 取り下げ = `dismiss_task` の結果の「Task task_… withdrawn」。 期限切れ = 出してから 7 日 (app の期限)。
+    (3) この session が `start_session` に `proposal_id` を渡して起こした (4) `dismiss_task` が押されていた・押した瞬間・
+    編集して押した返事を返した (7 通りの返事の読み分け = 下の WITHDRAWN の上の注)。
+  - 取り下げ = `dismiss_task` の結果の「Task task_… withdrawn」。 本人が閉じた・app に card が無い = 返事が
+    「already dismissed」「No pending task」 (出し直さず点呼にも載せない)。 本人が文を編集した = 返事が
+    「Not withdrawn: … edited …」 (取り下げも出し直しもせず、 点呼に残して card の上で押すか閉じるよう頼む)。
+    期限切れ = 出してから 7 日 (app の期限)。
   - 掲示板で引き受け済み = card の hand-off 文が名指す request に、 誰かの claim・submit・accept・abandoned・done が
     在る (最後が release なら戻る)。 掲示板は `<base>/*/events` と `<base>/*/board/events` (`<base>` = この repo の親)
     か env PENDING_CARDS_BOARD_ROOTS (`:` 区切り)。
@@ -44,10 +47,29 @@ import time
 
 PROPOSED = re.compile(r'Proposed "(?P<title>.*?)" \(task_id: (?P<tid>task_[0-9a-zA-Z]+)\)')
 STARTED = re.compile(r"The user started your proposal (task_[0-9a-zA-Z]+)")
+# dismiss_task の返事は 7 通り (app 本体の表 = 画面の bundle の `{dismissed:…, already_started:…, …}`、 版 5.1231)。
+# 文は app の版で変わる (旧い文も読む。 実測)。 読み分け:
+#   取り下げた (dismissed)              「Task <id> withdrawn …」
+#   押されていた (already_started)      「Task <id> is no longer pending …」 / 旧い文「Task <id> was already started …」
+#   押した瞬間 (starting)              「The user has just clicked Start on task <id> …」
+#   編集して押した (edited_start)        「Not withdrawn: the user edited the message of <id> and has just clicked Start …」
+#   本人が閉じた (already_dismissed)    「Task <id> was already dismissed …」 → 出し直さず点呼にも載せない
+#   card が無い (not_found)            「No pending task with id <id> … Do not re-flag it …」 → 同じ
+#   本人が文を編集した (edited)          「Not withdrawn: the user edited the message of <id>, so only its card starts it …」
+#                                      → 取り下げも出し直しもしない。 点呼に残し、 card の上で押すか閉じるよう頼む
 WITHDRAWN = re.compile(r"Task (task_[0-9a-zA-Z]+) withdrawn")
-# dismiss_task の「押されていた」 返事。 今の app の文 = 「Task <id> is no longer pending, so there is nothing to withdraw」、
-# 旧い文 = 「Task <id> was already started」 (両方を読む。 実測 = app の版で文が変わった)
-ALREADY_STARTED = re.compile(r"Task (task_[0-9a-zA-Z]+) (?:was already started|is no longer pending)")
+ALREADY_STARTED = re.compile(
+    r"Task (task_[0-9a-zA-Z]+) (?:was already started|is no longer pending)"
+    r"|has just clicked Start on task (task_[0-9a-zA-Z]+)"
+    r"|edited the message of (task_[0-9a-zA-Z]+) and has just clicked Start")
+ALREADY_DISMISSED = re.compile(r"Task (task_[0-9a-zA-Z]+) was already dismissed")
+NOT_FOUND = re.compile(r"No pending task with id (task_[0-9a-zA-Z]+)")
+EDITED = re.compile(r"edited the message of (task_[0-9a-zA-Z]+), so only its card starts it")
+
+
+def _ids(rx: re.Pattern, text: str) -> list[str]:
+    """正規表現のどれかの group に入った task id。"""
+    return [g for m in rx.finditer(text) for g in m.groups() if g]
 TASK_ID = re.compile(r"task_[0-9a-zA-Z]+")
 REQUEST = re.compile(r"request `(\d{8}T\d{6}Z-[a-z]+-[0-9a-f]{6})`")
 TAG = re.compile(r"^\s*\[[^\]]*\]\s*")
@@ -264,12 +286,15 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
           app_until: float | None = None) -> list[dict]:
     """この session の card の一覧。 各要素 = {task_id, title, name, ts, row, request_id, input, key, status,
     pressed (本人が押した・起こした = 掲示板の引き受けは含まない), withdrawn_row}。
-    status = pending / started / withdrawn / expired (started は掲示板の引き受けを含む)。"""
+    status = pending / started / withdrawn / closed (本人が閉じた・app に card が無い) / edited (本人が文を編集した) /
+    expired (started は掲示板の引き受けを含む)。"""
     now = time.time() if now is None else now
     uses: dict[str, tuple[str, dict]] = {}
     found: dict[str, dict] = {}
     started: set[str] = set()
     withdrawn: dict[str, int] = {}
+    closed: set[str] = set()
+    edited: set[str] = set()
     for i, e in enumerate(entries):
         if e.get("type") == "assistant":
             for b in _blocks(e):
@@ -299,12 +324,13 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
             elif name.endswith(DISMISS_TOOLS):
                 for m in WITHDRAWN.finditer(text):
                     withdrawn.setdefault(m.group(1), i)
-                for m in ALREADY_STARTED.finditer(text):
-                    started.add(m.group(1))
+                started.update(_ids(ALREADY_STARTED, text))
+                closed.update(_ids(ALREADY_DISMISSED, text) + _ids(NOT_FOUND, text))
+                edited.update(_ids(EDITED, text))
         for m in STARTED.finditer(_text_of(e)):
             started.add(m.group(1))
     if use_app_records:
-        open_ids = {t for t in found if t not in started and t not in withdrawn}
+        open_ids = {t for t in found if t not in started and t not in withdrawn and t not in closed}
         if open_ids:
             since = min(found[t]["ts"] for t in open_ids) or 0.0
             started |= _app_started_ids(open_ids, since, app_until)
@@ -323,8 +349,12 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
             c["status"] = "started"
         elif tid in withdrawn:
             c["status"] = "withdrawn"
+        elif tid in closed:
+            c["status"] = "closed"
         elif c["ts"] and now - c["ts"] > EXPIRE_SECONDS:
             c["status"] = "expired"
+        elif tid in edited:
+            c["status"] = "edited"
         else:
             c["status"] = "pending"
         out.append(c)
@@ -335,7 +365,7 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
 def chains(entries: list[dict], now: float | None = None, use_app_records: bool = True,
            app_until: float | None = None, cs: list[dict] | None = None) -> list[dict]:
     """同じ依頼の card を 1 本に結んだ鎖の一覧。 各要素 = {key, name, request_id, cards (出した順), latest,
-    origin_ts, status}。 status = started / withdrawn / expired / later / pending。"""
+    origin_ts, status}。 status = started / withdrawn / closed / expired / later / edited / pending。"""
     now = time.time() if now is None else now
     cs = cards(entries, now, use_app_records, app_until) if cs is None else cs
     by: dict[str, list[dict]] = {}
@@ -351,10 +381,14 @@ def chains(entries: list[dict], now: float | None = None, use_app_records: bool 
             st = "started"
         elif latest["status"] == "withdrawn":
             st = "withdrawn"
+        elif latest["status"] == "closed":
+            st = "closed"
         elif latest["status"] == "expired" or (origin and now - origin > EXPIRE_SECONDS):
             st = "expired"
         elif any(o > first["row"] for o in later_rows):
             st = "later"
+        elif latest["status"] == "edited":
+            st = "edited"
         else:
             st = "pending"
         out.append({"key": key, "name": latest["name"], "request_id": latest["request_id"], "cards": group,
@@ -364,14 +398,20 @@ def chains(entries: list[dict], now: float | None = None, use_app_records: bool 
 
 
 def active_chains(chs: list[dict]) -> list[dict]:
-    """点呼に載せる鎖 (押されていない・取り下げていない・7 日の内・「あとで」 と言われていない)。"""
-    return [ch for ch in chs if ch["status"] == "pending"]
+    """点呼に載せる鎖 (押されていない・取り下げていない・本人が閉じていない・7 日の内・「あとで」 と言われていない。
+    本人が文を編集した card も載せる = card の上で押してもらう)。"""
+    return [ch for ch in chs if ch["status"] in ("pending", "edited")]
+
+
+def edited_chains(chs: list[dict]) -> list[dict]:
+    """本人が文を編集した card の鎖 (取り下げも出し直しもしない。 app の返事 = card の上で押すか閉じるよう頼む)。"""
+    return [ch for ch in chs if ch["status"] == "edited"]
 
 
 def reissue_due(entries: list[dict], chs: list[dict]) -> list[dict]:
-    """一番下に出し直す鎖 = 点呼に載せる鎖のうち、 最後の card が今の turn より前の turn に出たもの。"""
+    """一番下に出し直す鎖 = 点呼に載せる鎖のうち、 最後の card が今の turn より前の turn に出たもの (編集された card は除く)。"""
     start = current_turn_start(entries)
-    return [ch for ch in active_chains(chs) if ch["latest"]["row"] < start]
+    return [ch for ch in chs if ch["status"] == "pending" and ch["latest"]["row"] < start]
 
 
 def to_withdraw(ch: dict) -> list[dict]:
@@ -430,7 +470,7 @@ def dropped_chains(entries: list[dict], chs: list[dict], now: float | None = Non
 def pending_request_ids(entries: list[dict], now: float | None = None, use_app_records: bool = True) -> set[str]:
     """押されていない card の hand-off 文が名指す掲示板の request id (見張りが拾い直さない依頼)。"""
     return {c["request_id"] for c in cards(entries, now, use_app_records)
-            if c["status"] == "pending" and c.get("request_id")}
+            if c["status"] in ("pending", "edited") and c.get("request_id")}
 
 
 def request_thread(rid: str) -> str | None:
