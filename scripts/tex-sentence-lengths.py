@@ -14,6 +14,8 @@
   - display 環境 (equation / align / gather / multline / figure / table / tabular / thebibliography / longtable、 * つきも)
     を除き、 その中の点では文を切らない。 display を macro で書く原稿は `--display-macro NAME` (繰り返し可) で
     `\\NAME{...}` を括弧の釣り合いを取って除く (例: `\\al{...}` を align の代わりに使う家風)。
+  - 節・小節の見出し (`\\section{...}` 類、 `*`・`[短い題]` つきも) は文に数えず、 空行と同じ文の切れ目にする
+    (数えると、 句点の無い見出しの語が次の文の頭に付き、 行番号も見出しの行になる = 実測)。
   - インライン数式 `$...$` と `\\cite` / `\\ref` / `\\eqref` / `\\cref` / `\\label` 類は 1 語として数える。
   - 略語の点 (Ref. Eq. Sec. Fig. App. e.g. i.e. vs. al. cf. など) では切らない。 文末 = `.` `!` `?` の後に空白と
     大文字・`\\`・`$` が続く所、 または空行。 英字の語だけを数える (20 文字未満の断片は捨てる)。
@@ -47,6 +49,25 @@ JOIN_START = (r"(?:the|a|an|its|it|their|they|we|this|that|these|those|each|ever
               r"inside|outside|below|above|at|in|for|with|from|on|by|there|here|then|only|all|most|neither|nor)\b")
 JOIN = re.compile(r",\s+(?:and|so|but|while|or|whereas)\s+" + JOIN_START, re.I)
 LONG_LEAD_WORDS = 9
+HEADING = re.compile(r"\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?(?:\[[^\]]*\])?\{")
+
+
+def strip_headings(t: str) -> str:
+    """節・小節の見出し `\\section{...}` 類を括弧の釣り合いを取って同じ長さの空白に置き換え、 末尾の 2 字を改行にする
+    (位置 = 行番号の対応を保ち、 空行として文の切れ目にする = 見出しの語を次の文の頭に足さない)。"""
+    out, i = [], 0
+    while (m := HEADING.search(t, i)):
+        k, depth = m.end(), 1
+        while k < len(t) and depth:
+            if t[k] == "\\":
+                k += 2
+                continue
+            depth += {"{": 1, "}": -1}.get(t[k], 0)
+            k += 1
+        k = min(k, len(t))
+        out += [t[i:m.start()], " " * max(0, k - m.start() - 2) + "\n\n"[:k - m.start()]]
+        i = k
+    return "".join(out) + t[i:]
 
 
 def load(path: Path) -> list[tuple[int, str]]:
@@ -135,6 +156,7 @@ def sentences(path: Path, macros: list[str]) -> list[tuple[int, int, str]]:
         text += l + "\n"
     text = re.sub(DISPLAY, lambda m: " " * len(m.group(0)), text, flags=re.S)
     text = strip_macros(text, macros)
+    text = strip_headings(text)
     text = re.sub(ABBR, lambda m: m.group(0).replace(".", "\x00"), text)
     notes = footnotes(text)
     main, prev = [], 0
@@ -243,6 +265,19 @@ def selftest() -> int:
     want = {"note": 2, "second": 2, "main": 3, "sentence": 4, "short": 4}
     if fn["sentences"] != 6 or fn["longest"] != 12 or any(lines.get(k) != v for k, v in want.items()):
         print(f"FAIL footnotes: sentences = {fn['sentences']} longest = {fn['longest']} lines = {lines}"); ok = False
+    hbody = ("\\documentclass{article}\n\\begin{document}\n\\section{Introduction of things}\n"
+             "This is the first sentence of the body. Here is a second one.\n"
+             "\\subsection*[Short]{A {nested} heading}\nThe last sentence follows a starred heading.\n"
+             "\\end{document}\n")
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "h.tex"
+        p.write_text(hbody, encoding="utf-8")
+        hd = summarize(p, [], [40])
+    # 見出しは文に数えず切れ目にする: 見出しの語が次の文の頭に付かず、 行番号は本文の行 (付くと 11 語・2 行目)
+    got = sorted((it["line"], it["words"], it["text"]) for it in hd["items"])
+    if got != [(4, 5, "Here is a second one."), (4, 8, "This is the first sentence of the body."),
+               (6, 7, "The last sentence follows a starred heading.")]:
+        print(f"FAIL headings: {got}"); ok = False
     print("selftest:", "OK" if ok else "FAIL")
     return 0 if ok else 1
 
