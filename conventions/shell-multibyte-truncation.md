@@ -93,6 +93,11 @@ PDF 由来の文字列をギリシャ文字の語で探すときは `[μµ]` と
 組版された PDF の文字層では、 φ (U+03C6) と ϕ (U+03D5)、 ε と ϵ、 θ と ϑ のような異体の字形が、 font の字形の名前と Unicode の対応のずれで入れ替わって出ることがある (実測: 抽出した文字列で φ の 2 つの字形が入れ替わっていた)。 しかも NFKC は異体の字を 1 つに写す (ϕ → φ、 ϵ → ε、 ϑ → θ) = 揃えてから比べると、 原典が 2 つの字形を別の量に使い分けていても同じに見える。
 他人の原稿の式と自分の式を照らすときは、 抽出した文字でなく頁の画像で読み、 原典に両方の字形が出るかを数える。 両方が出るなら別の量を指している見込みが高い = 「記号の書き方の違い」 に分類する前に確かめる (頁の画像を開くだけで済む。 実測: 2 つの字形を「書き方の違いだけ」 と書き、 別の量の取り違えを見逃した)。 自分の組版で字が別の字になる形 (Type1 の数式の字) は [latex.md](latex.md) の pdftotext の段。
 
+## <a id="kangxi-radicals-in-text"></a>資料から貼った文では「月」「日」 が康熙部首の字 (⽉ U+2F49・⽇ U+2F47) で来ることがある — 日付を正規表現で拾う前に NFKC を通す
+
+PDF・Word の資料から写した文 (メールの本文に貼った案内など) には、 見た目の同じ康熙部首の字が入ることがある。 「6⽉10⽇」 は「6月10日」 と同じに見えるが、 `(\d+)月(\d+)日` の pattern は error なしで 0 件を返す (実測: 会議の案内のメールの本文の日付がこの字で、 日付を拾う検出器が本文の日付を読まず、 件名の「M/D」 だけを読んでいた)。
+日付・語を正規表現で拾う道具は、 入口で `unicodedata.normalize('NFKC', s)` を通す (NFKC は康熙部首と CJK 互換の字を普通の字に写す)。 全角の数字・記号だけを写す変換表 (`str.translate`) では直らない。 NFKC は全角の英数字も半角にするので、 揃えた文と照らす相手 (台帳の題・予定の題) も同じく NFKC に通す (片方だけ通すと全角英字の題が外れる = 実測)。 様式の literal 照合の同じ罠 = [office-automation-principles.md](office-automation-principles.md) の CJK 互換字形の行。
+
 ## まとめ (reflex)
 
 - shell で非 ASCII を切る時は `cut -c` / `head -c` / byte slice を**使わない** → python の文字単位 truncate。
@@ -105,6 +110,7 @@ PDF 由来の文字列をギリシャ文字の語で探すときは `[μµ]` と
 - 人や他の道具に渡す行番号は改行だけで数える (`splitlines()` は改頁の文字でも割る、 [#python-splitlines-line-numbers](#python-splitlines-line-numbers))。
 - PDF 由来の文字列を μ で探すときは micro 記号 µ も入れる ([#pdf-text-micro-sign](#pdf-text-micro-sign))。
 - 他人の原稿の式と照らすときは、 φ/ϕ のような異体の字形を抽出した文字でなく頁の画像で数える (NFKC は 1 つに写す、 [#pdf-text-glyph-variants](#pdf-text-glyph-variants))。
+- 貼った文 (メールの本文など) から日付を正規表現で拾う道具は、 入口で NFKC を通す (「⽉」「⽇」 の康熙部首の字、 [#kangxi-radicals-in-text](#kangxi-radicals-in-text))。
 
 ## <a id="prose-args-quoting"></a>自然文を CLI 引数で渡すときの quoting — backtick は double quote の中で消える (2026-09)
 
