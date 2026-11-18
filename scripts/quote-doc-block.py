@@ -10,6 +10,8 @@
                    段落の中なら、 その段落の終わりまで。
   --heading 文字 = その文字を含む見出しの節。
   --item 文字    = その文字を含む箇条の 1 項 (行頭の `-`・`*`・`1.` から、 次の同じ深さの項・見出し・空行の後の地の文まで)。
+                   --heading・--item の文字が 2 つ以上の行に当たれば止まる (exit 1) = その塊にだけある句で選ぶ
+                   (日付や file 名は、 後から足した別の項にも出る)。
   --part quote   = 選んだ塊の中の引用 (`>` で始まる行) だけを、 `>` を外して返す (既定)。 --part body = 塊の全部 (見出しの行を除く)。
 使い方:
   python3 quote-doc-block.py extract --doc conventions/rebuttal-letter.md --anchor answer-fit-critic-instructions
@@ -77,20 +79,34 @@ def _paragraph_from(lines: list[str], i: int) -> list[str]:
     return out
 
 
+class Ambiguous(ValueError):
+    """選ぶ文字が 2 つ以上の見出し・箇条に当たった (どれを抜くか決められない)。"""
+
+
 def select(md: str, *, anchor: str | None = None, heading: str | None = None, item: str | None = None) -> list[str] | None:
+    """塊を 1 つ選ぶ。 --heading・--item の文字が 2 つ以上の見出し・箇条の行に当たれば Ambiguous を上げる
+    (最初の 1 つを黙って選ぶと、 後から足した別の項が同じ語を含んだとき違う塊を抜く = 実測)。"""
     lines = md.split("\n")
+    hits = []
     for i, ln in enumerate(lines):
         if anchor is not None and (f'<a id="{anchor}"' in ln or f"<a id='{anchor}'" in ln):
-            if HEADING.match(ln):
-                return _section_from(lines, i)
-            if ITEM.match(ln):
-                return _item_from(lines, i)
-            return _paragraph_from(lines, i)
-        if heading is not None and HEADING.match(ln) and heading in ln:
-            return _section_from(lines, i)
-        if item is not None and ITEM.match(ln) and item in ln:
-            return _item_from(lines, i)
-    return None
+            hits.append(i)
+        elif heading is not None and HEADING.match(ln) and heading in ln:
+            hits.append(i)
+        elif item is not None and ITEM.match(ln) and item in ln:
+            hits.append(i)
+    if not hits:
+        return None
+    if len(hits) > 1:
+        shown = "; ".join(f"行 {i + 1}: {lines[i].strip()[:60]}" for i in hits[:5])
+        raise Ambiguous(f"{len(hits)} か所に当たる ({shown})。 その塊にだけある句で選ぶ")
+    i = hits[0]
+    ln = lines[i]
+    if HEADING.match(ln):
+        return _section_from(lines, i)
+    if ITEM.match(ln):
+        return _item_from(lines, i)
+    return _paragraph_from(lines, i)
 
 
 def part_of(block: list[str], part: str) -> str:
@@ -169,6 +185,12 @@ def selftest() -> int:
     short = "Please do this:\n1. Read the two files.\n2. Judge the paragraphs."
     good, miss = contains_verbatim(short, q)
     check(not good and miss == "2. Judge each paragraph one by one.", "要約した行を最初に見つからない行として出す")
+    two = SELF_MD + "- another item that also says comparison\n"
+    try:
+        extract(two, item="comparison", part="body")
+        check(False, "2 つの箇条に当たる文字は止める")
+    except Ambiguous:
+        check(True, "2 つの箇条に当たる文字は止める")
     return 0 if ok else 1
 
 
@@ -187,7 +209,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--part", choices=["quote", "body"], default="quote")
     ap.add_argument("--in", dest="infile", type=Path, help="check: 依頼の文の file")
     a = ap.parse_args(argv)
-    text = extract(a.doc.read_text(encoding="utf-8"), part=a.part, anchor=a.anchor, heading=a.heading, item=a.item)
+    try:
+        text = extract(a.doc.read_text(encoding="utf-8"), part=a.part, anchor=a.anchor, heading=a.heading, item=a.item)
+    except Ambiguous as e:
+        print(f"✗ 塊を 1 つに決められない ({a.doc}): {e}", file=sys.stderr)
+        return 1
     if text is None:
         print(f"✗ 塊が見つからない ({a.doc}、 {a.anchor or a.heading or a.item}、 part={a.part})", file=sys.stderr)
         return 1
