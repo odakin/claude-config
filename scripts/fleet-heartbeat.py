@@ -903,7 +903,8 @@ def gc_facts(root: Path, names, now=None):
 
 def git_gc_config():
     """macOS で git の自動 gc を裏に回す設定か (gc.autoDetach の global の値。 "" = 未設定 = 裏に回る)。 macOS 以外 = None。
-    Apple の git は裏の gc が fork の後に異常終了して lock を残す (実測) = false でない macOS は reader が 1 行出す。"""
+    macOS で CoreFoundation を読み込んだ git は、 裏の gc の子が fork の後に異常終了して lock を残す (実測 = Homebrew の git)
+    = false でない macOS は reader が 1 行出す。"""
     if sys.platform != "darwin":
         return None
     rc, out = sh(["git", "config", "--global", "--get", "gc.autoDetach"])
