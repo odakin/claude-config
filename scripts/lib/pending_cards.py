@@ -1,26 +1,34 @@
-"""pending_cards.py — この session が出した card (`start_session` の提案) のうち、 押されていないものと、 本人がまだ見ていないものを、 会話記録と desktop app の記録から数える部品 (点呼の Stop hook と、 card を出した依頼を拾い直す見張りが、 同じ述語で読む)
+"""pending_cards.py — この session が出した card (`start_session` の提案) を、 同じ依頼の出し直しを 1 本に結んで数え、 押されていないもの・前の turn に出したまま返事の上に流れたもの (一番下に出し直す card) を会話記録と desktop app の記録から引く部品 (点呼と出し直しの Stop hook と、 card を出した依頼を拾い直す見張りが、 同じ述語で読む)
 
 なぜ (正本 = conventions/multi-session-coordination.md#pending-card-rollcall):
   自動の知らせや別の session の message で始まった turn では worker を直接起こせず、 card しか出せない。 card は
-  出した時点の会話の中にだけ描かれ、 その後に本人の発言でない turn の返事が積もると最新の返事から消える (実測)。
-  押されていない card を一か所に見せるのは Claude しかいないので、 最新の返事に
-  点呼の 1 行を書かせる。 ただし本人が見て押さなかった card を繰り返すと風景になる = 「まだ見ていない」 を数える。
+  出した時点の会話の中にだけ描かれ、 その後に返事が積もると最新の返事から上に流れて見えなくなる (実測)。 だから
+  押されていない card は turn の終わりごとに取り下げて一番下に出し直し、 点呼の 1 行と締めの箱のボタンも残す。
+  本人が「あとで」 と言った card と、 最初に出してから 7 日を過ぎた card は出し直さない。
 
 述語:
-  - card = `start_session` (旧 `spawn_task`) の結果の `Proposed "<題>" (task_id: task_…)`。 題・時刻・hand-off 文の
-    掲示板の request id (`request \\`<id>\\``) を持つ。
+  - card = `start_session` (旧 `spawn_task`) の結果の `Proposed "<題>" (task_id: task_…)`。 題・時刻・元の入力・
+    hand-off 文の掲示板の request id (`request \\`<id>\\``) を持つ。
+  - 依頼の鎖 = 同じ request id の card (request id が無ければ同じ仕事の名前 = 題から頭の `[…]` を外したもの)。
+    出し直した card は前の card の続きとして数える (7 日の期限・「あとで」 は鎖の最初の card から数える)。
   - 押された = (1) app の記録で `spawnedFrom.taskId` がその id の session が在る (押した瞬間にできる、 実測)
     (2) 会話記録の「The user started your proposal task_…」 (起こした側の次の turn に遅れて届く、 実測)
-    (3) この session が `start_session` に `proposal_id` を渡して起こした。
+    (3) この session が `start_session` に `proposal_id` を渡して起こした (4) `dismiss_task` が「already started」 を返した。
   - 取り下げ = `dismiss_task` の結果の「Task task_… withdrawn」。 期限切れ = 出してから 7 日 (app の期限)。
   - 掲示板で引き受け済み = card の hand-off 文が名指す request に、 誰かの claim・submit・accept・abandoned・done が
-    在る (最後が release なら戻る)。 別の窓が同じ依頼を起こし直して片付けた card を数え続けない (実測)。 掲示板は
-    `<base>/*/events` と `<base>/*/board/events` (`<base>` = この repo の親) か env PENDING_CARDS_BOARD_ROOTS (`:` 区切り)。
-  - 本人の turn = user の行のうち `origin.kind == "human"` (自動の知らせ = task-notification・別の session の message
+    在る (最後が release なら戻る)。 掲示板は `<base>/*/events` と `<base>/*/board/events` (`<base>` = この repo の親)
+    か env PENDING_CARDS_BOARD_ROOTS (`:` 区切り)。
+  - 鎖の状態 = started (どれかの card が押された・掲示板で引き受け済み) / withdrawn (最後の card が取り下げ) /
+    expired (最初の card から 7 日) / later (最初の card の後に本人が「あとで」) / pending (それ以外 = 点呼に載せる)。
+  - 出し直す鎖 = pending で、 最後の card が今の turn より前の turn に出たもの。 今の turn = 最後の turn を始めた
+    user の行から (tool_result を運ぶ行と Stop hook の差し戻しは turn を始めない)。
+  - 取り下げたまま = 点呼の差し戻し (REISSUE_HEAD を含む Stop hook の差し戻し) がその card の id を名指した後に
+    取り下げ、 同じ鎖の新しい card が無い鎖 (出し直しを落とした)。
+  - 2 人目になる card = 同じ鎖の card が押された後に出た、 まだ押されていない card (取り下げの結果を読む前に出し直し、
+    取り下げが「already started」 だった形)。 題か prompt に `[再起票]` があれば数えない (本人が 2 つ目を求めた)。
+  - 本人の発言 = user の行のうち `origin.kind == "human"` (自動の知らせ = task-notification・別の session の message
     = peer・子の知らせ・Stop hook の差し戻しは本人の発言でない)。 origin を持たない古い記録では、 isMeta でなく
-    自動の知らせの書き出しで始まらない行を本人の turn と見る。
-  - まだ見ていない card = 押されておらず、 出した後に始まった本人の turn が 0 回か、 1 回でそれが今の turn
-    (= 本人が話した turn への返事が最後の点呼)。 今の本人の turn の発言が「あとで」 なら見たものとする。
+    自動の知らせの書き出しで始まらない行を本人の発言と見る。 turn の途中に打った発言 (queued_command) も読む。
 Read-only、 例外を外に出さない (呼ぶ hook は fail-open)。 env CLAUDE_DESKTOP_SESSIONS_DIR で app の記録の dir を差し替える (試験)。
 """
 from __future__ import annotations
@@ -35,10 +43,14 @@ import time
 PROPOSED = re.compile(r'Proposed "(?P<title>.*?)" \(task_id: (?P<tid>task_[0-9a-zA-Z]+)\)')
 STARTED = re.compile(r"The user started your proposal (task_[0-9a-zA-Z]+)")
 WITHDRAWN = re.compile(r"Task (task_[0-9a-zA-Z]+) withdrawn")
+ALREADY_STARTED = re.compile(r"Task (task_[0-9a-zA-Z]+) was already started")
+TASK_ID = re.compile(r"task_[0-9a-zA-Z]+")
 REQUEST = re.compile(r"request `(\d{8}T\d{6}Z-[a-z]+-[0-9a-f]{6})`")
 TAG = re.compile(r"^\s*\[[^\]]*\]\s*")
 EXPIRE_SECONDS = 7 * 86400
 ROLLCALL_MARK = "🃏 押されていない card"
+REISSUE_HEAD = "🔁 押されていない card を一番下に出し直す"
+OVERRIDE = "[再起票]"
 LATER_WORDS = {"あとで", "あとで押す", "後で", "後で押す", "あとでおす"}
 SESSION_TOOLS = ("start_session", "spawn_task")
 DISMISS_TOOLS = ("dismiss_task",)
@@ -81,16 +93,23 @@ def _is_tool_result_row(e: dict) -> bool:
     return any(isinstance(b, dict) and b.get("type") == "tool_result" for b in _blocks(e))
 
 
+def _is_stop_feedback(e: dict) -> bool:
+    return bool(e.get("isMeta")) and _text_of(e).lstrip().startswith("Stop hook feedback")
+
+
 def starter_rows(entries: list[dict]) -> list[int]:
     """turn を始めた user の行の添字 (tool_result を運ぶ行と Stop hook の差し戻しは除く)。"""
     out = []
     for i, e in enumerate(entries):
-        if e.get("type") != "user" or _is_tool_result_row(e):
-            continue
-        if e.get("isMeta") and _text_of(e).lstrip().startswith("Stop hook feedback"):
+        if e.get("type") != "user" or _is_tool_result_row(e) or _is_stop_feedback(e):
             continue
         out.append(i)
     return out
+
+
+def current_turn_start(entries: list[dict]) -> int:
+    s = starter_rows(entries)
+    return s[-1] if s else -1
 
 
 REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
@@ -234,13 +253,14 @@ def _board_taken_ids(request_ids: set[str], until: float | None = None) -> set[s
 
 def cards(entries: list[dict], now: float | None = None, use_app_records: bool = True,
           app_until: float | None = None) -> list[dict]:
-    """この session の card の一覧。 各要素 = {task_id, title, name, ts, row, request_id, status}。
-    status = pending / started / withdrawn / expired。"""
+    """この session の card の一覧。 各要素 = {task_id, title, name, ts, row, request_id, input, key, status,
+    pressed (本人が押した・起こした = 掲示板の引き受けは含まない), withdrawn_row}。
+    status = pending / started / withdrawn / expired (started は掲示板の引き受けを含む)。"""
     now = time.time() if now is None else now
     uses: dict[str, tuple[str, dict]] = {}
     found: dict[str, dict] = {}
     started: set[str] = set()
-    withdrawn: set[str] = set()
+    withdrawn: dict[str, int] = {}
     for i, e in enumerate(entries):
         if e.get("type") == "assistant":
             for b in _blocks(e):
@@ -259,15 +279,19 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
                 m = PROPOSED.search(text)
                 if m and m.group("tid") not in found:
                     rq = REQUEST.search(str(inp.get("prompt") or ""))
-                    found[m.group("tid")] = {"task_id": m.group("tid"), "title": m.group("title"),
-                                             "name": short_name(m.group("title")), "ts": _ts(e), "row": i,
-                                             "request_id": rq.group(1) if rq else None}
+                    title = m.group("title")
+                    rid = rq.group(1) if rq else None
+                    found[m.group("tid")] = {"task_id": m.group("tid"), "title": title, "name": short_name(title),
+                                             "ts": _ts(e), "row": i, "request_id": rid, "input": dict(inp),
+                                             "key": ("request:" + rid) if rid else ("name:" + short_name(title))}
                 pid = inp.get("proposal_id")
                 if pid and not b.get("is_error") and "error" not in text[:200].lower():
                     started.add(str(pid))
             elif name.endswith(DISMISS_TOOLS):
                 for m in WITHDRAWN.finditer(text):
-                    withdrawn.add(m.group(1))
+                    withdrawn.setdefault(m.group(1), i)
+                for m in ALREADY_STARTED.finditer(text):
+                    started.add(m.group(1))
         for m in STARTED.finditer(_text_of(e)):
             started.add(m.group(1))
     if use_app_records:
@@ -275,13 +299,18 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
         if open_ids:
             since = min(found[t]["ts"] for t in open_ids) or 0.0
             started |= _app_started_ids(open_ids, since, app_until)
-            rids = {found[t]["request_id"] for t in open_ids if found[t]["request_id"] and t not in started}
-            if rids:
-                done = _board_taken_ids(rids, app_until)
-                started |= {t for t in open_ids if found[t]["request_id"] in done}
+    board_done: set[str] = set()
+    if use_app_records:
+        rids = {c["request_id"] for t, c in found.items()
+                if c["request_id"] and t not in started and t not in withdrawn}
+        if rids:
+            taken = _board_taken_ids(rids, app_until)
+            board_done = {t for t, c in found.items() if c["request_id"] in taken}
     out = []
     for tid, c in found.items():
-        if tid in started:
+        c["pressed"] = tid in started
+        c["withdrawn_row"] = withdrawn.get(tid)
+        if tid in started or tid in board_done:
             c["status"] = "started"
         elif tid in withdrawn:
             c["status"] = "withdrawn"
@@ -294,25 +323,98 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
     return out
 
 
-def unseen_pending(entries: list[dict], now: float | None = None, use_app_records: bool = True,
-                   app_until: float | None = None) -> list[dict]:
-    """押されておらず、 本人がまだ見ていない card (点呼に載せる card)。"""
-    pend = [c for c in cards(entries, now, use_app_records, app_until) if c["status"] == "pending"]
-    if not pend:
-        return []
-    owners = owner_rows(entries)
-    starters = starter_rows(entries)
-    current = starters[-1] if starters else -1
-    now_owner = [o for o in owners if o >= current]  # 今の turn の本人の発言 (turn を始めた発言と、 途中に打った発言)
+def chains(entries: list[dict], now: float | None = None, use_app_records: bool = True,
+           app_until: float | None = None, cs: list[dict] | None = None) -> list[dict]:
+    """同じ依頼の card を 1 本に結んだ鎖の一覧。 各要素 = {key, name, request_id, cards (出した順), latest,
+    origin_ts, status}。 status = started / withdrawn / expired / later / pending。"""
+    now = time.time() if now is None else now
+    cs = cards(entries, now, use_app_records, app_until) if cs is None else cs
+    by: dict[str, list[dict]] = {}
+    for c in cs:
+        by.setdefault(c["key"], []).append(c)
+    later_rows = [o for o in owner_rows(entries) if _owner_words(entries[o]) in LATER_WORDS]
     out = []
-    for c in pend:
-        # card の後に本人が話し、 その turn がもう終わっている = 本人はその返事で点呼を見た (繰り返さない)
-        if any(c["row"] < o < current for o in owners):
+    for key, group in by.items():
+        group.sort(key=lambda c: c["row"])
+        first, latest = group[0], group[-1]
+        origin = first["ts"] or 0.0
+        if any(c["status"] == "started" for c in group):
+            st = "started"
+        elif latest["status"] == "withdrawn":
+            st = "withdrawn"
+        elif latest["status"] == "expired" or (origin and now - origin > EXPIRE_SECONDS):
+            st = "expired"
+        elif any(o > first["row"] for o in later_rows):
+            st = "later"
+        else:
+            st = "pending"
+        out.append({"key": key, "name": latest["name"], "request_id": latest["request_id"], "cards": group,
+                    "latest": latest, "origin_ts": origin, "status": st})
+    out.sort(key=lambda ch: ch["latest"]["row"])
+    return out
+
+
+def active_chains(chs: list[dict]) -> list[dict]:
+    """点呼に載せる鎖 (押されていない・取り下げていない・7 日の内・「あとで」 と言われていない)。"""
+    return [ch for ch in chs if ch["status"] == "pending"]
+
+
+def reissue_due(entries: list[dict], chs: list[dict]) -> list[dict]:
+    """一番下に出し直す鎖 = 点呼に載せる鎖のうち、 最後の card が今の turn より前の turn に出たもの。"""
+    start = current_turn_start(entries)
+    return [ch for ch in active_chains(chs) if ch["latest"]["row"] < start]
+
+
+def to_withdraw(ch: dict) -> list[dict]:
+    """出し直すときに取り下げる card (その鎖の、 押されていない・取り下げていない・期限の内の card 全部)。"""
+    return [c for c in ch["cards"] if c["status"] == "pending"]
+
+
+def second_worker_cards(chs: list[dict], now: float | None = None) -> list[dict]:
+    """押すと同じ依頼の 2 人目になる card = 同じ鎖の card が押された後に出た、 押されていない card。"""
+    now = time.time() if now is None else now
+    out = []
+    for ch in chs:
+        pressed_rows = [c["row"] for c in ch["cards"] if c.get("pressed")]
+        if not pressed_rows:
             continue
-        # 今の turn で、 card の後に本人が「あとで」 と答えた = その場で止める
-        if any(o > c["row"] and _owner_words(entries[o]) in LATER_WORDS for o in now_owner):
+        for c in ch["cards"]:
+            if c.get("pressed") or c.get("withdrawn_row") is not None or c["row"] < min(pressed_rows):
+                continue
+            inp = c.get("input") or {}
+            if OVERRIDE in (c["title"] or "") or OVERRIDE in str(inp.get("prompt") or ""):
+                continue
+            if c["ts"] and now - c["ts"] > EXPIRE_SECONDS:
+                continue
+            out.append(c)
+    return out
+
+
+def reissue_feedback_rows(entries: list[dict], since: int = -1) -> list[int]:
+    """点呼の差し戻し (この hook が出した出し直しの指示) の行。"""
+    return [i for i, e in enumerate(entries) if i > since and _is_stop_feedback(e) and REISSUE_HEAD in _text_of(e)]
+
+
+def dropped_chains(entries: list[dict], chs: list[dict], now: float | None = None) -> list[dict]:
+    """出し直しを落とした鎖 = 今の turn の点呼の差し戻しが名指した card を取り下げ、 同じ鎖の新しい card が無いもの。"""
+    now = time.time() if now is None else now
+    start = current_turn_start(entries)
+    fb = reissue_feedback_rows(entries, start)
+    if not fb:
+        return []
+    named: dict[str, int] = {}
+    for r in fb:
+        for t in TASK_ID.findall(_text_of(entries[r])):
+            named.setdefault(t, r)
+    out = []
+    for ch in chs:
+        if ch["status"] != "withdrawn":
             continue
-        out.append(c)
+        last = ch["latest"]
+        r = named.get(last["task_id"])
+        if r is not None and last.get("withdrawn_row") is not None and last["withdrawn_row"] > r:
+            if not (ch["origin_ts"] and now - ch["origin_ts"] > EXPIRE_SECONDS):
+                out.append(ch)
     return out
 
 
@@ -341,9 +443,9 @@ def pending_threads(entries: list[dict], now: float | None = None, use_app_recor
     return out
 
 
-def rollcall_line(unseen: list[dict]) -> str:
-    names = "・".join(c["name"] for c in unseen)
-    return f"{ROLLCALL_MARK} {len(unseen)} 枚: {names} — 押すか「起こして」 の一言で全部起こします"
+def rollcall_line(active: list[dict]) -> str:
+    names = "・".join(ch["name"] for ch in active)
+    return f"{ROLLCALL_MARK} {len(active)} 枚: {names} — 押すか「起こして」 の一言で全部起こします"
 
 
 def has_rollcall(text: str, n: int) -> bool:

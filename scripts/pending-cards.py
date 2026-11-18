@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""pending-cards.py — この session が出した card のうち押されていないものを数え、 本人がまだ見ていない間は最新の返事に点呼の 1 行を書かせる (Stop hook の本体)。 見張りが card を出した依頼を拾い直さないための照会と、 過去の会話記録での流し直しも持つ
+"""pending-cards.py — この session が出した card のうち押されていないものを、 turn の終わりごとに取り下げて一番下に出し直させ、 最新の返事に点呼の 1 行を書かせる (Stop hook の本体)。 見張りが card を出した依頼を拾い直さないための照会と、 過去の会話記録での流し直しも持つ
 
 正本 = conventions/multi-session-coordination.md#pending-card-rollcall。 述語 = scripts/lib/pending_cards.py。
 
 使い方:
-  --stop              Stop hook の本体 (stdin = hook の payload)。 本人がまだ見ていない押されていない card があり、
-                      今の turn の最終発話に点呼の行 (「🃏 押されていない card N 枚」) が無ければ、 書く 1 行を
-                      添えて 1 回だけ止める (decision=block)。 stop_hook_active・最終発話が空・読めない記録は黙る (fail-open)。
-  --session ID        その session の card の一覧と、 押されていない card が名指す掲示板の request id を JSON で出す
+  --stop              Stop hook の本体 (stdin = hook の payload)。 次のどれかが成り立てば、 直し方を添えて止める (decision=block):
+                        - 押されていない card (同じ依頼の出し直しは 1 本に結ぶ) が前の turn に出たまま = 取り下げて一番下に出し直す
+                        - 押されていない card があるのに、 今の turn の最終発話に点呼の行 (「🃏 押されていない card N 枚」) が無い
+                        - 同じ依頼の card が押された後に出た card が残っている (押すと 2 人目の worker になる) = 取り下げる
+                      出し直しの指示を出した後の Stop (stop_hook_active) では、 名指した card を取り下げたまま出し直して
+                      いない形だけを見る (同じ turn に 2 回まで)。 最終発話が空・読めない記録・例外は黙る (fail-open)。
+                      出し直す card の元の入力は env PENDING_CARDS_STATE_DIR (既定 ~/.claude/state/pending-cards) の
+                      <session>/<task_id>.json に写す (会話が圧縮されて元の呼び出しが context に無いときに読む)。
+  --session ID        その session の card の一覧・依頼の鎖・押されていない card が名指す掲示板の request id を JSON で出す
                       (見張りが拾い直さない依頼を引く)。 ID = 会話記録の id (頭 8 字以上) か transcript の path。
-  --replay PATH       会話記録の turn ごとに、 その時点で点呼が要ったか・最終発話に在ったかを並べる
+  --replay PATH       会話記録の turn ごとに、 その時点で点呼の要る card・出し直す card・最終発話の点呼の有無を並べる
                       (app の記録は、 その turn の終わりまでにできた session だけを押された印に数える)。
   --selftest          合成の会話記録で鳴る形と黙る形を確かめる。
 """
@@ -29,6 +34,10 @@ try:
 except Exception:  # pragma: no cover
     tt = None
 
+RULE = "claude-config/conventions/multi-session-coordination.md#pending-card-rollcall"
+MAX_REISSUE_FEEDBACK = 2  # 同じ turn に出す出し直しの差し戻しの上限 (止め続けの輪を作らない)
+COPY_KEYS = ("initiation", "title", "prompt", "background", "context", "model", "effort", "name", "use_worktree")
+
 
 def _final_text(entries: list[dict]) -> str:
     if tt is not None:
@@ -44,19 +53,99 @@ def _final_text(entries: list[dict]) -> str:
     return final
 
 
-def reason_for(unseen: list[dict]) -> str:
-    line = pc.rollcall_line(unseen)
-    return (
-        "🃏 押されていない card が " + str(len(unseen)) + " 枚あり、 本人はまだ見ていません (この返事の後に本人が話せば、 "
-        "その返事を最後に点呼は止まります)。 card は出した時点の会話にしか描かれず、 後の返事で画面の上に流れます。\n"
-        "返事の終わりに次の 1 行をそのまま足してください (本文は出し直さない):\n"
-        f"  {line}\n"
-        "締めの箱を出すなら、 要約の 1 文目を「押されていない card が " + str(len(unseen)) + " 枚あります」 にし、 問いが空いていれば"
-        "「待っている card " + str(len(unseen)) + " 枚を起こしますか？」 + ボタン「" + str(len(unseen)) + " 枚とも起こして」「あとで」 にする。\n"
-        "本人が「起こして」 と答えたら、 その turn で start_session に proposal_id だけを渡して全部起こす。 "
-        "既に点呼の行を書いてあって数が違うだけなら、 この行の数に直す (押された card は app の記録で外してある)。\n"
-        "正本 = claude-config/conventions/multi-session-coordination.md#pending-card-rollcall"
-    )
+def _state_dir() -> str:
+    return os.environ.get("PENDING_CARDS_STATE_DIR") or os.path.expanduser("~/.claude/state/pending-cards")
+
+
+def save_inputs(session: str, cs: list[dict]) -> dict[str, str]:
+    """出し直す card の元の入力を写す。 → {task_id: path}。 書けなければ空 (理由の文から写しの path を外すだけ)。"""
+    out: dict[str, str] = {}
+    sid = "".join(ch for ch in (session or "unknown") if ch.isalnum() or ch in "-_")[:64] or "unknown"
+    d = os.path.join(_state_dir(), sid)
+    for c in cs:
+        inp = {k: v for k, v in (c.get("input") or {}).items() if k in COPY_KEYS}
+        inp["initiation"] = "own_initiative"
+        try:
+            os.makedirs(d, exist_ok=True)
+            p = os.path.join(d, c["task_id"] + ".json")
+            with open(p, "w", encoding="utf-8") as fh:
+                json.dump(inp, fh, ensure_ascii=False, indent=1)
+            out[c["task_id"]] = p
+        except OSError:
+            continue
+    return out
+
+
+def _card_list(cs: list[dict], copies: dict[str, str] | None = None) -> str:
+    parts = []
+    for c in cs:
+        s = f"{c['task_id']} (「{c['name']}」"
+        if copies and copies.get(c["task_id"]):
+            s += f"、 元の入力の写し = {copies[c['task_id']]}"
+        parts.append(s + ")")
+    return "、 ".join(parts)
+
+
+def _box_text(n: int) -> str:
+    return ("締めの箱を出すなら、 要約の 1 文目を「押されていない card が " + str(n) + " 枚あります」 にし、 問いが空いていれば"
+            "「待っている card " + str(n) + " 枚を起こしますか？」 + ボタン「" + str(n) + " 枚とも起こして」「あとで」 にする。 "
+            "本人が「起こして」 と答えたら、 その turn で start_session に proposal_id だけを渡して全部起こす。")
+
+
+def reason_for(active: list[dict], due: list[dict], second: list[dict], need_line: bool,
+               copies: dict[str, str] | None = None) -> str:
+    n = len(active)
+    out = []
+    if due:
+        withdraw = [c for ch in due for c in pc.to_withdraw(ch)]
+        latest = [ch["latest"] for ch in due]
+        out.append(
+            f"{pc.REISSUE_HEAD}: 前の turn に出した押されていない card が {len(due)} 枚あり、 返事の上に流れています。\n"
+            f"1. この応答では dismiss_task だけを出す (並べてよい): {_card_list(withdraw)}\n"
+            "2. 結果を読んでから、 次の応答で:\n"
+            "   - 「withdrawn」 が返った依頼は、 元と同じ入力で start_session を 1 枚ずつ出し直す (initiation = own_initiative。 "
+            "title・prompt・background・context・model・effort・name・use_worktree を変えない。 元の呼び出しが context に無ければ写しを Read する): "
+            f"{_card_list(latest, copies)}\n"
+            "   - 「already started」 が返った依頼は出し直さない (本人が押した = worker が起きている)。\n"
+            "   取り下げと出し直しを同じ応答に並べない (結果を読む前に出し直すと、 本人がその間に押した card と 2 人目の worker になる)。")
+    if second:
+        out.append(
+            "⚠️ 同じ依頼の card が押された後に出た card が残っています (押すと同じ依頼の 2 人目の worker になる)。 "
+            f"dismiss_task で取り下げ、 出し直さない: {_card_list(second)}")
+    if n and (need_line or due):
+        out.append("返事の終わりに次の 1 行をそのまま足す (本文は出し直さない。 既に点呼の行があって数が違うだけなら、 この行の数に直す):\n"
+                   f"  {pc.rollcall_line(active)}\n" + _box_text(n))
+    out.append(f"正本 = {RULE}")
+    return "\n".join(out)
+
+
+def reason_dropped(dropped: list[dict], copies: dict[str, str] | None = None) -> str:
+    return (f"{pc.REISSUE_HEAD} (続き): 取り下げた card を出し直していません: {_card_list([ch['latest'] for ch in dropped], copies)}。\n"
+            "元と同じ入力で start_session を出す (initiation = own_initiative。 元の呼び出しが context に無ければ写しを Read する)。 "
+            "本人の指示などでわざと取り下げたのなら、 そのままでよい (この知らせは同じ turn に 2 回までしか出ない)。\n"
+            f"正本 = {RULE}")
+
+
+def evaluate(entries: list[dict], now: float | None = None, app_until: float | None = None,
+             stop_hook_active: bool = False) -> dict:
+    """turn の終わりの判定。 → {active, due, second, need_line, dropped, block}。"""
+    chs = pc.chains(entries, now=now, app_until=app_until)
+    active = pc.active_chains(chs)
+    res = {"active": active, "due": [], "second": [], "need_line": False, "dropped": [], "block": False}
+    if stop_hook_active:
+        start = pc.current_turn_start(entries)
+        if len(pc.reissue_feedback_rows(entries, start)) <= MAX_REISSUE_FEEDBACK:
+            res["dropped"] = pc.dropped_chains(entries, chs, now=now)
+        res["block"] = bool(res["dropped"])
+        return res
+    final = _final_text(entries)
+    if not final.strip():
+        return res
+    res["due"] = pc.reissue_due(entries, chs)
+    res["second"] = pc.second_worker_cards(chs, now=now)
+    res["need_line"] = bool(active) and not pc.has_rollcall(final, len(active))
+    res["block"] = bool(res["due"] or res["second"] or res["need_line"])
+    return res
 
 
 def stop_main() -> int:
@@ -64,7 +153,7 @@ def stop_main() -> int:
         payload = json.load(sys.stdin)
     except Exception:
         return 0
-    if not isinstance(payload, dict) or payload.get("stop_hook_active"):
+    if not isinstance(payload, dict):
         return 0
     path = payload.get("transcript_path")
     if not path or not os.path.isfile(path):
@@ -75,13 +164,18 @@ def stop_main() -> int:
             if "(task_id: task_" not in fh.read():
                 return 0
         entries = pc.load_entries(path)
-        final = _final_text(entries)
-        if not final.strip():
+        active_flag = bool(payload.get("stop_hook_active"))
+        r = evaluate(entries, stop_hook_active=active_flag)
+        if not r["block"]:
             return 0
-        unseen = pc.unseen_pending(entries)
-        if not unseen or pc.has_rollcall(final, len(unseen)):
-            return 0
-        print(json.dumps({"decision": "block", "reason": reason_for(unseen)}, ensure_ascii=False))
+        session = payload.get("session_id") or os.path.splitext(os.path.basename(path))[0]
+        if r["dropped"]:
+            copies = save_inputs(session, [ch["latest"] for ch in r["dropped"]])
+            reason = reason_dropped(r["dropped"], copies)
+        else:
+            copies = save_inputs(session, [ch["latest"] for ch in r["due"]])
+            reason = reason_for(r["active"], r["due"], r["second"], r["need_line"], copies)
+        print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
     except Exception:
         return 0
     return 0
@@ -94,8 +188,13 @@ def session_main(arg: str) -> int:
         return 1
     entries = pc.load_entries(path)
     cs = pc.cards(entries)
-    out = {"transcript": path, "cards": cs,
-           "unseen": [c["task_id"] for c in pc.unseen_pending(entries)],
+    chs = pc.chains(entries, cs=cs)
+    out = {"transcript": path,
+           "cards": [{k: v for k, v in c.items() if k != "input"} for c in cs],
+           "chains": [{"key": ch["key"], "name": ch["name"], "status": ch["status"],
+                       "cards": [c["task_id"] for c in ch["cards"]]} for ch in chs],
+           "active": [ch["latest"]["task_id"] for ch in pc.active_chains(chs)],
+           "reissue_due": [ch["latest"]["task_id"] for ch in pc.reissue_due(entries, chs)],
            "pending_request_ids": sorted(pc.pending_request_ids(entries))}
     print(json.dumps(out, ensure_ascii=False, indent=1))
     return 0
@@ -106,27 +205,27 @@ def replay_main(path: str) -> int:
     starters = pc.starter_rows(entries)
     owners = set(pc.owner_rows(entries))
     bounds = starters[1:] + [len(entries)]
-    due_n = miss_n = 0
-    print("時刻(UTC)  始め    点呼の要る card  最終発話に点呼  止める")
+    due_n = block_n = reissue_n = 0
+    print("時刻(UTC)  始め    点呼の要る card  出し直す  最終発話に点呼  止める")
     for s, end in zip(starters, bounds):
         part = entries[:end]
         # その turn の最後の返事の時刻 = Stop hook が走る時点 (後ろに付く記録の行の時刻は使わない =
         # 返事を読んでから押された card を、 返事の時点で押されていたと数えてしまう)
         said = [pc._ts(e) for e in entries[s:end] if e.get("type") == "assistant"]
         t_end = (max(said) if said else 0.0) or None
-        unseen = pc.unseen_pending(part, now=t_end, app_until=t_end)
-        final = _final_text(part)
-        if not unseen:
+        r = evaluate(part, now=t_end, app_until=t_end)
+        if not r["active"] and not r["second"]:
             continue
-        has = pc.has_rollcall(final, len(unseen))
-        block = bool(final.strip()) and not has
+        has = not r["need_line"]
         due_n += 1
-        miss_n += block
+        block_n += r["block"]
+        reissue_n += bool(r["due"])
         ts = (entries[s].get("timestamp") or "")[11:19]
         kind = "本人" if s in owners else "自動"
-        print(f"{ts}  {kind}    {len(unseen)} ({'・'.join(c['name'][:12] for c in unseen)})  "
-              f"{'有' if has else '無'}  {'止める' if block else '-'}")
-    print(f"点呼の要る turn = {due_n} / 止める turn = {miss_n}")
+        names = "・".join(ch["name"][:12] for ch in r["active"])
+        print(f"{ts}  {kind}    {len(r['active'])} ({names})  {len(r['due'])}  "
+              f"{'有' if has else '無'}  {'止める' if r['block'] else '-'}")
+    print(f"点呼の要る turn = {due_n} / 出し直しの要る turn = {reissue_n} / 止める turn = {block_n}")
     return 0
 
 
@@ -160,31 +259,58 @@ class _T:
         self.rows.append({"type": "user", "timestamp": self._tick(),
                           "message": {"role": "user", "content": [{"type": "text", "text": text}]}})
 
-    def stop_feedback(self):
+    def feedback(self, text: str = "x"):
         self.rows.append({"type": "user", "timestamp": self._tick(), "isMeta": True,
-                          "message": {"role": "user", "content": "Stop hook feedback: x"}})
+                          "message": {"role": "user", "content": "Stop hook feedback:\n" + text}})
 
-    def tool(self, name: str, inp: dict, result: str):
+    def tool(self, name: str, inp: dict, result: str, is_error: bool = False):
         self.n += 1
         tid = f"toolu_{self.n:04d}"
         self.rows.append({"type": "assistant", "timestamp": self._tick(),
                           "message": {"role": "assistant", "content": [
                               {"type": "tool_use", "id": tid, "name": name, "input": inp}]}})
-        self.rows.append({"type": "user", "timestamp": self._tick(),
-                          "message": {"role": "user", "content": [
-                              {"type": "tool_result", "tool_use_id": tid, "content": [{"type": "text", "text": result}]}]}})
+        res = {"type": "tool_result", "tool_use_id": tid, "content": [{"type": "text", "text": result}]}
+        if is_error:
+            res["is_error"] = True
+        self.rows.append({"type": "user", "timestamp": self._tick(), "message": {"role": "user", "content": [res]}})
+
+    def parallel(self, calls: list[tuple[str, dict, str, bool]]):
+        """1 つの応答に並べた呼び出し (tool_use を全部出してから結果が並ぶ)。"""
+        ids = []
+        for name, inp, _res, _err in calls:
+            self.n += 1
+            tid = f"toolu_{self.n:04d}"
+            ids.append(tid)
+            self.rows.append({"type": "assistant", "timestamp": self._tick(),
+                              "message": {"role": "assistant", "content": [
+                                  {"type": "tool_use", "id": tid, "name": name, "input": inp}]}})
+        for tid, (_name, _inp, result, err) in zip(ids, calls):
+            res = {"type": "tool_result", "tool_use_id": tid, "content": [{"type": "text", "text": result}]}
+            if err:
+                res["is_error"] = True
+            self.rows.append({"type": "user", "timestamp": self._tick(), "message": {"role": "user", "content": [res]}})
+
+    @staticmethod
+    def card_input(title: str, request: str | None = None) -> dict:
+        prompt = f"You are the board worker for role `role-x`, request `{request}`, spec" if request else "do it"
+        return {"initiation": "own_initiative", "title": title, "prompt": prompt, "background": "bg", "context": "fresh",
+                "model": "opus", "effort": "xhigh", "name": "x", "use_worktree": False}
 
     def card(self, task: str, title: str, request: str | None = None):
-        prompt = f"You are the board worker for role `role-x`, request `{request}`, spec" if request else "do it"
-        self.tool("mcp__ccd_session__start_session", {"initiation": "own_initiative", "title": title, "prompt": prompt},
+        self.tool("mcp__ccd_session__start_session", self.card_input(title, request),
                   f'Proposed "{title}" (task_id: {task}). The user sees a card and nothing runs until they start it.')
+
+    def dismiss(self, task: str, started: bool = False):
+        res = (f"Task {task} was already started by the user — it's no longer pending and can't be withdrawn." if started
+               else f"Task {task} withdrawn — the chip is no longer shown to the user.")
+        self.tool("mcp__ccd_session__dismiss_task", {"task_id": task}, res)
 
     def say(self, text: str):
         self.rows.append({"type": "assistant", "timestamp": self._tick(),
                           "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
 
     def write(self, d: str) -> str:
-        p = os.path.join(d, f"t{len(self.rows)}_{self.n}.jsonl")
+        p = os.path.join(d, f"t{len(self.rows)}_{self.n}_{id(self)}.jsonl")
         with open(p, "w", encoding="utf-8") as fh:
             for r in self.rows:
                 fh.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -195,7 +321,7 @@ def _run_stop(path: str, active: bool = False) -> str:
     import io
     import contextlib
     old = sys.stdin
-    sys.stdin = io.StringIO(json.dumps({"transcript_path": path, "stop_hook_active": active}))
+    sys.stdin = io.StringIO(json.dumps({"transcript_path": path, "stop_hook_active": active, "session_id": "selftest"}))
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):
@@ -203,6 +329,13 @@ def _run_stop(path: str, active: bool = False) -> str:
     finally:
         sys.stdin = old
     return buf.getvalue()
+
+
+def _reason(out: str) -> str:
+    try:
+        return json.loads(out)["reason"]
+    except Exception:
+        return ""
 
 
 def selftest() -> int:
@@ -219,55 +352,176 @@ def selftest() -> int:
         os.makedirs(os.path.join(d, "app", "acct", "env"))
         board = os.path.join(d, "board")
         os.environ["PENDING_CARDS_BOARD_ROOTS"] = board
-        line_mark = pc.ROLLCALL_MARK
+        os.environ["PENDING_CARDS_STATE_DIR"] = os.path.join(d, "state")
+        mark = pc.ROLLCALL_MARK
+        R1, R3 = "20990101T000001Z-claude-aaaa01", "20990101T000003Z-claude-aaaa03"
 
-        # 1. 鳴る: 自動の turn で card を出し、 点呼の行が無い
+        # ---- 点呼の行 (今の turn に出した card) ----
         t = _T(now - 3600)
         t.event()
-        t.card("task_aaa1", "[local推奨] [model: opus xhigh] 検収係の RCA", "20990101T000001Z-claude-aaaa01")
+        t.card("task_aaa1", "[local推奨] [model: opus xhigh] 検収係の RCA", R1)
         t.say("card を出しました。")
         out = _run_stop(t.write(d))
-        check("自動の turn・点呼なし → 止める", '"block"' in out and "1 枚: 検収係の RCA" in out)
+        rs = _reason(out)
+        check("今の turn の card・点呼なし → 止める (点呼の行だけ、 出し直しは無し)",
+              '"block"' in out and "1 枚: 検収係の RCA" in rs and pc.REISSUE_HEAD not in rs)
+        t.say(f"card を出しました。\n{mark} 1 枚: 検収係の RCA — 押すか「起こして」 の一言で全部起こします")
+        check("今の turn の card・点呼あり → 黙る (出し直しの要らない形)", _run_stop(t.write(d)) == "")
+        check("stop_hook_active (出し直しの指示の後でない) → 黙る", _run_stop(t.write(d), active=True) == "")
 
-        # 2. 黙る: 点呼の行が在る
-        t.say(f"card を出しました。\n{line_mark} 1 枚: 検収係の RCA — 押すか「起こして」 の一言で全部起こします")
-        check("点呼の行が在る → 黙る", _run_stop(t.write(d)) == "")
-
-        # 3. 鳴る: 数が違う (2 枚目を出した)
+        # ---- 出し直し (前の turn に出した card) ----
         t.event()
-        t.card("task_aaa2", "[local推奨] [model: opus xhigh] 数式の件", None)
-        t.say(f"{line_mark} 1 枚: 検収係の RCA")
+        t.say(f"見張りが拾いました。\n{mark} 1 枚: 検収係の RCA")
         out = _run_stop(t.write(d))
-        check("点呼の数が古い → 止める (2 枚)", '"block"' in out and "2 枚" in out)
+        rs = _reason(out)
+        copy = os.path.join(d, "state", "selftest", "task_aaa1.json")
+        check("前の turn の card → 点呼の行があっても止めて出し直させる",
+              '"block"' in out and pc.REISSUE_HEAD in rs and "task_aaa1" in rs and "dismiss_task" in rs)
+        check("出し直しの指示は取り下げと出し直しを別の応答に分けさせる", "同じ応答に並べない" in rs)
+        try:
+            with open(copy, encoding="utf-8") as fh:
+                cp = json.load(fh)
+        except (OSError, ValueError):
+            cp = {}
+        check("元の入力の写しを書く (initiation = own_initiative、 title・prompt・background が元のまま)",
+              cp.get("initiation") == "own_initiative" and cp.get("title", "").endswith("検収係の RCA")
+              and R1 in cp.get("prompt", "") and cp.get("background") == "bg" and copy in rs)
 
-        # 4. 黙る: stop_hook_active
-        check("stop_hook_active → 黙る", _run_stop(t.write(d), active=True) == "")
+        # 取り下げ → 結果を読んで → 出し直し → 点呼
+        t.feedback(rs)
+        t.dismiss("task_aaa1")
+        t.card("task_aaa1b", "[local推奨] [model: opus xhigh] 検収係の RCA", R1)
+        t.say(f"出し直しました。\n{mark} 1 枚: 検収係の RCA")
+        p = p_reissued = t.write(d)
+        check("出し直した後 (stop_hook_active) → 黙る", _run_stop(p, active=True) == "")
+        chs = pc.chains(pc.load_entries(p))
+        check("出し直した card は同じ依頼の続き (鎖 1 本・card 2 枚・最初の card を起点)",
+              len(chs) == 1 and [c["task_id"] for c in chs[0]["cards"]] == ["task_aaa1", "task_aaa1b"]
+              and chs[0]["status"] == "pending" and chs[0]["origin_ts"] == chs[0]["cards"][0]["ts"])
 
-        # 5. 鳴る: 本人の最初の turn への返事 (最後の点呼)
-        t.human("どういう意味？")
-        t.say("説明です。")
-        check("本人の最初の turn の返事 → 止める", '"block"' in _run_stop(t.write(d)))
+        # 本人の turn でも (見たかに依らず) 出し直す = 本人の裁定
+        t.human("ほかの件だけど、 あれどうなった？")
+        t.say(f"説明です。\n{mark} 1 枚: 検収係の RCA")
+        rs = _reason(_run_stop(t.write(d)))
+        check("本人の turn の終わりでも前の turn の card は出し直す", "task_aaa1b" in rs and pc.REISSUE_HEAD in rs)
 
-        # 6. 黙る: 本人の turn が終わった後の自動の turn (見送り = 繰り返さない)
-        t.say(f"説明です。\n{line_mark} 2 枚: 検収係の RCA・数式の件")
-        t.event()
-        t.say("見張りが拾いました。")
-        check("本人が見た後の自動の turn → 黙る", _run_stop(t.write(d)) == "")
+        # 取り下げたまま出し直さない → 続きの Stop で 1 回知らせる (2 回まで)
+        t.feedback(rs)
+        t.dismiss("task_aaa1b")
+        t.say(f"取り下げました。\n{mark} 1 枚: 検収係の RCA")
+        p = t.write(d)
+        rs = _reason(_run_stop(p, active=True))
+        check("名指した card を取り下げたまま (stop_hook_active) → 出し直しを求める", "出し直していません" in rs and "task_aaa1b" in rs)
+        t.feedback(rs)
+        t.feedback(rs)
+        t.say("わざと取り下げました。")
+        check("出し直しの差し戻しが同じ turn に 3 回目になる → 黙る (止め続けない)", _run_stop(t.write(d), active=True) == "")
 
-        # 7. 鳴る: 見送りの後に新しい card → 新しい card だけを数える
-        t.event()
-        t.card("task_aaa3", "[local推奨] [model: opus xhigh] 道具の直し", "20990101T000003Z-claude-aaaa03")
-        t.say("card を出しました。")
-        out = _run_stop(t.write(d))
-        check("見送りの後の新しい card → その 1 枚だけで止める", '"block"' in out and "1 枚: 道具の直し" in out)
+        # わざと取り下げた (差し戻しが名指していない) card は数えない
+        tw = _T(now - 3600)
+        tw.event()
+        tw.card("task_www1", "[local推奨] 取り下げる", None)
+        tw.dismiss("task_www1")
+        tw.say("取り下げました。")
+        pw = tw.write(d)
+        check("自分で取り下げた card → 黙る (通常の Stop と stop_hook_active の両方)",
+              _run_stop(pw) == "" and _run_stop(pw, active=True) == "")
 
-        # 8. 黙る: 本人が「あとで」 と答えた turn
-        t.say(f"{line_mark} 1 枚: 道具の直し")
-        t.human("<system-reminder>x</system-reminder>\nあとで")
-        t.say("分かりました。")
-        check("本人の「あとで」 → 黙る", _run_stop(t.write(d)) == "")
+        # 取り下げの結果を読む前に出し直す形 (a) = 二重起動の guard が止めて card が出ない → 取り下げたまま扱い
+        ta = _T(now - 3600)
+        ta.event()
+        ta.card("task_rrr1", "[local推奨] 並べた形", None)
+        ta.say(f"{mark} 1 枚: 並べた形")
+        ta.event()
+        ta.say("見張り。")
+        rs = _reason(_run_stop(ta.write(d)))
+        ta.feedback(rs)
+        ta.parallel([("mcp__ccd_session__dismiss_task", {"task_id": "task_rrr1"},
+                      "Task task_rrr1 withdrawn — the chip is no longer shown to the user.", False),
+                     ("mcp__ccd_session__start_session", _T.card_input("[local推奨] 並べた形"),
+                      "PreToolUse:mcp__ccd_session__start_session hook error: 🛑 spawn-dedupe-guard: 同じ依頼の worker を 2 つ起動させる chip なので止めた。",
+                      True)])
+        ta.say(f"{mark} 1 枚: 並べた形")
+        rs2 = _reason(_run_stop(ta.write(d), active=True))
+        check("取り下げと出し直しを並べ、 出し直しが止められた → 出し直しを求める", "出し直していません" in rs2 and "task_rrr1" in rs2)
 
-        # 9. 黙る: 押された (会話記録の知らせ)
+        # (b) = guard の無い所で並べ、 その間に本人が押した (取り下げが already started) → 後の card を取り下げさせる
+        tb = _T(now - 3600)
+        tb.event()
+        tb.card("task_sss1", "[local推奨] 押された形", R3)
+        tb.say(f"{mark} 1 枚: 押された形")
+        tb.event()
+        tb.parallel([("mcp__ccd_session__dismiss_task", {"task_id": "task_sss1"},
+                      "Task task_sss1 was already started by the user — it's no longer pending and can't be withdrawn.", False),
+                     ("mcp__ccd_session__start_session", _T.card_input("[local推奨] 押された形", R3),
+                      'Proposed "[local推奨] 押された形" (task_id: task_sss2). The user sees a card.', False)])
+        tb.say("出し直しました。")
+        rs = _reason(_run_stop(tb.write(d)))
+        check("押された後に出た同じ依頼の card → 取り下げさせ、 出し直させない",
+              "2 人目" in rs and "task_sss2" in rs and pc.REISSUE_HEAD not in rs)
+
+        # ---- 出し直さない形 ----
+        # 「あとで」 = その鎖は以後も出し直さない・点呼しない。 その後の新しい card だけを数える
+        tl = _T(now - 3600)
+        tl.event()
+        tl.card("task_lll1", "[local推奨] 道具の直し", None)
+        tl.say(f"{mark} 1 枚: 道具の直し")
+        tl.human("<system-reminder>x</system-reminder>\nあとで")
+        tl.say("分かりました。")
+        check("本人の「あとで」 → 黙る", _run_stop(tl.write(d)) == "")
+        tl.event()
+        tl.say("見張り。")
+        check("「あとで」 の後の turn → 黙る (出し直さない)", _run_stop(tl.write(d)) == "")
+        tl.card("task_lll2", "[local推奨] 数式の件", None)
+        tl.say("新しい card。")
+        rs = _reason(_run_stop(tl.write(d)))
+        check("「あとで」 の後の新しい card → その 1 枚だけで点呼", "1 枚: 数式の件" in rs and pc.REISSUE_HEAD not in rs)
+
+        # turn の途中に打った「あとで」 (queued_command) も本人の発言
+        tq = _T(now - 3600)
+        tq.event()
+        tq.card("task_qqq1", "[local推奨] 途中の発言", None)
+        tq.say(f"{mark} 1 枚: 途中の発言")
+        tq.event()
+        tq.rows.append({"type": "attachment", "timestamp": _iso(tq.t + 5), "attachment": {
+            "type": "queued_command", "origin": {"kind": "human"},
+            "prompt": [{"type": "text", "text": "<system-reminder>x</system-reminder>"}, {"type": "text", "text": "あとで"}]}})
+        tq.say("了解。")
+        check("turn の途中の本人の「あとで」 → 黙る", _run_stop(tq.write(d)) == "")
+
+        # origin が human でも別 session の message の形の「あとで」 は本人の発言にしない
+        tc = _T(now - 3600)
+        tc.event()
+        tc.card("task_ccc1", "[local推奨] 本人でない human", None)
+        tc.say(f"{mark} 1 枚: 本人でない human")
+        tc.human('<cross-session-message from="local_x" encoded="1">あとで</cross-session-message>')
+        tc.say("受けました。")
+        check("別 session の message の「あとで」 → 出し直しは続く", pc.REISSUE_HEAD in _reason(_run_stop(tc.write(d))))
+
+        # 7 日: 最初の card から数える (出し直しで延びない)
+        t7 = _T(now - 8 * 86400)
+        t7.event()
+        t7.card("task_777a", "[local推奨] 古い依頼", "20990101T000007Z-claude-aaaa07")
+        t7.say(f"{mark} 1 枚: 古い依頼")
+        t7.t = now - 600
+        t7.event()
+        t7.dismiss("task_777a")
+        t7.card("task_777b", "[local推奨] 古い依頼", "20990101T000007Z-claude-aaaa07")
+        t7.say("出し直し。")
+        t7.event()
+        t7.say("見張り。")
+        check("最初の card から 7 日を過ぎた依頼 → 出し直した card が新しくても黙る", _run_stop(t7.write(d)) == "")
+
+        # request id の無い card は仕事の名前で結ぶ
+        tn = _T(now - 3600)
+        tn.event()
+        tn.card("task_nnn1", "[local推奨] 名前だけ", None)
+        tn.dismiss("task_nnn1")
+        tn.card("task_nnn2", "[worktree推奨] 名前だけ", None)
+        chs = pc.chains(pc.load_entries(tn.write(d)))
+        check("request id の無い card は題の tag を外した名前で結ぶ", len(chs) == 1 and len(chs[0]["cards"]) == 2)
+
+        # ---- 押された・片付いた ----
         t2 = _T(now - 3600)
         t2.event()
         t2.card("task_bbb1", "[local推奨] 返事の記録", None)
@@ -276,53 +530,33 @@ def selftest() -> int:
         t2.say("押されました。")
         check("「started your proposal」 の知らせ → 黙る", _run_stop(t2.write(d)) == "")
 
-        # 10. 黙る: proposal_id を渡して起こした
         t3 = _T(now - 3600)
         t3.event()
-        t3.card("task_ccc1", "[local推奨] 返事の記録", None)
+        t3.card("task_ddd1", "[local推奨] 返事の記録", None)
         t3.human("起こして")
-        t3.tool("mcp__ccd_session__start_session", {"proposal_id": "task_ccc1"}, 'Started session "x" (session_id: local_2).')
+        t3.tool("mcp__ccd_session__start_session", {"proposal_id": "task_ddd1"}, 'Started session "x" (session_id: local_2).')
         t3.say("起こしました。")
         check("proposal_id で起こした → 黙る", _run_stop(t3.write(d)) == "")
 
-        # 11. 黙る: app の記録に card から起きた session がある
         t4 = _T(now - 3600)
         t4.event()
-        t4.card("task_ddd1", "[local推奨] 検収係", None)
+        t4.card("task_eee1", "[local推奨] 検収係", None)
         t4.say("card を出しました。")
+        t4.event()
+        t4.say("見張り。")
         p4 = t4.write(d)
         with open(os.path.join(d, "app", "acct", "env", "local_9.json"), "w") as fh:
             json.dump({"sessionId": "local_9", "createdAt": int(now * 1000),
-                       "spawnedFrom": {"sessionId": "local_p", "taskId": "task_ddd1", "sideSession": True}}, fh)
+                       "spawnedFrom": {"sessionId": "local_p", "taskId": "task_eee1", "sideSession": True}}, fh)
         check("app の記録の spawnedFrom.taskId → 黙る", _run_stop(p4) == "")
-        check("流し直しでは、 その turn の後にできた記録は数えない",
-              len(pc.unseen_pending(pc.load_entries(p4), now=now - 3000, app_until=now - 3000)) == 1)
+        r = evaluate(pc.load_entries(p4), now=now - 3000, app_until=now - 3000)
+        check("流し直しでは、 その turn の後にできた記録は数えない", len(r["active"]) == 1)
 
-        # 12. 黙る: 取り下げ / 期限切れ
-        t5 = _T(now - 3600)
-        t5.event()
-        t5.card("task_eee1", "[local推奨] 取り下げる", None)
-        t5.tool("mcp__ccd_session__dismiss_task", {"task_id": "task_eee1"},
-                "Task task_eee1 withdrawn — the chip is no longer shown to the user.")
-        t5.say("取り下げました。")
-        check("dismiss_task の withdrawn → 黙る", _run_stop(t5.write(d)) == "")
-        t6 = _T(now - 8 * 86400)
-        t6.event()
-        t6.card("task_fff1", "[local推奨] 古い", None)
-        t6.say("card を出しました。")
-        check("7 日を過ぎた card → 黙る", _run_stop(t6.write(d)) == "")
-
-        # 13. 掲示板の request id (見張りが拾い直さない依頼)
-        ids = pc.pending_request_ids(pc.load_entries(t.write(d)))
-        check("押されていない card の request id を引く (押された・見送りも含む押されていない分)",
-              ids == {"20990101T000001Z-claude-aaaa01", "20990101T000003Z-claude-aaaa03"})
-
-        # 13b. 掲示板で別の窓が引き受けた依頼の card は数えない / release の後は戻る
-        tb = _T(now - 3600)
-        tb.event()
-        tb.card("task_jjj1", "[local推奨] 別の窓が引き受けた", "20990101T000009Z-claude-aaaa09")
-        tb.say("card を出しました。")
-        pb = tb.write(d)
+        tb2 = _T(now - 3600)
+        tb2.event()
+        tb2.card("task_jjj1", "[local推奨] 別の窓が引き受けた", "20990101T000009Z-claude-aaaa09")
+        tb2.say("card を出しました。")
+        pb = tb2.write(d)
         th = os.path.join(board, "events", "proj", "2099-01-01-x")
         os.makedirs(th)
 
@@ -338,70 +572,23 @@ def selftest() -> int:
         ev("20990101T000011Z-claude-bbbb11", "release", now - 30)
         check("引き受けの後の release → また止める", '"block"' in _run_stop(pb))
 
-        # 14. origin の無い古い記録: isMeta でなく自動の書き出しで始まらない行を本人の turn と見る
-        t7 = _T(now - 3600)
-        t7.rows.append({"type": "user", "timestamp": t7._tick(),
-                        "message": {"role": "user", "content": "Background (from the session that started this one): x"}})
-        t7.card("task_ggg1", "[local推奨] 古い形", None)
-        t7.say("card を出しました。")
-        t7.rows.append({"type": "user", "timestamp": t7._tick(), "message": {"role": "user", "content": "ok"}})
-        t7.say("はい。")
-        t7.rows.append({"type": "user", "timestamp": t7._tick(),
-                        "message": {"role": "user", "content": "<task-notification>x</task-notification>"}})
-        t7.say("見張りです。")
-        check("origin の無い記録で本人の turn を見分ける → 見送り後は黙る", _run_stop(t7.write(d)) == "")
+        # ---- 掲示板の request id (見張りが拾い直さない依頼) ----
+        check("出し直した後の card の request id を引く (見張りが拾い直さない依頼)",
+              pc.pending_request_ids(pc.load_entries(p_reissued)) == {R1})
+        check("取り下げたままの依頼の request id は引かない", pc.pending_request_ids(pc.load_entries(t.write(d))) == set())
 
-        # 15. 最終発話が空 (tool だけの turn) は黙る
+        # ---- その他の黙る形 ----
         t8 = _T(now - 3600)
         t8.event()
         t8.card("task_hhh1", "[local推奨] 空", None)
         check("最終発話の無い turn → 黙る", _run_stop(t8.write(d)) == "")
-
-        # 16. Stop hook の差し戻しは turn の始めに数えない (本人の turn の扱いを変えない)
         t9 = _T(now - 3600)
         t9.event()
         t9.card("task_iii1", "[local推奨] 差し戻し", None)
         t9.say("card を出しました。")
-        t9.stop_feedback()
+        t9.feedback("別の hook の差し戻し")
         t9.say("追記です。")
-        check("Stop hook の差し戻しの後の追記 → 点呼が無ければ止める", '"block"' in _run_stop(t9.write(d)))
-
-        # 17. turn の途中に本人が打った発言 (queued_command) も本人の発言: その turn の返事が最後、 次の自動の turn は黙る
-        tq = _T(now - 3600)
-        tq.event()
-        tq.card("task_kkk1", "[local推奨] 途中の発言", None)
-        tq.rows.append({"type": "attachment", "timestamp": _iso(tq.t + 5), "attachment": {
-            "type": "queued_command", "origin": {"kind": "human"},
-            "prompt": [{"type": "text", "text": "<system-reminder>x</system-reminder>"}, {"type": "text", "text": "続けて"}]}})
-        tq.say("続けます。")
-        check("途中の本人の発言の turn の返事 → まだ止める (最後の点呼)", '"block"' in _run_stop(tq.write(d)))
-        tq.say(f"{line_mark} 1 枚: 途中の発言")
-        tq.event()
-        tq.say("見張りです。")
-        check("途中の本人の発言の turn が終わった後 → 黙る", _run_stop(tq.write(d)) == "")
-
-        # 18. origin が human でも別 session の message の形・起動文の形は本人の発言にしない
-        tc = _T(now - 3600)
-        tc.event()
-        tc.card("task_lll1", "[local推奨] 本人でない human", None)
-        tc.say("card を出しました。")
-        tc.human('<cross-session-message from="local_x" encoded="1">頼み</cross-session-message>')
-        tc.say("受けました。")
-        tc.event()
-        tc.say("見張りです。")
-        check("origin が human の別 session の message の後 → まだ止める", '"block"' in _run_stop(tc.write(d)))
-
-        # 19. API の誤りの直後の「Try again」 (app の再試行) は本人の発言にしない
-        tr = _T(now - 3600)
-        tr.event()
-        tr.card("task_mmm1", "[local推奨] 再試行", None)
-        tr.rows.append({"type": "assistant", "timestamp": tr._tick(), "isApiErrorMessage": True,
-                        "message": {"role": "assistant", "content": [{"type": "text", "text": "API Error"}]}})
-        tr.human("Try again")
-        tr.say("再開しました。")
-        tr.event()
-        tr.say("見張りです。")
-        check("API の誤りの後の「Try again」 の後 → まだ止める", '"block"' in _run_stop(tr.write(d)))
+        check("別の hook の差し戻しの後の追記 → 差し戻しは turn を始めない (点呼が無ければ止める)", '"block"' in _run_stop(t9.write(d)))
 
     print(f"{'PASS' if fails == 0 else 'FAIL'} ({fails} fail)")
     return 1 if fails else 0
