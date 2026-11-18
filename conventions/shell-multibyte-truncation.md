@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names) + **Python で file の行番号を出すとき** (#python-splitlines-line-numbers) + **PDF から起こした文字列をギリシャ文字で探すとき** (#pdf-text-micro-sign) + **他人の原稿の式と自分の式を PDF から照らすとき** (#pdf-text-glyph-variants)
+when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names) + **Python で file の行番号を出すとき** (#python-splitlines-line-numbers) + **PDF から起こした文字列をギリシャ文字で探すとき** (#pdf-text-micro-sign)
 category: infra
 summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 -->
