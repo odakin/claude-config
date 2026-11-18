@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import re
 import sys
+import unicodedata
 from datetime import date, timedelta
 
 # ---------------------------------------------------------------------------
@@ -35,11 +36,13 @@ from datetime import date, timedelta
 DATE_JA_RE = re.compile(r"(\d{1,2})\s*月\s*(\d{1,2})\s*日")                 # 「6月10日」 (全角は正規化後)
 DATE_SLASH_RE = re.compile(r"(?<![\d/.])(\d{1,2})/(\d{1,2})(?![\d/.])")    # 「6/10」
 ZEN2HAN = str.maketrans("０１２３４５６７８９：／～〜", "0123456789:/~~")
+NORMALIZE_FORM = "NFKC"
 
 
 def normalize_text(s: str) -> str:
-    """全角数字・コロン・スラッシュ・波ダッシュを半角に揃える。"""
-    return (s or "").translate(ZEN2HAN)
+    """NFKC で字を揃えてから (康熙部首の「⽉」「⽇」 → 「月」「日」、 全角の数字・記号・括弧 → 半角 = 実測で康熙部首の形の
+    日付を落とした)、 NFKC が変えない波ダッシュ「〜」 も含めて半角に揃える。"""
+    return unicodedata.normalize(NORMALIZE_FORM, s or "").translate(ZEN2HAN)
 
 
 def resolve_year(month: int, day: int, today: date) -> date | None:
@@ -381,6 +384,7 @@ def predicate_version(*extra: str) -> str:
                                  EN_MD_RE, EN_DM_RE, EN_CTX_PRE_RE, EN_CTX_POST_RE, EN_ACTION_RE, EN_REL_RE,
                                  URGENCY_WORD_RE, FULL_DATE_RE, _YEAR_BEFORE_RE, _YEAR_AFTER_RE)]
     parts += [rx.pattern for _k, rx in REL_JA_RES]
+    parts += ["normalize:" + NORMALIZE_FORM]          # 正規化を変えると結果が変わる = 古い cache を捨てさせる
     parts += [str(x) for x in extra]
     return hashlib.sha1("\x00".join(parts).encode("utf-8")).hexdigest()[:12]
 
@@ -412,11 +416,14 @@ def _selftest() -> int:
           "散文: 隣の日付の直後の〆を次の日付のものと読まない")
     check(nearest_prose_deadline("（〆 3/13）は別の窓口", today, base) == date(2030, 3, 13), "散文: 締切語が前にある形")
     check(nearest_prose_deadline("３月１４日（金）までに", today, base) == date(2030, 3, 14), "散文: 全角数字と月日表記")
+    check(nearest_prose_deadline("3⽉14⽇（金）までに", today, base) == date(2030, 3, 14), "散文: 康熙部首の「⽉」「⽇」 の月日表記")
     check(nearest_prose_deadline("12/25〆", date(2030, 12, 20), date(2030, 11, 1)) == date(2030, 12, 25), "散文: 年の解決は base 以降")
     check(prose_deadline_dates("", base) == [], "散文: 空文字は空")
 
     # --- メール本文 (合成データ) ---
     t = date(2030, 7, 20)
+    check([d["date"] for d in extract_input_deadlines("回答は 7⽉ 24⽇（⽔）までに提出してください。", t, 7)] == ["2030-07-24"],
+          "メール: 康熙部首の「⽉」「⽇」「⽔」 で書かれた期限 (全角の括弧も)")
     check([d["date"] for d in extract_input_deadlines("報告書は7月25日までに提出してください。", t, 7)] == ["2030-07-25"],
           "メール: 締切語 + 行動語")
     check(extract_input_deadlines("工事は7月25日まで続く見込みです。", t, 7) == [], "メール: 行動語が無い期限の言及は取らない")
