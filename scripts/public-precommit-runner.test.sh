@@ -29,6 +29,8 @@ unset CLAUDE_CODE_SESSION_ID CLAUDE_CARRYOVER_TRANSCRIPT CLAUDE_CARRYOVER_GUARD
 
 TMPDIR_TEST="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_TEST"' EXIT
+# 止めた文字列の控え (leak-guard-consent.py note-block) を、 この機械の本物の置き場でなく一時 dir に書かせる
+export LEAK_GUARD_STATE_DIR="$TMPDIR_TEST/consent-state"
 
 # ====================================================================
 # Mock personal layer setup
