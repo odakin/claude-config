@@ -39,7 +39,7 @@ import sys
 
 GENERATED_PROMPT = ("<command-", "<local-command", "<task-notification>", "<cross-session-message", "Another Claude session",
                     "Stop hook feedback", "Base directory for this skill", "Caveat:", "<system-reminder>", "[Request interrupted",
-                    "<side-sessions-event", "This session is being continued from a previous conversation",
+                    "<side-sessions-event", "<ci-monitor-event", "This session is being continued from a previous conversation",
                     # a session started by another session: its first prompt is the starter's hand-off text, which often
                     # quotes the owner's words (conventions/hook-authoring.md#transcript-human-vs-peer-message)
                     "Background (from the session that started this one)")
@@ -239,6 +239,8 @@ def _selftest() -> int:
                                           "child X reported: this window is the conductor post</side-sessions-event>")
     check("owner_text: a typed prompt is the owner's", owner_text(user("t", "  do Z  ")) == "do Z")
     check("owner_text: the app's side-session notice is not the owner (a child's report quoted in it)", owner_text(notice) == "")
+    check("owner_text: the app's CI monitor event is not the owner",
+          owner_text(user("t", "<system-reminder>x</system-reminder>\n<ci-monitor-event>checks failed</ci-monitor-event>")) == "")
     check("owner_text: a peer's message, a hook's feedback and a tool result are not the owner",
           owner_text(rows[3]) == owner_text(rows[4]) == owner_text(rows[2]) == "")
     check("owner_text: a queued prompt typed by the owner is the owner's", owner_text(queued("t", "also do Y")) == "also do Y")
