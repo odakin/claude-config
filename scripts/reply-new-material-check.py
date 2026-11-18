@@ -26,7 +26,9 @@ referee には読めない (実測)。 批判役は返答書と referee の報�
   python3 reply-new-material-check.py --selftest
 終了値: 0 = 出すものなし / 1 = 新しいと言っていない答えか、 初出で定義していない記号がある / 2 = 使い方の誤り。
 見ないもの: 言い換えた主張の新しさ (節・図・式の番号に出ないもの)、 番号を書かずに節の題で引く参照、 原稿の番号が
-返答書の想定と違うとき (今の原稿に無い番号として出るだけ)、 定義の文の中身が正しいか。
+返答書の想定と違うとき (今の原稿に無い番号として出るだけ)、 定義の文の中身が正しいか。 式は label で照らすので、
+投稿の後に label だけを足した式は新しいと出る (--current-tex を渡すと、 その式の行が投稿版の tex に字面で在るかも見て
+外し、 relabeled_equations に名を出す。 実測 = 投稿版にある式に後で label を足し、 新しい式と出た)。
 """
 from __future__ import annotations
 
@@ -46,10 +48,38 @@ DEFAULT_NEW = [r"\bnew(?:ly)?\b", r"\badded\b", r"\badd(?:ing)?\b", r"\bintroduc
 WINDOW = 160
 
 
+def _eq_body(tex: str, label: str) -> str | None:
+    """今の原稿の tex で `\\label{label}` の付いた式の行 (その label の前の行の切れ目まで) を寄せた形で返す。"""
+    i = tex.find("\\label{" + label + "}")
+    if i < 0:
+        return None
+    start = max(tex.rfind("\\\\", 0, i), tex.rfind("\\begin{", 0, i), 0)
+    return _norm_tex(tex[start:i])
+
+
+def _norm_tex(s: str) -> str:
+    s = re.sub(r"\\label\{[^}]*\}|\\nonumber|\\notag|\\begin\{[a-z*]+\}|\\\\|&|[\s{}]", "", s)
+    return s
+
+
 def analyse(reply: str, current: rl.ManuscriptIndex, submitted: rl.ManuscriptIndex, *, submitted_tex: str | None,
             quote_macro: str, item_macro: str, referee_macro: str, font_macros: set[str],
-            conventional: list[str], new_phrases: list[str]) -> dict:
+            conventional: list[str], new_phrases: list[str], current_tex: str | None = None) -> dict:
     text = rl.strip_comments(reply)
+    sub_norm = _norm_tex(rl.strip_comments(submitted_tex)) if (submitted_tex and current_tex) else None
+    cur_clean = rl.strip_comments(current_tex) if current_tex else None
+    relabeled: list[str] = []
+
+    def new_item(it) -> bool:
+        if not rl.is_new(it, submitted):
+            return False
+        if it.kind == "equation" and sub_norm is not None:
+            body = _eq_body(cur_clean, it.label)
+            if body and len(body) >= 12 and body in sub_norm:
+                if it.label not in relabeled:
+                    relabeled.append(it.label)
+                return False
+        return True
     answers = rl.segment_answers(text, quote_macro, item_macro)
     new_re = re.compile("|".join(new_phrases), re.I)
     out = {"answers": [], "unresolved": [], "outside_answers": [], "symbols": []}
@@ -62,7 +92,7 @@ def analyse(reply: str, current: rl.ManuscriptIndex, submitted: rl.ManuscriptInd
                 out["unresolved"].append({"answer": a.label, "ref": r.raw, "kind": r.kind, "number": r.number,
                                           "line": rl.line_of(text, r.pos)})
                 continue
-            if rl.is_new(it, submitted):
+            if new_item(it):
                 uses.append((r, it))
         if not uses:
             continue
@@ -124,6 +154,7 @@ def analyse(reply: str, current: rl.ManuscriptIndex, submitted: rl.ManuscriptInd
         out["symbols"].append({"key": key, "shown": u.shown, "line": rl.line_of(text, u.pos),
                                "answer": a0.label if a0 else "(答えの外)", "status": status, "defined_line": def_line,
                                "in_submitted": (key in sub_keys) if submitted_tex is not None else None})
+    out["relabeled_equations"] = relabeled
     out["counts"] = {
         "answers_using_new": len({x["answer"] for x in out["answers"]}),
         "new_not_said": sum(1 for x in out["answers"] if not x["new_said"]),
@@ -226,6 +257,13 @@ def selftest() -> int:
     res2 = analyse(SELF_REPLY, cur, sub, submitted_tex=None, quote_macro="Q", item_macro="A", referee_macro="R",
                    font_macros=set(), conventional=[r"^t$"], new_phrases=DEFAULT_NEW)
     check(not any(s["key"] == "t" for s in res2["symbols"]), "--conventional で外す")
+    cur_tex = r"\begin{equation} \lambda = \kappa_j t \label{eq:added} \end{equation}"
+    sub_tex = r"\begin{equation} \lambda = \kappa_j t \end{equation}"
+    res3 = analyse(SELF_REPLY.replace("the new Fig.~2 and Eq.~(2)", "Eq.~(2)"), cur, sub, submitted_tex=sub_tex,
+                   current_tex=cur_tex, quote_macro="Q", item_macro="A", referee_macro="R", font_macros=set(),
+                   conventional=[], new_phrases=DEFAULT_NEW)
+    check(not any(x["kind"] == "equation" for x in res3["answers"]) and res3["relabeled_equations"] == ["eq:added"],
+          "投稿の後に label だけを足した式は新しいと出さない")
     return 0 if ok else 1
 
 
@@ -235,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--current-aux", type=Path)
     ap.add_argument("--submitted-aux", type=Path)
     ap.add_argument("--submitted-tex", type=Path)
+    ap.add_argument("--current-tex", type=Path, help="今の原稿の tex (式の label が投稿版に無いとき、 式の中身が投稿版にあるかを見る)")
     ap.add_argument("--quote-macro", default="Q")
     ap.add_argument("--item-macro", default="A")
     ap.add_argument("--referee-macro", default="R")
@@ -253,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
                   rl.parse_aux(a.current_aux.read_text(encoding="utf-8", errors="replace")),
                   rl.parse_aux(a.submitted_aux.read_text(encoding="utf-8", errors="replace")),
                   submitted_tex=a.submitted_tex.read_text(encoding="utf-8") if a.submitted_tex else None,
+                  current_tex=a.current_tex.read_text(encoding="utf-8") if a.current_tex else None,
                   quote_macro=a.quote_macro, item_macro=a.item_macro, referee_macro=a.referee_macro,
                   font_macros=set(a.font_macro), conventional=a.conventional,
                   new_phrases=DEFAULT_NEW + a.new_phrase)
