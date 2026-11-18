@@ -52,7 +52,7 @@ HAND = r"(手で|手計算|暗算|頭の中|by hand|mentally)"
 CHECK = r"(一致|再現|確か|確認|検算|照合|再導出|平方完成|verif|reproduc|check|agree)"
 INDEP = r"(独立検査|独立に再現|独立に再導出|独立の検算|independent(?:ly)?\s+(?:check|re-?deriv|verif))"
 EVIDENCE = r"(\.py\b|\.wls\b|\.nb\b|\.ipynb\b|\.m\b|script|スクリプト)"
-DEFER = r"(次に[^。\n]{0,30}?(とき|時|際)|(?<![前最])(?<!前と)後で|あとで|次回|そのうち(?!\s*\d|の)|いずれ(?![もか])|\blater\b|next time)"
+DEFER = r"(次に[^。\n]{0,30}?(とき|時|際)|(?<![前最午])(?<!前と)後で|あとで|次回|そのうち(?!\s*\d|の)|いずれ(?![もか])|\blater\b|next time)"
 CARRIER = r"(\b20\d\d-\d\d-\d\d-[a-z0-9-]+|plan|TODO|掲示板|thread|request|期限|deadline|carrier)"
 
 A1_RE = re.compile(HAND + r".*" + CHECK + "|" + CHECK + r".*" + HAND, re.I)
@@ -194,9 +194,11 @@ def selftest():
         ("t18", "返事", "「確認した」 と書いた後、 足したものはありません。"),
         ("t19", "返事", "分ける前と後で同じ。 空白を除いた文字列は前後で一致する"),
         ("t20", "返事", "表の最後で止まる"),
+        ("t21", "返事", "午後で会議の枠が埋まる"),          # 「午後で」 は先送りでない
+        ("t22", "返事", "会議の後で直します"),              # 「の後で」 は先送りとして拾い続ける
     ]
     got = sorted((k[:2], ts) for k, ts, _w, _l in scan(items))
-    expect("findings", got, [("A1", "t1"), ("A2", "t1"), ("A2", "t6"), ("B ", "t3"), ("B ", "t8"),
+    expect("findings", got, [("A1", "t1"), ("A2", "t1"), ("A2", "t6"), ("B ", "t22"), ("B ", "t3"), ("B ", "t8"),
                              ("C ", "t10"), ("C ", "t11"), ("C ", "t13"), ("C ", "t15"), ("C ", "t18")])
     # end to end on a synthetic transcript
     with tempfile.TemporaryDirectory() as d:
