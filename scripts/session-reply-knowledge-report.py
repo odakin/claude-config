@@ -36,6 +36,7 @@
   session-reply-knowledge-report.py <session id か先頭の数文字>     # 既定は環境変数 CLAUDE_CODE_SESSION_ID
   session-reply-knowledge-report.py abcd1234 --show Q3                # その候補の返事 (要約の項目) の全文
   session-reply-knowledge-report.py abcd1234 --check dispositions.txt [--base ~/work]
+  session-reply-knowledge-report.py abcd1234 --check dispositions.txt --summary   # 結果の行だけ (別の窓 = 検収係で照らすとき、 本人の発言を出さない)
   session-reply-knowledge-report.py abcd1234 --delegated [--check …]  # 締めを渡された worker が回す (P も並べる・照合する)
   session-reply-knowledge-report.py abcd1234 --json
   session-reply-knowledge-report.py --hook-stop < <Stop hook の JSON>   # 締め (/wrap) の turn で照合が通っていなければ 1 回差し戻す
@@ -538,6 +539,18 @@ def report(session, pdirs, args):
     if args.json:
         print(json.dumps({"compactions": n_comp, "candidates": cands}, ensure_ascii=False, indent=1))
         return 0
+    if args.check and getattr(args, "summary", False):
+        # the result lines only: run in another window (a reviewer's), the full listing put the person's words there (measured)
+        rows, bad, unknown = check(cands, read_dispositions(args.check), Path(args.base).expanduser(),
+                                   since=last_commit_time(args.check))
+        marks = ["❌" if not ok else ("⚠️" if warn else "✅") for _c, _s, ok, _sh, warn in rows]
+        print("処分の照合: 候補 %d 件、 欠け・根拠の無いもの %d 件、 根拠の行が未決の書き方か後で変わった %d 件 (⚠️ = 読み直す)"
+              % (len(cands), bad, marks.count("⚠️")))
+        print("✅ %d / ⚠️ %d / ❌ %d、 処分の file にあって候補に無い id %d 件" % (marks.count("✅"), marks.count("⚠️"),
+                                                                     marks.count("❌"), len(unknown)))
+        rc = 1 if bad else 0
+        print("終了値 = %d (--summary = 候補の文と根拠の行は出さない。 中身は --summary を外して読む)" % rc)
+        return rc
     print("記録: " + ", ".join(map(str, paths)))
     print("文脈圧縮: %d 回。 ⏪ = 圧縮より前 (今の context に無い、 全文 = --show <id>)" % n_comp)
     if args.check:
@@ -762,6 +775,25 @@ def selftest():
         sk = {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "wrap"}}]}}
         p.write_text(json.dumps(human("仕上げて")) + "\n" + json.dumps(sk) + "\n", encoding="utf-8")
         expect("Skill の起動は締めの印", len(tail_entries(p)), 2)
+    # --check --summary: the result lines only (the person's words and the basis lines are not printed)
+    import contextlib
+    import io
+    with tempfile.TemporaryDirectory() as td:
+        proj = Path(td) / "proj"
+        proj.mkdir()
+        (proj / "abcd1234-0000.jsonl").write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in entries) + "\n",
+                                                  encoding="utf-8")
+        disp = Path(td) / "d.txt"
+        disp.write_text("Q1 記録済み no-such.md:1\n", encoding="utf-8")
+        ns = argparse.Namespace(show=None, json=False, check=str(disp), base=td, delegated=False, strict=False, summary=True)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = report("abcd1234", [Path(td)], ns)
+        out = buf.getvalue()
+        expect("--summary: 件数の行・印の数・終了値の 3 行だけ", (len(out.strip().splitlines()), rc, "処分の照合:" in out,
+                                                     "終了値 = 1" in out), (3, 1, True, True))
+        expect("--summary: 本人の発言と返事の文を出さない", any(w in out for w in ("簡潔", "符号", "no-such.md")), False)
+        expect("--summary: Stop hook が読む件数の形は同じ", "欠け・根拠の無いもの" in out, True)
 
     print("selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
@@ -774,6 +806,9 @@ def main(argv=None):
     ap.add_argument("--projects-dir")
     ap.add_argument("--show", metavar="ID", help="その候補の全文")
     ap.add_argument("--check", metavar="FILE", help="処分の file を照合する")
+    ap.add_argument("--summary", action="store_true",
+                    help="--check と使う: 結果の行 (件数・✅⚠️❌ の数・終了値) だけを出し、 候補の文 (本人の発言) と根拠の行は出さない"
+                         " (依頼元の締めを別の窓 = 検収係で照らすとき)")
     ap.add_argument("--base", default=".", help="処分の根拠の path の基準 (既定 = 今の dir)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--delegated", action="store_true",
@@ -788,6 +823,8 @@ def main(argv=None):
         return hook_stop_main()
     if not a.session:
         ap.error("session id を渡す (または CLAUDE_CODE_SESSION_ID)")
+    if a.summary and not a.check:
+        ap.error("--summary は --check と使う")
     return report(a.session, ssr.projects_dirs(a.projects_dir), a)
 
 
