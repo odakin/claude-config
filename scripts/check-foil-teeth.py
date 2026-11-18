@@ -36,6 +36,11 @@ unittest の試験に当てるとき: `"run": "python3 <試験の file> -v <Clas
 (行頭一致で読むため) = 外した結果が assertion で落ちる形に mutant を作る。 試験の file は target と同じ dir に置く
 (写しは target の親 dir だけ)。
 
+shell の試験が結果の行を字下げして出すとき (`  ✅ A1 …` / `  ❌ A1 …` のように行の頭に空白を置く形): 印にも同じ字下げを入れる
+(`"pass_marker": "  ✅ "`)。 行頭一致なので、 字下げの無い印では基準の PASS 行が 1 本も数えられず、 どの label も
+「label not found among the unmutated PASS lines」 の [SPEC] になる (実測)。 target を差し替える口は試験の側に置く
+(例 = wrapper が本体の path を env で受け、 `"run": "env <NAME>={} bash {spec_dir}/<試験>.test.sh"`)。
+
 selftest が target の dir からの相対 path で隣の repo・上の dir を読むとき: 写しの dir からはその path が見えず、
 その読みに頼る check が基準で落ちて `[BASE-RED]` になり、 どの mutant も測れなくなる (実測)。 読む先を env で
 渡せる作りなら `"run": "env <変数>={spec_dir}/<元の場所からの相対 path> python3 {} --selftest"` で元の場所を渡す
