@@ -1056,7 +1056,8 @@ def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_pr
 
     fpath.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n")
     git(repo, "add", rel)
-    rc, _ = git(repo, "commit", "-q", "-m", f"fleet-heartbeat: {data['host']}")
+    # path を付けて自分の file だけを commit する (付けないと、 他の session が git add した file を index ごと beat の commit に吸う = 実測)
+    rc, _ = git(repo, "commit", "-q", "-m", f"fleet-heartbeat: {data['host']}", "--", rel)
     if rc != 0:
         return "commit failed (fail-open)"
     # --autostash: 他 session が残した無関係な dirty file で rebase が
@@ -1262,6 +1263,16 @@ def selftest():
         ok += 1
         r2 = beat(repo, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
         assert r2.startswith("skip"), r2
+        ok += 1
+        # 他の session が stage した file を beat の commit に吸わない (path を付けた commit)、 その file は stage に残る
+        (repo / "other.txt").write_text("someone else's work\n")
+        git(repo, "add", "other.txt")
+        r3 = beat(repo, "fleet", 0, RC_LABEL_PREFIX_DEFAULT, None)     # 間隔 0 = 必ず commit する
+        assert r3.startswith("committed"), r3
+        _rc, names = git(repo, "show", "--name-only", "--format=", "HEAD")
+        assert names.split() == [f"fleet/{hostname_short()}.json"], names
+        _rc, staged = git(repo, "diff", "--cached", "--name-only")
+        assert staged.split() == ["other.txt"], staged
         ok += 1
         # harness_hooks: settings.json の hook の file 名だけ (event 横断、 重複なし)
         hh_home = Path(td) / "hh"
