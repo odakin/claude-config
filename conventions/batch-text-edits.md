@@ -29,7 +29,7 @@ open(path, "w", encoding="utf-8").write(txt)
 | 1-2 箇所 | Edit tool | 差分がそのまま可視になり人間 review が効く |
 | 3 箇所以上 / 長い string / 系統的 sweep | 本 pattern | 手数と転記ミスが線形に増えるのを止める |
 
-## <a id="batch-text-failure-modes"></a>12 の失敗モード
+## <a id="batch-text-failure-modes"></a>13 の失敗モード
 
 ### <a id="assert-does-not-gate-downstream"></a>1. assert の verdict は下流に伝わらない
 
@@ -150,6 +150,14 @@ open(path, "w", encoding="utf-8").write(txt)
 **なぜ契約が守ってくれないか**: 置換の回数の assert は、 当たった場所が数式か鍵かを見ない。 鍵 (label・ref・cite・環境名) は数式と同じ文字の並びを含む。
 
 **対処**: 当てる前に鍵の引数 (`\label{…}` `\ref{…}` `\eqref{…}` `\cite{…}` `\begin{…}` `\end{…}`) を退避して戻すか、 正規表現から除外する。 当てた後に `grep -nE '\\(label|ref|eqref|cite)\{[^}]*\\'` で鍵に制御綴が入っていないかを見る。
+
+### <a id="placeholder-substring-names"></a>13. pair の new に埋めた目印の名前が互いの部分文字列だと、 順に置き換えたときに長い方が壊れる
+
+**症状** (実測): pair 列の new に後で埋める 2 つの式を目印で置き、 `n.replace('A_RHS', a).replace('CON_A_RHS', b)` の順で埋めた (目印の一方が他方を含む形 = 例 `TORSION_RHS` と `CONTORSION_RHS`)。 1 つ目の置換が長い目印の中の短い名前にも当たり、 2 つ目の式の位置に `CON` + 1 つ目の式が入った。 dry-run の差分の 1 行で見つかった。 error は出ず、 契約 (各 old は正確に 1 回) も TARGET に当てる old の側しか見ないので通る。
+
+**なぜ契約が守ってくれないか**: 契約が数えるのは TARGET の中の old の出現で、 pair 列を組み立てる段 (new の中の目印を埋める replace) は契約の外にある。 目印の名前は人が付ける識別子なので、 片方が他方を含んでいても見た目では気づきにくい。
+
+**対処**: (1) 目印を区切りの印で囲む (`@@T@@` と `@@K@@`) = 囲んだ目印はどれも他の目印の部分文字列にならない。 (2) 囲めないなら長い目印から先に埋める。 (3) 埋めた後に目印の残りと、 埋めた式の出現の数を数える。 (4) `--dry-run` の差分を当てる前に読む (今回はこれで止まった)。
 
 ## <a id="batch-text-verification"></a>適用後の検証
 
