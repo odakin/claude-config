@@ -17,6 +17,9 @@ new input of the owner's: the owner's latest input is still the last one the per
 
 API (read-only, never raises on a broken or missing file):
   owner_entries(path)            -> [{"ts", "queued", "text"}] oldest first
+  owner_text(entry, after_api_error=False) -> the owner's text of one transcript entry, or "" (for readers that walk
+                                    the transcript line by line from an offset or keep their own turn state; pass
+                                    after_api_error=True when the previous assistant entry was an API error)
   latest_input(entries)          -> the tail of entries that is the owner's latest input
   find_quote(path, quote, now)   -> {"found", "in_latest", "when", "later", "minutes", "latest"}
   transcript_for(session_id)     -> the transcript path of a session id (full id or a unique prefix) or None
@@ -79,6 +82,13 @@ def _text_of(e: dict) -> tuple[str, bool]:
     if not text or text.startswith(GENERATED_PROMPT):
         return "", False
     return text, queued
+
+
+def owner_text(e: dict, after_api_error: bool = False) -> str:
+    """The owner's text of one entry, with the same filter as owner_entries (a line-by-line reader that wrote its own
+    filter missed the app's side-session notice and counted a child's report as the owner's words, measured)."""
+    text, _ = _text_of(e)
+    return "" if (after_api_error and text in RETRY_TEXTS) else text
 
 
 def owner_entries(path) -> list[dict]:
@@ -224,6 +234,17 @@ def _selftest() -> int:
                                 "message": {"content": [{"type": "text", "text": "ok"}]}}) + "\n")
             f.write(json.dumps(user("2026-01-01T00:06:10Z", "Try again")) + "\n")
         check("'Try again' typed with no API error before it is the owner's", find_quote(p, "Try again", now)["in_latest"])
+    # owner_text = the same filter for one line (line-by-line readers)
+    notice = user("2026-01-01T00:07:00Z", "<system-reminder>Linked sessions now</system-reminder>\n<side-sessions-event>\n"
+                                          "child X reported: this window is the conductor post</side-sessions-event>")
+    check("owner_text: a typed prompt is the owner's", owner_text(user("t", "  do Z  ")) == "do Z")
+    check("owner_text: the app's side-session notice is not the owner (a child's report quoted in it)", owner_text(notice) == "")
+    check("owner_text: a peer's message, a hook's feedback and a tool result are not the owner",
+          owner_text(rows[3]) == owner_text(rows[4]) == owner_text(rows[2]) == "")
+    check("owner_text: a queued prompt typed by the owner is the owner's", owner_text(queued("t", "also do Y")) == "also do Y")
+    check("owner_text: 'Try again' right after an API error is not the owner; otherwise it is",
+          owner_text(user("t", "Try again"), after_api_error=True) == "" and owner_text(user("t", "Try again")) == "Try again")
+    check("owner_text: a broken entry is ''", owner_text("not json") == owner_text({}) == "")
     print(f"{'OK' if not fails else 'FAILED'}: {fails} failure(s)")
     return 1 if fails else 0
 
