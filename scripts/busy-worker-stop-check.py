@@ -462,6 +462,13 @@ def wrap_check(inp: dict, ids: list[str], cw) -> tuple[int, str]:
         reasons = cw.check_child(ids[0])["reasons"] or [hold["reason"]]
     except Exception:
         reasons = [hold["reason"]]
+    if hold.get("judge"):  # a blind judge window: no wrap (it would carry the requester's context in), collect it first
+        return 2, ("🛑 busy-worker-stop-check: 畳もうとした子は盲検の判定の窓で、 sandbox が回収済みで変わっていない形でないので 1 回目は止めた。"
+                   " 照合の理由 (全部、 道具の語のまま):\n" + "\n".join("  - " + r for r in reasons) + "\n"
+                   "  wrap は頼まない (締めは repo と規約を読み、 次の回の判定が独立でなくなる)。 sandbox を回収してから"
+                   " (`make-review-sandbox.py collect <slug> --into <回収先>`) 照合し直して畳む。"
+                   " 理由を全部見た上で畳むなら、 同じ操作をもう一度打てば通る。"
+                   f" 規約 = {CHILD_RULE}")
     return 2, ("🛑 busy-worker-stop-check: 畳もうとした子に wrap の記録が無い (か、 wrap の turn の後に書いた分がある) ので 1 回目は止めた。"
                " 照合の理由 (全部、 道具の語のまま):\n" + "\n".join("  - " + r for r in reasons) + "\n"
                f"  先に wrap を頼む = {cw._then(cw.model_step(child.get('local_id') or ids[0]))}"
@@ -666,6 +673,20 @@ def selftest() -> int:
         transcript(("2026-01-01T00:00:00.000Z", "x"), ("2099-01-01T00:00:00.000Z", "それはもういい、畳んで"))
         rc, txt = run(arch, {"session_id": idle_local}, sid=parent_cli)
         ok("R6: the person's 「畳んで」 passes the person's side, then the missing wrap stops it once", rc == 2 and "wrap の記録が無い" in txt)
+
+        class _JudgeCW:  # the check's part for a blind judge window not collected yet (the real one needs a sandbox)
+            WRAP_ASK_TEXT, ds, _then, model_step = cw_mod.WRAP_ASK_TEXT, cw_mod.ds, staticmethod(cw_mod._then), staticmethod(cw_mod.model_step)
+
+            def wrap_hold(self, t):
+                return {"found": True, "reason": "盲検の判定の窓 (sandbox j1) = wrap は頼まない。 sandbox が回収されていない",
+                        "parent": parent_local, "local": nw_local, "judge": {"slug": "j1", "state": "uncollected"},
+                        "last_msg": "", "first": "2026-01-01T00:00:00Z", "key": "judge-k1"}
+
+            def check_child(self, t):
+                return {"reasons": [self.wrap_hold(t)["reason"]]}
+        rc, txt = wrap_check({"session_id": parent_cli, "transcript_path": ""}, [nw_local], _JudgeCW())
+        ok("R6: a blind judge window not collected → blocked once with the collection, no wrap request",
+           rc == 2 and "盲検の判定の窓" in txt and "collect" in txt and cw_mod.WRAP_ASK_TEXT not in txt)
         ok("no_wrap_said: the words that skip the wrap", all(no_wrap_said(s) for s in (
             "wrap なしで畳んで", "締めは要らない", "wrap しないで閉じて", "wrap なしでいい", "wrap は不要です。 閉じちゃって")))
         ok("no_wrap_said: not those words (no skip, or a question / complaint / denial)", not any(no_wrap_said(s) for s in (
