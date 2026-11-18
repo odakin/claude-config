@@ -1291,6 +1291,8 @@ hook の state (処理済みの記録・割り当て・既読) を「読む → 
 
 履歴の書き換え・追従・分岐を test する fixture で、 「旧い履歴」 と「新しい履歴」 を同じ秒の中で作ると、 中身と日付が同じ commit は同じ sha になり、 分岐していないように見える (速い CI の runner でだけ再現し、 手元では通る = 実測)。 `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE` を commit ごとに別の固定値にする。 <a id="fixture-clock-and-git-since"></a>固定した日付の fixture に、 本物の時計に相対の窓 (`git log --since=60.days`) を当てると commit が全部窓の外に出る = 試験のために時計を注入できる道具は、 窓も注入した時計からの絶対時刻 (`--since=YYYY-MM-DDTHH:MM:SS`) で渡す (実測: 相対の窓のままの道具で、 注入した時計なら拾えるはずの commit を fixture の test が全部落とした)。 時刻の経過で変わる判定は sleep で待たず、 state に書いた時刻を戻して作る。
 
+<a id="fixture-setup-commit-sweeps-staged"></a>**試験の対象の変更を stage に置いたまま前提の file (設定など) だけを commit するときは、 `git commit -- <前提の path>` で打つ**: 素の `git commit -m` は index の全体を commit するので、 対象の変更まで一緒に入る。 その後の「stage の差分を検査する」 段は空の stage を見て、 道具が何を返しても期待どおりの空になる (実測: 「この設定では読み込みの差を見ない」 を確かめる試験が、 道具のその分岐を外した写しでも ok のままだった)。 空 (finding なし) を期待する試験は、 道具の分岐を壊した写しで落ちることを 1 回見る (§22 の最後の行と同じ確かめ)。
+
 ## <a id="autofix-hook-path-commit-stale-index"></a>§21. 自動修正して再 stage する pre-commit と `git commit -- <path>` を合わせると、 本当の index に修正前の版が残る
 
 並列の session と同じ repo を触るときは `git commit -- <path>` で index を経由せずに commit する ([`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race))。 このとき git は一時の index で commit を作るので、 pre-commit が file を書き直して `git add` した分は、 一時の index と commit には入るが、 本当の index には修正前の版が staged のまま残る (実測: commit = 修正後、 index = 修正前、 working tree = 修正後、 `git status --short` は `MM`)。 残った staged の差分は「修正を戻す変更」 なので、 次に誰か (並列の session を含む) が path を指定せずに commit すると、 修正が消える。
