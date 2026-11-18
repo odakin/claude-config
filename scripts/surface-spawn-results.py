@@ -14,7 +14,16 @@
     2. 本 script が marker を拾い、 SessionStart hook・dashboard から「結果が届いた、 場所はここ」
        を出す (file を読む script の操作 = model の chat 出力に依らない)。
     3. live-push は効いたときの bonus。 落ちても本 surface が拾う。
-  該当 0 件なら沈黙、 全 path で fail-open。
+  該当 0 件なら沈黙。 surface (引数なし = hook・dashboard が呼ぶ) は fail-open。 記録・受け取り・棚卸し
+  (--record・--consume・--audit・--list・--neutralize) は失敗を黙って成功に見せない = 終了値 1 と 1 行
+  (実測: 作業場の外に書けない sandbox の中の --record が、 書けずに終了値 0・出力なしで終わり、 印が残らなかった)。
+
+封じた sandbox からの返送 (sandbox の中にしか書けない作業者):
+  --record が marker dir に書けず、 result_path か作業の dir が封じた sandbox (CLAUDE.md か AGENTS.md の 1 行目が
+  「# Isolated … sandbox」 = ai-collaboration の make-review-sandbox.py の is_sealed_sandbox と同じ述語) の中なら、
+  同じ marker をその sandbox の root の `DONE` に書いて 1 行で知らせ、 終了値 0 で終わる (外へ書く別の道は試させない)。
+  起票側は sandbox の状態の一覧 (make-review-sandbox.py status = 未回収の sandbox と、 DONE が書かれたか) で受け取る。
+  sandbox の外でも中でも書けなければ終了値 1。
 
 marker の契約 (子が `--record` で書く):
   <marker dir>/<token>.yaml:
@@ -238,8 +247,28 @@ def classify_result_path(result_path):
     return None
 
 
+def sealed_sandbox_of(*paths):
+    """paths (result_path・作業の dir) のどれかを含む封じた sandbox の root。 無ければ None。 述語 = CLAUDE.md か AGENTS.md の
+    1 行目が「# Isolated … sandbox」 (ai-collaboration の make-review-sandbox.py の is_sealed_sandbox と同じ)。"""
+    for p in paths:
+        if not str(p or "").strip():
+            continue
+        q = Path(os.path.expanduser(str(p))).resolve()
+        for d in [q, *q.parents]:
+            for name in ("CLAUDE.md", "AGENTS.md"):
+                try:
+                    with open(d / name, encoding="utf-8", errors="replace") as fh:
+                        first = fh.readline().strip()
+                except OSError:
+                    continue
+                if first.startswith("# Isolated ") and first.endswith("sandbox"):
+                    return d
+    return None
+
+
 def record(d, token, status, task, result_path, summary, spawned_by,
-           allow_confidential_text=False, notes=None):
+           allow_confidential_text=False, notes=None, name=None):
+    """marker を書いて path を返す。 name = file 名 (既定 <token>.yaml、 封じた sandbox の中の返送は DONE)。"""
     notes = notes if notes is not None else []
     if len(str(summary or "")) > SUMMARY_MAX:
         raise ValueError(
@@ -257,7 +286,7 @@ def record(d, token, status, task, result_path, summary, spawned_by,
         summary = CONFIDENTIAL_NOTE
         task = CONFIDENTIAL_TASK
     d.mkdir(parents=True, exist_ok=True)
-    f = d / f"{token}.yaml"
+    f = d / (name or f"{token}.yaml")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     # 既存 created は保つ (= 再 record で時刻を上書きしない)
     created = now
@@ -532,6 +561,57 @@ def selftest():
         (ok / "R.md").write_text("まったく無関係な調査の結論をここに書いた。\n", encoding="utf-8")
         record(d2, "TOK", "done", "別件", str(ok / "R.md"), "要旨", "")
         check("無関係な成果物は縛らない", bool((_load_yaml(d2 / "TOK.yaml") or {}).get("result_path")))
+
+        # 書けない marker dir (実測: 作業場の外に書けない sandbox の中の --record が終了値 0・出力なしで印を残さなかった)
+        def cli(cwd, *argv):
+            r = subprocess.run([sys.executable, str(Path(__file__).resolve()), *argv], cwd=str(cwd),
+                               capture_output=True, text=True, timeout=60)
+            return r.returncode, r.stdout, r.stderr
+        d = d2       # この節の一時 dir (前の節の dir は閉じている)
+        ro = d / "ro-markers"
+        ro.mkdir()
+        os.chmod(ro, 0o555)
+        try:
+            writable_anyway = os.access(ro, os.W_OK)          # root で回すと chmod が効かない = この節を飛ばす
+            plain = d / "plain-work"
+            plain.mkdir()
+            sb = d / "sealed-sb"
+            (sb / "notes").mkdir(parents=True)
+            (sb / "CLAUDE.md").write_text("# Isolated review sandbox\n\nrules\n", encoding="utf-8")
+            if not writable_anyway:
+                rc, out, err = cli(plain, "--dir", str(ro), "--record", "--token", "TRO1", "--summary", "s",
+                                   "--not-confidential")
+                check("書けない marker dir への --record = 終了値 1 と 1 行 (sandbox の外)",
+                      rc == 1 and "marker を書けませんでした" in err and not list(ro.iterdir()))
+                rc, out, err = cli(sb / "notes", "--dir", str(ro), "--record", "--token", "TRO2", "--task", "t",
+                                   "--summary", "s", "--result-path", str(sb) + "/")
+                done = _load_yaml(sb / "DONE") or {}
+                check("封じた sandbox の中の --record = その sandbox の DONE に同じ印を書いて知らせる",
+                      rc == 0 and "recorded in the sealed sandbox" in out and done.get("token") == "TRO2"
+                      and done.get("status") == "done" and not list(ro.iterdir()))
+                (sb / "DONE").unlink(missing_ok=True)   # 直しを外した写し (mutant) では書かれていない
+                rc, out, err = cli(plain, "--dir", str(ro), "--record", "--token", "TRO3", "--summary", "s",
+                                   "--result-path", str(sb / "REVIEW-RESULTS.md"))
+                check("作業の dir が外でも result_path が封じた sandbox の中なら、 その sandbox の DONE に書く",
+                      rc == 0 and (_load_yaml(sb / "DONE") or {}).get("token") == "TRO3")
+                rc, out, err = cli(plain, "--dir", str(ro))
+                check("surface (引数なし) は書けない dir でも止めない (fail-open のまま)", rc == 0)
+            rc, out, err = cli(plain, "--dir", str(d / "rw-markers"), "--record", "--token", "TRW", "--summary", "s",
+                               "--not-confidential")
+            check("書ける marker dir への --record は今までどおり (終了値 0・recorded の行・DONE を書かない)",
+                  rc == 0 and out.startswith("recorded:") and (d / "rw-markers" / "TRW.yaml").exists()
+                  and not (plain / "DONE").exists())
+            os.chmod(d / "rw-markers" / "TRW.yaml", 0o444)
+            if not os.access(d / "rw-markers" / "TRW.yaml", os.W_OK):
+                rc, out, err = cli(plain, "--dir", str(d / "rw-markers"), "--consume", "TRW")
+                check("書けない marker への --consume = 終了値 1 と 1 行 (受け取りの失敗を黙って成功に見せない)",
+                      rc == 1 and "surface-spawn-results: 失敗" in err)
+            os.chmod(d / "rw-markers" / "TRW.yaml", 0o644)
+            (plain / "CLAUDE.md").write_text("# CLAUDE.md — a project\n", encoding="utf-8")
+            check("普通の入口の CLAUDE.md の下は封じた sandbox と読まない、 sandbox の下の file は sandbox の root を返す",
+                  sealed_sandbox_of(str(plain)) is None and sealed_sandbox_of(str(sb / "notes" / "x.md")) == sb.resolve())
+        finally:
+            os.chmod(ro, 0o755)
     for k, v in saved.items():
         if v is None:
             os.environ.pop(k, None)
@@ -584,6 +664,21 @@ def main():
             except ValueError as e:
                 print(f"marker を書きませんでした: {e}", file=sys.stderr)
                 sys.exit(1)
+            except OSError as e:
+                sb = sealed_sandbox_of(args.result_path, os.getcwd())
+                if sb is None:
+                    print(f"marker を書けませんでした: {d} ({type(e).__name__})。 返送の印は残っていない", file=sys.stderr)
+                    sys.exit(1)
+                try:
+                    f = record(sb, args.token, args.status, args.task, args.result_path, args.summary,
+                               args.spawned_by, allow_confidential_text=True, name="DONE")
+                except OSError as e2:
+                    print(f"marker を書けませんでした: {d} ({type(e).__name__}) と、 封じた sandbox の {sb / 'DONE'}"
+                          f" ({type(e2).__name__})。 返送の印は残っていない", file=sys.stderr)
+                    sys.exit(1)
+                print(f"recorded in the sealed sandbox: {f} (marker dir {d} には書けない = {type(e).__name__}。"
+                      " 起票側が make-review-sandbox.py status で受け取る。 外へ書く別の道は試さない)")
+                return
             for n in notes:
                 print(f"⚠️ {n}", file=sys.stderr)
             print(f"recorded: {f}")
@@ -604,8 +699,12 @@ def main():
             print(out)
     except SystemExit:
         raise
-    except Exception:
-        # fail-open: dashboard / hook 連鎖を絶対に止めない
+    except Exception as e:
+        if args.record or args.consume or args.neutralize or args.audit or args.list:
+            # 記録・受け取り・棚卸しは失敗を黙って成功に見せない (実測: 書けない --record が終了値 0・出力なしだった)
+            print(f"surface-spawn-results: 失敗 ({type(e).__name__}: {e})", file=sys.stderr)
+            sys.exit(1)
+        # fail-open: surface (hook / dashboard の連鎖) は止めない
         sys.exit(0)
 
 

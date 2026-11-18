@@ -1,5 +1,5 @@
 {
-  "_comment": "surface-spawn-results.py の selftest の foil に歯があることを、 受け取りの道具の要所を 1 か所ずつ外した mutant 8 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 外すのは、 受け取り済みを出さない絞り・並び順・受け取りの案内の起動の形・相対 path の基点・HANDOFF の判定・summary の上限・機密の置き換え・機密 dir の path の判定。",
+  "_comment": "surface-spawn-results.py の selftest の foil に歯があることを、 受け取りの道具の要所を 1 か所ずつ外した mutant で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。 外すのは、 受け取り済みを出さない絞り・並び順・受け取りの案内の起動の形・相対 path の基点・HANDOFF の判定・summary の上限・機密の置き換え・機密 dir の path の判定・基点の下の読めない dir・書けない marker dir への --record の失敗の終了値・封じた sandbox の DONE への返送・受け取りの失敗の終了値。",
   "target": "surface-spawn-results.py",
   "run": "python3 {} --selftest",
   "mutants": [
@@ -105,6 +105,48 @@
       ],
       "expect_fail": ["読めない dir が基点の下にあっても次の dir で解決する"],
       "expect_pass": ["相対の result_path を基点の下で解決する"],
+      "only_on": ["Darwin", "Linux"]
+    },
+    {
+      "name": "書けない marker dir への --record の分け道を外し、 末尾も前の形 (黙って終了値 0) に戻す",
+      "pairs": [
+        [
+          "            except OSError as e:\n                sb = sealed_sandbox_of(args.result_path, os.getcwd())",
+          "            except ZeroDivisionError as e:\n                sb = sealed_sandbox_of(args.result_path, os.getcwd())"
+        ],
+        [
+          "        if args.record or args.consume or args.neutralize or args.audit or args.list:",
+          "        if False:"
+        ]
+      ],
+      "expect_fail": ["書けない marker dir への --record = 終了値 1 と 1 行 (sandbox の外)",
+                      "封じた sandbox の中の --record = その sandbox の DONE に同じ印を書いて知らせる"],
+      "expect_pass": ["書ける marker dir への --record は今までどおり (終了値 0・recorded の行・DONE を書かない)"],
+      "only_on": ["Darwin", "Linux"]
+    },
+    {
+      "name": "封じた sandbox の DONE への返送を外す (書けなければいつも終了値 1)",
+      "pairs": [
+        [
+          "                if sb is None:\n                    print(f\"marker を書けませんでした",
+          "                if True:\n                    print(f\"marker を書けませんでした"
+        ]
+      ],
+      "expect_fail": ["封じた sandbox の中の --record = その sandbox の DONE に同じ印を書いて知らせる",
+                      "作業の dir が外でも result_path が封じた sandbox の中なら、 その sandbox の DONE に書く"],
+      "expect_pass": ["書けない marker dir への --record = 終了値 1 と 1 行 (sandbox の外)"],
+      "only_on": ["Darwin", "Linux"]
+    },
+    {
+      "name": "受け取り・棚卸しの失敗を黙って終了値 0 にする (前の形の末尾)",
+      "pairs": [
+        [
+          "        if args.record or args.consume or args.neutralize or args.audit or args.list:",
+          "        if False:"
+        ]
+      ],
+      "expect_fail": ["書けない marker への --consume = 終了値 1 と 1 行 (受け取りの失敗を黙って成功に見せない)"],
+      "expect_pass": ["書けない marker dir への --record = 終了値 1 と 1 行 (sandbox の外)"],
       "only_on": ["Darwin", "Linux"]
     }
   ]
