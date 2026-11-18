@@ -61,7 +61,11 @@ host の形 (`--hosts`、 2026-11-12): 外部の service ごとの経路の台�
     出す (path つき > host が同じ > host の段が多い)。 command の文字の除き方は上と同じ (掲示板の自由文・grep 系の
     検索語の URL には出ない)。 行に書かれた道具 (`*.py` `*.sh` の名) を command が叩いているなら、 その行は出さない
     (= もう経路を使っている)。 Bash の他に、 tool_input に `url` を持つ tool (WebFetch など) の URL にも当てる
-    (どの tool に配線するかは呼び手が決める)。
+    (どの tool に配線するかは呼び手が決める)。 Write・Edit・MultiEdit は、 script の file (CODE_EXTS の拡張子) に
+    書く中身 (content / new_string) に「引く」 の語があるときだけ、 その中の URL に当てる (後で `python3 x.py` で
+    引く script は、 command に URL が出ない = 書く瞬間に当てる。 実測)。 文書 (.md など) に書く URL と、 行の道具
+    そのもの (同じ file 名) を書く回には出さない。 過去の呼び出しでの較正 (実測) では、 出るのは script の file に
+    書く回のごく一部で、 誤って出る形は文書の文を組む script の文字列に引く語と URL が入る回 (知らせるだけなので許す)。
   - 出し方: 1 回の call で最大 --max 行、 行の頭から ROW_MAX 字まで (行の番号つき。 全文は台帳を開く)。 同じ行は
     1 session に 1 回 (state = <state-dir>/<session_id>、 既定の dir は上と別 = 2 つの hook が同時に追記しない)。
 
@@ -556,12 +560,40 @@ def match_host_rows(rows: list[dict], text: str) -> list[tuple[dict, str]]:
     return hits
 
 
+CODE_EXTS = {"py", "sh", "bash", "zsh", "js", "mjs", "cjs", "ts", "rb", "pl", "php", "lua", "go", "swift", "r",
+             "jl", "wl", "m"}
+WRITE_TOOLS = ("Write", "Edit", "MultiEdit")
+
+
+def written_code(tool_name: str, tool_input: dict) -> str | None:
+    """Write・Edit・MultiEdit が script の file に書く中身 (拡張子が CODE_EXTS のときだけ)。 それ以外は None。"""
+    if tool_name not in WRITE_TOOLS:
+        return None
+    name = str(tool_input.get("file_path") or "").rsplit("/", 1)[-1]
+    if "." not in name or name.rsplit(".", 1)[-1].lower() not in CODE_EXTS:
+        return None
+    if tool_name == "Write":
+        text = tool_input.get("content")
+    elif tool_name == "Edit":
+        text = tool_input.get("new_string")
+    else:
+        text = "\n".join(str(e.get("new_string", "")) for e in (tool_input.get("edits") or []) if isinstance(e, dict))
+    return text if isinstance(text, str) else None
+
+
 def host_haystack(tool_name: str, tool_input: dict) -> str | None:
     """当てる文字。 Bash は「引く」 の語のある command だけ (語は元の command で見る = quote を外す前。 当てる URL は
-    掲示板の自由文・grep 系の検索語を除いた後の文字から取る)、 ほかの tool は tool_input の url。 当てない時は None。"""
+    掲示板の自由文・grep 系の検索語を除いた後の文字から取る)。 Write・Edit・MultiEdit は script の file に書く中身の
+    うち「引く」 の語のあるものだけ。 ほかの tool は tool_input の url。 当てない時は None。"""
     if tool_name == "Bash":
         raw = str(tool_input.get("command", ""))
         return strip_unused_text(raw) if FETCH_RE.search(raw) else None
+    if tool_name in WRITE_TOOLS:
+        code = written_code(tool_name, tool_input)
+        if not code or not FETCH_RE.search(code):
+            return None
+        # 書いている file の名を足す = 行の道具そのものを書いている回は、 その行を出さない (match_host_rows の道具の除外)
+        return code + "\n" + str(tool_input.get("file_path") or "").rsplit("/", 1)[-1]
     url = tool_input.get("url")
     return url if isinstance(url, str) else None
 
@@ -653,7 +685,9 @@ def hosts_main(tables: list[Path], state_dir: str, max_rows: int, probe: str | N
     for t in tables:
         if t.is_file():
             rows.extend(load_host_rows(t)[0])
-    text = host_haystack(tool, {"command": probe, "url": probe}) or ""  # hook と同じ除き方で当てる
+    # hook と同じ除き方で当てる (Write・Edit・MultiEdit の probe は、 中身を script の file に書くとして当てる)
+    text = host_haystack(tool, {"command": probe, "url": probe, "content": probe, "new_string": probe,
+                                "edits": [{"new_string": probe}], "file_path": "probe.py"}) or ""
     hits = match_host_rows(rows, text)
     print(f"{len(hits)} 行が出る (tool = {tool}、 URL = {[h for h, _ in url_targets(text)]}):")
     for r, host in hits:
@@ -737,6 +771,28 @@ def selftest_hosts(tmp: Path, check) -> None:
     check(heads("curl https://elsewhere.example/") == [], "hosts match: 台帳に無い host は 0")
     check([r["head"][:6] for r, _ in match_host_rows(rows, host_haystack("WebFetch", {"url": "https://api.lit.example/w"}))]
           == ["文献の検索 "], "hosts match: tool_input の url (WebFetch) は引く語なしで当てる")
+
+    def wheads(tool, ti):
+        return [r["head"][:6] for r, _ in match_host_rows(rows, host_haystack(tool, ti) or "")]
+
+    code = "import urllib.request\nurllib.request.urlopen('https://api.lit.example/w')\n"
+    check(wheads("Write", {"file_path": "/w/fetch.py", "content": code}) == ["文献の検索 "],
+          "hosts write: script の file に書く中身の URL (引く語つき) に当てる")
+    check(wheads("Edit", {"file_path": "/w/fetch.sh", "new_string": "curl -s https://api.lit.example/w"}) == ["文献の検索 "],
+          "hosts write: Edit の new_string にも当てる")
+    check(wheads("MultiEdit", {"file_path": "/w/f.py", "edits": [{"new_string": "x = 1"}, {"new_string": code}]})
+          == ["文献の検索 "], "hosts write: MultiEdit の edits の new_string にも当てる")
+    check(wheads("Write", {"file_path": "/w/notes.md", "content": code}) == [],
+          "hosts write: 文書 (.md) に書く URL には出さない")
+    check(wheads("Write", {"file_path": "/w/Makefile", "content": code}) == [], "hosts write: 拡張子の無い file には出さない")
+    check(wheads("Write", {"file_path": "/w/table.py", "content": "LINKS = ['https://api.lit.example/w']\n"}) == [],
+          "hosts write: 引く語の無い script (URL を値に持つだけ) には出さない")
+    check(wheads("Write", {"file_path": "/w/f.py", "content": "import urllib.request\n# lit-tool.py を使う\n"
+                           "urllib.request.urlopen('https://api.lit.example/w')\n"}) == [],
+          "hosts write: 行の道具の名を書いた script には出さない (もう経路を使っている)")
+    check(wheads("Write", {"file_path": "/w/lit-tool.py", "content": code}) == [],
+          "hosts write: 行の道具そのもの (同じ file 名) を書く回には出さない")
+    check(wheads("Write", {"file_path": "/w/f.py", "content": None}) == [], "hosts write: 中身が無ければ出さない")
     st = tmp / "hstate"
 
     def run(e, *extra, table=led):
@@ -766,6 +822,13 @@ def selftest_hosts(tmp: Path, check) -> None:
     r = run({"hook_event_name": "PostToolUse", "session_id": "h6", "tool_name": "Bash",
              "tool_input": {"command": "curl https://api.lit.example/"}})
     check(r.stdout.strip() == "", "hosts hook: PreToolUse 以外の event は無言")
+    r = run({"hook_event_name": "PreToolUse", "session_id": "h7", "tool_name": "Write",
+             "tool_input": {"file_path": "/w/fetch.py", "content": code}})
+    check('"additionalContext"' in r.stdout and "L9 (← api.lit.example)" in r.stdout,
+          "hosts hook: Write で script に書く中身の URL に行を出す")
+    r = subprocess.run([sys.executable, __file__, "--hosts", "--table", str(led), "--probe", code, "--tool", "Write"],
+                       capture_output=True, text=True)
+    check(r.returncode == 0 and "1 行が出る" in r.stdout, "hosts --probe --tool Write: 中身を script に書くとして当てる")
     r = subprocess.run([sys.executable, __file__, "--hosts", "--table", str(led), "--state-dir", str(st)],
                        input="not json", capture_output=True, text=True)
     check(r.returncode == 0 and r.stdout.strip() == "", "hosts hook: 壊れた stdin は fail-open")
