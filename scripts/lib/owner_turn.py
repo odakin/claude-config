@@ -20,6 +20,8 @@ API (read-only, never raises on a broken or missing file):
   owner_text(entry, after_api_error=False) -> the owner's text of one transcript entry, or "" (for readers that walk
                                     the transcript line by line from an offset or keep their own turn state; pass
                                     after_api_error=True when the previous assistant entry was an API error)
+  harness_line(entry)            -> True for hook feedback / meta lines / compact summaries / other sessions' messages
+                                    (narrower than owner_text: a started window's hand-off request is not marked)
   latest_input(entries)          -> the tail of entries that is the owner's latest input
   find_quote(path, quote, now)   -> {"found", "in_latest", "when", "later", "minutes", "latest"}
   transcript_for(session_id)     -> the transcript path of a session id (full id or a unique prefix) or None
@@ -89,6 +91,19 @@ def owner_text(e: dict, after_api_error: bool = False) -> str:
     filter missed the app's side-session notice and counted a child's report as the owner's words, measured)."""
     text, _ = _text_of(e)
     return "" if (after_api_error and text in RETRY_TEXTS) else text
+
+
+def harness_line(e: dict) -> bool:
+    """The entry is a line the harness wrote in the user role that nobody typed for this window: hook feedback and other
+    meta lines (isMeta), a compact summary, another session's message (turnOrigin peer / promptSource system).
+    Narrower than owner_text: the hand-off request of a window another session started (turnOrigin host_synthetic) is
+    not marked here, because readers that collect what the window was asked to do still read it (measured: a search
+    for the owner's words listed other sessions' messages and hook feedback as the owner's)."""
+    if not isinstance(e, dict):
+        return False
+    if e.get("isMeta") or e.get("isCompactSummary"):
+        return True
+    return e.get("type") == "user" and (e.get("turnOrigin") == "peer" or e.get("promptSource") == "system")
 
 
 def owner_entries(path) -> list[dict]:
@@ -247,6 +262,16 @@ def _selftest() -> int:
     check("owner_text: 'Try again' right after an API error is not the owner; otherwise it is",
           owner_text(user("t", "Try again"), after_api_error=True) == "" and owner_text(user("t", "Try again")) == "Try again")
     check("owner_text: a broken entry is ''", owner_text("not json") == owner_text({}) == "")
+    peer = user("t", "Another Claude session sent a message: <cross-session-message>do it</cross-session-message>",
+                isMeta=True, turnOrigin="peer", promptSource="system")
+    hook = user("t", "Stop hook feedback: write the line", isMeta=True)
+    handoff = user("t", "<system-reminder>x</system-reminder>\nBackground (from the session that started this one): do Z",
+                   turnOrigin="host_synthetic", promptSource="sdk")
+    check("harness_line: another session's message and hook feedback are marked; a typed prompt is not",
+          harness_line(peer) and harness_line(hook) and harness_line(user("t", "peer", turnOrigin="peer"))
+          and not harness_line(user("t", "do Z")) and not harness_line(queued("t", "also do Y")))
+    check("harness_line: a started window's hand-off request is not marked (owner_text still drops it)",
+          not harness_line(handoff) and owner_text(handoff) == "" and not harness_line("not json"))
     print(f"{'OK' if not fails else 'FAILED'}: {fails} failure(s)")
     return 1 if fails else 0
 

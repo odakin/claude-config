@@ -45,7 +45,9 @@ repo に無くても、 会話そのものから発言者と時刻を確かめ�
   - 役割は user だけ (--role any で全部)。 harness が差し込んだ user 側の文
     (system-reminder・command 表示・AGENTS.md 指示・文脈圧縮の要約。 INJECTED_PREFIXES) は除く (--include-injected で含める)。
     発言の先頭に付いた system-reminder の塊だけは外して、 残りの本人の文を読む (own_text = 別の session が起こした窓の
-    最初の依頼文は app の system-reminder を先頭に付けて記録される)
+    最初の依頼文は app の system-reminder を先頭に付けて記録される)。 Claude の記録で本人の発言でない印のある行
+    (hook の差し戻し・別の session の message = isMeta / turnOrigin peer、 判定 = lib/owner_turn.py の harness_line) も
+    除く (文が `<` で始まらないので形では外れず、 本人の発言として出した = 実測。 --include-injected で含める)
   - 同じ agent・役割・時刻・本文の重複は 1 回だけ出す (Codex の記録は同じ発言を複数回持つことがある)。
     時刻が違えば同じ文面でも別の発言として全部出す (「送って」 を 2 回打てば 2 行)
   - 行を JSON として読む前に、 素の行に対して文字列の有無を先に見る (大きな記録でも速い)。
@@ -105,6 +107,10 @@ try:
     import compressed_jsonl as _cj
 except Exception:  # pragma: no cover - 古い配置 (圧縮した記録は読めなかった本数として数える)
     _cj = None
+try:
+    import owner_turn as _ot   # 本人の発言でない印 (hook の差し戻し・別の session の message) の読み手
+except Exception:  # pragma: no cover - 古い配置 (印では外さず、 文の形だけで外す)
+    _ot = None
 # --since / --until の形と比べ方 (境界と同じ長さの先頭で比べ、 形の違う値は error) = lib/time_bound.py
 from time_bound import bound_utc as _bound, out_of_range as _out_of_range  # noqa: E402
 
@@ -353,6 +359,8 @@ def search(pattern: str, *, regex: bool, role: str, agent: str, since: str | Non
                 r = "parent"  # 親が agent に渡した指示・親の会話の写し (user 本人がこの session で打った発言ではない)
             if r is None or (role != "any" and r != role):
                 continue
+            if ag == "claude" and r == "user" and not include_injected and _ot is not None and _ot.harness_line(rec):
+                continue      # hook の差し戻し・別の session の message (記録の印 isMeta / turnOrigin peer) = 本人の発言でない
             for tx in texts:
                 if r in ("user", "developer") and not include_injected:
                     tx = own_text(tx)
@@ -490,6 +498,15 @@ def selftest() -> int:
             {"type": "assistant", "timestamp": "2099-01-01T00:00:02Z", "message": {"content": [{"type": "text", "text": "りんごは赤で記録します"}]}},
             {"type": "user", "timestamp": "2099-01-03T00:00:00Z", "message": {"content": "みかんの話"}},
             {"type": "user", "timestamp": "2099-01-03T00:05:00Z", "message": {"content": "みかんの話"}},
+            # 本人の発言でない印のある user 役の行 (別の session の message・hook の差し戻し) と、 印の無い本人の発言・
+            # 別の session が起こした窓の依頼文 (turnOrigin host_synthetic = 締めの集めが読む)
+            {"type": "user", "timestamp": "2099-01-04T00:00:00Z", "message": {"content": "すいかを切って"}},
+            {"type": "user", "timestamp": "2099-01-04T00:00:01Z", "isMeta": True, "turnOrigin": "peer", "promptSource": "system",
+             "message": {"content": "Another Claude session sent a message: <cross-session-message>すいかの依頼</cross-session-message>"}},
+            {"type": "user", "timestamp": "2099-01-04T00:00:02Z", "isMeta": True,
+             "message": {"content": "Stop hook feedback: すいかの行を書く"}},
+            {"type": "user", "timestamp": "2099-01-04T00:00:03Z", "turnOrigin": "host_synthetic", "promptSource": "sdk",
+             "message": {"content": "<system-reminder>x</system-reminder>\nBackground (from the session that started this one): すいかを数えて"}},
         ]) + "\n", encoding="utf-8")
         sa = cl / "aaaaaaaa-1111" / "subagents"
         sa.mkdir(parents=True)
@@ -524,6 +541,9 @@ def selftest() -> int:
                   [x[4] for x in search("ぶどう", **base)] == ["ぶどうを洗って"]),
             check("--include-injected では先頭の system-reminder も残す",
                   len(search("ぶどう", **{**base, "include_injected": True})) == 2),
+            check("別の session の message と hook の差し戻し (記録の印) は本人の発言に出さない、 起こされた窓の依頼文は出す",
+                  sorted(x[0] for x in search("すいか", **base)) == ["2099-01-04T00:00:00Z", "2099-01-04T00:00:03Z"]),
+            check("--include-injected では印のある行も出す", len(search("すいか", **{**base, "include_injected": True})) == 4),
             check("--since で日付を絞る", [x[1] for x in search("りんご", **{**base, "since": "2099-01-02"})] == ["codex"]),
             check("--since・--until に日時の先頭を渡す (同じ日の中で絞る)",
                   [x[0] for x in search("みかん", **{**base, "since": "2099-01-03T00:01"})] == ["2099-01-03T00:05:00Z"]
