@@ -16,6 +16,7 @@
 - **[apply-text-pairs.py](apply-text-pairs.py)** — (old, new) の置換 pair 列を 1 file に当てる前に、 契約 (各 old は正確に 1 回 / 全検査が通るまで書かない) に加えて「再実行で二重に入る」「old が長い別物の先頭」 を拒否し、 必要なら patch 後の写しで test を回してから、 原子的に書く。--selftest 内蔵。
 - **[approval-source-census.py](approval-source-census.py)** — Count user-message leading tags without printing bodies, paths or session identifiers; --selftest.
 - **[arxiv-package.py](arxiv-package.py)** — arXiv 投稿用の source package を作って検査する (コメント除去 / .bbl + .bib + .bst 同梱 / 包装物だけで組版 / 元原稿と PDF テキスト一致 / bibtex 再実行で .bbl 再現)。 metadata (題・abstract の平文化と照合) と arXiv の組版 PDF との頁ごと照合も。 --selftest 内蔵。 conventions/paper-submission.md#arxiv-package-tool
+- **[ast-unresolved-names.py](ast-unresolved-names.py)** — python の候補を import も実行もせずに AST だけで読み、 関数の中で定義の無い名前が基準の版より増えていないかを比べる (当てる前に写しを回せない道具の候補の確かめ、 静的検査の道具の無い機でも動く)。 --selftest 内蔵。
 - **[audio-bgm-audition.py](audio-bgm-audition.py)** — 本編の下に敷く BGM の音量を声の下で聞き比べて決める道具 (聞き比べの切り出し・間の多い箇所探し・曲の波の大きさ・仕上がりの静かな所)。
 - **[audio-bgm-underlay.py](audio-bgm-underlay.py)** — 仕上がった配信音声 (ジングル + 本編 + ジングル) の本編の下に BGM を敷いた試作を作る (ffmpeg の入口)。
 - **[audio-finish-episode.py](audio-finish-episode.py)** — ポッドキャストの 1 回分を仕上げる: 本編にジングルを頭と尾に付け、音量を揃えて配信用 MP3 に書き出し、測り直して検査する。
