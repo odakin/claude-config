@@ -34,6 +34,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 - **素の `grep -o '.{0,80}X.{0,200}'` は時間切れになる** (実測: 120 秒で終わらない)。 1 行が MB 級なので、 python の `re` で bytes に当てて前後だけ切り出す (本道具がそうしている)。 ugrep は長い正規表現で `exceeds complexity limits` になることもある。
 - **画面 (renderer) の JS と文言は手元の `ion-dist` にある** (dir か `ion-dist.asar`)。 app.asar と cache だけを探して「画面は remote から来るので読めない」 と結論しない (実測: この取り違えで、 メニューの訳語を読まずに推測で案内した)。 道具の `i18n` / `grep --where renderer` が何も返さないときは、 まず版で置き場所が変わっていないかを `ls …/Resources` で見る (実測: dir が asar に移り、 旧い道具は黙って 0 件を返した。 その後 dir と asar の両方を持つ版で、 JS の無い dir を選んで同じく 0 件を返した)。 今の道具は読んだ source の本数を stderr に出し、 0 本なら exit 2 で言う (exit 1 = 読んだが当たり 0)。
 - **同じ関数でも chunk ごとに名前が違う**。 ある chunk の `Se` と別 chunk の `Se` は無関係。 必ず import を辿る。
+- **状態を決める関数と、 その状態を描く component の引数の分岐を両方読む**。 同じ状態でも、 描く場所を表す引数 (例 = 一覧の欄の中か会話の中か) で描き方が分かれることがある。 状態の名前と文言 (i18n) だけを読んで「こう描かれる」 と書くと、 分岐の片方だけを報告する (実測: 取り下げた提案の card を「題と短い 1 行で残る」 と読んだが、 その形は一覧の欄だけで、 会話の中では元の tool の行で描く分岐を読み落としていた)。 component の頭の引数の分解 (`{item:t, …, inLedger:i, …}=e` の形) を先に読み、 分岐に使う引数を全部押さえる。
 - **「コードにそう書いてある」 ≠ 「画面でそうなる」**。 条件が複数 chunk の plugin に散っていると、 読み切れないことがある。 読み切れない・結論が load-bearing なら、 次の実験で画面 1 回に決めさせる。
 - **「見つからない」 ≠ 「読めない」 — 探す語を変える**。 実測: inline code をリンクにする条件は、 markdown の plugin 側から探して見つからず画面実験で決めたが、 後の検収で **描画する側** (mdast の node 型名 `inlineCode` と、 描画した要素の `data-…` 属性名を grep → その component が呼ぶ parser を `resolve`) から入ると、 数 KB の 1 chunk に正規表現ごと読めた。 入口の候補 = 画面の文言 (i18n) / node 型名 / DOM の属性名 / log に出る文言 (main process は失敗を `[…] could not resolve` のように log へ書くので、 **app の log の文言を `--where asar` で探す**と解決関数に直接着く)。
 - **renderer の判定と main process の解決は別物**。 画面側 (renderer) は path の形で「中か外か」 を決めるだけで、 実際に file を探すのは main process の関数。 fallback (別の基準での再試行など) は main process 側にしか無いので、 renderer だけ読んで「解決の規則」 を書くと抜ける (実測: [`claude-code-permissions.md#chat-link-resolution-base`](claude-code-permissions.md#chat-link-resolution-base) の「本体が持つ fallback」)。
@@ -42,6 +43,9 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 ## <a id="screen-experiment"></a>読み切れないときは、 画面 1 回で決まる実験を頼む
 
 - **仮説ごとに結果が分かれる入力を並べる**: 「形だけで判定」 と「実在を見て判定」 を分けたいなら、 **実在する path と実在しない path** を同じ形で並べて見てもらう。 1 つだけだと、 どちらの仮説でも同じ結果になりうる。
+- **先に自分で見る道を尽くす**: Claude からは Claude app の窓を撮れない (computer-use は Claude の app を許可しない。 `screencapture` は画面の録画の許可が無い process では撮れない。 Remote Control は session ごとに切れていることがある = 実測)。 そのぶん app 本体の読みと app 自身の返事の文 (tool の結果の文は app の表から来る) を先に読み切り、 画面 1 回で決まるところまで絞ってから頼む。
+- **確かめる物は今の画面の一番下に置く**: 会話の上の方に流れた物 (前に出した card など) を「すぐ上」 と言って探させない = 頼む turn に試しの物を出し直し、 その直後に問う (実測: 上の方の card を探させ、 本人は見つけられなかった)。
+- **短い答えを確かめた事実に読み替えない**: 「無い」 は「消えた (見た)」 とも「見つからない (探せなかった)」 とも読める = 選択肢を分けて問う。 読み替えて規則や記録に「画面で確かめた」 と書かない (実測: 「無い」 を消えたと読んで規則に書き、 本人に「知らない、 自分で見て」 と返された)。
 - **答えの形を指定する**: 確認を 2 つ以上頼むときの書き方 = [`concise-output.md#decision-questions`](concise-output.md#decision-questions) (実測: 短い返事「1」 が「1 つ目だけ」 とも「問い 1 は OK」 とも読めた)。
 - 実験の入力を最終メッセージに置くときは、 自分の Stop hook に引っかからない形を選ぶ (例: [`hooks/chat-file-ref-enforce.sh`](../hooks/chat-file-ref-enforce.sh) は「どこにも無い path」 と「基準フォルダから在る path」 を拾わない)。
 
