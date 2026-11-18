@@ -34,7 +34,9 @@ subcommand:
   共有フォルダには暗号文しか置かない。 鍵が無い・違う機械では復号に失敗し、 その本数を stderr に出す (黙って 0 件にしない)
   ⚠️ 同期フォルダ (macOS の CloudStorage 配下の Dropbox) は、 別の機械が書いたばかりの file をまだ手元に落としていないことがある
   (dataless。 読むと 1 本ずつ取り寄せを待つ = 検索が CPU を使わずに何分も止まる、 実測)。 search は dataless の file を読まずに飛ばし、
-  その本数を stderr に出す (その分は検索していない)。 待って読むなら --include-dataless。 status も本数を出す
+  その本数を stderr に出す (その分は検索していない)。 待って読むなら --include-dataless。 status も本数を出す。
+  書いた session が分かっているなら --session <id の頭> で、 一致した記録だけを読む
+  (手元に落ちていない一致ファイルは取り寄せる)
   (見分け方 = conventions/dropbox-placeholder-diagnosis.md#file-provider-dataless)
 
 差分: 状態 file (--state、 既定 ~/.claude/state/transcript-share-export.json) に記録ごとの大きさと mtime を持ち、
@@ -310,12 +312,16 @@ def cmd_search(a) -> int:
     own = _safe(_machine(a.machine))
     rx = re.compile(a.pattern) if a.regex else None
     hits, bad, skipped = [], 0, 0
+    sess = getattr(a, "session", None)
     for machine, f in _shared_files(share):
         if machine == own and not a.all_machines:
             continue
         if a.only_machine and machine != a.only_machine:
             continue
-        if not getattr(a, "include_dataless", False) and _dataless(f):
+        if sess and not SAT._session_of(f.with_suffix(".jsonl"), f.parent.name).startswith(sess):
+            continue
+        # session を名指したときは、 当たる数本だけなので取り寄せを待って読む
+        if not (getattr(a, "include_dataless", False) or sess) and _dataless(f):
             skipped += 1  # 読むと取り寄せを待って止まる
             continue
         try:
@@ -495,6 +501,24 @@ def selftest() -> int:
                                           regex=False, role="user", since=None, until=None, all_machines=False,
                                           only_machine=None, context=20, limit=0))
         check(buf.getvalue() == "", "既定では自分の機械の分を除く")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cmd_search(argparse.Namespace(pattern="部屋", share_dir=str(share), key_file=str(keyf), machine="hostB",
+                                          regex=False, role="user", since=None, until=None, all_machines=False,
+                                          only_machine=None, context=20, limit=0, session="aaaaaaaa"))
+        res = buf.getvalue()
+        check("南側" in res and "Codex の部屋" not in res, "--session で名指した記録だけを読む")
+        for prefix, expected, other in (("dddddddd", "Codex の部屋", "南側"), ("ffffffff", None, None)):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                cmd_search(argparse.Namespace(pattern="部屋", share_dir=str(share), key_file=str(keyf), machine="hostB",
+                                              regex=False, role="user", since=None, until=None, all_machines=False,
+                                              only_machine=None, context=20, limit=0, session=prefix))
+            res = buf.getvalue()
+            if expected:
+                check(expected in res and other not in res, "--session は Codex の記録名から ID を引く")
+            else:
+                check(res == "", "--session は一致しない記録を読まない")
         bad = td / "bad.key"
         bad.write_text(base64.b64encode(os.urandom(32)).decode())
         err = io.StringIO()
@@ -542,6 +566,9 @@ def main(argv=None) -> int:
     s.add_argument("--limit", type=int, default=200)
     s.add_argument("--include-dataless", action="store_true",
                    help="同期フォルダがまだ手元に落としていない file も読む (取り寄せを待つので遅い)")
+    s.add_argument("--session",
+                   help="session ID がこの接頭辞で始まる記録だけを読む (手元に落ちていなくても待って読む)。 "
+                        "書いた session が commit の Agent-Session の trailer などで分かっているとき")
     t = sub.add_parser("status", help="機械ごとの本数と最後に書いた時刻")
     t.add_argument("--share-dir", required=True)
     k = sub.add_parser("keygen", help="新しい鍵を書く")
