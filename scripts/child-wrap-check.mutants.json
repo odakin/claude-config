@@ -1,5 +1,5 @@
 {
-  "_comment": "child-wrap-check.py の「hand-off の手順 0 で止まった turn は本人待ちに数えない」 と「依頼元の答えを数え、 本人だけが答えられる問いは残す」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。",
+  "_comment": "child-wrap-check.py の「hand-off の手順 0 で止まった turn は本人待ちに数えない」 と「依頼元の答えを数え、 本人だけが答えられる問いは残す」 の foil の歯 (修正の一部を外した mutant で、 その部分を見る check だけが落ちるか)。 依頼元の本人への問いに結ばれた子を畳む番に数えない判定 (asked / relay) の歯も持つ。",
   "target": "child-wrap-check.py",
   "run": "python3 {} --selftest",
   "fail_marker": "NG: ",
@@ -118,6 +118,26 @@
      "pairs": [["        return (f\"{r.get('settled_at') or r['accepted_at']}|{r['state']}", "        return (f\"{r['accepted_at']}|{r['state']}"]],
      "expect_fail": ["hook-stop: after the child let go of that request → stops again"],
      "expect_pass": ["hook-stop: the second Stop for the same children → silent",
-                     "hook-stop: the next request to the child's role, claimed by it → open, the Stop stays silent"]}
+                     "hook-stop: the next request to the child's role, claimed by it → open, the Stop stays silent"]},
+    {"name": "依頼元の本人への問いを見ない (直す前の判定)",
+     "pairs": [["    tied = tied_asks((asks() if callable(asks) else asks) or [], held, as_of) if held and not wraps else []\n", "    tied = []\n"]],
+     "expect_fail": ["asked: an open question to the person names the child's accepted request", "asked: the key's #2 form names the same request", "hook-stop: the asked children are not named", "relay: the person answered and nothing went to the child since"],
+     "expect_pass": ["asked control: a question on another request → due", "relay control: the requester sent the answer"]},
+    {"name": "先送りと時間切れを見ずに開いた問いで残す",
+     "pairs": [["    waiting = [t for t in tied if t[\"status\"] == \"open\" and not t[\"deferred\"] and t[\"at\"]\n               and (ASKED_HOLD_H is None or now - _epoch(t[\"at\"]) < ASKED_HOLD_H * 3600)]\n", "    waiting = [t for t in tied if t[\"status\"] == \"open\"]\n"]],
+     "expect_fail": ["asked control: the person put the question off (defer) → due", "asked: past the hold (4 hours from the question) → due"],
+     "expect_pass": ["asked: an open question to the person names the child's accepted request", "asked: within the hold → still asked"]},
+    {"name": "子が手放した依頼の問いでも残す",
+     "pairs": [["    held = [r for r in b[\"claimed\"] if r not in b[\"released\"]]\n", "    held = list(b[\"claimed\"])\n"]],
+     "expect_fail": ["asked control: the child let go of the request (the requester decided to fold) → due"],
+     "expect_pass": ["asked: an open question to the person names the child's accepted request"]},
+    {"name": "wrap を頼んだ後も問いで残す",
+     "pairs": [["held, as_of) if held and not wraps else []\n", "held, as_of) if held else []\n"]],
+     "expect_fail": ["asked control: the wrap was asked and ran after the accept → wrapped, not asked"],
+     "expect_pass": ["asked: an open question to the person names the child's accepted request"]},
+    {"name": "答えを子に送った後も答えを送る番と読む",
+     "pairs": [["             and t[\"answered_at\"][:19] > (b[\"settled_at\"] or \"\")[:19] and not sent_after(t[\"answered_at\"])]\n", "             and t[\"answered_at\"][:19] > (b[\"settled_at\"] or \"\")[:19]]\n"]],
+     "expect_fail": ["relay control: the requester sent the answer, the child applied and stopped → due"],
+     "expect_pass": ["relay: the person answered and nothing went to the child since"]}
   ]
 }

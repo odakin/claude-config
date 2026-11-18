@@ -57,10 +57,20 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
   (`claude@<host>`) で子が claim / submit した request (actor.task の頭の transcript id 8 字か actor.session_id で引く)。
   開いている依頼 = 子が claim して受け取られておらず、 子が今も持っているもの + 子が claim に使った役 (role id) か子の id
   宛ての、 まだ誰も受け取っていない request (次の依頼 = 使い回し)。 子が手放した依頼 (release・担当の引き継ぎ・lease の
-  切れた後の別の session の claim = 掲示板が claim を外す 3 つ) は数えない = 子の窓の外の答えを待つ当ては、 待ちを掲示板に
-  残して子を畳み、 答えが来たら新しい窓が引き受ける (実測: 外の答えを待つだけの次の依頼で子が何時間も「開いている」
-  と数えられて残った)。 手放した時刻は受け取りと同じく「片づいた時刻」 で、 Stop の網はその時刻ごとに止め直す。 状態:
+  切れた後の別の session の claim = 掲示板が claim を外す 3 つ) は数えない = 子が手放したのは、 依頼元が子を畳むと決めた
+  印 (答えの見込みが立たない待ちは、 待ちを掲示板に残して子を畳み、 答えが来たら新しい窓が引き受ける。 実測: 外の答えを
+  待つだけの次の依頼で子が何時間も「開いている」 と数えられて残った)。 手放した時刻は受け取りと同じく「片づいた時刻」 で、
+  Stop の網はその時刻ごとに止め直す。
+  依頼元が本人に出した問い (掲示板の問いの台帳 = ai-collaboration board/board_asks.py、 掲示板ごとの台帳を engine の
+  ledger_path で引く) の key が子の受け取られた依頼を名指す (`request:<id>`・`request:<id>#N`) 間は、 子を畳む番に数えない
+  = 答えが出れば依頼元が答えの逐語を子に送り、 子が同じ窓で当てる (実測: 本人が同じ窓ですぐ答える問いの間に子を畳み、
+  答えの後に起こし直した新しい窓が、 前の窓が持っていた候補の文脈を読み直した)。 問いが答えを先送りされた
+  (答えの記録が defer) か、 開いてから ASKED_HOLD_H 時間 (既定 4、 env CHILD_WRAP_ASKED_HOLD_H、 `none` = 時間で切らない)
+  を越えたら、 見込みの立たない待ちとして数え直す。 子が手放した依頼の問いと、 wrap を頼んだ後の子は数えない (畳むと
+  決めた後)。 台帳か engine が読めなければ問いは無いと読む (fail-open = 今までの判定)。 状態:
     open (開いている依頼がある) / busy / owner (本人待ち) / answered (本人が子の窓で話した後に子が答え終えている = 裁定待ち) /
+    asked (依頼元が本人に出した問いがこの子の依頼に結ばれて開いている = 残す) /
+    relay (その問いに本人が答え、 その後に依頼元から子への message も子の役宛ての次の依頼も無い = 依頼元が答えを送る番) /
     due (全部受け取られ、 wrap を頼んでいない = 規則の番) / wrapping (wrap を頼んで子がまだ終えていない) /
     wrapped (wrap が終わっている = 照合して畳む) / no-board (掲示板に子の依頼が無い = 判定しない)
 
@@ -78,7 +88,8 @@ Usage:
   child-wrap-check.py --finished [--parent <local_…|transcript id>] --board-root <dir> [...] [--as-of …]
         掲示板の依頼が受け取られたのに畳まれていない子を数える (--parent 無し = この機械の全部の親。 exit 1 = due / wrapped がある)
   child-wrap-check.py --wait-due <local_…> [...] --board-root … [--max-minutes N]
-        子のどれかが親の番 (due / wrapped。 ANSWERED_GRACE_MIN が none なら答え終えて ASK_AFTER_MIN 分も) になるまで待って
+        子のどれかが親の番 (due / wrapped / judge / relay。 ANSWERED_GRACE_MIN が none なら答え終えて ASK_AFTER_MIN 分も。
+        asked も返る = 本人の答えは依頼元の窓に来るので、 見張っても早くならない) になるまで待って
         状態と、 残りの子を続けて見張る 1 行を出す (既定 720 分、 時間切れ = exit 3)。
         本人を待っている子に親が run_in_background で出す = 本人が子の窓で答えて子が終えたとき、 ほかの子が動いていても親が起こされる
   child-wrap-check.py --hook-sendmessage [--rule <参照>]  PostToolUse(SendMessage) の hook 用: 自分の子 (切り離した
@@ -322,6 +333,27 @@ def _grace_from_env() -> float | None:
 
 ANSWERED_GRACE_MIN: float | None = _grace_from_env()
 ASK_AFTER_MIN = 10  # an "answered" child idle this long is raised once as "ask the person whether to fold" (--hook-stop / --wait-due)
+
+
+def _hold_from_env() -> float | None:
+    v = (os.environ.get("CHILD_WRAP_ASKED_HOLD_H") or "").strip().lower()
+    if v in ("none", "off"):
+        return None
+    try:
+        return float(v) if v else DEFAULT_ASKED_HOLD_H
+    except ValueError:
+        return DEFAULT_ASKED_HOLD_H
+
+
+# Hours an open question the requester put to the person (tied to the child's request in the board's question ledger)
+# keeps the child out of the fold: past this, the wait no longer counts as one the person is about to answer, and the
+# child is the parent's to fold (an answer that comes later goes to a new window). `none` = no time limit.
+DEFAULT_ASKED_HOLD_H = 4.0
+ASKED_HOLD_H: float | None = _hold_from_env()
+# The question ledger's engine (ai-collaboration board/board_asks.py, a sibling checkout of this repo). env
+# CHILD_WRAP_ASKS_ENGINE names another file; a missing or failing engine = no questions known (the earlier judgment).
+ASKS_ENGINE_DEFAULT = os.path.join(HERE, "..", "..", "ai-collaboration", "board", "board_asks.py")
+REQUEST_KEY = re.compile(r"^request:(\d{8}T\d{6}Z-[a-z]+-[0-9a-f]+)(?:#\d+)?$")
 RAW_ROOTS: list[str] = []  # the --board-root values as given (patterns), repeated in the commands the hooks suggest
 CHILD_DAYS = 14  # children are looked for among app records touched this recently
 STATE_DIR_DEFAULT = os.path.expanduser("~/.claude/state/child-finished-stop")
@@ -1147,8 +1179,10 @@ def _let_go_at(es: list[dict], cli: str, instance: str) -> str:
 def board_state(cli: str, events: list[dict], instance: str, as_of: str = "") -> dict:
     """The child's requests on the board: claimed (this machine), open ones, the ones it let go of, and when the last of
     them was settled (accepted, or let go of by the child). A request the child let go of is not the child's open work:
-    the wait lives on the board, and a new window takes the request up (measured: the requester's next request to the
-    child's role, waiting on an answer from outside the child's window, kept the child for hours as "open")."""
+    letting go is the requester's decision to fold the child, the wait lives on the board, and a new window takes the
+    request up (measured: the requester's next request to the child's role, waiting on an answer from outside the child's
+    window, kept the child for hours as "open"). A wait the requester keeps the child for (its question to the person,
+    tied to the child's request in the question ledger) is read in finished_state, not here."""
     evs = [e for e in events if not (as_of and str(e.get("created_at") or "")[:19] > as_of[:19])]
     by_req: dict[str, list[dict]] = collections.defaultdict(list)
     for e in evs:
@@ -1247,8 +1281,102 @@ def parent_actions(parent_path: str, child_local: str, as_of: str = "") -> dict:
     return out
 
 
+_ASKS_ENGINE: list = []  # [module or None], loaded once
+
+
+def _asks_engine():
+    if not _ASKS_ENGINE:
+        m = None
+        try:
+            spec = _ilu.spec_from_file_location("board_asks_for_child_wrap",
+                                                os.environ.get("CHILD_WRAP_ASKS_ENGINE") or ASKS_ENGINE_DEFAULT)
+            m = _ilu.module_from_spec(spec)
+            spec.loader.exec_module(m)
+        except Exception:
+            m = None
+        _ASKS_ENGINE.append(m)
+    return _ASKS_ENGINE[0]
+
+
+def asks_ledgers(roots: list[str]) -> list[list[dict]]:
+    """The records of each board's question ledger (the engine's ledger_path per board root; one ledger is read once).
+    [] when the engine is missing or no ledger can be read."""
+    eng = _asks_engine()
+    out, seen = [], set()
+    if not eng:
+        return out
+    for root in roots:
+        try:
+            p = str(eng.ledger_path(root))
+        except Exception:
+            continue
+        if p in seen:
+            continue
+        seen.add(p)
+        try:
+            recs = eng.load(p)
+        except Exception:
+            continue
+        if recs:
+            out.append(recs)
+    return out
+
+
+def lazy_asks(roots: list[str]):
+    """A callable that reads the ledgers on its first call (most Stops never reach a child whose requests are all closed)."""
+    box: list = []
+
+    def get() -> list[list[dict]]:
+        if not box:
+            box.append(asks_ledgers(roots))
+        return box[0]
+    return get
+
+
+def tied_asks(ledgers: list[list[dict]], rids: list[str], as_of: str = "") -> list[dict]:
+    """The questions put to the person whose key names one of these requests (request:<id>, request:<id>#N), with their
+    state at as_of: label, status (open / answered / withdrawn), text, the request, `at` (asked or last reworded),
+    `deferred` (an answer that only put it off), `answered_at` and `quote` (the last settled answer)."""
+    eng = _asks_engine()
+    want, out = set(rids), []
+    if not eng or not want:
+        return out
+    settled_kinds = tuple(getattr(eng, "SETTLED", ("label", "order", "confirmed")))
+    for recs in ledgers:
+        rs = [r for r in recs if not (as_of and str(r.get("created_at") or "")[:19] > as_of[:19])]
+        try:
+            st = eng.state(rs)
+        except Exception:
+            continue
+        for a in st.values():
+            hit = sorted({m.group(1) for k in (a.get("keys") or []) for m in [REQUEST_KEY.match(str(k))] if m} & want)
+            if not hit:
+                continue
+            answers = a.get("answers") or []
+            done = [x for x in answers if x.get("binding") in settled_kinds and not x.get("defer")
+                    and a.get("label") in (x.get("labels") or [])]
+            out.append({"label": str(a.get("label") or ""), "status": str(a.get("status") or ""), "request": hit[0],
+                        "text": str(a.get("text") or ""),
+                        "at": max([str(a.get("created_at") or "")] + [str(w.get("created_at") or "") for w in a.get("rewords") or []]),
+                        "deferred": any(x.get("defer") for x in answers),
+                        "answered_at": str(done[-1].get("created_at") or "") if done else "",
+                        "quote": str(done[-1].get("quote") or "") if done else ""})
+    return out
+
+
+def _asked_text(t: dict) -> str:
+    return (f"依頼元が本人に出した問い {t['label']} がこの子の依頼 {t['request']} に結ばれて開いている"
+            f" ({_local_hm(t['at'])} から): {t['text'][:100]}")
+
+
+def _relay_text(t: dict) -> str:
+    return (f"本人が {_local_hm(t['answered_at'])} に問い {t['label']} (依頼 {t['request']}) に答えた:"
+            f" 「{t['quote'][:100]}」。 その後に依頼元からこの子への message も、 この子の役宛ての次の依頼も無い")
+
+
 def finished_state(child: dict, parent_local: str, parent_path: str, events: list[dict], instance: str,
-                   as_of: str = "") -> dict:
+                   as_of: str = "", asks=None) -> dict:
+    """asks = the question ledgers (list, or a callable returning it = lazy_asks); None = no questions known."""
     row = dict(child, parent=parent_local, state="", accepted_at="", settled_at="", reasons=[], hours=None, threads={})
     b = board_state(child["cli"], events, instance, as_of)
     row["threads"], row["accepted_at"], row["settled_at"] = b["threads"], b["accepted_at"], b["settled_at"]
@@ -1281,10 +1409,34 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
         row["reasons"].append(_ask_text(ask))
     if talking:
         row["reasons"].append(_talking_text(talking))
+    landed = [ts for ts, frm in ev["peer_wraps"] if frm == parent_local]  # sent to the child's uds address too
+    off = _called_off(ev, parent_local, acts["unwraps"])
+    # wrap requests count from the last accept, not from a later let-go (settled_at): the parent asks for the wrap before
+    # the child releases its last request (measured shape: the wrap request a minute or two before the release)
+    wraps = sorted(t for t in acts["wraps"] + ev["wraps"] + landed if t[:19] >= b["accepted_at"][:19] and t > off)
+    # The requester's question to the person, tied to a request of the child that the child still holds (accepted, not
+    # let go of), keeps the child before any wrap is asked: the answer comes to the requester's window and goes on to the
+    # child, who applies in the same window (measured: folding the child between a question and its answer a minute
+    # later, then raising a new window that read the earlier window's context again). A let-go request or a wrap
+    # request = the requester decided to fold, and the question does not keep the child.
+    held = [r for r in b["claimed"] if r not in b["released"]]
+    tied = tied_asks((asks() if callable(asks) else asks) or [], held, as_of) if held and not wraps else []
+    waiting = [t for t in tied if t["status"] == "open" and not t["deferred"] and t["at"]
+               and (ASKED_HOLD_H is None or now - _epoch(t["at"]) < ASKED_HOLD_H * 3600)]
+
+    def sent_after(at: str) -> bool:
+        return (any(ts[:19] > at[:19] for ts, frm in ev["peers"] if frm == parent_local)
+                or any(ts[:19] > at[:19] for ts in parent_sends(parent_path, child, as_of)))
+    relay = [t for t in tied if t["status"] == "answered" and t["answered_at"]
+             and t["answered_at"][:19] > (b["settled_at"] or "")[:19] and not sent_after(t["answered_at"])]
     if row["reasons"]:
         if talking and talking.get("answered_at") and not ask:
             row["state"], row["answered_at"] = "answered", talking["answered_at"]
             row["answered_min"] = round((now - _epoch(talking["answered_at"])) / 60)
+        elif ask and not ask["owner_only"] and not talking and waiting:
+            # the child's question of judgment went on to the person (the requester asked it in its own window)
+            row["state"], row["wait_since"] = "asked", waiting[-1]["at"]
+            row["reasons"].append(_asked_text(waiting[-1]))
         elif ask and not ask["owner_only"] and not talking:
             # 判断の問いだけが残る = 規則 9 で親が答える番 (見張りに回すと、 見張りはその問いが消えるのを待ち、 親は見張りが
             # 起きるのを待つ = 互いの待ち、 実測)。 本人だけの問い・本人が子と話している途中は従来どおり残して見張る
@@ -1293,11 +1445,14 @@ def finished_state(child: dict, parent_local: str, parent_path: str, events: lis
             row["state"] = "owner"
             row["wait_since"] = (ask or talking or {}).get("at", "")
         return row
-    landed = [ts for ts, frm in ev["peer_wraps"] if frm == parent_local]  # sent to the child's uds address too
-    off = _called_off(ev, parent_local, acts["unwraps"])
-    # wrap requests count from the last accept, not from a later let-go (settled_at): the parent asks for the wrap before
-    # the child releases its last request (measured shape: the wrap request a minute or two before the release)
-    wraps = sorted(t for t in acts["wraps"] + ev["wraps"] + landed if t[:19] >= b["accepted_at"][:19] and t > off)
+    if waiting:
+        row["state"], row["wait_since"] = "asked", waiting[-1]["at"]
+        row["reasons"].append(_asked_text(waiting[-1]))
+        return row
+    if relay:
+        row["state"], row["wait_since"] = "relay", relay[-1]["answered_at"]
+        row["reasons"].append(_relay_text(relay[-1]))
+        return row
     # a turn end counts only when the child started replying after the request (measured: the child's previous turn
     # ended 3 s after the parent's SendMessage, before the message was delivered)
     last = wraps[-1] if wraps else ""
@@ -1335,10 +1490,12 @@ def finished(parent: str, roots: list[str], as_of: str = "", instance: str | Non
     since = _iso(min(c["created_ms"] for c in kids) / 1000 - 86400) if all(c["created_ms"] for c in kids) else ""
     events = load_board(roots, since)
     ppath = sm.transcript_path(prec["cli_id"]) or ""
-    return [finished_state(c, prec["local_id"], ppath, events, instance or instance_name(), as_of) for c in kids]
+    asks = lazy_asks(roots)
+    return [finished_state(c, prec["local_id"], ppath, events, instance or instance_name(), as_of, asks) for c in kids]
 
 
-DONE_STATES = ("due", "wrapped", "archived", "no-board", "judge")  # judge = 親が子の問いに答える番 (--wait-due はすぐ返す)
+DONE_STATES = ("due", "wrapped", "archived", "no-board", "judge", "relay", "asked")
+# judge / relay = 親が子に答えを送る番 (--wait-due はすぐ返す)。 asked = 本人の答えは親の窓に来る = 見張っても早くならない
 
 
 def _settled(r: dict) -> bool:
@@ -1364,7 +1521,7 @@ def wait_due(targets: list[str], roots: list[str], max_minutes: float, interval:
     of the parent is running, so the app's own turn-end note would not wake the parent (see the docstring)."""
     deadline = time.time() + max_minutes * 60
     while True:
-        rows = []
+        rows, asks = [], lazy_asks(roots)
         for t in targets:
             child, prec = child_row(t)
             if not child or not prec:
@@ -1375,7 +1532,8 @@ def wait_due(targets: list[str], roots: list[str], max_minutes: float, interval:
                 rows.append(dict(child, parent=prec["local_id"], state="archived", reasons=[], hours=None, accepted_at=""))
                 continue
             events = load_board(roots, _iso(child["created_ms"] / 1000 - 86400) if child["created_ms"] else "")
-            rows.append(finished_state(child, prec["local_id"], sm.transcript_path(prec["cli_id"]) or "", events, instance_name()))
+            rows.append(finished_state(child, prec["local_id"], sm.transcript_path(prec["cli_id"]) or "", events, instance_name(),
+                                       asks=asks))
         settled = [r for r in rows if _settled(r)]
         if settled:  # the first child that is the parent's turn ends the watch (the rest are re-watched)
             print(f"🧺 子 {len(settled)} 件が親の番になった ({time.strftime('%H:%M')}):")
@@ -1408,7 +1566,9 @@ def all_parents() -> list[str]:
 
 STATE_WORDS = {"due": "規則 10 の番 (wrap を頼んでいない)", "wrapped": "wrap は終わっている = 照合して畳む",
                "wrapping": "wrap の途中", "owner": "本人待ち = 残す", "judge": "判断の問いが残っている = 親が答える番 (規則 9)", "answered": "本人の発言に子が答え終えている (裁定待ち = 今は残す)",
-               "open": "開いている依頼がある", "busy": "動いている", "no-board": "掲示板に依頼が無い", "archived": "archive 済み"}
+               "open": "開いている依頼がある", "busy": "動いている", "no-board": "掲示板に依頼が無い", "archived": "archive 済み",
+               "asked": "依頼元が本人に出した問いがこの子の依頼に結ばれて開いている = 残す (答えが出たらこの子に送って同じ窓で当てさせる)",
+               "relay": "本人が問いに答えた = 答えの逐語と依頼元の session の id をこの子に送って同じ窓で当てさせる"}
 
 
 def _settled_words(r: dict) -> str:
@@ -1420,7 +1580,7 @@ def _settled_words(r: dict) -> str:
 def render_finished(rows: list[dict]) -> str:
     lines = []
     for r in rows:
-        mark = "🧺" if r["state"] in ("due", "wrapped") else "  "
+        mark = "🧺" if r["state"] in ("due", "wrapped", "relay") else "  "
         h = f"  {_settled_words(r)} から {r['hours']} 時間" if r.get("hours") is not None else ""
         lines.append(f"{mark} [{r['state']}] {r['title'] or r['local']} ({r['local']})  親={r['parent']}{h}  — {STATE_WORDS.get(r['state'], '')}")
         for why in r["reasons"]:
@@ -1430,6 +1590,21 @@ def render_finished(rows: list[dict]) -> str:
         if r.get("released"):
             lines.append("      → 子が手放した依頼 (開いている依頼に数えない): " + ", ".join(r["released"]))
     return "\n".join(lines)
+
+
+def _hold_words() -> str:
+    return f"{ASKED_HOLD_H:g} 時間" if ASKED_HOLD_H is not None else "数時間"
+
+
+def keep_for_answer_text() -> str:
+    """The sentence the accept line and the Stop net say about a wait for an answer outside the child's window."""
+    return (" 本人に問いを出していて、 答えが出ればこの子が当てを続けられるなら、 畳まずに残す = その問いを問いの台帳に"
+            " `--key request:<この子の依頼の id>` で立てる (道具はその問いが開いている間この子を畳む番に数えない)。"
+            " 答えが出たら、 答えの逐語と自分の session の id を依頼に note で書き、 この子に SendMessage で送って同じ窓で当てさせる。"
+            " 答えの見込みが立たない待ち (共同研究者・外部の返事・本人がその件を後回しにした・"
+            f"{_hold_words()}を越える) と、 子の context が大きい・壊れたときだけ、 子に候補の在りか・SHA-256・当てる直前の照らし方・"
+            "当て方を掲示板の note に残させ、 claim を手放させて畳む (道具は手放した依頼を開いている依頼と数えない。"
+            " 答えが来たら依頼元がその役の新しい窓を起こして当てさせる)。")
 
 
 def _accept_line(r: dict, rule: str, extra: str = "") -> str:
@@ -1443,11 +1618,18 @@ def _accept_line(r: dict, rule: str, extra: str = "") -> str:
                 + "子へ SendMessage で"
                 f"「{WRAP_ASK_TEXT}」 と送る (言い換えない = skill の名が無いと子は skill を起動しない) → 同じ turn に見張り"
                 f" (`python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {r['local']}`) → 起こされたら照合して archive。"
-                " 子の窓の外で出る答え (本人・検収係・共同研究者) を待つだけの当ては、 この子への次の依頼にしない ="
-                " 子に候補の在りか・SHA-256・当てる直前の照らし方・当て方を掲示板の note に残させ、 claim を手放させて畳む"
-                " (道具は手放した依頼を開いている依頼と数えない。 答えが来たら依頼元がその役の新しい窓を起こして当てさせる)。"
-                " 次の仕事に使うなら、 今すぐ始められる次の依頼だけをこの turn に掲示板に出す (宛先 = その子の役。 道具は開いている依頼と数える)。"
+                + keep_for_answer_text()
+                + " 次の仕事に使うなら、 今すぐ始められる次の依頼だけをこの turn に掲示板に出す (宛先 = その子の役。 道具は開いている依頼と数える)。"
                 + (f" {extra}" if extra else "") + tail)
+    if r["state"] == "asked":
+        return (f"🧺 {who} の依頼を受け取った。 {'; '.join(r['reasons'])[:300]} = 畳まずに残す (wrap を頼まない・claim を手放させない)。"
+                " 本人が答えたら、 答えの逐語と自分の session の id を依頼に note で書き、 この子に SendMessage で送って同じ窓で当てさせる"
+                " (受け取った依頼の後の当ては、 この子の役宛ての次の依頼にする = 受け取った依頼には submit できない)。"
+                f" 本人がその件を後回しにしたか、 問いが {_hold_words()} 答えられなければ、 見込みの立たない待ちとして規則の順で畳む。" + tail)
+    if r["state"] == "relay":
+        return (f"🧺 {who} の依頼を受け取った。 {'; '.join(r['reasons'])[:300]} = 依頼元が答えを送る番: 答えの逐語と自分の session の id を"
+                " 依頼に note で書き、 この子に SendMessage で送って同じ窓で当てさせる (当ての記録が要るなら、 この子の役宛ての次の依頼に)。"
+                " 答えの後の仕事を別の窓に回すなら、 この子は規則の順で畳む。" + tail)
     if r["state"] == "owner":
         return (f"🧺 {who} の依頼を受け取った。 子は本人を待っている ({'; '.join(r['reasons'])[:300]})"
                 " = 規則 10 では残し、 本人に 1 行で伝える。 本人が子の窓で答えて子が終えたときに起こされるよう、 同じ turn に"
@@ -1488,10 +1670,10 @@ def hook_accept(inp: dict, roots: list[str], rule: str, extra: str = "") -> str:
             workers.add(mm.group(1) if mm else str(a.get("session_id") or "")[:8])
     lines = []
     if workers and me:
-        ppath = sm.transcript_path(me["cli_id"]) or ""
+        ppath, asks = sm.transcript_path(me["cli_id"]) or "", lazy_asks(roots)
         for c in children_of(me["local_id"]):
             if c["cli"][:8] in workers and not c["detached"] and not c["archived"]:
-                line = _accept_line(finished_state(c, me["local_id"], ppath, events, instance), rule, extra)
+                line = _accept_line(finished_state(c, me["local_id"], ppath, events, instance, asks=asks), rule, extra)
                 if line:
                     lines.append(line)
     # A delegated closing (the spec, the submission or a file read this turn carries wrap-delegate-spec.py's mark) = the
@@ -1576,7 +1758,8 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
     if not me:
         return ""
     rows = finished(me["local_id"], roots)
-    due = [r for r in rows if r["state"] in ("due", "wrapped", "answered", "owner", "judge") and not _watch_running(r["local"])]
+    # asked = the requester's open question to the person keeps the child (silent here); relay = the person answered it
+    due = [r for r in rows if r["state"] in ("due", "wrapped", "answered", "owner", "judge", "relay") and not _watch_running(r["local"])]
     if not due:
         return ""
     path = _state_file(me["local_id"])
@@ -1616,7 +1799,8 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
     ask = [r for r in new if r["state"] == "answered" and ANSWERED_GRACE_MIN is None
            and r.get("answered_min", 0) >= ASK_AFTER_MIN]
     judge = [r for r in new if r["state"] == "judge"]
-    watch = [r for r in new if r not in fold and r not in ask and r not in judge]
+    relay = [r for r in new if r["state"] == "relay"]
+    watch = [r for r in new if r not in fold and r not in ask and r not in judge and r not in relay]
     lines = []
     if fold:
         lines.append(f"🧺 規則 10 の番の子が {len(fold)} つ、 畳まれないまま残っている (掲示板の依頼は全部受け取り済みか子が手放し、 子は動いておらず本人も待っていない):")
@@ -1629,7 +1813,7 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
                      f" 子へ SendMessage で「{WRAP_ASK_TEXT}」 と送る → 同じ turn に見張り"
                      " → 照合 → archive。 送る文は言い換えない)。 本人がこの子について別の指示を"
                      "しているなら (例 = 使用量の上限が戻るまで待つ)、 それを本人に 1 行で書いて turn を終える。"
-                     + (f" {extra}" if extra else ""))
+                     + keep_for_answer_text() + (f" {extra}" if extra else ""))
     if ask:
         lines.append(f"🧺 依頼は全部受け取り済みで、 本人がその窓で話した後に子が答え終え、 {ASK_AFTER_MIN} 分以上止まっている子が {len(ask)} つ"
                      " (規則 10 の「話している間」 に入るかは本人の裁定待ち = 道具は残す側):")
@@ -1649,6 +1833,13 @@ def hook_stop(inp: dict, roots: list[str], rule: str, mode: str, extra: str = ""
         for r in judge:
             lines.append(f"- {r['title'] or r['local']} ({r['local']}) — " + "; ".join(r["reasons"])[:200])
         lines.append("子に答えを SendMessage で送る (本人の判断が要るなら本人に 1 行で聞く)。")
+    if relay:
+        lines.append(f"🧺 依頼元が本人に出した問いに本人が答えたのに、 答えをまだ送っていない子が {len(relay)} つ (畳まない):")
+        for r in relay:
+            lines.append(f"- {r['title'] or r['local']} ({r['local']}) — " + "; ".join(r["reasons"])[:240])
+        lines.append("答えの逐語と自分の session の id を依頼に note で書き、 子に SendMessage で送って同じ窓で当てさせる"
+                     " (受け取った依頼の後の当ては、 子の役宛ての次の依頼にする = 受け取った依頼には submit できない)。"
+                     " 答えの後の仕事を別の窓に回すなら、 その子は規則の順で畳む (wrap を頼めばこの知らせは出ない)。")
     lines.append("この知らせは子ごとに 1 回だけ。")
     if rule:
         lines.append(f"規則 = {rule}")
@@ -1721,7 +1912,7 @@ def main(argv: list[str]) -> int:
             ap.error("--finished には --board-root (か env CHILD_WRAP_BOARD_ROOTS) が要る")
         rows = [r for p in ([a.parent] if a.parent else all_parents()) for r in finished(p, roots, a.as_of)]
         print(json.dumps(rows, ensure_ascii=False, indent=1) if a.json else (render_finished(rows) or "(該当する子なし)"))
-        return 1 if any(r["state"] in ("due", "wrapped") for r in rows) else 0
+        return 1 if any(r["state"] in ("due", "wrapped", "relay") for r in rows) else 0
     if not a.targets:
         ap.error("子の local_… か transcript id を 1 つ以上")
     wrap_since, targets, rest = "", a.targets, []
@@ -1742,11 +1933,57 @@ def main(argv: list[str]) -> int:
     return 0 if all(r["ok"] for r in rows) else 1
 
 
+# The selftest's stand-in for the question ledger's engine (CI checks this repo out alone): the same names and the same
+# reading of asks, settled answers (not defer), and withdraws as ai-collaboration board/board_asks.py.
+STUB_ASKS_ENGINE = '''import json
+from pathlib import Path
+SETTLED = ('label', 'order', 'confirmed')
+
+
+def ledger_path(root):
+    return Path(root) / '.local' / 'asks.jsonl'
+
+
+def load(path):
+    out = []
+    try:
+        for line in open(path, encoding='utf-8'):
+            r = json.loads(line)
+            if isinstance(r, dict) and r.get('type'):
+                out.append(r)
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def state(recs):
+    asks = {}
+    for r in recs:
+        t = r.get('type')
+        if t == 'ask':
+            asks[r['label']] = dict(r, status='open', answers=[])
+        elif t == 'answer':
+            for lb in r.get('labels') or []:
+                a = asks.get(lb)
+                if a is None:
+                    continue
+                a['answers'].append(r)
+                if r.get('binding') in SETTLED and not r.get('defer') and a['status'] == 'open':
+                    a['status'] = 'answered'
+        elif t == 'withdraw':
+            a = asks.get(r.get('label'))
+            if a is not None and a['status'] == 'open':
+                a['status'] = 'withdrawn'
+    return asks
+'''
+
+
 def selftest() -> int:
     import tempfile
 
-    global ANSWERED_GRACE_MIN, BG_TASKS
+    global ANSWERED_GRACE_MIN, BG_TASKS, ASKED_HOLD_H
     saved_grace, ANSWERED_GRACE_MIN = ANSWERED_GRACE_MIN, None  # the cases below were written for "keep counting"
+    saved_hold = ASKED_HOLD_H
     saved_bg, BG_TASKS = BG_TASKS, (lambda cli: [])  # no live background work unless a case says so
     fails: list[str] = []
 
@@ -2600,6 +2837,136 @@ def selftest() -> int:
            and rf.index("set_session_model") < rf.index(WRAP_ASK_TEXT))
         WRAP_MODEL.clear()
         WRAP_MODEL.update(saved_wm)
+        # ---- the requester's question to the person, tied to the child's request in the board's question ledger ----
+        # (measured: the child was folded between a question and its answer a minute later, and a new window raised after
+        # the answer read the earlier window's context again). The stub engine has the ledger engine's shape (ledger_path,
+        # load, state, SETTLED); the real one runs below when the sibling checkout is there.
+        stub = os.path.join(td, "stub_asks.py")
+        with open(stub, "w", encoding="utf-8") as fh:
+            fh.write(STUB_ASKS_ENGINE)
+        os.makedirs(os.path.join(board, ".local"), exist_ok=True)
+        ledger = os.path.join(board, ".local", "asks.jsonl")
+        saved_engine, saved_ledger_env = os.environ.get("CHILD_WRAP_ASKS_ENGINE"), os.environ.pop("BOARD_ASKS_LEDGER", None)
+        os.environ["CHILD_WRAP_ASKS_ENGINE"] = stub
+        _ASKS_ENGINE.clear()
+        qp_l, qp_c = "local_d0000000-0000-4000-8000-000000000000", "d0000000-aaaa-4000-8000-000000000000"
+        record(qp_l, qp_c)
+        transcript(qp_c, [])
+        QR = {k: f"20260103T000000Z-claude-{0xd0 + i:06x}" for i, k in enumerate(
+            ["asked", "defer", "relgo", "wrapq", "relay", "sent", "other", "hash", "wd"])}
+        qk, qrecs = {}, []
+        q_base = [u("2026-01-03T00:00:00Z", "依頼", origin={"kind": "human"}), reply("2026-01-03T01:00:00Z"),
+                  stop("2026-01-03T01:00:01Z")]
+        for i, k in enumerate(QR):
+            n = f"d30000{i + 1:02x}"
+            local, cli = f"local_{n}-0000-4000-8000-000000000000", f"{n}-cccc-4000-8000-000000000000"
+            record(local, cli, qp_l)
+            live(5000 + i, cli, local, "idle")
+            rows_q = list(q_base)
+            if k == "wrapq":  # the requester chose to fold after all: the wrap request and the child's wrap
+                rows_q += [peer("2026-01-03T01:20:00Z", WRAP_ASK_TEXT, qp_l), skill_wrap("2026-01-03T01:20:30Z"),
+                           reply("2026-01-03T01:21:00Z"), stop("2026-01-03T01:21:05Z")]
+            if k == "sent":  # the requester sent the person's answer, the child applied and stopped
+                rows_q += [peer("2026-01-03T01:22:00Z", "本人の答え「この候補で直す」、 依頼元の session = …", qp_l),
+                           reply("2026-01-03T01:23:00Z"), stop("2026-01-03T01:23:05Z")]
+            transcript(cli, rows_q)
+            qk[k] = (local, cli)
+            role = f"role-q-{k}"
+            event("request", QR[k], "2026-01-03T00:00:00", task="parent", sid=qp_c, assignee={"agent": "claude", "session_id": role})
+            event("claim", QR[k], "2026-01-03T00:01:00", task=f"{n} (opus)", sid=role)
+            if k == "relgo":  # the child let go of it (the requester decided to fold)
+                event("release", QR[k], "2026-01-03T01:12:00", task="workflow", sid=role)
+            else:
+                event("submit", QR[k], "2026-01-03T00:50:00", task=f"{n} (opus)", sid=role)
+                event("accept", QR[k], "2026-01-03T01:10:00", task="d0000000 (opus)", sid="role-q-review")
+            key = ("request:20260103T000000Z-claude-0000ff" if k == "other"
+                   else f"request:{QR[k]}#2" if k == "hash" else f"request:{QR[k]}")
+            qrecs.append({"type": "ask", "label": f"Q{i + 1}", "text": f"候補を当てますか ({k})", "keys": [key],
+                          "created_at": "2026-01-03T01:15:00Z", "session": qp_c})
+            if k == "defer":
+                qrecs.append({"type": "answer", "labels": [f"Q{i + 1}"], "binding": "label", "defer": True,
+                              "quote": "それは後で", "created_at": "2026-01-03T01:18:00Z", "session": qp_c})
+            if k in ("relay", "sent"):
+                qrecs.append({"type": "answer", "labels": [f"Q{i + 1}"], "binding": "confirmed", "quote": "この候補で直す",
+                              "created_at": "2026-01-03T01:20:00Z", "session": qp_c})
+            if k == "wd":
+                qrecs.append({"type": "withdraw", "label": f"Q{i + 1}", "reason": "別の所で決まった",
+                              "created_at": "2026-01-03T01:18:00Z", "session": qp_c})
+        with open(ledger, "w", encoding="utf-8") as fh:
+            for r in qrecs:
+                fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+        qs = {r["local"]: r for r in finished(qp_l, [board], as_of="2026-01-03T01:30:00")}
+        qst = {k: qs.get(v[0], {}).get("state") for k, v in qk.items()}
+        ok("asked: an open question to the person names the child's accepted request → asked (kept), with the question",
+           qst["asked"] == "asked" and any("Q1" in x for x in qs[qk["asked"][0]]["reasons"]))
+        ok("asked: the key's #2 form names the same request → asked", qst["hash"] == "asked")
+        ok("asked control: a question on another request → due (the finished child is still the parent's to fold)",
+           qst["other"] == "due")
+        ok("asked control: the person put the question off (defer) → due", qst["defer"] == "due")
+        ok("asked control: the question was withdrawn → due", qst["wd"] == "due")
+        ok("asked control: the child let go of the request (the requester decided to fold) → due", qst["relgo"] == "due")
+        ok("asked control: the wrap was asked and ran after the accept → wrapped, not asked", qst["wrapq"] == "wrapped")
+        ok("relay: the person answered and nothing went to the child since → relay, with the person's words",
+           qst["relay"] == "relay" and any("この候補で直す" in x for x in qs[qk["relay"][0]]["reasons"]))
+        ok("relay control: the requester sent the answer, the child applied and stopped → due", qst["sent"] == "due")
+        ok("asked control: before the question was asked → due",
+           {r["local"]: r["state"] for r in finished(qp_l, [board], as_of="2026-01-03T01:14:00")}[qk["asked"][0]] == "due")
+        late = {r["local"]: r["state"] for r in finished(qp_l, [board], as_of="2026-01-03T05:16:00")}
+        ok("asked: past the hold (4 hours from the question) → due (an answer with no prospect)",
+           ASKED_HOLD_H == DEFAULT_ASKED_HOLD_H and late[qk["asked"][0]] == "due")
+        ok("asked: within the hold → still asked",
+           {r["local"]: r["state"] for r in finished(qp_l, [board], as_of="2026-01-03T05:14:00")}[qk["asked"][0]] == "asked")
+        a_line = _accept_line(qs[qk["asked"][0]], "R")
+        ok("accept line (asked): keep it, send the person's words and own session id to it, no wrap",
+           "畳まずに残す" in a_line and "SendMessage" in a_line and WRAP_ASK_TEXT not in a_line)
+        r_line = _accept_line(qs[qk["relay"][0]], "R")
+        ok("accept line (relay): send the answer now", "答えを送る番" in r_line and "この候補で直す" in r_line)
+        d_line = _accept_line(qs[qk["other"][0]], "R")
+        ok("accept line (due): a question the person will answer keeps the child (ledger key); fold only a wait with no"
+           " prospect, after note and release",
+           "畳まずに残す" in d_line and "--key request:" in d_line and "手放させて畳む" in d_line
+           and d_line.index("畳まずに残す") < d_line.index("手放させて畳む") < d_line.index("今すぐ始められる次の依頼だけ"))
+        ASKED_HOLD_H = None  # the Stop and --wait-due read the ledger as of now (the cases are dated 2026-01-03)
+        q_in = {"hook_event_name": "Stop", "session_id": qp_c}
+        qd = json.loads(hook_stop(q_in, [board], "R", "block") or "{}")
+        qwhy = qd.get("reason", "")
+        q_fold = qwhy.split("答えをまだ送っていない子")[0]
+        ok("hook-stop: the asked children are not named (the question keeps them)",
+           qd.get("decision") == "block" and qk["asked"][0] not in qwhy and qk["hash"][0] not in qwhy)
+        ok("hook-stop: the finished children are still named in the fold part (control)",
+           all(qk[k][0] in q_fold for k in ("other", "defer", "wd", "relgo", "sent", "wrapq")))
+        ok("hook-stop: the relay child → 'send the answer', not the fold part",
+           qk["relay"][0] in qwhy and qk["relay"][0] not in q_fold
+           and "同じ窓で当てさせる" in qwhy.split("答えをまだ送っていない子")[-1])
+        ok("hook-stop: the fold part says how a question to the person keeps a child", "--key request:" in q_fold)
+        ok("wait-due: an asked child → returns at once (the answer comes to the parent's window)",
+           wait_due([qk["asked"][0]], [board], 0.001, 0) == 0)
+        os.environ["CHILD_WRAP_ASKS_ENGINE"] = os.path.join(td, "no-such-engine.py")
+        _ASKS_ENGINE.clear()
+        ok("fail-open: no ledger engine → the asked child reads as before (due)",
+           {r["local"]: r["state"] for r in finished(qp_l, [board], as_of="2026-01-03T01:30:00")}[qk["asked"][0]] == "due")
+        real = os.path.abspath(ASKS_ENGINE_DEFAULT)
+        ASKED_HOLD_H = DEFAULT_ASKED_HOLD_H
+        if os.path.isfile(real):
+            os.environ["CHILD_WRAP_ASKS_ENGINE"] = real
+            _ASKS_ENGINE.clear()
+            rs = {r["local"]: r["state"] for r in finished(qp_l, [board], as_of="2026-01-03T01:30:00")}
+            ok("real ledger engine: asked / deferred / relay / withdrawn read the same as the stub",
+               rs[qk["asked"][0]] == "asked" and rs[qk["defer"][0]] == "due" and rs[qk["relay"][0]] == "relay"
+               and rs[qk["wd"][0]] == "due")
+        else:
+            print("SKIP: the real ledger engine (sibling ai-collaboration checkout) is absent; the stub cases cover the predicate")
+        if saved_engine is None:
+            os.environ.pop("CHILD_WRAP_ASKS_ENGINE", None)
+        else:
+            os.environ["CHILD_WRAP_ASKS_ENGINE"] = saved_engine
+        if saved_ledger_env is not None:
+            os.environ["BOARD_ASKS_LEDGER"] = saved_ledger_env
+        _ASKS_ENGINE.clear()
+        for v, want in (("none", None), ("", 4.0), ("2", 2.0), ("x", 4.0)):
+            os.environ["CHILD_WRAP_ASKED_HOLD_H"] = v
+            ok(f"env hold {v!r} → {want}", _hold_from_env() == want)
+        os.environ.pop("CHILD_WRAP_ASKED_HOLD_H", None)
         ANSWERED_GRACE_MIN = None
         for v, want in (("none", None), ("", 10.0), ("30", 30.0), ("45", 45.0), ("x", 10.0)):
             os.environ["CHILD_WRAP_ANSWERED_GRACE_MIN"] = v
@@ -2608,7 +2975,7 @@ def selftest() -> int:
         for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "CLAUDE_DESKTOP_SESSIONS_DIR", "CHILD_WRAP_REPOS_GLOB",
                   "CHILD_WRAP_INSTANCE", "CHILD_FINISHED_STATE_DIR"):
             os.environ.pop(k, None)
-    ANSWERED_GRACE_MIN, BG_TASKS = saved_grace, saved_bg
+    ANSWERED_GRACE_MIN, BG_TASKS, ASKED_HOLD_H = saved_grace, saved_bg, saved_hold
     print("selftest:", "PASS" if not fails else f"{len(fails)} FAIL")
     return 1 if fails else 0
 
