@@ -106,7 +106,7 @@ def reason_for(active: list[dict], due: list[dict], second: list[dict], need_lin
             "   - 「withdrawn」 が返った依頼は、 元と同じ入力で start_session を 1 枚ずつ出し直す (initiation = own_initiative。 "
             "title・prompt・background・context・model・effort・name・use_worktree を変えない。 元の呼び出しが context に無ければ写しを Read する): "
             f"{_card_list(latest, copies)}\n"
-            "   - 「already started」 が返った依頼は出し直さない (本人が押した = worker が起きている)。\n"
+            "   - 押されていた返事 (「is no longer pending」、 旧い app では「already started」) が返った依頼は出し直さない (本人が押した = worker が起きている)。\n"
             "   取り下げと出し直しを同じ応答に並べない (結果を読む前に出し直すと、 本人がその間に押した card と 2 人目の worker になる)。")
     if second:
         out.append(
@@ -301,7 +301,9 @@ class _T:
                   f'Proposed "{title}" (task_id: {task}). The user sees a card and nothing runs until they start it.')
 
     def dismiss(self, task: str, started: bool = False):
-        res = (f"Task {task} was already started by the user — it's no longer pending and can't be withdrawn." if started
+        # 押されていた返事 = 今の app の文 (旧い文 = 「Task … was already started by the user …」 は (b) の形で試す)
+        res = (f"Task {task} is no longer pending, so there is nothing to withdraw: it was started in its own session, "
+               "or the user sent it to this one, which starts none." if started
                else f"Task {task} withdrawn — the chip is no longer shown to the user.")
         self.tool("mcp__ccd_session__dismiss_task", {"task_id": task}, res)
 
@@ -459,6 +461,37 @@ def selftest() -> int:
         rs = _reason(_run_stop(tb.write(d)))
         check("押された後に出た同じ依頼の card → 取り下げさせ、 出し直させない",
               "2 人目" in rs and "task_sss2" in rs and pc.REISSUE_HEAD not in rs)
+
+        # 今の app の文で押されていたと返る (「is no longer pending」) → 押された card として出し直さない
+        tn2 = _T(now - 3600)
+        tn2.event()
+        tn2.card("task_npn1", "[local推奨] 今の文", None)
+        tn2.say(f"{mark} 1 枚: 今の文")
+        tn2.event()
+        tn2.say("見張り。")
+        tn2.feedback(_reason(_run_stop(tn2.write(d))))
+        tn2.dismiss("task_npn1", started=True)
+        tn2.say("押されていました。")
+        pn2 = tn2.write(d)
+        check("取り下げが今の文の「is no longer pending」 → 押された (取り下げたままの知らせも出ない)",
+              _run_stop(pn2, active=True) == "" and pc.chains(pc.load_entries(pn2))[0]["status"] == "started")
+
+        # 起きた session を本人が消した後: 押された印は起こした側の app の記録に積まれた知らせだけ
+        tg = _T(now - 3600)
+        tg.event()
+        tg.card("task_ghost1", "[local推奨] 消された子", None)
+        tg.say(f"{mark} 1 枚: 消された子")
+        tg.event()
+        tg.say("見張り。")
+        pg = tg.write(d)
+        check("起こした側の記録に知らせが無い → 出し直しを求める", pc.REISSUE_HEAD in _reason(_run_stop(pg)))
+        with open(os.path.join(d, "app", "acct", "env", "local_parent.json"), "w") as fh:
+            json.dump({"sessionId": "local_parent", "pendingSystemReminder":
+                       "<system-reminder>\nThe user started your proposal task_ghost1 (\"x\") as session local_gone.\n"
+                       "</system-reminder>"}, fh)
+        check("起こした側の記録に積まれた「started your proposal」 → 押された (起きた session が消された後も)", _run_stop(pg) == "")
+        check("流し直し (時刻つき) では積まれた知らせを使わない",
+              len(evaluate(pc.load_entries(pg), now=now - 3000, app_until=now - 3000)["active"]) == 1)
 
         # ---- 出し直さない形 ----
         # 「あとで」 = その鎖は以後も出し直さない・点呼しない。 その後の新しい card だけを数える

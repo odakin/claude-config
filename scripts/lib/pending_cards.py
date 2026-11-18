@@ -12,8 +12,10 @@
   - 依頼の鎖 = 同じ request id の card (request id が無ければ同じ仕事の名前 = 題から頭の `[…]` を外したもの)。
     出し直した card は前の card の続きとして数える (7 日の期限・「あとで」 は鎖の最初の card から数える)。
   - 押された = (1) app の記録で `spawnedFrom.taskId` がその id の session が在る (押した瞬間にできる、 実測)
-    (2) 会話記録の「The user started your proposal task_…」 (起こした側の次の turn に遅れて届く、 実測)
-    (3) この session が `start_session` に `proposal_id` を渡して起こした (4) `dismiss_task` が「already started」 を返した。
+    (2) 会話記録の「The user started your proposal task_…」 (起こした側の次の turn に遅れて届く、 実測)、 届く前は
+    起こした側の app の記録に積まれた同じ文 (起きた session が消されると (1) が消える = こちらでしか分からない、 実測)
+    (3) この session が `start_session` に `proposal_id` を渡して起こした (4) `dismiss_task` が押されていた返事
+    (今の文 = 「is no longer pending」、 旧い文 = 「already started」) を返した。
   - 取り下げ = `dismiss_task` の結果の「Task task_… withdrawn」。 期限切れ = 出してから 7 日 (app の期限)。
   - 掲示板で引き受け済み = card の hand-off 文が名指す request に、 誰かの claim・submit・accept・abandoned・done が
     在る (最後が release なら戻る)。 掲示板は `<base>/*/events` と `<base>/*/board/events` (`<base>` = この repo の親)
@@ -25,7 +27,7 @@
   - 取り下げたまま = 点呼の差し戻し (REISSUE_HEAD を含む Stop hook の差し戻し) がその card の id を名指した後に
     取り下げ、 同じ鎖の新しい card が無い鎖 (出し直しを落とした)。
   - 2 人目になる card = 同じ鎖の card が押された後に出た、 まだ押されていない card (取り下げの結果を読む前に出し直し、
-    取り下げが「already started」 だった形)。 題か prompt に `[再起票]` があれば数えない (本人が 2 つ目を求めた)。
+    取り下げが押されていた返事だった形)。 題か prompt に `[再起票]` があれば数えない (本人が 2 つ目を求めた)。
   - 本人の発言 = user の行のうち `origin.kind == "human"` (自動の知らせ = task-notification・別の session の message
     = peer・子の知らせ・Stop hook の差し戻しは本人の発言でない)。 origin を持たない古い記録では、 isMeta でなく
     自動の知らせの書き出しで始まらない行を本人の発言と見る。 turn の途中に打った発言 (queued_command) も読む。
@@ -43,7 +45,9 @@ import time
 PROPOSED = re.compile(r'Proposed "(?P<title>.*?)" \(task_id: (?P<tid>task_[0-9a-zA-Z]+)\)')
 STARTED = re.compile(r"The user started your proposal (task_[0-9a-zA-Z]+)")
 WITHDRAWN = re.compile(r"Task (task_[0-9a-zA-Z]+) withdrawn")
-ALREADY_STARTED = re.compile(r"Task (task_[0-9a-zA-Z]+) was already started")
+# dismiss_task の「押されていた」 返事。 今の app の文 = 「Task <id> is no longer pending, so there is nothing to withdraw」、
+# 旧い文 = 「Task <id> was already started」 (両方を読む。 実測 = app の版で文が変わった)
+ALREADY_STARTED = re.compile(r"Task (task_[0-9a-zA-Z]+) (?:was already started|is no longer pending)")
 TASK_ID = re.compile(r"task_[0-9a-zA-Z]+")
 REQUEST = re.compile(r"request `(\d{8}T\d{6}Z-[a-z]+-[0-9a-f]{6})`")
 TAG = re.compile(r"^\s*\[[^\]]*\]\s*")
@@ -194,6 +198,11 @@ def _app_started_ids(task_ids: set[str], since: float, until: float | None = Non
                 raw = fh.read()
         except OSError:
             continue
+        # 起こした側の記録に積まれた「The user started your proposal task_…」 (次の turn に届く前の知らせ)。 起きた
+        # session を本人が消すと spawnedFrom の記録も消えるので、 こちらでしか押されたと分からない (実測)。 時刻を
+        # 持たないので、 流し直し (until あり) では使わない
+        if until is None and "started your proposal" in raw:
+            found |= {m.group(1) for m in STARTED.finditer(raw) if m.group(1) in task_ids}
         if "taskId" not in raw:
             continue
         try:
