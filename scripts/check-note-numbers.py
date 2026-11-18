@@ -15,6 +15,7 @@ note の小数 (2.513 / 41.7 / 0.73 など、 小数点以下 1 桁以上) と�
 並んだ数のうち、 丸め元の候補が「1 桁だけ多く、 最後の桁が 5」 の出力 (出力 1.2345 → note 1.235 / 1.234) には
 「二重丸めの恐れ」 の印を付ける: 出力はそれ自体が表示の桁で丸めた値なので、 元の値 (1.23448) が
 どちらに丸まるかは出力からは決まらない。 出力の桁を増やして出し直してから写す。
+同じ出力に 2 桁以上多い値があり、 それが note の数に丸まるなら印を付けない (桁の多い方で決まる)。
 逆に、 並ばなかった数が正しい場所から来たとは限らない (同じ字の数が別の行・別の量にあっても一致になる)。
 向きは締めの道具の数値照合 (scripts/lib/output_numbers.py = 出力の数が記録にあるか) の逆で、 両方を回す。
 規則の正本 = conventions/scientific-computing.md#note-numbers-against-outputs。
@@ -26,7 +27,7 @@ import os
 import re
 import sys
 import tempfile
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 NOTE_NUM = re.compile(r"(?<![\w.:/§])(\d+\.\d+)(?![\w.:/])")
 DEFAULT_EXT = (".txt", ".out", ".log", ".json", ".csv")
@@ -79,16 +80,19 @@ def double_rounding_sources(num, outputs):
     d = len(num.split(".")[1])
     ulp = Decimal(1).scaleb(-d)
     n = Decimal(num)
-    hits = []
+    hits, settled = [], False
     for m in OUT_NUM.finditer(outputs):
         x = m.group(1)
         frac = x.split(".")[1]
+        if len(frac) >= d + 2 and Decimal(x).quantize(ulp, rounding=ROUND_HALF_UP) == n:
+            settled = True                    # a longer output of the same value rounds to num
+            continue
         if len(frac) != d + 1 or not frac.endswith("5"):
             continue
         p = Decimal(x[:-1])
         if n in (p, p + ulp) and x not in hits:
             hits.append(x)
-    return hits
+    return [] if settled else hits
 
 
 def missing(note_text, outputs):
@@ -124,6 +128,9 @@ def selftest():
     assert double_rounding_sources("3.7", "x 3.75 y") == ["3.75"]
     assert double_rounding_sources("3.7", "x 3.65 y") == ["3.65"]   # 3.65 may round to 3.6 or 3.7
     assert double_rounding_sources("3.7", "x 3.85 y") == []
+    # the same value also printed with more digits settles it: no mark
+    assert double_rounding_sources("1.235", "short 1.2345 long 1.234998") == []
+    assert double_rounding_sources("1.234", "short 1.2345 long 1.234480") == []
     assert not in_outputs("5.81", "x 5.812 y")          # no prefix match inside a longer number
     assert in_outputs("5.81", "x 5.81, y")
     with tempfile.TemporaryDirectory() as d:
