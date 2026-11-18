@@ -494,7 +494,8 @@ def pending_threads(entries: list[dict], now: float | None = None, use_app_recor
 
 def rollcall_line(active: list[dict]) -> str:
     names = "・".join(ch["name"] for ch in active)
-    return f"{ROLLCALL_MARK} {len(active)} 枚: {names} — 押すか「起こして」 の一言で全部起こします"
+    tail = "起こします" if len(active) == 1 else "全部起こします"
+    return f"{ROLLCALL_MARK} {len(active)} 枚: {names} — 押すか「起こして」 の一言で{tail}"
 
 
 def has_rollcall(text: str, n: int) -> bool:

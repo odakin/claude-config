@@ -87,9 +87,12 @@ def _card_list(cs: list[dict], copies: dict[str, str] | None = None) -> str:
 
 
 def _box_text(n: int) -> str:
+    # 1 枚のときに「1 枚とも」 は日本語にならない = ボタンは「起こして」、 2 枚以上は「N 枚とも起こして」
+    button = "起こして" if n == 1 else str(n) + " 枚とも起こして"
+    start = "その card を起こす" if n == 1 else "全部起こす"
     return ("締めの箱を出すなら、 要約の 1 文目を「押されていない card が " + str(n) + " 枚あります」 にし、 問いが空いていれば"
-            "「待っている card " + str(n) + " 枚を起こしますか？」 + ボタン「" + str(n) + " 枚とも起こして」「あとで」 にする。 "
-            "本人が「起こして」 と答えたら、 その turn で start_session に proposal_id だけを渡して全部起こす。")
+            "「待っている card " + str(n) + " 枚を起こしますか？」 + ボタン「" + button + "」「あとで」 にする。 "
+            "本人が「起こして」 と答えたら、 その turn で start_session に proposal_id だけを渡して" + start + "。")
 
 
 def reason_for(active: list[dict], due: list[dict], second: list[dict], need_line: bool,
@@ -374,7 +377,17 @@ def selftest() -> int:
         rs = _reason(out)
         check("今の turn の card・点呼なし → 止める (点呼の行だけ、 出し直しは無し)",
               '"block"' in out and "1 枚: 検収係の RCA" in rs and pc.REISSUE_HEAD not in rs)
-        t.say(f"card を出しました。\n{mark} 1 枚: 検収係の RCA — 押すか「起こして」 の一言で全部起こします")
+        check("card 1 枚の止める文: ボタンは「起こして」 (「1 枚とも」 と言わない)、 点呼の行は「全部」 と言わない",
+              "ボタン「起こして」「あとで」" in rs and "1 枚とも" not in rs and "全部起こします" not in rs
+              and "の一言で起こします" in rs)
+        two = [{"name": "甲の仕事"}, {"name": "乙の仕事"}]
+        check("card 2 枚の文: ボタンは「2 枚とも起こして」、 点呼の行は「全部起こします」",
+              "ボタン「2 枚とも起こして」「あとで」" in _box_text(2) and "全部起こす" in _box_text(2)
+              and pc.rollcall_line(two).endswith("の一言で全部起こします"))
+        check("点呼の行の検出は文の末尾の言い方に依らない (1 枚の新しい形も 2 枚の形も見つける)",
+              pc.has_rollcall(pc.rollcall_line([{"name": "甲の仕事"}]), 1) and pc.has_rollcall(pc.rollcall_line(two), 2)
+              and not pc.has_rollcall(pc.rollcall_line(two), 1))
+        t.say(f"card を出しました。\n{mark} 1 枚: 検収係の RCA — 押すか「起こして」 の一言で起こします")
         check("今の turn の card・点呼あり → 黙る (出し直しの要らない形)", _run_stop(t.write(d)) == "")
         check("stop_hook_active (出し直しの指示の後でない) → 黙る", _run_stop(t.write(d), active=True) == "")
 
