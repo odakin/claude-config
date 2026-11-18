@@ -207,7 +207,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 ## <a id="commit"></a>4. commit + push
 
 - repo ごとに `git fetch` → behind 0 を確かめ、 **`git commit -- <自分の path>`** (他 session の staged を巻き込まない)。
-  commit 前に `git diff -U0 -- <path> | grep -c '^@@'` で自分の分だけか数える ([`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race))。
+  commit 前に `git diff -U0 -- <path> | grep -c '^@@'` の塊の数と `git diff --numstat -- <path>` の行の数で、 自分の分だけかを確かめる ([`multi-session-coordination.md#staging-window-race`](multi-session-coordination.md#staging-window-race)。 塊の数だけでは、 相手が自分の直した行の隣を直した変更が自分の塊に入って数が合う = [`multi-session-coordination.md#behind-check-in-chain`](multi-session-coordination.md#behind-check-in-chain))。
 - 自分が触っていない dirty file (credential・他 session の作業) は commit しない。
 - push の後に 1.5 の 3 で手放す。
 
