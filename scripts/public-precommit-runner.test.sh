@@ -601,6 +601,34 @@ Example: \`the copper kettle estimator keeps the quiet invariance alive\` in a r
 fi
 
 # ====================================================================
+# 本人の承認 (leak-guard-consent.py): 止めた語と repo 名を控え、 承認した repo でだけ通す。 Tier A は承認で外さない
+# (2026-11-18 実測 = 本人が載せると決めたリンクを止め、 案内は検査を全部外す方法だけだった)
+# ====================================================================
+export LEAK_GUARD_STATE_DIR="$TMPDIR_TEST/consent-state"
+CONSENT_KEY="$(basename "$MOCK_REPO")"   # origin の無い repo の key = dir の名前
+rm -f "$MOCK_LAYER/leak-guard-consents.jsonl"
+expect_block "consent: no consent yet → block (term + repo name)" "モック秘語 の頁 mockpriv-foo"
+STATE_FILE="$LEAK_GUARD_STATE_DIR/$CONSENT_KEY.json"
+if [ -f "$STATE_FILE" ] && grep -q 'モック秘語' "$STATE_FILE" && grep -q 'mockpriv-foo' "$STATE_FILE"; then
+  PASS=$((PASS+1))
+else
+  FAIL=$((FAIL+1)); FAILED_CASES="${FAILED_CASES}  [no block note] consent: block writes the stopped term and repo name\n"
+fi
+printf '%s\n' \
+  "{\"repo\": \"$CONSENT_KEY\", \"tier\": \"terms\", \"string\": \"モック秘語\", \"quote\": \"載せる\"}" \
+  "{\"repo\": \"$CONSENT_KEY\", \"tier\": \"repo-name\", \"string\": \"mockpriv-foo\", \"quote\": \"載せる\"}" \
+  > "$MOCK_LAYER/leak-guard-consents.jsonl"
+expect_pass  "consent: approved term + repo name in this repo → pass" "モック秘語 の頁 mockpriv-foo"
+expect_block "consent: an unapproved term still blocks" "モック秘語 と MOCK_SECRET_TERM_ALPHA"
+expect_block "consent: tier-a (email) is not waived by consent" "モック秘語 $REAL_MAIL"
+printf '%s\n' \
+  "{\"repo\": \"other/repo\", \"tier\": \"terms\", \"string\": \"モック秘語\", \"quote\": \"載せる\"}" \
+  > "$MOCK_LAYER/leak-guard-consents.jsonl"
+expect_block "consent: approval for another repo does not apply" "モック秘語 の頁"
+rm -f "$MOCK_LAYER/leak-guard-consents.jsonl"
+unset LEAK_GUARD_STATE_DIR
+
+# ====================================================================
 echo ""
 echo "=== public-precommit-runner self-test ==="
 echo "PASS: $PASS"

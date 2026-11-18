@@ -63,6 +63,16 @@ if [ -n "$PERSONAL_LAYER" ]; then
   SENSITIVE_TERMS="$PERSONAL_LAYER/sensitive-terms.txt"
 fi
 
+# 本人の承認 (この repo だけ、 Tier B の語と Tier C の repo 名だけ) = leak-guard-consent.py が正本。
+# 止めた文字列に本人の発言を承認として記録すると、 その repo でだけ通す (承認の記録は個人層)。
+# 道具が無い・python3 が無い・個人層が無い = 承認は空 (= 今までどおり止める、 fail-closed)
+CONSENT_TOOL="$(dirname "$0")/leak-guard-consent.py"
+CONSENT_REPO="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+consent_allowed() {   # $1 = terms | repo-name
+  [ -f "$CONSENT_TOOL" ] && [ -n "$CONSENT_REPO" ] && [ -n "$PERSONAL_LAYER" ] || return 0
+  python3 "$CONSENT_TOOL" allowed --repo "$CONSENT_REPO" --layer "$PERSONAL_LAYER" --tier "$1" 2>/dev/null || true
+}
+
 # ----------------------------------------------------------------------
 # Stage 済みファイルを列挙。削除済み (D)・merge commit は skip。
 # ----------------------------------------------------------------------
@@ -272,6 +282,8 @@ if [ -f "$SENSITIVE_TERMS" ] && [ -s "$SENSITIVE_TERMS" ] && [ -f "$(dirname "$0
 
   # 行の種類 (`!複合語` = 許可 / ASCII = 単語境界 / 他 = 部分一致) の正本 = lib/sensitive-terms.sh
   st_split "$SENSITIVE_TERMS" "$ASCII_TERMS" "$NA_TERMS" "$ALLOW_TERMS"
+  # この repo で本人が承認した語は、 許可した複合語と同じに消してから照合する (ほかの repo では今までどおり止まる)
+  consent_allowed terms >> "$ALLOW_TERMS"
 
   # 許可した複合語を消した本文で照合し、 当たった行の **番号** で ADDED_BUF に戻る
   # (= 本文を書き換えたので、 行の文字列では file に戻れない)
@@ -328,6 +340,9 @@ fi
 REPO_NAME_MATCHER="$(dirname "$0")/lib/commit-msg-leak-matcher.sh"
 if [ -f "$REPO_NAME_MATCHER" ] && [ -s "$ADDED_BUF" ]; then
   . "$REPO_NAME_MATCHER"
+  # この repo で本人が承認した repo 名は例外の一覧に足す (この repo の検査の間だけ。 例外の一覧そのものは変えない)
+  CONSENTED_NAMES="$(consent_allowed repo-name | tr '\n' ' ')"
+  [ -n "${CONSENTED_NAMES// /}" ] && LEAK_MATCHER_ALLOWLIST="$LEAK_MATCHER_ALLOWLIST $CONSENTED_NAMES"
   ADDED_TEXT="$(awk -F'\t' '{ print $2 }' "$ADDED_BUF")"
   run_leak_matcher "$ADDED_TEXT"
   REPO_NAME_HITS="$(printf '%s\n' "${LEAK_MATCHER_HITS:-}" \
@@ -583,6 +598,12 @@ if [ "${CLAUDE_PUBLIC_GATE_REPORT_LEAK_PASS:-0}" = "1" ]; then
   fi
 fi
 
+# 止めた Tier B の語と Tier C の repo 名をこの機械に控える (本人の承認を記録する時に、 何を承認するかの源になる。 公開しない)
+if [ -f "$CONSENT_TOOL" ] && [ -n "$CONSENT_REPO" ]; then
+  python3 "$CONSENT_TOOL" note-block --repo "$CONSENT_REPO" --added "$ADDED_BUF" --ascii "${ASCII_TERMS:-}" \
+    --na "${NA_TERMS:-}" --allow "${ALLOW_TERMS:-}" --repo-hits "${REPO_NAME_HITS:-}" 2>/dev/null || true
+fi
+
 cat >&2 << EOF
 [public-precommit-runner] commit rejected: potential leak detected.
 
@@ -605,9 +626,15 @@ staged hits:$HITS
                           (= どの repo かは層 3 の関心事)。 例外 list への
                           追加は user 判断 (claude-config/CLAUDE.md §安全規則)
 
-意図的に commit したい場合は \`git commit --no-verify\` で bypass 可能
-(escape hatch)。bypass 事例は個人層の leak-incidents.md (あれば) に
-記録することを推奨。
+本人がこの文字列を載せると決めたなら (tier-b の語と tier-c の repo 名だけ。
+tier-a は承認では外さない):
+  agent の session で、 本人の発言を引いて承認を記録してから commit し直す
+  (止めた文字列を、 この repo でだけ通す。 記録は個人層 = push すればほかの機械も読む):
+    python3 $CONSENT_TOOL record --repo "$CONSENT_REPO" --quote '<本人の発言そのもの>'
+  承認の一覧 = 同じ道具の list --repo "$CONSENT_REPO"
+
+人が端末で、 意図的に検査を全部外して commit するときだけ \`git commit --no-verify\`
+(agent は使わない = 承認の道を使う)。
 EOF
 
 exit 1

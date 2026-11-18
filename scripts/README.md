@@ -270,6 +270,7 @@
 - **[latexdiff-untagged-changes.py](latexdiff-untagged-changes.py)** — Count the paragraphs of a latexdiff output that contain a change but no item tag (``\itemtag{...}``).
 - **[latexdiff-views-check.py](latexdiff-views-check.py)** — Check a finished latexdiff document against the two versions it claims to compare.
 - **[latexdiff-whole-items.py](latexdiff-whole-items.py)** — Rebuild one list (itemize / enumerate) in a latexdiff output so that each item is deleted, added or kept whole.
+- **[leak-guard-consent.py](leak-guard-consent.py)** — 公開 repo の漏洩検査 (public-precommit-runner.sh) が止めた文字列に本人の承認を付け、 その repo でだけ通す。
 - **[ledger-commit-cadence-gate.py](ledger-commit-cadence-gate.py)** — [forwarder → ai-collaboration/scripts/ledger-commit-cadence-gate.py] YAML ledger の commit cadence gate (pre-commit): 1 commit で追加される list entry (`- id:`) が N 個を超えたら refuse、escape env は hygiene log に記録 + worker scope gate (= env CAMPAIGN_WORKER_DIR が
 - **[letter-word-count.py](letter-word-count.py)** — LaTeX で組んだ返答書・手紙の語数を、 自分の文と引用 (referee の文など) に分けて数える。 git の前の版との比較つき。
 - **[leveldb-grep.py](leveldb-grep.py)** — Chromium / Electron の Local Storage (LevelDB) を読むだけで検索する (圧縮された .ldb も、 追加の library なし)
