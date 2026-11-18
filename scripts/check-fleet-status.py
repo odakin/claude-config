@@ -348,12 +348,42 @@ def sync_findings(host, d, now, age_h=0.0):
         if b and k and isinstance(ws, (int, float)) and now - ws >= SYNC_BLOCKED_H * 3600:
             tr = v.get("trial")
             tnote = (" [試走: 道具なら衝突も欠けも無く解ける見込み]" if tr == "clean"
+                     else " [試走: 途中で止まった最新化 = 道具で仕上げられる見込み (intersect-sync.py --apply、"
+                          " multi-session-coordination.md#interrupted-fast-forward)]" if tr == "interrupted"
                      else f" [試走: 道具では解けない = {tr}]" if isinstance(tr, str) and tr else "")
             out.append(f"🟠 {host}: {name} が {b} commit 遅れたまま最新化できない (未 commit の変更 {k} file が upstream の変更と"
                        f"重なる、 遅れの最古 {_ago(now - ws)}前) = 持ち主の session に commit させる / 居なければ"
                        f" multi-session-coordination.md#owner-gone-intersect-sync{tnote}{unote}{note}")
         elif b and u and isinstance(ws, (int, float)) and now - ws >= SYNC_BLOCKED_H * 3600:
             out.append(f"🟠 {host}: {name} が {b} commit 遅れたまま最新化できない (遅れの最古 {_ago(now - ws)}前){unote}{note}")
+    return out
+
+
+def gc_findings(host, d, now, age_h=0.0):
+    """1 マシンの beat の repos.gc と git_gc から finding を作る (writer の事実 = fleet-heartbeat.py の gc_facts / git_gc_config)。
+    - 🟠 1 日より古い .git/gc.log.lock = 裏の gc が異常終了した跡 (以後の裏の gc は毎回この lock で死に、 repack が走らない)
+    - 🟠 15 日より古い loose object が git の閾値を超える = gc が repack と prune を終えていない
+    - 🟠 macOS で gc.autoDetach が false でない = 裏の gc が異常終了する設定のまま
+    直し方の正本 = conventions/multi-session-coordination.md#interrupted-fast-forward。
+    なぜ (実測): 掃除の印は毎時の記録の外にあり、 裏の gc がいくつもの repo で死んだまま何週間も誰も気づかなかった。"""
+    note = f" [beat {age_h:.0f}h 前]" if age_h >= 1 else ""
+    ref = "multi-session-coordination.md#interrupted-fast-forward"
+    out = []
+    for name, v in sorted(((d.get("repos") or {}).get("gc") or {}).items()):
+        if not isinstance(v, dict):
+            continue
+        ls = v.get("lock_since")
+        if isinstance(ls, (int, float)):
+            out.append(f"🟠 {host}: {name} の .git/gc.log.lock が {_ago(now - ls)}前から残っている (裏の gc が異常終了した跡 ="
+                       f" 以後の裏の gc は毎回死ぬ) = そのマシンで gc が動いていないことを確かめて lock を消し、 git gc を前景で"
+                       f"最後まで ({ref}){note}")
+        if v.get("stale_loose"):
+            out.append(f"🟠 {host}: {name} の git の掃除が終わっていない (15 日より古い loose object が標本で {v['stale_loose']} 個、"
+                       f" 閾値 {v.get('stale_limit')}) = そのマシンで git gc を前景で最後まで ({ref}){note}")
+    gg = d.get("git_gc")
+    if isinstance(gg, dict) and str(gg.get("auto_detach") or "").strip().lower() not in ("false", "no", "off", "0"):
+        out.append(f"🟠 {host}: git の gc.autoDetach が false でない (macOS の git は裏の gc が異常終了して lock を残す) ="
+                   f" そのマシンで claude-config の setup.sh を走らせるか git config --global gc.autoDetach false ({ref}){note}")
     return out
 
 
@@ -404,6 +434,7 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
         findings.extend(missed_run_findings(host, d, role, routine, plist_dir))
         findings.extend(auth_findings(host, d, self_host))
         findings.extend(sync_findings(host, d, now, age_h))
+        findings.extend(gc_findings(host, d, now, age_h))
         if role == "always-on" and not d.get("servers"):
             findings.append(f"🟠 {host} (always-on): RC server が 1 本も loaded されていない")
         # coverage check: expected account の suffix server (= label 末尾 .<acct>) が居るか
@@ -708,6 +739,9 @@ def selftest():
         assert any(x.startswith("🟠 mini: pr が 15 commit 遅れたまま最新化できない") and "遅れの最古 44 時間前" in x
                    and "#owner-gone-intersect-sync" in x and "[試走: 道具なら衝突も欠けも無く解ける見込み]" in x for x in fs), fs
         assert any(x.startswith("🟠 mini: pc が 3 commit") and "[試走: 道具では解けない = conflict]" in x for x in fs), fs
+        fi = sync_findings("mini", {"host": "mini", "repos": {"sync": {"ip": {"behind": 9, "wip_overlap": 4, "trial": "interrupted",
+                                                                              "behind_since": now - 15 * h}}}}, now)
+        assert len(fi) == 1 and "途中で止まった最新化 = 道具で仕上げられる" in fi[0] and "解けない" not in fi[0], fi
         assert any(x.startswith("🔴 mini: rw の追従が止まっている") for x in fs), fs
         assert any(x.startswith("🟠 mini: ub が 4 commit 遅れたまま最新化できない") and "untracked の file 1 件" in x
                    and "#origin-worktree-untracked-copy" in x for x in fs), fs
@@ -725,6 +759,17 @@ def selftest():
         assert any("mini: eo が upstream と分岐" in x and "[beat 2h 前]" in x for x in fs), fs
         (d / "mini.json").write_text(json.dumps(dict(sb, epoch=now - 10 * h)))
         assert not any("eo" in x for x in scan(d, {}, 6, now)), "寝ている machine の古い beat の同期の事実は出さない"
+        # git の掃除が終わっていない印 (repos.gc) と、 macOS で裏に回す設定のまま (git_gc) は 🟠。 揃っていれば黙る
+        gb = {"host": "mini", "repos": {"gc": {"ab": {"lock_since": now - 40 * 86400},
+                                               "eo": {"stale_loose": 31, "stale_limit": 27}}}, "git_gc": {"auto_detach": ""}}
+        gf = gc_findings("mini", gb, now)
+        assert any(x.startswith("🟠 mini: ab の .git/gc.log.lock が 40 日前から残っている") and "#interrupted-fast-forward" in x
+                   for x in gf), gf
+        assert any(x.startswith("🟠 mini: eo の git の掃除が終わっていない") and "31 個" in x for x in gf), gf
+        assert any(x.startswith("🟠 mini: git の gc.autoDetach が false でない") for x in gf) and len(gf) == 3, gf
+        assert gc_findings("mini", {"host": "mini", "repos": {"gc": {}}, "git_gc": {"auto_detach": "false"}}, now) == [], \
+            "掃除が済み設定も届いた machine は黙る"
+        assert gc_findings("mini", {"host": "mini"}, now) == [], "旧 beat (gc・git_gc 欄なし、 macOS 以外) は黙る"
         ok += 1
     print(f"selftest: {ok}/22 PASS")
 

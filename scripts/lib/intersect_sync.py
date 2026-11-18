@@ -11,6 +11,10 @@
   record / report = 試走の結果を machine-local の記録 (JSONL) に書き、 期間で集計する。 記録には path を書かない
                  (path の hash と拡張子・数だけ = file 名に人や案件が出る repo がある)。
 
+途中で止まった最新化 (verdict = interrupted): fast-forward が index と作業 tree を upstream のある commit X まで書いた後、
+  HEAD を動かす前に止まった形 (未 stage の変更が無く、 stage 済みの集合が HEAD → X の差分とちょうど同じで、 index が X の木と
+  同じ)。 apply は旧値を条件に HEAD を X へ進めて仕上げ (index と作業 tree はそのまま)、 続けて `merge --ff-only @{u}`。
+  実測: HEAD の更新が並列の git gc の ref の lock とぶつかり、 stage 済みに見える数百の file のために以後の ff が止まり続けた。
 扱わない形 (verdict): conflict (同じ所を両側が変えた) / staged (交差した file を誰かが stage している = 戻すと相手の
   stage を消す) / binary / deleted (どちらかが file を消した) / error (平文を読めない = git-crypt の鍵が無い等) /
   ahead (手元にだけ在る commit がある = 通常の分岐、 #ordinary-divergence-replay) / busy (merge・rebase の途中) /
@@ -107,6 +111,32 @@ def repo_state(repo) -> dict:
     st["overlap"] = sorted(changed & (set(_z(wt)) | staged))
     st["staged"] = sorted(changed & staged)
     return st
+
+
+def interrupted_ff(repo, st: dict) -> str:
+    """途中で止まった最新化なら index が指す upstream の commit (完全な sha)、 違えば ""。 読むだけ (index の lock も取らない
+    = write-tree は使わず、 候補の commit を `git diff --cached --quiet` で index と比べる)。"""
+    if not st.get("staged") or st.get("ahead") or st.get("busy") or not st.get("behind"):
+        return ""
+    if git(repo, "diff", "--quiet")[0] != 0:          # 未 stage の変更がある = 誰かの作業
+        return ""
+    rc, ix = git(repo, "diff", "--cached", "--name-only", "-z")
+    staged = set(_z(ix))
+    rc2, log = git(repo, "-c", "core.quotePath=false", "log", "--reverse", "--format=C %H", "--name-only", "HEAD..@{u}")
+    if rc or rc2 or not staged:
+        return ""
+    cands, seen, cur = [], set(), ""
+    for line in log.splitlines() + ["C " + "0" * 40]:   # 番兵 = 最後の commit を閉じる
+        if line.startswith("C ") and len(line) == 42:
+            if cur and seen == staged:
+                cands.append(cur)
+            cur = line[2:]
+        elif line:
+            seen.add(line)
+    for x in cands:
+        if git(repo, "diff", "--cached", "--quiet", x)[0] == 0:
+            return x
+    return ""
 
 
 def _blob(repo, rev: str, rel: str) -> bytes | None:
@@ -226,6 +256,13 @@ def trial(repo, now: float | None = None) -> dict:
     if st["busy"]:
         res["verdict"] = "busy"
         return res
+    target = interrupted_ff(root, st)
+    if target:
+        res.update(verdict="interrupted", target=target[:12])
+        res["_target"] = target
+        res["state"] = hashlib.sha1(json.dumps([st["upstream"], git(root, "rev-parse", "HEAD")[1].strip(), target]).encode()
+                                    ).hexdigest()[:12]
+        return res
     staged = set(st["staged"])
     full = [file_result(root, rel, staged, now) for rel in st["overlap"]]
     res["_files"] = list(zip(st["overlap"], full))
@@ -266,6 +303,9 @@ def one_line(res: dict) -> str:
         sub = sum(1 for f in files if f.get("subsumed"))
         extra = f"、 うち {sub} file は upstream が手元の変更を全部含む" if sub else ""
         return f"試走: 道具なら衝突も欠けも無く解ける見込み ({n} file{extra}。 記録だけ、 書き換えはしない)"
+    if v == "interrupted":
+        return (f"試走: 途中で止まった最新化 (index と作業 tree は upstream の {res.get('target', '?')} まで進み HEAD だけが残った)"
+                " = 道具で仕上げられる見込み (記録だけ、 書き換えはしない。 仕上げ = intersect-sync.py --apply)")
     names = {"conflict": "同じ所を両側が変えている", "staged": "stage 済みの file がある", "binary": "binary の file",
              "deleted": "どちらかが file を消した", "lost": "合わせると行が欠ける", "error": "平文を読めない file がある",
              "ahead": "手元にだけ在る commit がある", "busy": "merge / rebase の途中"}
@@ -325,6 +365,39 @@ def _unlock(lk: Path, owner: str) -> None:
         pass
 
 
+def _apply_interrupted(root: Path, res: dict, out: dict, min_age_min: int) -> dict:
+    """途中で止まった最新化を仕上げる (apply が lock の内側で呼ぶ)。 書くのは HEAD だけ (旧値を条件にした update-ref と ff)。"""
+    gd = _git_dir(root)
+    if gd is None or (gd / "index.lock").exists():
+        out["reason"] = "index の lock がある = 別の git が動いている (触らない)"
+        return out
+    now = time.time()
+    _, ix = git(root, "diff", "--cached", "--name-only", "-z")
+    young = [rel for rel in _z(ix) if (root / rel).exists() and now - (root / rel).stat().st_mtime < min_age_min * 60]
+    if young:
+        out["reason"] = (f"stage 済みの file のうち {len(young)} つが {min_age_min} 分以内に書かれた = 最新化が今進んでいるかも"
+                         "しれない (待つ)")
+        return out
+    target = res["_target"]
+    head = git(root, "rev-parse", "HEAD")[1].strip()
+    if interrupted_ff(root, repo_state(root)) != target:
+        out["reason"] = "判定の後に index か作業 tree が変わった = 触らない"
+        return out
+    rc, _ = git(root, "update-ref", "-m", f"merge {target}: Fast-forward (completing an interrupted fast-forward)",
+                "HEAD", target, head)
+    if rc != 0:
+        out["reason"] = "HEAD を進められなかった (ref の lock が取れない?) = 何も変わっていない"
+        return out
+    if git(root, "status", "--porcelain", "--untracked-files=no")[1].strip():
+        out["reason"] = f"HEAD を {target[:12]} へ進めたが tracked が clean にならない = 手で確かめる"
+        return out
+    ff = git(root, "merge", "--ff-only", "-q", "@{u}")[0] == 0
+    out["applied"] = True
+    out["reason"] = ("最新化した: 途中で止まった最新化を仕上げ (HEAD を index の指す commit へ)、 upstream まで ff した" if ff
+                     else f"途中で止まった最新化を仕上げた (HEAD = {target[:12]})。 続く ff は通らなかった = 次の同期で進む")
+    return out
+
+
 def apply(repo, min_age_min: int = MIN_AGE_MIN) -> dict:
     """①〜⑤ を行う。 戻り値 = public な結果 + applied (True/False) + reason。 書くのは交差した file と HEAD (ff) だけ。"""
     root = repo_root(repo)
@@ -340,6 +413,8 @@ def apply(repo, min_age_min: int = MIN_AGE_MIN) -> dict:
     try:
         res = trial(root)
         out = dict(public(res), applied=False)
+        if res["verdict"] == "interrupted":
+            return _apply_interrupted(root, res, out, min_age_min)
         if res["verdict"] != "clean":
             out["reason"] = one_line(res) or f"交差が無い・遅れていない ({res['verdict']})"
             return out

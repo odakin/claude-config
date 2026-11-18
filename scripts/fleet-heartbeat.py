@@ -65,7 +65,10 @@ usage:
     rewrite_follow: {capable, state, upstream, manifest, prepush_stub, forced_update_seen},  # 下記
     repos: {heads: {repo 名: {head, up, prepush}}, stale: [repo 名], no_stub: [repo 名],
             stub_placed, stub_failed,
-            sync: {repo 名: {ahead, ahead_since, behind, behind_since, wip_overlap, untracked_block}}} }   # --repos-root 指定時のみ、 下記
+            sync: {repo 名: {ahead, ahead_since, behind, behind_since, wip_overlap, untracked_block}},
+            gc: {repo 名: {lock_since, stale_loose, stale_limit}}},     # --repos-root 指定時のみ、 下記 (gc = gc_facts の docstring)
+    git_gc: {auto_detach},                                       # macOS のみ = gc.autoDetach の global の値 (git_gc_config)
+}
 
 書き換えられた履歴への追従 (rewrite_follow、 部品 = lib/git_rewrite_follow.py、 2026-09-29):
   heartbeat repo の remote が force-push で書き換えられた後、 従来の `pull --rebase` は古い commit を新しい履歴に
@@ -667,6 +670,11 @@ def essence(d: dict):
             "sync": sorted([n, bool(v.get("ahead")), bool(v.get("behind")), bool(v.get("wip_overlap")),
                             bool(v.get("untracked_block"))]
                            for n, v in ((d.get("repos") or {}).get("sync") or {}).items()),
+            # git の掃除が終わっていない印は「古い lock が在る / 古い loose object が閾値を超える」 の有無だけ (数・時刻は入れない)、
+            # 裏に回す設定の値は変われば即 commit (macOS の機械に設定が届いたかを他の machine の reader が読む)
+            "gc": sorted([n, bool(v.get("lock_since")), bool(v.get("stale_loose"))]
+                         for n, v in ((d.get("repos") or {}).get("gc") or {}).items()),
+            "git_gc": d.get("git_gc"),
         },
         sort_keys=True,
     )
@@ -854,6 +862,54 @@ def sync_facts(root: Path, names):
     return out
 
 
+GC_STALE_DAYS = 15      # gc の prune の既定 (2 週間) + 1 日: これより古い loose object は、 gc が終わっていれば残らない
+
+
+def gc_facts(root: Path, names, now=None):
+    """root/*/ の clone ごとの、 git の掃除 (gc) が終わっていない印。 異常の在る repo だけを返す (path は載せない):
+    lock_since = `.git/gc.log.lock` の時刻 (1 日より古いものだけ = 裏の gc が異常終了した跡。 以後の裏の gc はこの lock で毎回死ぬ) /
+    stale_loose = objects/17 の loose object のうち GC_STALE_DAYS 日より古いものの数 (git が自動 gc を起こす判定と同じ標本) と
+    stale_limit = その閾値 ((gc.auto + 255) // 256)。 閾値を超える = gc が repack と prune を終えていない
+    (2 週間より若い到達不能な object は gc が正しく残すので数えない)。
+    なぜ (実測): macOS の git の裏の gc が異常終了して lock を残し、 何週間も repack が走らずに loose object が数万個溜まった。
+    git を叩くたびに前景で走る reflog の整理が ref の lock を取り、 fast-forward の HEAD の更新とぶつかった
+    (conventions/multi-session-coordination.md#interrupted-fast-forward)。"""
+    now = time.time() if now is None else now
+    out = {}
+    for name in names:
+        try:
+            rc, gd = git(root / name, "rev-parse", "--path-format=absolute", "--git-common-dir")
+            if rc or not gd.strip():
+                continue
+            gd = Path(gd.strip())
+            e = {}
+            lk = gd / "gc.log.lock"
+            if lk.exists() and now - lk.stat().st_mtime > 86400:
+                e["lock_since"] = int(lk.stat().st_mtime)
+            d17 = gd / "objects" / "17"
+            if d17.is_dir():
+                old = sum(1 for f in d17.iterdir() if now - f.stat().st_mtime > GC_STALE_DAYS * 86400)
+                rc2, ga = git(root / name, "config", "--get", "gc.auto")
+                auto = int(ga.strip()) if rc2 == 0 and ga.strip().isdigit() else 6700
+                limit = (auto + 255) // 256
+                if auto > 0 and old > limit:
+                    e["stale_loose"], e["stale_limit"] = old, limit
+            if e:
+                out[name] = e
+        except Exception:   # 1 つの repo の失敗で、 残りの repo の事実を落とさない
+            continue
+    return out
+
+
+def git_gc_config():
+    """macOS で git の自動 gc を裏に回す設定か (gc.autoDetach の global の値。 "" = 未設定 = 裏に回る)。 macOS 以外 = None。
+    Apple の git は裏の gc が fork の後に異常終了して lock を残す (実測) = false でない macOS は reader が 1 行出す。"""
+    if sys.platform != "darwin":
+        return None
+    rc, out = sh(["git", "config", "--global", "--get", "gc.autoDetach"])
+    return {"auto_detach": out.strip() if rc == 0 else ""}
+
+
 def repos_rollcall(root: Path, follow=False, skip=()):
     """root/*/ の全 repo に pre-push stub を置き、 repo ごとの事実と、 この machine 自身が分かっている未追従を返す
     (docstring「repo ごとの点呼」)。 follow=True なら、 その前に全 repo を fetch して追従する。 部品が古い / 失敗 = None
@@ -874,7 +930,7 @@ def repos_rollcall(root: Path, follow=False, skip=()):
         out = {"heads": heads, "stale": sorted(stale),
                "no_stub": sorted(n for n, f in heads.items() if f.get("prepush") != "stub"),
                "stub_placed": len(placed), "stub_failed": failed[:5],
-               "sync": sync_facts(root, sorted(heads))}
+               "sync": sync_facts(root, sorted(heads)), "gc": gc_facts(root, sorted(heads))}
         if follow:
             out["followed"], out["stopped"] = sorted(followed), sorted(stopped)
             if fetch_failed:
@@ -963,6 +1019,9 @@ def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_pr
         except Exception:
             pass  # fail-open (= 起こし直せなくても beat は出す)
     data["engine_head"] = engine_head()
+    gg = git_gc_config()
+    if gg is not None:
+        data["git_gc"] = gg
     hh = harness_hooks(Path.home())
     if hh is not None:
         data["harness_hooks"] = hh
@@ -1315,6 +1374,38 @@ def selftest():
             assert "stale" not in sync_facts(rc_root, ["stale"]), "写しを消せば載らない (遅れているだけ)"
             assert essence({"repos": {"sync": {"x": {"behind": 1}}}}) \
                 != essence({"repos": {"sync": {"x": {"behind": 1, "untracked_block": 1}}}}), "untracked の衝突が現れたら commit する"
+            # git の掃除が終わっていない印: 1 日より古い gc.log.lock / 15 日より古い loose object が閾値を超える。 若いものは載らない
+            gd_ = rc_root / "stale" / ".git"
+            assert gc_facts(rc_root, ["stale"]) == {}, "掃除の済んだ clone は載らない"
+            (gd_ / "gc.log.lock").write_text("x")
+            assert gc_facts(rc_root, ["stale"]) == {}, "新しい lock (裏の gc の途中かもしれない) は載らない"
+            old_t = time.time() - 3 * 86400
+            os.utime(gd_ / "gc.log.lock", (old_t, old_t))
+            f1 = gc_facts(rc_root, ["stale"]).get("stale") or {}
+            assert f1.get("lock_since") == int(old_t) and "stale_loose" not in f1, f1
+            (gd_ / "gc.log.lock").unlink()
+            d17 = gd_ / "objects" / "17"
+            d17.mkdir(exist_ok=True)
+            git(rc_root / "stale", "config", "gc.auto", "256")   # 閾値 = (256 + 255) // 256 = 1
+            fakes = [d17 / f"{'f' * 36}{i:02x}" for i in range(3)]
+            old_t = time.time() - 20 * 86400
+            for p_ in fakes:
+                p_.write_bytes(b"x")
+                os.utime(p_, (old_t, old_t))
+            f2 = gc_facts(rc_root, ["stale"]).get("stale") or {}
+            assert f2 == {"stale_loose": 3, "stale_limit": 1}, f2
+            young_t = time.time() - 5 * 86400
+            for p_ in fakes:
+                os.utime(p_, (young_t, young_t))
+            assert gc_facts(rc_root, ["stale"]) == {}, "2 週間より若い loose object (gc が正しく残す) は数えない"
+            for p_ in fakes:
+                p_.unlink()
+            git(rc_root / "stale", "config", "--unset", "gc.auto")
+            assert isinstance(rr.get("gc"), dict), "repos_rollcall が gc の事実を持つ"
+            assert essence({"repos": {"gc": {}}}) != essence({"repos": {"gc": {"x": {"lock_since": 1}}}}), "古い lock が現れたら commit する"
+            assert essence({"repos": {"gc": {"x": {"stale_loose": 3, "stale_limit": 1}}}}) \
+                == essence({"repos": {"gc": {"x": {"stale_loose": 9, "stale_limit": 1}}}}), "数の変化では commit しない"
+            assert essence({"git_gc": {"auto_detach": ""}}) != essence({"git_gc": {"auto_detach": "false"}}), "設定が届いたら commit する"
             assert essence({"repos": {"sync": {"x": {"ahead": 1, "ahead_since": 1}}}}) \
                 == essence({"repos": {"sync": {"x": {"ahead": 2, "ahead_since": 5}}}}), "数・時刻の変化では commit しない"
             assert essence({"repos": {"sync": {}}}) != essence({"repos": {"sync": {"x": {"ahead": 1}}}}), \

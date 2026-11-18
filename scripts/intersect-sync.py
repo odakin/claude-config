@@ -230,6 +230,37 @@ def selftest() -> int:
         g(a, "fetch", "-q")
         check(isync.trial(a)["verdict"] == "ahead", "S8 手元にだけ在る commit = ahead")
 
+        # S13 途中で止まった最新化 (index と作業 tree は upstream の commit X、 HEAD は元のまま) → interrupted、 apply で仕上げる
+        def interrupted_world(name):
+            w, a, b = world(name)
+            push_b(b, lambda r: ((r / "ev").mkdir(), (r / "ev" / "x1.json").write_text('{"i": 1}\n')), "x1")
+            x1 = g(b, "rev-parse", "HEAD").strip()
+            push_b(b, lambda r: (r / "ev" / "x2.json").write_text('{"i": 2}\n'), "x2")
+            g(a, "fetch", "-q")
+            g(a, "read-tree", "-m", "-u", "HEAD", x1)          # merge の checkout の段だけを済ませた形
+            age(a / "ev" / "x1.json", 60)
+            return a, x1
+
+        a, x1 = interrupted_world("s13")
+        head0 = g(a, "rev-parse", "HEAD")
+        r = isync.trial(a)
+        check(r["verdict"] == "interrupted" and r.get("target") == x1[:12] and g(a, "rev-parse", "HEAD") == head0,
+              f"S13 index が upstream の commit の木 = interrupted (got {r['verdict']})、 trial は HEAD に触らない")
+        check("仕上げられる" in isync.one_line(r), "S13 sweep に添える 1 行 = 道具で仕上げられる")
+        x = isync.apply(a)
+        check(x.get("applied") and g(a, "rev-parse", "HEAD") == g(a, "rev-parse", "@{u}")
+              and not g(a, "status", "--porcelain", "--untracked-files=no").strip(),
+              f"S13 apply: HEAD を X へ進めて upstream まで ff、 tracked は clean ({x.get('reason')})")
+        a, x1 = interrupted_world("s13b")
+        (a / "notes.md").write_text("# notes\nline 1\nsomeone's unstaged edit\n")
+        check(isync.trial(a)["verdict"] != "interrupted", "S13 未 stage の変更が乗っている = interrupted にしない (誰かの作業)")
+        a, x1 = interrupted_world("s13c")
+        age(a / "ev" / "x1.json", 1)
+        head0 = g(a, "rev-parse", "HEAD")
+        x = isync.apply(a, min_age_min=30)
+        check(not x.get("applied") and "待つ" in x.get("reason", "") and g(a, "rev-parse", "HEAD") == head0,
+              f"S13 stage 済みの file が 30 分以内 = 最新化が進行中かもしれない、 触らない ({x.get('reason')})")
+
         # S9 ff が通らない (upstream が足した file と同じ名の未追跡 file) → 控えから戻す
         w, a, b = world("s9")
         edit(a / "ledger.yaml", "- id: e2\n  status: open", "- id: e2\n  status: done")
