@@ -176,7 +176,18 @@ def check_spec(spec_path: Path, timeout: int = TIMEOUT, out=print, system: str |
         if not target.is_file():
             raise SpecError(f"{spec_path}: target not found: {target}")
         base_text = target.read_text(encoding="utf-8")
-        mutants = [(m, mutate(base_text, m["pairs"], m["name"])) for m in spec["mutants"]]  # pair の照合は全 OS で
+        # pair の照合は全 OS で。 当たらない pair は全 mutant 分を集めて 1 回で出す = 1 本目で止めると、 target の書き換えで
+        # 複数の old が同時に外れたとき、 直しては回すを本数だけ繰り返す (実測)
+        mutants, drift = [], []
+        for m in spec["mutants"]:
+            try:
+                mutants.append((m, mutate(base_text, m["pairs"], m["name"])))
+            except SpecError as e:
+                drift.append(e)
+        if drift:
+            for e in drift:
+                out(f"[SPEC] {e}")
+            return 2
     except SpecError as e:
         out(f"[SPEC] {e}")
         return 2
@@ -334,6 +345,14 @@ def selftest() -> int:
         rc = check_spec(spec_file("absent", [dict(kill, pairs=[["no such line\n", ""]])]), out=log.append)
         expect("a pair that no longer matches the target is a spec error (exit 2), not a teeth verdict",
                rc == 2 and any("matches 0 times" in ln for ln in log))
+        log.clear()
+        drift2 = [dict(kill, name="first drift", pairs=[["no such line\n", ""]]), kill,
+                  dict(kill, name="second drift", pairs=[["    return x\n", "    return x\n"], ["no other line\n", ""]])]
+        rc = check_spec(spec_file("absent2", drift2), out=log.append)
+        expect("every mutant whose pair no longer matches is listed in one run (not only the first), and nothing runs (exit 2)",
+               rc == 2 and sum(ln.startswith("[SPEC]") for ln in log) == 2 and any("first drift" in ln for ln in log)
+               and any("second drift" in ln for ln in log) and not any(ln.startswith("[BASE]") for ln in log))
+        (pkg / "absent2.mutants.json").unlink()
 
         log.clear()
         rc = check_spec(spec_file("typo", [dict(kill, expect_fail=["clamped to teh floor"])]), out=log.append)
