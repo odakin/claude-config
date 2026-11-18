@@ -38,6 +38,12 @@ A GFM table row is exactly one line. A newline in the middle of a cell ends the 
 
 - **Fix**: keep each row on one line and use `<br>` for a line break inside a cell. When editing a long cell with a tool, check afterwards that the row is still one line (e.g. print the first characters of the surrounding lines).
 
+## A bracketed index followed by `(x)` renders as a link
+
+Plain-text math such as `T_[μν](x)` or `Γ^ρ_[νμ](x)` contains `[…](…)`, which GFM reads as a link with label `μν` and target `x`: the brackets disappear and the label becomes a broken link (measured, in a record that quoted printed equations).
+
+- **Fix**: escape the closing bracket (`T_[μν\](x)`), or put the expression in backticks (inside a code span nothing is a link). A link checker that does not skip code spans still lists the backticked form; that hit is harmless.
+
 ---
 
 # GFM Markdown レンダリングの落とし穴
@@ -79,3 +85,9 @@ GFM の autolinker は裸の URL を貪欲に伸ばす。`**https://example.com*
 GFM の表の 1 行は、ファイルの 1 行そのもの。セルの途中で改行すると行はそこで終わり、続きの行は切れた表の後ろの普通の段落になる（実測: 長いセルに字下げした続きの段落を書き足して、表が壊れた）。
 
 - **対処**: 1 行は 1 行のまま書き、セルの中の改行は `<br>`。長いセルを道具で書き換えたら、その行がまだ 1 行かを確かめる（前後の行の頭を数文字出すなど）
+
+## 添字の角括弧の直後に `(x)` が続くと link になる
+
+`T_[μν](x)` や `Γ^ρ_[νμ](x)` のように地の文に書いた式は `[…](…)` を含み、GFM はこれを、ラベル `μν`・行き先 `x` の link と読む。角括弧が消え、ラベルが壊れた link になる（実測: 印字の式を引いた記録で起きた）。
+
+- **対処**: 閉じ括弧を escape する（`T_[μν\](x)`）か、式を backtick で囲む（code span の中は link にならない）。code span を読み分けない link の点検の道具は backtick の形も挙げるが、描画は壊れない
