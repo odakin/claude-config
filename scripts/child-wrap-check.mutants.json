@@ -165,6 +165,14 @@
     {"name": "盲検の判定の窓を見分けず wrap の記録を求める",
      "pairs": [["    jd = judge_window(ev)\n    wr = (_judge_text", "    jd = None\n    wr = (_judge_text"]],
      "expect_fail": ["collected and unchanged → foldable without a wrap"],
-     "requires": ["{spec_dir}/../../ai-collaboration/scripts/make-review-sandbox.py"]}
+     "requires": ["{spec_dir}/../../ai-collaboration/scripts/make-review-sandbox.py"]},
+    {"name": "素の照合が設定の掲示板の root を読まない",
+     "pairs": [["    RAW_ROOTS[:] = given or config_roots()", "    RAW_ROOTS[:] = given"]],
+     "expect_fail": ["the same child gets the same reasons, touch included"],
+     "expect_pass": ["config_roots reads board_roots from the config", "the plain check does not read touches"]},
+    {"name": "設定から読んだ root も次の一手の command に写す",
+     "pairs": [["    if ROOTS_FROM_CONFIG and ROOTS_FROM_CONFIG == RAW_ROOTS:\n        return \"\"", "    if False:\n        return \"\""]],
+     "expect_fail": ["the suggested commands carry no copy of the roots"],
+     "expect_pass": ["the same child gets the same reasons, touch included"]}
   ]
 }

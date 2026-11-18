@@ -56,7 +56,7 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
   - 「本人と話している途中」 は、 子の窓の本人の最後の発言より後に、 本人が親の窓で畳んでよいと言っていれば (archive の hook と
     同じ語 = busy-worker-stop-check の close_consent、 本人の発言の読み手 = lib/owner_turn.py) 理由にしない (実測: 親の窓の
     「子をぜんぶwrapさせてから閉じて。」 の後も 10 分残した)
-  - 子が掲示板で宣言した file (touch) を手放していない (--board-root か env CHILD_WRAP_BOARD_ROOTS があるときだけ読む)、
+  - 子が掲示板で宣言した file (touch) を手放していない (掲示板の root が --board-root・env CHILD_WRAP_BOARD_ROOTS・個人層の設定のどれかで分かるときだけ読む)、
     子の最後の返事が続きをする形 (CONTINUE_LATER) = 締めの途中かも → 残す (実測: 「…同期待ちで止まっています … 終わったら
     続きを書きます」 の 2 分後に畳まれ、 宣言も未 commit の file も残った)
   - push されていない commit でも、 同じ patch (patch-id) か、 変えた file の中身が upstream にあれば (rebase の前の写し)
@@ -65,7 +65,10 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
 見ないもの: 掲示板の依頼が受理されたか (受理は親自身の操作。 `--finished` は掲示板を読む)、 子が commit しなかった変更
   (同じ作業木を共有すると帰属できない)、 trailer の hook が入っていない repo の commit。
 
-`--finished` (掲示板の root は --board-root か env CHILD_WRAP_BOARD_ROOTS = os.pathsep 区切り。 層1 に既定は無い):
+掲示板の root (`--finished`・`--wait-due`・hook と、 素の照合の touch の段): --board-root か env CHILD_WRAP_BOARD_ROOTS (os.pathsep
+  区切り)、 どちらも無ければ設定 (env CHILD_WRAP_CONFIG、 無ければ個人層の child-wrap-check.json = {"board_roots": [...]})。
+  hook と手で打つ照合が同じ root を 1 か所から読む (実測: hook だけが root を渡し、 素の照合は touch を読まなかった)。 層1 に既定は無い。
+`--finished`:
   子 = app の記録で spawnedFrom が親で、 独立させていない (lineageDetached でない) もの。 子の依頼 = この機械の instance
   (`claude@<host>`) で子が claim / submit した request (actor.task の頭の transcript id 8 字か actor.session_id で引く)。
   開いている依頼 = 子が claim して受け取られておらず、 子が今も持っているもの + 子が claim に使った役 (role id) か子の id
@@ -382,6 +385,7 @@ ASKED_HOLD_H: float | None = _hold_from_env()
 ASKS_ENGINE_DEFAULT = os.path.join(HERE, "..", "..", "ai-collaboration", "board", "board_asks.py")
 REQUEST_KEY = re.compile(r"^request:(\d{8}T\d{6}Z-[a-z]+-[0-9a-f]+)(?:#\d+)?$")
 RAW_ROOTS: list[str] = []  # the --board-root values as given (patterns), repeated in the commands the hooks suggest
+ROOTS_FROM_CONFIG: list[str] = []  # RAW_ROOTS when they came from the config (then the suggested commands need none)
 CHILD_DAYS = 14  # children are looked for among app records touched this recently
 STATE_DIR_DEFAULT = os.path.expanduser("~/.claude/state/child-finished-stop")
 
@@ -964,7 +968,7 @@ def _owner_close_after(parent_path: str, since: str, as_of: str = "") -> str:
     return max(hits, default="")
 
 
-CHECK_ROOTS: list[str] = []  # board roots for the plain check (--board-root / env CHILD_WRAP_BOARD_ROOTS); none = not read
+CHECK_ROOTS: list[str] = []  # board roots for the plain check (--board-root / env CHILD_WRAP_BOARD_ROOTS / the config); none = not read
 TOUCH_HOURS = 12  # a touch declaration older than this holds nothing (the board's own default = a session that died)
 NONE_TOUCH = "(none)"  # the board's touch set of a session that holds nothing any more
 
@@ -1279,6 +1283,8 @@ def _watch_running(local: str) -> bool:
 
 
 def _roots_args() -> str:
+    if ROOTS_FROM_CONFIG and ROOTS_FROM_CONFIG == RAW_ROOTS:
+        return ""  # the suggested command reads the same config (no copy of the roots in it)
     return " ".join("--board-root '" + r.replace(os.path.expanduser("~"), "~", 1) + "'" for r in RAW_ROOTS)
 
 
@@ -1326,6 +1332,38 @@ def hook_sendmessage(inp: dict, rule: str) -> str:
 def instance_name() -> str:
     """The board's instance for this machine (board.py writes agent@<short hostname>)."""
     return os.environ.get("CHILD_WRAP_INSTANCE") or "claude@" + socket.gethostname().split(".")[0]
+
+
+CONFIG_NAME = "child-wrap-check.json"  # in the personal layer: {"board_roots": ["<board dir or glob>", ...]}
+
+
+def _personal_layer() -> str:
+    """The personal layer (lib/find-personal-layer.sh's rule: env CLAUDE_PERSONAL_LAYER, `none` = none, else the one dir
+    beside this repo with a .claude-personal-layer marker), '' when none or more than one."""
+    env = os.environ.get("CLAUDE_PERSONAL_LAYER", "")
+    if env == "none":
+        return ""
+    if env:
+        p = os.path.expanduser(env)
+        return p if os.path.isfile(os.path.join(p, ".claude-personal-layer")) else ""
+    hits = glob.glob(os.path.join(HERE, os.pardir, os.pardir, "*", ".claude-personal-layer"))
+    return os.path.dirname(os.path.realpath(hits[0])) if len(hits) == 1 else ""
+
+
+def config_roots() -> list[str]:
+    """The board roots from the config (env CHILD_WRAP_CONFIG, else <personal layer>/child-wrap-check.json), [] when none:
+    the one place the hooks and a hand-typed check read them from (measured: the hooks passed the roots and a plain
+    `child-wrap-check.py <child>` passed none, so the same child read differently by hand and from the hook)."""
+    path = os.environ.get("CHILD_WRAP_CONFIG")
+    if path is None:
+        pl = _personal_layer()
+        path = os.path.join(pl, CONFIG_NAME) if pl else ""
+    try:
+        with open(os.path.expanduser(path), encoding="utf-8") as fh:
+            roots = (json.load(fh) or {}).get("board_roots") or []
+    except (OSError, ValueError, TypeError, AttributeError):
+        return []
+    return [str(r) for r in roots if isinstance(r, str) and r.strip()]
 
 
 def board_roots(extra: list[str] | None = None) -> list[str]:
@@ -2109,12 +2147,16 @@ def main(argv: list[str]) -> int:
     if a.wrap_model is not None:
         WRAP_MODEL.clear()
         WRAP_MODEL.update(parse_wrap_model(a.wrap_model))
-    RAW_ROOTS[:] = list(a.board_root) + [x for x in (os.environ.get("CHILD_WRAP_BOARD_ROOTS") or "").split(os.pathsep) if x]
-    CHECK_ROOTS[:] = board_roots(a.board_root) if RAW_ROOTS else []  # the plain check reads the child's touches there
+    given = list(a.board_root) + [x for x in (os.environ.get("CHILD_WRAP_BOARD_ROOTS") or "").split(os.pathsep) if x]
+    # --board-root / env first; else the config (the hooks and a check typed by hand read the same roots, one place)
+    RAW_ROOTS[:] = given or config_roots()
+    ROOTS_FROM_CONFIG[:] = [] if given else list(RAW_ROOTS)
+    roots_all = board_roots(RAW_ROOTS) if RAW_ROOTS else []
+    CHECK_ROOTS[:] = roots_all  # the plain check reads the child's touches there
     if a.wait_due:
-        roots = board_roots(a.board_root)
+        roots = roots_all
         if not a.targets or not roots:
-            ap.error("--wait-due には子の local_… と --board-root (か env CHILD_WRAP_BOARD_ROOTS) が要る")
+            ap.error("--wait-due には子の local_… と --board-root (か env CHILD_WRAP_BOARD_ROOTS か個人層の child-wrap-check.json) が要る")
         return wait_due(a.targets, roots, a.max_minutes if a.max_minutes != 180 else 720)
     if a.hook_presend:
         try:
@@ -2128,12 +2170,12 @@ def main(argv: list[str]) -> int:
         try:
             inp = json.loads(sys.stdin.read() or "{}")
             if a.hook_stop:
-                out = hook_stop(inp, board_roots(a.board_root), a.rule,
+                out = hook_stop(inp, roots_all, a.rule,
                                 a.stop_mode or os.environ.get("CHILD_FINISHED_STOP") or "observe", a.extra)
                 if out:
                     print(out)
                 return 0
-            ctx = (hook_accept(inp, board_roots(a.board_root), a.rule, a.extra) if a.hook_accept
+            ctx = (hook_accept(inp, roots_all, a.rule, a.extra) if a.hook_accept
                    else hook_sendmessage(inp, a.rule))
         except Exception:
             return 0  # fail-open
@@ -2141,9 +2183,9 @@ def main(argv: list[str]) -> int:
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": ctx}}, ensure_ascii=False))
         return 0
     if a.finished:
-        roots = board_roots(a.board_root)
+        roots = roots_all
         if not roots:
-            ap.error("--finished には --board-root (か env CHILD_WRAP_BOARD_ROOTS) が要る")
+            ap.error("--finished には --board-root (か env CHILD_WRAP_BOARD_ROOTS か個人層の child-wrap-check.json) が要る")
         rows = [r for p in ([a.parent] if a.parent else all_parents()) for r in finished(p, roots, a.as_of)]
         print(json.dumps(rows, ensure_ascii=False, indent=1) if a.json else (render_finished(rows) or "(該当する子なし)"))
         return 1 if any(r["state"] in ("due", "wrapped", "relay") for r in rows) else 0
@@ -3290,6 +3332,39 @@ def selftest() -> int:
            any("touch" in x and "proj-repo/notes.md" in x for x in check_child(done)["reasons"]))
         touch_note("b", [NONE_TOUCH], time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 1)))
         ok("... after a (none) touch note the child holds nothing → foldable", check_child(done)["ok"])
+        # the plain check by hand and the hooks read the same roots from one place (the config)
+        import contextlib
+        import io
+        touch_note("c", ["proj-repo/notes.md"], time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 2)))
+        cfg = os.path.join(td, CONFIG_NAME)
+        with open(cfg, "w", encoding="utf-8") as fh:
+            json.dump({"board_roots": [tb]}, fh)
+        saved_cfg = {k: os.environ.pop(k, None) for k in ("CHILD_WRAP_CONFIG", "CHILD_WRAP_BOARD_ROOTS")}
+
+        def run_main(args: list[str]) -> tuple[list[dict], str]:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                main(args)
+            return json.loads(buf.getvalue()), _roots_args()
+
+        os.environ["CHILD_WRAP_CONFIG"] = cfg
+        ok("config_roots reads board_roots from the config", config_roots() == [tb])
+        by_hand, hand_args = run_main([done, "--json"])
+        by_hook, hook_args = run_main([done, "--board-root", tb, "--json"])
+        ok("by hand (no --board-root) and as the hook (--board-root) the same child gets the same reasons, touch included",
+           by_hand[0]["reasons"] == by_hook[0]["reasons"] and by_hand[0]["ok"] == by_hook[0]["ok"]
+           and any("touch" in x and "proj-repo/notes.md" in x for x in by_hand[0]["reasons"]))
+        ok("the suggested commands carry no copy of the roots when they came from the config, and the given ones otherwise",
+           hand_args == "" and tb.replace(os.path.expanduser("~"), "~", 1) in hook_args)
+        os.environ["CHILD_WRAP_CONFIG"] = os.path.join(td, "no-such-config.json")
+        none_cfg, _ = run_main([done, "--json"])
+        ok("without the config the plain check does not read touches (the miss the config closes)",
+           not any("touch" in x for x in none_cfg[0]["reasons"]) and config_roots() == [])
+        os.environ.pop("CHILD_WRAP_CONFIG", None)
+        for k, v in saved_cfg.items():
+            if v is not None:
+                os.environ[k] = v
+        RAW_ROOTS[:], ROOTS_FROM_CONFIG[:] = [], []
         CHECK_ROOTS[:] = []
         if saved_inst is None:
             os.environ.pop("CHILD_WRAP_INSTANCE", None)
