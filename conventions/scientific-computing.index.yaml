@@ -133,6 +133,9 @@ sections:
   - id: threshold-by-root-not-grid
     level: 2
     title: "符号や大小が変わる点は、 格子の値から読まずに根で出す"
+  - id: root-next-to-domain-edge
+    level: 2
+    title: "解の範囲の端のすぐ隣にある根は、 端を先に解き、 端での極限の値で挟む"
   - id: table-corners-as-nodes
     level: 2
     title: "表で関数を引く (逆引きも) ときは、 折れ目を表の点にし、 確かめの掃引で折れ目を通る"
