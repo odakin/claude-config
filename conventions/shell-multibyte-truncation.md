@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names) + **Python で file の行番号を出すとき** (#python-splitlines-line-numbers) + **PDF から起こした文字列をギリシャ文字で探すとき** (#pdf-text-micro-sign)
+when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names) + **Python で file の行番号を出すとき** (#python-splitlines-line-numbers) + **PDF から起こした文字列をギリシャ文字で探すとき** (#pdf-text-micro-sign) + **他人の原稿の式と自分の式を PDF から照らすとき** (#pdf-text-glyph-variants)
 category: infra
 summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 -->
@@ -86,7 +86,12 @@ Dropbox や macOS から来た file 名は、 「ピ」 を「ヒ + 半濁点」
 ## <a id="pdf-text-micro-sign"></a>PDF から起こした文字列では μ が micro 記号 µ (U+00B5) になることがある — ギリシャ文字の語で探すときは両方を入れる
 
 組版された PDF の文字層 (PyMuPDF・pdftotext の出力) では、 ギリシャ文字の μ (U+03BC) が見た目の同じ micro 記号 µ (U+00B5) で出てくることがある。 μ だけの pattern (`[λμν]` など) は error なしで 0 件を返す (実測: PDF から起こした文字列の添字の µ を、 μ だけの pattern が拾わなかった)。
-PDF 由来の文字列をギリシャ文字の語で探すときは `[μµ]` と両方を書くか、 `unicodedata.normalize('NFKC', s)` で揃えてから比べる (NFKC は µ を μ に写す)。 角括弧に非 ASCII を書くときの locale の罠は上の [#bracket-expression-c-locale](#bracket-expression-c-locale)。
+PDF 由来の文字列をギリシャ文字の語で探すときは `[μµ]` と両方を書くか、 `unicodedata.normalize('NFKC', s)` で揃えてから比べる (NFKC は µ を μ に写す)。 角括弧に非 ASCII を書くときの locale の罠は上の [#bracket-expression-c-locale](#bracket-expression-c-locale)。 揃えるのは探すときだけ = 2 つの字形が同じ量かを決める比べには使わない (下の [#pdf-text-glyph-variants](#pdf-text-glyph-variants))。
+
+## <a id="pdf-text-glyph-variants"></a>PDF の文字層では φ と ϕ のような異体の字形が入れ替わることがある — 他人の原稿の式と照らすときは頁の画像で読む
+
+組版された PDF の文字層では、 φ (U+03C6) と ϕ (U+03D5)、 ε と ϵ、 θ と ϑ のような異体の字形が、 font の字形の名前と Unicode の対応のずれで入れ替わって出ることがある (実測: 抽出した文字列で φ の 2 つの字形が入れ替わっていた)。 しかも NFKC は異体の字を 1 つに写す (ϕ → φ、 ϵ → ε、 ϑ → θ) = 揃えてから比べると、 原典が 2 つの字形を別の量に使い分けていても同じに見える。
+他人の原稿の式と自分の式を照らすときは、 抽出した文字でなく頁の画像で読み、 原典に両方の字形が出るかを数える。 両方が出るなら別の量を指している見込みが高い = 「記号の書き方の違い」 に分類する前に確かめる (頁の画像を開くだけで済む。 実測: 2 つの字形を「書き方の違いだけ」 と書き、 別の量の取り違えを見逃した)。 自分の組版で字が別の字になる形 (Type1 の数式の字) は [latex.md](latex.md) の pdftotext の段。
 
 ## まとめ (reflex)
 
@@ -99,6 +104,7 @@ PDF 由来の文字列をギリシャ文字の語で探すときは `[μµ]` と
 - macOS の file 名を濁点つきの語で grep して 0 件なら、 NFD を疑う ([#nfd-file-names](#nfd-file-names))。
 - 人や他の道具に渡す行番号は改行だけで数える (`splitlines()` は改頁の文字でも割る、 [#python-splitlines-line-numbers](#python-splitlines-line-numbers))。
 - PDF 由来の文字列を μ で探すときは micro 記号 µ も入れる ([#pdf-text-micro-sign](#pdf-text-micro-sign))。
+- 他人の原稿の式と照らすときは、 φ/ϕ のような異体の字形を抽出した文字でなく頁の画像で数える (NFKC は 1 つに写す、 [#pdf-text-glyph-variants](#pdf-text-glyph-variants))。
 
 ## <a id="prose-args-quoting"></a>自然文を CLI 引数で渡すときの quoting — backtick は double quote の中で消える (2026-09)
 
