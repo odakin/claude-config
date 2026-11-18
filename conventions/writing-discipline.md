@@ -260,7 +260,7 @@ scope を絞って残りを別の論文へ送る段落は、 先送りする対�
 - 次の文が言うことを修飾語で先取りしない。
 - 1 文に 2 段の論理を畳まない (「A を消すと B が変わり、 それが C の起源」 は 2 文に)。
 - 「There (先行研究では) … / Here …」 の対があれば、 Here に in this paper を足さない。 対比の要点を足すなら中身の語で足す (「the fluctuations」→「the quantum fluctuations」)。
-- 主語と補語を同じ種類の物にする (量を計算の行為と等号で結ばない: 「the only known X is the computation of Ref. Y」→「the only other known X is that of Ref. Y, computed at …」)。 修飾語を積み上げた 1 文は 2 文に分ける。
+- 主語と補語、 比べる・並べる 2 語 (A and B / between A and B / A differs from B / rather than / instead of / not A but B) を同じ種類の物にする (量を計算の行為と等号で結ばない: 「the only known X is the computation of Ref. Y」→「the only other known X is that of Ref. Y, computed at …」。 量と装置を比べない: 「the difference between the corrected rate and the detector」→「between the corrected and the uncorrected rate」)。 種類が分からないときは、 A と B がそれぞれ何か (量・現象・装置・式・節・行為) を 1 語ずつ書いてみる。 返答書の批判役の検閲 = [rebuttal-letter.md#answer-fit-critic-instructions](rebuttal-letter.md#answer-fit-critic-instructions) の 5 の (e)。 修飾語を積み上げた 1 文は 2 文に分ける。
 - 文献で見かけない言い回しに補足の条件句を押し込まない。 パラメータへの依存だけを平叙で言い、 式を見れば分かること (冪など) は言わない。 並べた文が否定から肯定へ折れて流れが止まるなら、 前の文の否定を落とす。 呼び名が文献で普通かは数で確かめる ([`ai-collaboration/scripts/inspire-phrase-frequency.py`](../../ai-collaboration/scripts/inspire-phrase-frequency.py))。
 - 言い換えで関係の名詞 (coefficient / form / source / contribution) を入れ替えない (対数発散は次元正則化で極 1/ε として現れるのであって、 極が発散の係数なのではない)。 書き直した文ごとに、 その名詞が式の関係と合っているかを照らす。
 - 動機づけで可能性を持ち出す文は控えめに書く (「we may consider the possibility」)。

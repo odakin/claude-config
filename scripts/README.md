@@ -422,6 +422,7 @@
 - **[tex-display-punctuation.py](tex-display-punctuation.py)** — LaTeX 原稿の display 数式の末尾の句読点と、 直後の散文の頭が合わない所を挙げる (式は書き換えず、 散文の側を直すための候補)。
 - **[tex-first-use.py](tex-first-use.py)** — Is a notation explained where the reader first meets it? Lists the first body uses of a regex with line and section, checks the first one against the line of the defining \label (a reference to that label near the use counts as a pointer), and lists \cref-type references to equations that are printed further down.
 - **[tex-label-shift.py](tex-label-shift.py)** — LaTeX 原稿の 2 つの版 (git の commit) を別 dir で組み、 式・節・図表・文献の番号がどう動いたかを .aux から出す。
+- **[tex-new-symbols.py](tex-new-symbols.py)** — 案を当てた LaTeX の写しにだけ現れる記号 (macro と添字つきの記号) を、 基準の版 (投稿版・主筆の版) と比べて数える (--selftest)。
 - **[tex-printed-grep.py](tex-printed-grep.py)** — TeX の source を、 PDF に印字される部分だけで grep する。
 - **[tex-prose-pass-invariants.py](tex-prose-pass-invariants.py)** — 英文だけを直した pass の前後で、 LaTeX 原稿の数式・引用 (\cite)・引用文・参照・label・数値が変わっていないかを数える — 2 つの git revision の多重集合を比べ、 増えた・減ったものを出す (書き換えた文を新旧の対で並べる --pairs つき)。
 - **[tex-rename-symbols.py](tex-rename-symbols.py)** — LaTeX 原稿の 1 文字記号 (y → x、 r → \zeta_x の類) を安全に一括改名する (scan / apply)。
