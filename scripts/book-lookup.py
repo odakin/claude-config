@@ -13,6 +13,8 @@
      楽天の「ご注文できない商品」 は楽天で扱えないだけのこともあるので弱い信号。 版元のサイトで在庫ありに
      絞る検索があれば、 それが一番強い (版元ごとに違うので道具には入れていない)。
   4. **ISBN が無い本がある** — 雑誌扱いの叢書や 1980 年代より前の本。 書名で引く。
+     **OPAC の頁が読めないのを 0 件と読まない** — 件数の語の無い頁を 0 件と出した (実測)。 件数の語も該当なしの語
+     (`--none`) も無い頁 (ログインの頁・読み込み中の頁・形の変わった頁など) は「読めない」 と出す = 所蔵なしの結論にしない。
   5. **書店の商品ページが丸 1 日応答しないことがある** (nginx のエラー、 script でもブラウザでも同じ = 実測)。 その日は
      `amazon` (通販の商品ページ、 商品 id = ISBN-10) で価格と入手を取る。 値付けは出品者込みで定価より高いことがあり、
      「残り N 点」 は出品在庫。 空の応答が時々返るので間を置いて取り直す。 楽天の検索結果は洋書では海外取り寄せの上乗せで
@@ -155,10 +157,15 @@ def resolve_ncids(q: str, count: int) -> list[str]:
 
 # ---------------------------------------------------------------- OPAC
 
-def parse_opac(text: str, hit: str, item: str | None) -> tuple[int, list[str]]:
+OPAC_NONE_DEFAULT = (r"該当する(?:資料|データ|もの|図書)(?:は|が)(?:ありません|見つかりません)|見つかりませんでした|"
+                     r"検索結果はありません|[Nn]o (?:records|results|items|matches)(?: were)? found")
+
+
+def parse_opac(text: str, hit: str, item: str | None, none: str = OPAC_NONE_DEFAULT) -> tuple[int | None, list[str]]:
+    """(件数, 先頭の行)。 件数の語が無く該当なしの語 (none) があれば 0、 どちらも無ければ None = 読めない頁 (0 件と分ける)。"""
     m = re.search(hit, text)
     if not m:
-        return 0, []
+        return (0, []) if re.search(none, text) else (None, [])
     n = int(m.group(1))
     if not item:
         return n, [text[m.end():m.end() + 300].strip()]
@@ -270,7 +277,11 @@ def cmd_held(a) -> None:
 def cmd_opac(a) -> None:
     for q in a.query:
         text = page_text(fetch(a.url.replace("{q}", urllib.parse.quote(q))))
-        n, items = parse_opac(text, a.hit, a.item)
+        n, items = parse_opac(text, a.hit, a.item, a.none)
+        if n is None:   # 件数の語も該当なしの語も無い頁 (ログインの頁・読み込み中の頁・形の変わった頁) を 0 件にしない
+            print("\t".join([q, "読めない (件数の語も該当なしの語も無い頁。 0 件ではない = 画面で確かめるか --hit / --none を直す)"]))
+            time.sleep(PAUSE)
+            continue
         # 行は先頭 5 件まで (1 ページ目だけ)。 当たりが多いと 6 件目以降の本を見落とすので、 切れたことを出す
         more = [f"…ほか {n - len(items)} 件は表示していない (書名と著者を空白でつないだ AND 検索で絞る)"] if a.item and n > len(items) else []
         print("\t".join([q, f"{n} 件"] + items + more))
@@ -370,7 +381,10 @@ def selftest() -> int:
     n, items = parse_opac(opac_text, r"(\d+)\s*件", r"\d+\. (.*?)(?= \d+\. | メール送信)")
     check(n == 2 and items == ["合成の本 / 著者A 図書", "合成の本 / 著者A : electronic bk 電子ブック"],
           "OPAC: 件数と行 (区分の語が行に残る)")
-    check(parse_opac("該当する資料はありません", r"(\d+)\s*件", None) == (0, []), "OPAC: 件数が出なければ 0")
+    check(parse_opac("該当する資料はありません", r"(\d+)\s*件", None) == (0, []), "OPAC: 該当なしの語があれば 0")
+    check(parse_opac("検索結果 0件", r"(\d+)\s*件", None)[0] == 0, "OPAC: 件数の語の 0 件は 0")
+    check(parse_opac("ログインしてください 読み込み中…", r"(\d+)\s*件", None) == (None, []),
+          "OPAC: 件数の語も該当なしの語も無い頁は None = 読めない (0 件にしない)")
 
     ob = parse_openbd([None, {"summary": {"isbn": isbn13}, "onix": {"ProductSupply": {"SupplyDetail": {
         "Price": [{"PriceType": "01", "PriceAmount": "2000"}]}}}}])
@@ -418,6 +432,21 @@ def selftest() -> int:
     check("openBD 2000" in out and "紀伊國屋 応答なし" in out and "楽天 応答なし" in out,
           "price: 書店が応答しなくても openBD の価格は出て、 書店の列だけ「応答なし」")
     check("openBD 応答なし" in price_out(False), "price: openBD も応答しなければ「登録なし」 でなく「応答なし」")
+
+    def opac_out(page: str) -> str:
+        g["fetch"], g["PAUSE"] = (lambda url, timeout=30, encoding="utf-8": page), 0
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                cmd_opac(types.SimpleNamespace(url="https://opac.example.invalid/?q={q}", hit=r"(\d+)\s*件",
+                                               item=r"\d+\. (.*?)(?= \d+\. |$)", none=OPAC_NONE_DEFAULT, query=["合成の本"]))
+            return buf.getvalue()
+        finally:
+            g["fetch"], g["PAUSE"] = real_fetch, real_pause
+
+    check("\t読めない" in opac_out("<html><body>ログインしてください</body></html>")
+          and "\t0 件" in opac_out("<p>該当する資料はありません</p>"),
+          "opac: 読めない頁は「読めない」、 該当なしの頁は 0 件 (2 つを分けて出す)")
     return 0 if ok else 1
 
 
@@ -435,6 +464,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("opac"); p.add_argument("--url", required=True, help="検索 URL。 {q} を語に置き換える")
     p.add_argument("--hit", default=r"(\d+)\s*件", help="件数を取る正規表現 (group 1 = 件数)")
     p.add_argument("--item", help="1 件ごとの行を取る正規表現 (group 1)。 省くと件数の後ろ 300 字")
+    p.add_argument("--none", default=OPAC_NONE_DEFAULT,
+                   help="該当なしの頁の語の正規表現。 件数の語もこれも無い頁は「読めない」 と出す (0 件と分ける)")
     p.add_argument("query", nargs="+"); p.set_defaults(fn=cmd_opac)
     p = sub.add_parser("price"); p.add_argument("isbn", nargs="+"); p.add_argument("--rakuten", action="store_true")
     p.set_defaults(fn=cmd_price)
