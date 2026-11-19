@@ -261,7 +261,7 @@ cd claude-config && ./setup.sh
 
 setup.sh が自動で行うこと:
 1. `<base>/CONVENTIONS.md` → `claude-config/CONVENTIONS.md` の symlink（Windows は cp）
-2. `~/.gitignore_global` → `claude-config/gitignore_global` の symlink + `git config --global core.excludesfile` 設定
+2. `~/.gitignore_global` → `claude-config/gitignore_global` の symlink + `git config --global core.excludesfile` 設定 + *(macOS のみ)* 未設定なら `git config --global gc.autoDetach false` (macOS で裏に回した自動 gc の子が fork の後に落ちて `.git/gc.log.lock` を残すことがある = `conventions/multi-session-coordination.md#interrupted-fast-forward`)
 3. Claude Code hooks を `~/.claude/hooks/` に symlink + `settings.json` に設定マージ + 誰でも使う skill (`skills/`、 例 `/wrap`) を `~/.claude/skills/` に置く (Codex を使う機は `~/.codex/skills/` にも。 同名の個人層・本人の skill があれば触らない。 Windows は copy。 pull だけで新しい skill も届く = `scripts/install-shared-skills.sh`)
 4. *(macOS のみ)* PATH 消失防止（`.zprofile` の重複 `brew shellenv` 修正 + スナップショット自動パッチ用 launchd エージェント）+ **Claude.app の新セッション folder picker を `<base>` に固定する launchd エージェント**（default-ON = **デスクトップアプリ使用時のみ** install〔CLI 専用 Mac は skip〕、 1 秒間隔だが drift 時のみ書込 = steady-state は read のみ、 opt-out 可 = `touch ~/.claude/pin-claude-cwd.off` or `CLAUDE_PIN_CWD=0`。 詳細・除去手順は `conventions/claude-app-cwd-pin.md`）
 5. Claude Code パーミッション設定 — 安全なツール（Bash, Read, Edit, Write, Glob, Grep, WebFetch, WebSearch）を自動許可
