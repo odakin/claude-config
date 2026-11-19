@@ -542,6 +542,12 @@ source は名前の頭に印の命令 (`\section{\skipmark 題}`・`\begin{proof
 
 **対処**: `.aux` の `\newlabel` から label→(番号, 頁) を取り、 版間で比べる。 頁が動いていれば頁ごとの比較をやめ、 語の多重集合で比べる (英文の直し = [`#prose-pass-pdf-word-diff`](#prose-pass-pdf-word-diff)、 型の入れ替え = [`#class-conversion-body-check`](#class-conversion-body-check))。 頁が動いた label と**番号が動いた** label (= 参照の意味が変わる) を分けて出す。 道具 = [`ai-collaboration/scripts/compare-tex-builds.py`](../../ai-collaboration/scripts/compare-tex-builds.py) (`--before-aux/--after-aux`)。 同 script の `--before-log/--after-log` は log の**折返しを復元**してから overfull を数える (79 桁で折れた警告は素の grep が落とす)。 規律 = [`physics-verification-cycle.md#page-count-is-not-pagination`](../../ai-collaboration/conventions/physics-verification-cycle.md#page-count-is-not-pagination)。
 
+### <a id="math-house-macro-migration"></a>数式を家風マクロへ移すときの比較
+
+生の丸括弧を `\left(…\right)` 型のマクロへ移すと、括弧のサイズに加え、数式内の atom の種類による前後の空きも変わり得る。旧 `\rm` の文字ラベルを `\text{…}` 型へ移す場合も、字間・合字・添字の寸法を確かめる。記号と数が同じこと、組版が同じことを分けて報告する。数式モード・対応する括弧・group を読んで呼出しを変換し、マクロ自身の定義、文章の括弧、描画座標まで一括置換しない。
+
+`equation` から `align` 型のマクロへ移す外枠変更では、式本文に加え、番号の有無・個数、`\label`・`\tag` と参照を比較する。内側の `aligned` を展開して番号を増やさず、番号なし環境には番号なしの対応を使う。番号のない式も含めて PDF の印字を照合し、`.aux` の番号・頁・anchor を別々に読む。独立した補遺が変換先マクロを定義しているかも確認する。比較画像と頁割りの扱いは上の節と次の節に従う。
+
 ## <a id="variant-comparison-images"></a>記法・体裁の案は、 組版した姿を左右に並べて決める (source の diff では決められない) (2026-09-12)
 
 **規則**: 記法・語順・体裁に複数案があり著者が選ぶとき、 **案ごとに別に組んで、 決定点の左右比較画像を出してから聞く**。
