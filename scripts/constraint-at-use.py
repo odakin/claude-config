@@ -389,7 +389,7 @@ def check_main(tables: list[Path]) -> int:
 
 # ── host の形 (--hosts): 経路の台帳の行を、 command が引く URL の host で出す (docstring の「host の形」) ──
 DEFAULT_HOST_STATE_DIR = os.path.join(os.path.expanduser("~"), ".claude", "state", "route-ledger-at-use")
-HOST_HEADER = ("🧭 この command が引く URL の host が経路の台帳にある (この session で初めての行。 "
+HOST_HEADER = ("🧭 この command (か書く script) が引く URL の host が経路の台帳にある (この session で初めての行。 "
                "道具・API の経路があれば手書きの code より先にそれを使う。 正本 = {table})")
 HOST_KEY_BLOCK_RE = re.compile(r"<!--\s*route-hosts\s*\n(.*?)-->", re.S)
 ROW_MAX = 1200
