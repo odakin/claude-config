@@ -92,7 +92,8 @@ Garoon 固有の実測:
 
 | app | URL | 備考 |
 |---|---|---|
-| ポータル | `/g/index.csp` | 掲示板の新着数件・通知一覧が 1 ページに出る = 巡回の入口 |
+| ポータル | `/g/index.csp` | 掲示板の新着数件・通知一覧が 1 ページに出る = 画面で巡回する入口。 script の `get` では `/g/index.csp` も `/g/portal/index.csp` も中身が空で返る (実測) = script で通知を読むのは下の通知の一覧 |
+| 通知の一覧 | `/g/notification/index.csp` | script の `get` で中身が読める (実測)。 `?sp=20` を付けると続きの頁が返る (HTML に送りの link は無い) |
 | 掲示板 | `/g/bulletin/index.csp` | ルート category は空に見える (= 掲示は subcategory 配下) |
 | **掲示板 検索** | `/g/bulletin/search.csp?cid=1&text=<urlencoded>` | **本文全文検索**。 keyword で掲示 + 添付 PDF 内文まで hit する |
 | ファイル管理 | `/g/cabinet/index.csp` | 各種申請書・様式の配布場所 |
