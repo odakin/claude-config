@@ -53,9 +53,18 @@ export async function updateCourse(classroom, courseId, fields) {
 // Post an announcement, optionally with the teacher's own Drive files attached
 // (materials.driveFile; Classroom itself grants the class view access, so the file needs no sharing).
 // state "DRAFT" = invisible to students until a teacher posts it from the course page.
-export async function createAnnouncement(classroom, courseId, text, driveFileIds = [], state = "PUBLISHED") {
+// opts.scheduledTime (RFC 3339, e.g. "2026-11-19T16:30:00+09:00") = Classroom publishes it at that time by itself
+// (the API requires state DRAFT for a scheduled post, so the state is forced to DRAFT; the teacher sees it as a
+// scheduled post on the course page and can cancel it there).
+export async function createAnnouncement(classroom, courseId, text, driveFileIds = [], state = "PUBLISHED", opts = {}) {
   if (!courseId || !text) throw new Error("courseId and text are required");
-  const requestBody = { text, state };
+  const requestBody = { text, state: opts.scheduledTime ? "DRAFT" : state };
+  if (opts.scheduledTime) {
+    const t = new Date(opts.scheduledTime);
+    if (Number.isNaN(t.getTime())) throw new Error(`scheduledTime is not a time: ${opts.scheduledTime}`);
+    if (t.getTime() <= Date.now()) throw new Error(`scheduledTime is in the past: ${opts.scheduledTime}`);
+    requestBody.scheduledTime = t.toISOString();
+  }
   if (driveFileIds.length) {
     requestBody.materials = driveFileIds.map((id) => ({ driveFile: { driveFile: { id }, shareMode: "VIEW" } }));
   }
@@ -63,6 +72,7 @@ export async function createAnnouncement(classroom, courseId, text, driveFileIds
   const a = res.data;
   return {
     id: a.id, state: a.state, text: a.text, alternateLink: a.alternateLink, creationTime: a.creationTime,
+    scheduledTime: a.scheduledTime,
     attachments: (a.materials || []).map((m) => m.driveFile?.driveFile?.title || Object.keys(m)[0]),
   };
 }
