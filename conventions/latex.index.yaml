@@ -116,6 +116,9 @@ sections:
   - id: symbol-width-repagination
     level: 2
     title: "記号幅の変わる一括置換は、 総頁数が同じまま頁割りだけ動かす — `.aux` の label→頁 で見る (2026-09-12)"
+  - id: math-house-macro-migration
+    level: 3
+    title: "数式を家風マクロへ移すときの比較"
   - id: variant-comparison-images
     level: 2
     title: "記法・体裁の案は、 組版した姿を左右に並べて決める (source の diff では決められない) (2026-09-12)"
