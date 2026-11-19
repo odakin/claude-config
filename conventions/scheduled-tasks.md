@@ -304,6 +304,17 @@ heartbeat とは別 layer: job は「生きて」 いて毎日失敗していた
 - **検出器が拾うところまで** = 別の label の一時の launchd job (時刻起動なし) に同じ wrapper を載せて 1 回 `kickstart` し、 `launchctl list` の終了値と検出器の出力を見て、 `trap` で `bootout` と plist の削除をする。 本物の job を壊さずに、 launchd を通した終了値を確かめられる (実測)。 検出器に label の全体を prefix として渡すと、 名前の欄は空になる (表示は prefix を外した残り)。 一時の job も常駐の登録に見えて止められることがある = [#agent-direct-launchd-install](#agent-direct-launchd-install)。
 - **過去の本番の run** = job の終了値を残している heartbeat の履歴 ([`multi-machine-state.md#fleet-heartbeat`](multi-machine-state.md#fleet-heartbeat)) を、 知らせを出した時刻の直後で引く。
 
+## <a id="unattended-commit-verify"></a>無人の処理の commit は、 commit が入ったかを確かめてから「済んだ」 と記録する
+
+- 無人の処理 (定期 job) が repo に commit して push し、 その後に「載せた・済んだ」 を記録する作りで commit の終了値を見ないと、 commit の門 (pre-commit) が止めた回に、 何も上がらない push が成功し、 済んだと記録される (実測: 公開 repo の門が commit を止め、 処理は「載せた」 と記録して人にも知らせた。 次の run は済みの印を見て試し直さなかった)。
+  - commit の終了値を見る。 止まったら、 書いた所を元に戻し (stage を外し・作業ツリーを戻し・新しく作った file を消す)、 門の出力の見出しの行を添えて失敗として知らせ、 済みの印を付けない = 次の run が試し直す
+  - push の後に、 HEAD の題が自分の commit か・origin との差が 0 かを確かめる
+  - 門の出力をそのまま知らせに貼らない = 前後の行を持つことがある。 どの段が止めたかの見出しの行だけを抜く
+- **失敗した run の残りが、 同じ checkout を読むほかの job を止める**: commit できなかった変更が作業ツリーに残ると、 「変更が無いこと」 を同期の条件にする別の job が全部止まる (実測: 1 つの job の失敗の残りで、 別の 2 つの job が止まった)。 書く側は失敗したら元に戻し、 前の run の残りは pull の前に自分の書く所だけ stash に退ける (消さない = 人が途中の変更を置いていても戻せる)。 書く所の外に変更があれば触らずに止める。
+  - ほかの job の同期の確かめが「変更が無いこと」 を条件にするのは正しい (知らない変更の上で動かない) = 直すのは残す側
+  - 止まった job の知らせは、 同じ壊れ方を 1 回しか鳴らさない作り ([#wrapper-exit-and-manual-check](#wrapper-exit-and-manual-check)) なら、 その後の沈黙は直った証拠にならない。 直ったかは終了値の記録 (heartbeat) で見る
+- 門の側に、 本人が載せると決めた物を通す道を持たせる形 = [`../docs/convention-design-principles.md#consent-inside-the-gate`](../docs/convention-design-principles.md#consent-inside-the-gate)
+
 ## <a id="reload-resets-exit-status"></a>plist を読み込み直すと、 失敗は終了コード 0 の顔になる
 
 launchd は job を読み込み直すと、 次に走るまで `launchctl list` の終了コードを 0 で表示する (実測)。

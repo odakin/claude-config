@@ -1037,6 +1037,10 @@ sections:
     legacy: "26"
     level: 2
     title: "26. 検査を過去の呼び出しに当て直すときは、 実地の結果で当て直しの道具を較正する"
+  - id: consent-inside-the-gate
+    legacy: "27"
+    level: 2
+    title: "27. 本人が載せると決めた物の道は、 検査そのものに持たせる — 「検査を全部外す」 だけの逃げ道は、 それを禁じる守りと組むと道が無くなる"
   - id: changelog
     level: 2
     title: "変更履歴"

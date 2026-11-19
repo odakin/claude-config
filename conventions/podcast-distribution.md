@@ -245,6 +245,8 @@ PNG は元の絵として手元に残す。
 - **字数は媒体ごとの数え方で数える** = [`../scripts/post-length.py`](../scripts/post-length.py) (X は日本語 1 字を 2、 URL は 23)。
   X は無料のアカウントで 280。 有料のプランは長い投稿ができるが、 上限は情報源で割れている (25,000 / 4,000)。 長い投稿もタイムラインには頭の 280 ぶんだけが出る = 引きは頭に置く
 - URL を貼るとカードが出る媒体 (Bluesky・X) では、 回の題はカードに出る = 本文は引きに使う
+- <a id="promo-official-repost"></a>**回の話題の作品・催しの公式の account が告知を拡げてくれる見込みなら、 その媒体の版を公式の読者向けに書き直す**: 本文で公式の account を名指しし、 ハッシュタグは公式が実際に使っているものを公式の頁 (プロフィール・最近の投稿) で確かめて付ける (推した形・作品名からの作文を付けない)。 人物の表記も公式に合わせるか、 本人の表記を選ぶなら同じ人と分かる形にする。 番組の側の縁 (出演者と知り合い、 など) は公式の読者への引きになるが、 その人の目にも入る = 出す前に持ち主に見せる。 催しの事実 (場所・期間) は公式の頁で確かめ、 終わりの日が載っていなければ書かない (実測)
+- **回の脱線の話は告知から外す**: 回の中で話がそれた先 (別の作品の名前など) を並べると、 告知の焦点がぼける (実測 = 持ち主の指摘)
 - <a id="mastodon-scheduled-post"></a>**Mastodon 系は API で投稿を予約できる**: `POST /api/v1/statuses` に `scheduled_at` (ISO 8601、 5 分以上先)。 返りは予約の id と `params` = 送った本文と同じかをここで照らす。
   出る前にやめるなら `DELETE /api/v1/scheduled_statuses/<id>`。 同じ予約を二重に入れないよう `Idempotency-Key` を付ける。
   token は持ち主が設定の「開発」 で、 `write:statuses` と `profile` (どの account の token かを `accounts/verify_credentials` で確かめる) だけの app を作って発行する (値は会話に貼らせない = [`secret-handoff.md#agent-side-paste`](secret-handoff.md#agent-side-paste))。
