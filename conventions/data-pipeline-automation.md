@@ -51,6 +51,7 @@ SoT の不変条件 (= 重複なし / uniqueness / schema 準拠) を、 それ�
 
 - **落とし穴**: 「この field を読むのは publish 経路だけ」 と暗黙仮定して move/prune すると、 **publish 後に走る別 consumer** (= poster 生成・告知メール・過去 archive 移行 等) が壊れる。 move/prune を設計した瞬間に「この field の consumer は他に無いか?」 を grep で verify (= CLAUDE.md inline §3 の「assertion 前に consumer/referent を verify」)。 consumer 列挙を省くと「web publish だけが consumer」 という誤前提のまま prune して下流を壊す (実例 2026-06-09: candidates の title/abstract を poster/告知/archive の 3 経路も読んでいた)。
 - **resolver**: `resolve(item)` = item が `published:<key>` を持てば新 home から、 無ければ item 自身から title 等を返す (= 公開済→新 home / 未公開→旧 home、 どの瞬間も home は 1 箇所 = single-SoT 維持)。解決ロジックを各 consumer に複製しない (= 複製 = 複数 home の smell、 §1 の dedup 思想を「読み手側」 に適用)。
+- **後から足す consumer も resolver を呼ぶ**: 洗い出しは move を設計した時だけでなく、 その field を読む code を新しく書く時にも要る。 1 件ごとの照合・検査の script (回ごとの dir に置く一度きりのもの) が旧 home を直に読むと、 move の後は空の値と比べて「不一致」 を出す (実測: 転記の照合 script が prune の後に題を空と比べた)。 move の前に書いた script も、 move した turn で consumer の grep に入れる。
 - **field-scoped prune**: prune するのは新 home に移った field だけ。 移っていない field (= photo / 連絡先 / pipeline status 等) は旧 file に残し resolver も触らない。
 - cross-repo read (= consumer が別 repo の新 home を読む) は層依存が合法な範囲で OK (= 依存先が同等以上に public な層、 owner script → 共有 repo 等)。
 
@@ -176,6 +177,12 @@ open(p, "w").write(s2)
 ### Pattern: build → publish の責務分離
 
 local build (= PDF/.tex 生成) と external publish (= 別リポへ mirror、 PDF copy) は別 script に分ける。 publish script は build 済 artifact の存在を前提に動き、 不在なら explicit error。 1 script に統合すると失敗時の責務切り分けが難しくなる。
+
+### <a id="publish-once-after-destination"></a>Pattern: 一度だけ写す資料は、 載せる先ができてから写す
+
+資料を一度だけ写す方式 (publish-once = 公開の場所に在れば作り直しを反映しない) では、 載せる先 (頁・一覧の項目) がまだ無いうちに資料を写さない。
+先に写すと、 頁から辿れない資料だけが公開の場所に残り、 その後に作り直した版は「もう在る」 と判定されて届かない = 古い版が固定される (実測: 載せる先の公開を見送った run が資料だけを写し、 後で組み直した版が届かない状態になっていた)。
+写すかの判定と載せるかの判定を同じ条件 (載せる先が在る・同じ run で作る) にそろえ、 見送ったときは写しも見送る。 既に写してしまった資料は、 載せる先を作る turn で作り直した版に手で差し替える。
 
 ---
 
