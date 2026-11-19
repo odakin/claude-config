@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names) + **Python で file の行番号を出すとき** (#python-splitlines-line-numbers) + **PDF から起こした文字列をギリシャ文字で探すとき** (#pdf-text-micro-sign)
+when: shell で多バイト文字列を truncate・加工するとき + **grep / sed の角括弧に非 ASCII を書くとき・`.{0,N}` で非 ASCII の語の間の距離を限るとき** + **git が出す file path (log --name-only / diff --name-only / ls-files / status) を script が文字列で判定するとき** (#git-quoted-paths) + **日本語の文の中の英字の語を Python の正規表現で探すとき** (#python-word-boundary-cjk) + **macOS の file 名を日本語の語で探して 0 件のとき** (#nfd-file-names) + **Python で file の行番号を出すとき** (#python-splitlines-line-numbers) + **PDF から起こした文字列をギリシャ文字で探すとき** (#pdf-text-micro-sign) + **git の語単位の差分で日本語を区切るとき** (#git-word-diff-regex-bytes) + **awk で行の字数を数えるとき**
 category: infra
 summary: シェルの多バイト UTF-8 切り詰め gotchas (= cut -c/head -c/bash 部分文字列は byte 単位で多バイト文字を割り invalid UTF-8 → osascript 等下流で文字列全体が文字化け、 launchd は LANG 空で C locale ゆえ特に注意、 安全策=python 文字単位 truncate + valid UTF-8 検証 1-liner、 2026-06-24 osascript 通知 RCA)
 -->
@@ -18,7 +18,7 @@ UTF-8 では日本語 1 文字 = 3 バイト、絵文字 = 4 バイト。**byte 
 | `cut -c1-N` | **macOS / BSD は byte 単位** (GNU cut は UTF-8 locale なら文字単位だが、移植性のため依存しない) | `python3 -c 'import sys;sys.stdout.write(sys.stdin.read()[:N])'` |
 | `head -c N` / `dd bs=1 count=N` | 定義上 byte 単位 | 同上 (文字単位 truncate) |
 | `${var:0:N}` (bash 部分文字列) | locale が C/POSIX (= `LANG` 空) や bash 3.2 だと byte 単位 | python / perl、または `LC_ALL` を `*.UTF-8` に確実に設定 |
-| `awk 'substr(...)'` | BSD awk は多バイト非対応のことが多い | `python3` / `perl -CSD` |
+| `awk 'substr(...)'` / `awk '{print length($0)}'` | BSD awk は多バイト非対応のことが多い。 macOS の awk (version 20200816) は `LC_ALL=en_US.UTF-8` を付けても `length` が byte を数える (実測: 1,199 字の行に 2,149 と出し、 その数を字数として記録に書いた) | `python3` / `perl -CSD` (字数は `len(line)`) |
 | `wc -m` (字数を数える) | locale が C/POSIX だと **byte を数える** (日本語は 1 字 3 byte = 約 3 倍に出る)。 Claude Code の Bash tool も `LANG`・`LC_ALL` が空 (下の節)。 実測: 投稿先の字数の上限に合わせて文面を削ったが、 数えていたのは byte で、 実際は上限の半分ほどだった = 削らなくてよい文を削った | `python3 -c 'import sys;print(len(open(sys.argv[1],encoding="utf-8").read()))' <file>` |
 
 ⚠️ **launchd / cron から走る script は `LANG` が空 (= C locale) になりがち** (= user の shell profile を読まないため)。bash の `${var:0:N}` 等が byte 単位に落ちるので、daemon 系 script では特に文字単位の truncate を明示する。
@@ -47,6 +47,7 @@ except UnicodeDecodeError as e: print('INVALID', e)"
 - 書き方: 非 ASCII を含む pattern は python で書くか、`LC_ALL=en_US.UTF-8` を明示する。表示のための grep を gate の chain に入れない ([shell-env.md#test-gate-no-pipe](shell-env.md#test-gate-no-pipe))。 bash の hook なら jq の `test` / `match` に寄せてもよい (jq の正規表現は UTF-8 を文字として読む)。
 - <a id="bash-tool-grep-differs-from-hook-grep"></a>⚠️ **Claude Code の Bash tool で pattern を試しても、 hook の中の grep の動きは再現しない** — Bash tool の `grep` は別の grep ([shell-env.md#bash-tool-grep-ignores-gitignore](shell-env.md#bash-tool-grep-ignores-gitignore)) で非 ASCII の角括弧を文字として読むが、 hook の bash script が呼ぶ `/usr/bin/grep` は byte で読む。 実測: hook の「語の直後 20 字に否定の語があるか」 の判定 `[^。]{0,20}` が、 Bash tool では文の終わりまで当たり、 hook の中では 0 字にしか当たらず否定の語を読み落とした。 hook の pattern は hook を起こす試験 (`.test.sh`) の中で確かめる
 - <a id="wildcard-window-counts-bytes"></a>同じ環境では `.` も 1 byte に一致する。 語と語の間の距離を限る窓 `.{0,30}` は 30 字でなく 30 byte (全角なら 10 字) になり、 離れた入力に**一致しないだけで error は出ない** (実測: 「30 字以内」 のつもりの hook の pattern が、 14 字離れた入力に一致しなかった)。 test も同じ環境で回るので、 距離の短い case だけだと通ってしまう = **窓の上限に近い距離の case を 1 つ入れ、 locale の指定を外した版でそれが赤くなることを見る**。 書き方は上と同じ (python で書くか、 その grep に `LC_ALL=en_US.UTF-8` を明示)。 窓の上限も別にある: macOS の `grep -E` は N が 255 を超えると `grep: maximum repetition exceeds 255` で止まる (実測) = 長い行の一部を見るなら python で slice する。
+- <a id="git-word-diff-regex-bytes"></a>**git の語単位の差分も同じ** — 日本語を 1 字ずつ比べるつもりの `git diff --word-diff-regex='[A-Za-z0-9_]+|[^[:space:]]'` は、 locale の空の shell では `[^[:space:]]` が 1 byte に一致し、 字の途中で割れた差分を出す (印 `{+…+}` が字の 3 byte の間に入り、 端末では `�` に化ける。 実測 = git 2.39.2 (Apple))。 既定の `--word-diff` (空白で区切る) は割れないが、 空白の無い日本語は空白から空白までの塊ごとに入れ替わって見える。 書き方: 多 byte の字を先に 1 つの語として拾う byte の範囲の正規表現を置く (`--word-diff-regex=$'[A-Za-z0-9_]+|[\xc2-\xf4][\x80-\xbf]+|[^[:space:]]'`、 bash・zsh の `$'…'` = locale に依らず字単位になった、 実測) か、 `LC_ALL=en_US.UTF-8` を付ける。
 
 ## <a id="git-quoted-paths"></a>git が出す path は、 非 ASCII の file 名を引用符つき 8 進にする
 
