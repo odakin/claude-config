@@ -73,3 +73,5 @@ node_modules/
 # === Cloudflare wrangler ===
 # wrangler writes local state / cache (e.g. the account cache) into whatever directory it runs in; machine-local, never tracked.
 .wrangler/
+
+**/.claude/settings.local.json
