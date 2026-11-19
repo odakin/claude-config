@@ -201,6 +201,18 @@ else
     echo "  Set git config --global core.excludesfile = $GITIGNORE_DST"
 fi
 
+# --- 1c. git の自動 gc を前景で走らせる (macOS only) ---
+# macOS で CoreFoundation を読み込んだ git は、 自動 gc を裏に回す (fork して exec しない) と、 子が fork の後に異常終了して
+# .git/gc.log.lock を残す (実測 = Homebrew の git。 Apple の /usr/bin/git では落ちた記録が無い)。 それ以後の自動 gc は
+# 裏の段の lock で毎回死ぬので repack が一度も終わらず、 loose object が溜まって、 git を叩くたびに前景の reflog の整理が
+# ref の lock を取り続ける (fast-forward の HEAD の更新とぶつかる)。 gc.autoDetach=false で裏に回さない (global の設定 =
+# どの git が呼ばれても効く)。 本人が値を決めていれば触らない。
+# 既存の機械への配り方と症状の読み方 = conventions/multi-session-coordination.md#interrupted-fast-forward
+if [ "$(uname -s)" = "Darwin" ] && [ -z "$(git config --global --get gc.autoDetach 2>/dev/null)" ]; then
+    git config --global gc.autoDetach false
+    echo "  Set git config --global gc.autoDetach = false (macOS では裏の gc の子が fork の後に落ちることがある)"
+fi
+
 # --- 2. Install hooks ---
 # Step 1 の失敗で Step 2-4 が止まらないよう、ここから先はエラーを個別処理
 echo ""
