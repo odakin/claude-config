@@ -363,7 +363,15 @@ headless `claude -p` の routine は、 使う config dir (`CLAUDE_CONFIG_DIR`) 
 
 - **検出**: log 末尾の文言 (判定 = `scripts/lib/launchd_job_log.py` の `AUTH_MARKERS`)。 そのマシンでは
   `check-cron-health.py` が job ごとに原因と config dir を出し、 config dir ごとに 1 行 login の command を出す。
-  他のマシンでは fleet の reader (`check-fleet-status.py`) が config dir ごとに 🔴 1 行。
+  他のマシンでは fleet の reader (`check-fleet-status.py`) が config dir ごとに 🔴 1 行 (次の項の dir は除く)。
+- <a id="standby-only-config-dir"></a>**本番ホストでない機械で、 関門つきの定期実行だけが使う config dir は 🔴 にしない**: その機械では
+  関門が run を止めるので、 切れても止まるものが無い (出し続けると、 今は直す必要の無い 🔴 が毎回の session 開始に並ぶ)。 判定 =
+  `scripts/lib/config_dir_auth.py` の `standby_only` (使い手 = その dir を `CLAUDE_CONFIG_DIR` に持つ launchd job を Remote Control の
+  サーバー / 関門つき / それ以外に分けた本数。 writer が beat の `config_dir_auth.<alias>.uses` に載せる)。 fleet の reader と、 その機械の
+  `check-desktop-logout-auth.py` (`--verbose` でだけ ⚪) が同じ判定で外し、 その機械の問い合わせの失敗の通知も出さない。 Remote Control の
+  サーバーや関門なしの job も使う dir、 本番ホストの dir、 本番ホストが分からない (台帳が読めない) 場合と使い手の数の無い旧 beat は今どおり 🔴。
+  その代わり本番を切り替える道具が、 台帳を書く前に本番にする機械の dir の状態を出す (自分 = `check-desktop-logout-auth.py --switch-check`、
+  他の機械 = `check-fleet-status.py --switch-check <host>` = その機械の最後の beat)。 🔴 なら、 その機械でログインし直してから切り替える。
 - 再ログインした後も、 次の run までは失敗が残って見える。 `check-cron-health.py` はその config dir が今
   ログイン済みかを `claude auth status` で読み (読むだけ)、 「次の run で消える」 に切り替える。
 - <a id="auth-expiry-reach-owner"></a>**人に届く面に載せる**: 上の検出は session の開始の hook の出力と fleet の 🔴 に出るが、 hook の出力は人の画面に出ず、

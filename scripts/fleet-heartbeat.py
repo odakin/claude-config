@@ -54,7 +54,7 @@ usage:
   { host, ts (iso), epoch, servers: [{label, pid, last_status, log_age_min, detail?}],
     tcc_pending: [{service, client, at}],      # RC server の在る機械のみ、 下記
     config_dirs: {alias: email_metadata_or_null},
-    config_dir_auth: {alias: {dead, last_probe, last_probe_ok, last_probe_tag, first_fail}},  # 部品が在る時のみ
+    config_dir_auth: {alias: {dead, last_probe, last_probe_ok, last_probe_tag, first_fail, uses}},  # 部品が在る時のみ
     remote_control_at_startup, old_usr_local_cli, cron_jobs,
     desktop_scheduled_tasks: [{registry, enabled_ids}],
     inventories: {label: [name, ...]},         # --inventory 指定時のみ
@@ -149,7 +149,10 @@ config_dir_auth (設定フォルダが切れたか、 部品 = lib/config_dir_au
   - first_fail = 今続いている失敗の最初の問い合わせの時刻 (失敗が続いていなければ None)。 reader は last_probe でなく
     これを出す = beat は dead が変わった時しか commit されないので last_probe は古いままのことがあり、 first_fail は
     失敗が続く間変わらない
-  - 変化として commit するのは dead の値だけ (問い合わせの時刻では commit しない)
+  - uses = そのフォルダを CLAUDE_CONFIG_DIR に持つ launchd job の区分ごとの本数 {rc, gated, other} (判定 =
+    lib/config_dir_auth.py の dir_uses)。 reader は、 本番ホストでない機械で関門つきの定期実行だけが使うフォルダ
+    (standby_only) を 🔴 から外し、 本番を切り替える手順で確かめる。 この欄の無い beat は今どおり 🔴
+  - 変化として commit するのは dead と uses の値だけ (問い合わせの時刻では commit しない)
 
 job health (--job-label-prefix、 opt-in、 repeatable):
   launchd の無人ジョブは job 定義の PATH で `python3` を解決する。 その PATH は agent の session や対話 shell と
@@ -403,10 +406,16 @@ def collect(rc_prefix, cron_prefix, inventory_specs=None, job_prefixes=None, job
         data["config_dirs"][alias] = email
     # 設定フォルダ (pinned) ごとの認証の判定 = 最後の問い合わせが失敗し、 その後ログインし直していないか。
     # 問い合わせは check-desktop-logout-auth.py の見張りが打つ (claude を呼ぶのはそちら)。 ここは記録と keychain の
-    # 更新時刻 (属性だけ) を読むだけ = claude を呼ばない設計を保つ。 他のマシンの reader が 🔴 を出す
+    # 更新時刻 (属性だけ) を読むだけ = claude を呼ばない設計を保つ。 他のマシンの reader が 🔴 を出す。
+    # uses = そのフォルダを使う launchd job の区分ごとの本数 (reader が「本番でない機械の、 関門つきの定期実行だけが使う
+    # フォルダ」 を 🔴 から外す材料。 数えられなければ欄を載せない = reader は今どおり出す)
     if _cda is not None:
         try:
             rows = _cda.read_ledger()
+            try:
+                uses_by_dir = _cda.dir_uses(home / "Library" / "LaunchAgents", home)
+            except Exception:
+                uses_by_dir = None
             auth = {}
             for d in sorted(home.glob(".claude-*")):
                 if not d.is_dir():
@@ -414,13 +423,16 @@ def collect(rc_prefix, cron_prefix, inventory_specs=None, job_prefixes=None, job
                 last = _cda.last_probe(rows, str(d))
                 mdat = _cda.keychain_mdat(_cda.keychain_service(str(d)))
                 run = _cda.failure_run(rows, str(d))
-                auth[d.name[len(".claude-"):]] = {
+                rec = {
                     "dead": _cda.is_dead(rows, str(d), mdat) is not None,
                     "last_probe": time.strftime("%Y-%m-%d %H:%M", time.localtime(last["t"])) if last else None,
                     "last_probe_ok": last["ok"] if last else None,
                     "last_probe_tag": last["tag"] if last else None,
                     "first_fail": time.strftime("%Y-%m-%d %H:%M", time.localtime(run["first"]["t"])) if run else None,
                 }
+                if uses_by_dir is not None:
+                    rec["uses"] = uses_by_dir.get(str(d), {k: 0 for k in _cda.USE_KINDS})
+                auth[d.name[len(".claude-"):]] = rec
             data["config_dir_auth"] = auth
         except Exception:
             pass  # fail-open (= beat 全体を落とさない)
@@ -650,6 +662,8 @@ def essence(d: dict):
             "config_dirs": d.get("config_dirs"),
             # 設定フォルダが切れた / 直った は即 commit (問い合わせの時刻は変化に数えない = 毎日の確認で commit を増やさない)
             "config_dir_dead": {k: v.get("dead") for k, v in (d.get("config_dir_auth") or {}).items()},
+            # 使い手の区分の本数 (job の追加・削除のときだけ変わる) も即 commit = reader が 🔴 から外すかの材料を早く届ける
+            "config_dir_uses": {k: v.get("uses") for k, v in (d.get("config_dir_auth") or {}).items()},
             "rcs": d.get("remote_control_at_startup"),
             "old_cli": d.get("old_usr_local_cli"),
             "cron_jobs": d.get("cron_jobs"),
@@ -1349,6 +1363,10 @@ def selftest():
         g = json.loads(json.dumps(e)); g["config_dir_auth"]["x"]["dead"] = True
         assert essence(e) == essence(f), "問い合わせの時刻だけでは commit しない"
         assert essence(e) != essence(g), "切れたら commit する"
+        u1 = json.loads(json.dumps(e)); u1["config_dir_auth"]["x"]["uses"] = {"rc": 0, "gated": 2, "other": 0}
+        u2 = json.loads(json.dumps(u1)); u2["config_dir_auth"]["x"]["uses"]["rc"] = 1
+        assert essence(e) != essence(u1), "使い手の数が初めて載る beat は即 commit"
+        assert essence(u1) != essence(u2), "使い手の区分が変わったら commit する"
         ok += 1
         # git repo での beat → commit → 2 回目は skip
         repo = Path(td) / "repo"

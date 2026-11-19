@@ -18,6 +18,12 @@ heartbeat は `claude` を呼ばない設計なので (監視が監視対象と�
     (= ログインし直していない、 更新も成功していない)。 問い合わせが無い・keychain が読めないなら判定しない
   - 続いている失敗 (failure_run) = 最後の問い合わせから遡って続く失敗の回数と、 その最初の行・その前に通った行。
     問い合わせは切れた瞬間を見ていない = 最初の失敗は「遅くともこの時刻には切れていた」 を言う
+  - 使い手 (dir_uses) = そのフォルダを CLAUDE_CONFIG_DIR に持つ launchd job (~/Library/LaunchAgents/*.plist) の区分ごとの
+    本数。 区分 (use_kind) = "rc" (起動行が `claude remote-control` = Remote Control のサーバー) / "gated" (起動行が本番
+    ホストの関門 routine-host-gate.py を通る定期実行) / "other" (それ以外)。 RC の判定を関門より先に見る
+  - 待機中の機械でだけ使われる (standby_only) = この機械が本番ホストでない ∧ 使い手が関門つきの定期実行だけ。 切れても
+    この機械で止まるものが無いので 🔴 から外し、 本番を切り替える手順 (台帳を書き換える道具) の側で確かめる。 使い手の数が
+    無い (旧 beat) か本番ホストかが分からない (台帳が読めない) なら外さない (= 今どおり出す)
 """
 from __future__ import annotations
 
@@ -31,6 +37,8 @@ from pathlib import Path
 KEYCHAIN_PREFIX = "Claude Code-credentials-"
 LEDGER = Path.home() / ".claude" / "state" / "desktop-logout-probe.log"
 _MDAT_RE = re.compile(r'"mdat"<timedate>=0x[0-9A-F]*\s+"(\d{14})Z')
+_RC_RE = re.compile(r'\bclaude"?\s+remote-control(?=[\s"\';]|$)')
+USE_KINDS = ("rc", "gated", "other")
 
 
 def keychain_service(config_dir: str) -> str:
@@ -96,6 +104,51 @@ def failure_run(rows: list[dict], config_dir: str) -> dict | None:
     return {"first": run[-1], "n": len(run), "last_ok": last_ok} if run else None
 
 
+def use_kind(plist: dict | None) -> str:
+    """launchd job 1 本が設定フォルダをどう使うか ("rc" / "gated" / "other"、 docstring の「使い手」)。"""
+    import launchd_job_log as jl  # 同じ lib/ (起動行の読み方と関門の判定は launchd_job_log が持つ)
+    if _RC_RE.search(jl._command(plist)):
+        return "rc"
+    return "gated" if jl.is_gated(plist) else "other"
+
+
+def _norm_dir(d: str, home: Path) -> str:
+    for h in ("${HOME}", "$HOME"):
+        if d.startswith(h):
+            d = str(home) + d[len(h):]
+    if d == "~" or d.startswith("~/"):
+        d = str(home) + d[1:]
+    return d.rstrip("/") if d.startswith("/") else ""
+
+
+def dir_uses(agents_dir: Path, home: Path | None = None) -> dict[str, dict[str, int]]:
+    """設定フォルダ (絶対 path) → {"rc": n, "gated": n, "other": n} (それを CLAUDE_CONFIG_DIR に持つ launchd job の本数)。
+    plist が読めない・CLAUDE_CONFIG_DIR が無い job は数えない。 dir が無い・読めないなら空。"""
+    import launchd_job_log as jl
+    home = home or Path.home()
+    out: dict[str, dict[str, int]] = {}
+    try:
+        plists = sorted(Path(agents_dir).glob("*.plist"))
+    except OSError:
+        return out
+    for p in plists:
+        pl = jl.load_plist(p)
+        d = _norm_dir(jl.config_dir_of(pl), home)
+        if not d:
+            continue
+        u = out.setdefault(d, {k: 0 for k in USE_KINDS})
+        u[use_kind(pl)] += 1
+    return out
+
+
+def standby_only(uses: dict | None, active: bool | None) -> bool:
+    """本番でない機械で、 関門つきの定期実行だけが使う設定フォルダか (docstring の「待機中の機械でだけ使われる」)。
+    active = この機械が本番ホストか (分からなければ None)。 分からない・数が無いなら False (= 今どおり出す)。"""
+    if active is not False or not isinstance(uses, dict):
+        return False
+    return uses.get("gated", 0) > 0 and not uses.get("rc", 0) and not uses.get("other", 0)
+
+
 def selftest() -> int:
     fails = 0
 
@@ -130,6 +183,35 @@ def selftest() -> int:
     ck("keychain 項目名 = sha256(path) の先頭 8 桁",
        keychain_service(d) == KEYCHAIN_PREFIX + hashlib.sha256(d.encode()).hexdigest()[:8])
     ck("mdat の属性を UTC として読む", _MDAT_RE.search('"mdat"<timedate>=0x32303236  "20260923034324Z\\000"') is not None)
+    # 使い手の区分と、 待機中の機械でだけ使われるフォルダ
+    import plistlib
+    rc_pl = {"ProgramArguments": ["/bin/sh", "-c", 'export CLAUDE_CONFIG_DIR="/h/.claude-a"; exec claude remote-control --name x']}
+    gated_pl = {"ProgramArguments": ["/bin/sh", "-c", 'export CLAUDE_CONFIG_DIR="$HOME/.claude-b"; '
+                                     'python3 "$HOME/Claude/claude-config/scripts/routine-host-gate.py" r l && exec claude -p x']}
+    other_pl = {"ProgramArguments": ["/bin/sh", "-c", 'export CLAUDE_CONFIG_DIR="/h/.claude-b"; exec claude -p y']}
+    ck("区分 = RC のサーバー / 関門つき / それ以外",
+       (use_kind(rc_pl), use_kind(gated_pl), use_kind(other_pl)) == ("rc", "gated", "other"))
+    ck("`remote-control` を語の中に含むだけの起動行は RC にしない",
+       use_kind({"ProgramArguments": ["/bin/sh", "-c", "exec claude remote-controlled -p x"]}) == "other")
+    with tempfile.TemporaryDirectory() as td2:
+        la = Path(td2)
+        for name, pl in (("r", rc_pl), ("g", gated_pl), ("g2", gated_pl), ("o", other_pl),
+                         ("none", {"ProgramArguments": ["/bin/sh", "-c", "exec true"]})):
+            with open(la / f"{name}.plist", "wb") as fh:
+                plistlib.dump(pl, fh)
+        (la / "broken.plist").write_text("not a plist", encoding="utf-8")
+        got = dir_uses(la, home=Path("/h"))
+        ck("フォルダごとの使い手の数 ($HOME を展開、 CLAUDE_CONFIG_DIR の無い job と壊れた plist は数えない)",
+           got == {"/h/.claude-a": {"rc": 1, "gated": 0, "other": 0}, "/h/.claude-b": {"rc": 0, "gated": 2, "other": 1}})
+        ck("読めない dir は空", dir_uses(la / "missing", home=Path("/h")) == {})
+    g_only = {"rc": 0, "gated": 3, "other": 0}
+    ck("本番でない機械 ∧ 関門つきだけ = 待機中だけ", standby_only(g_only, active=False))
+    ck("本番ホストなら外さない", not standby_only(g_only, active=True))
+    ck("本番ホストか分からない (台帳が読めない) なら外さない", not standby_only(g_only, active=None))
+    ck("RC のサーバーも使うなら外さない", not standby_only({"rc": 1, "gated": 3, "other": 0}, active=False))
+    ck("関門なしの job も使うなら外さない", not standby_only({"rc": 0, "gated": 3, "other": 1}, active=False))
+    ck("使い手の数が無い (旧 beat) ・使い手が居ないなら外さない",
+       not standby_only(None, active=False) and not standby_only({"rc": 0, "gated": 0, "other": 0}, active=False))
     print(f"config_dir_auth selftest: {fails} failure(s)")
     return 1 if fails else 0
 

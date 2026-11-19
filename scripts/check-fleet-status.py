@@ -23,6 +23,13 @@ server 異常 (どの役割でも beat が新鮮なら報告):
   最後の問い合わせが失敗し、 その後ログインし直していない pinned の設定フォルダ = 🔴 (他のマシンの分だけ。 自分の分は
   check-desktop-logout-auth.py が出す)。 server の Connected は OAuth の更新が生きている証拠にならないので、 こちらで見る。
   ⚠️ config_dirs の `default` は desktop app を最後に起動した時の account = ログインの記録ではない (writer の docstring)。
+  本番ホスト (--routine-ledger の host) でない機械で、 関門つきの定期実行だけが使うフォルダ (beat の uses、 判定 =
+  lib/config_dir_auth.py の standby_only) は出さない = その機械では切れても止まるものが無い。 本番を切り替える手順が
+  `--switch-check <host>` で確かめる。 台帳が読めない・uses の無い旧 beat は今どおり出す。 RC のサーバーや関門なしの job も
+  使うフォルダ、 本番ホストのフォルダは今どおり出す。
+  `--switch-check <host>`: その機械の beat から、 関門つきの定期実行が使うフォルダの状態を 1 行ずつ出す (🔴 切れた /
+  ✅ 最後の問い合わせが通った / ⚪ 問い合わせの記録が無い。 待機中かを問わない)。 🔴 が 1 つでもあれば exit 1、 beat が
+  無い・読めないなら exit 2。 本番を切り替える道具 (個人層の台帳の道具) が書き込みの前に呼ぶ。
 
 inventory parity (writer 側 --inventory の対、 追加設定不要):
   writer が記録した `inventories: {label: [name...]}` を全マシン分で突合し、 **他マシンには
@@ -75,6 +82,7 @@ clone の同期 (writer の --repos-root の repos.stopped / repos.sync、 追�
 usage:
   check-fleet-status.py --dir <fleet-status-dir> [--role HOST=always-on ...]
       [--stale-hours 6] [--expect-account <acct> ...] [--routine-ledger <active-routine-host.json>]
+  check-fleet-status.py --dir <fleet-status-dir> --switch-check <host>   # 本番にする前の設定フォルダの確認
   check-fleet-status.py --selftest
 
 ⚠️ 読むのは git working tree = 「最後に pull した時点の他マシン状態」。 呼び出し側の
@@ -96,6 +104,10 @@ try:
     import launchd_job_log as _jl
 except Exception:
     _jl = None
+try:
+    from config_dir_auth import standby_only as _standby_only   # 書き手・check-desktop-logout-auth と同じ判定
+except Exception:
+    _standby_only = None   # 部品が無ければ外さない (= 今どおり出す)
 _HIDDEN_FAIL_H = _HFD * 24
 _CAUSE = {"auth": "Claude の認証切れ", "ptl": "Prompt is too long (context 超過)"}
 
@@ -279,21 +291,81 @@ def rc_findings(host, d):
     return out
 
 
-def auth_findings(host, d, self_host=None):
+def _auth_since(a):
+    return (f"{a['first_fail']} の問い合わせから失敗が続き" if a.get("first_fail")
+            else f"{a.get('last_probe') or '?'} の問い合わせ〔{a.get('last_probe_tag') or '?'}〕が失敗し")
+
+
+def auth_findings(host, d, self_host=None, routine=None):
     """1 マシンの beat の config_dir_auth から finding を作る (writer の判定 = lib/config_dir_auth.py、 問い合わせは
     check-desktop-logout-auth.py の見張り)。 🔴 = 最後の問い合わせが失敗し、 その後ログインし直していない設定フォルダ。
     自分のマシンの分は check-desktop-logout-auth.py が同じ判定で出すので出さない。 旧 beat (欄なし) は黙る。
-    時刻は失敗が続いた最初の問い合わせ (first_fail)。 この欄の無い beat は最後の問い合わせで出す。"""
+    時刻は失敗が続いた最初の問い合わせ (first_fail)。 この欄の無い beat は最後の問い合わせで出す。
+    routine (台帳) の host でない機械の、 関門つきの定期実行だけが使うフォルダ (uses、 standby_only) は出さない
+    (= 切り替える前に switch_check で確かめる)。 台帳が無い・読めない (routine=None) なら外さない。"""
     if host == self_host:
         return []
+    active = _same_host(host, routine.get("host")) if routine else None
     out = []
     for alias, a in sorted((d.get("config_dir_auth") or {}).items()):
         if isinstance(a, dict) and a.get("dead"):
-            since = (f"{a['first_fail']} の問い合わせから失敗が続き" if a.get("first_fail")
-                     else f"{a.get('last_probe') or '?'} の問い合わせ〔{a.get('last_probe_tag') or '?'}〕が失敗し")
-            out.append(f"🔴 {host}: 設定フォルダ ~/.claude-{alias} が切れた ({since}、 その後ログインし直していない) = そのマシンの terminal で"
+            if _standby_only is not None and _standby_only(a.get("uses"), active):
+                continue
+            out.append(f"🔴 {host}: 設定フォルダ ~/.claude-{alias} が切れた ({_auth_since(a)}、 その後ログインし直していない) = そのマシンの terminal で"
                        f" `CLAUDE_CONFIG_DIR=~/.claude-{alias} claude auth login` (scheduled-tasks.md#headless-auth-expiry)")
     return out
+
+
+def switch_check(dir_, host, now=None):
+    """本番を host に切り替える前の確認 (docstring の `--switch-check`)。 (行の list, exit code) を返す。
+    beat の config_dir_auth のうち、 関門つきの定期実行が使う (uses.gated > 0、 uses の無い旧 beat は全部) フォルダごとに
+    1 行。 待機中かは問わない (= 切り替えた後に、 止まるかどうかを言う)。"""
+    now = now or time.time()
+    d = None
+    for f in sorted(Path(dir_).glob("*.json")):
+        try:
+            x = json.load(open(f))
+        except Exception:
+            continue
+        if _same_host(x.get("host", f.stem), host):
+            d = x
+            break
+    if d is None:
+        return ([f"ℹ️ {host}: fleet の beat が無い = 設定フォルダの状態は分からない (そのマシンで"
+                 f" `python3 check-desktop-logout-auth.py --switch-check`)"], 2)
+    host = d.get("host") or host   # 表示は beat の機械名 (引数の `.local` の有無に依らない)
+    epoch = d.get("epoch")
+    when = (f"beat {time.strftime('%-m/%-d %H:%M', time.localtime(epoch))} 時点、 {(now - epoch) / 3600:.1f}h 前"
+            if isinstance(epoch, (int, float)) else "beat の時刻なし")
+    auth = d.get("config_dir_auth")
+    if not isinstance(auth, dict):
+        return ([f"ℹ️ {host}: beat に設定フォルダの判定が無い ({when}) = そのマシンで"
+                 f" `python3 check-desktop-logout-auth.py --switch-check`"], 2)
+    lines, bad = [], False
+    for alias, a in sorted(auth.items()):
+        if not isinstance(a, dict):
+            continue
+        uses = a.get("uses")
+        if isinstance(uses, dict) and not uses.get("gated", 0):
+            continue   # 関門つきの定期実行が使わない = 切り替えで変わらない (RC 等は普段の 🔴 が出す)
+        who = (f"関門つきの定期実行 {uses['gated']} 本が使う" if isinstance(uses, dict)
+               else "使い手の数が無い旧 beat")
+        p = f"~/.claude-{alias} ({who})"
+        if a.get("dead"):
+            bad = True
+            lines.append(f"🔴 {host}: 本番にすると止まる = {p} が切れた ({_auth_since(a)}、 その後ログインし直していない)。"
+                         f" そのマシンの terminal で `CLAUDE_CONFIG_DIR=~/.claude-{alias} claude auth login`")
+        elif a.get("last_probe") is None:
+            lines.append(f"⚪ {host}: {p} は問い合わせの記録が無い = 通るかは分からない (そのマシンで"
+                         f" `python3 check-desktop-logout-auth.py --probe ~/.claude-{alias}`)")
+        elif a.get("last_probe_ok"):
+            lines.append(f"✅ {host}: {p} は最後の問い合わせ {a['last_probe']}〔{a.get('last_probe_tag') or '?'}〕が通った")
+        else:
+            lines.append(f"⚪ {host}: {p} は最後の問い合わせ {a['last_probe']} が失敗したが、 その後に認証が更新された"
+                         f" (ログインし直した見込み。 通るかは次の問い合わせで分かる)")
+    if not lines:
+        lines.append(f"ℹ️ {host}: 関門つきの定期実行が使う設定フォルダが beat に無い")
+    return ([f"{host} の設定フォルダ ({when}):"] + lines, 1 if bad else 0)
 
 
 SYNC_UNPUSHED_H = 3    # 手元にだけ在る commit がこれより古ければ出す (session の途中で push 前の数分は出さない)
@@ -432,7 +504,7 @@ def scan(dir_, roles, stale_hours, now=None, expect_accounts=None, warn_desktop_
         findings.extend(rc_findings(host, d))
         findings.extend(job_findings(host, d, self_host))
         findings.extend(missed_run_findings(host, d, role, routine, plist_dir))
-        findings.extend(auth_findings(host, d, self_host))
+        findings.extend(auth_findings(host, d, self_host, routine))
         findings.extend(sync_findings(host, d, now, age_h))
         findings.extend(gc_findings(host, d, now, age_h))
         if role == "always-on" and not d.get("servers"):
@@ -662,6 +734,48 @@ def selftest():
         ff = auth_findings("host-a", beat_f, self_host="host-b")
         assert len(ff) == 1 and "2000-01-02 03:04 の問い合わせから失敗が続き" in ff[0] and "2000-01-09" not in ff[0], ff
         ok += 1
+        # 19b: 本番でない機械の、 関門つきの定期実行だけが使うフォルダは出さない。 本番ホスト・RC・関門なし・台帳不明・旧 beat は今どおり
+        dead = lambda uses=None: dict({"dead": True, "last_probe": "2000-01-02 03:04", "last_probe_tag": "stale-check"},
+                                      **({"uses": uses} if uses is not None else {}))
+        beat_s = {"config_dir_auth": {"cron": dead({"rc": 0, "gated": 19, "other": 0}),
+                                      "rc": dead({"rc": 1, "gated": 0, "other": 0}),
+                                      "mix": dead({"rc": 0, "gated": 2, "other": 1}),
+                                      "old": dead()}}
+        prod = {"host": "mini.local", "since": None}
+        alias_of = lambda fs: sorted(x.split("~/.claude-")[1].split(" ")[0] for x in fs)
+        assert alias_of(auth_findings("book", beat_s, self_host="mini", routine=prod)) == ["mix", "old", "rc"], \
+            "本番でない機械の関門つきだけのフォルダ (cron) だけを外す"
+        assert alias_of(auth_findings("mini", beat_s, self_host="book", routine=prod)) == ["cron", "mix", "old", "rc"], \
+            "本番ホストの分は今どおり全部出す"
+        assert alias_of(auth_findings("book", beat_s, self_host="mini", routine=None)) == ["cron", "mix", "old", "rc"], \
+            "台帳が読めないなら外さない"
+        # scan も台帳を渡す (= session 開始の一覧と dashboard の入口)
+        with tempfile.TemporaryDirectory() as tds:
+            ds = Path(tds)
+            (ds / "book.json").write_text(json.dumps(dict(beat_s, host="book", epoch=time.time(), servers=[])))
+            got = [x for x in scan(ds, {}, 6, self_host="mini", routine=prod) if "設定フォルダ" in x]
+            assert alias_of(got) == ["mix", "old", "rc"], got
+            # 本番を切り替える前の確認 = 待機中を問わず、 関門つきの定期実行が使うフォルダだけを 1 行ずつ
+            ok_dir = {"dead": False, "last_probe": "2000-01-03 04:05", "last_probe_ok": True, "last_probe_tag": "verdict",
+                      "uses": {"rc": 0, "gated": 1, "other": 0}}
+            unprobed = {"dead": False, "last_probe": None, "uses": {"rc": 0, "gated": 1, "other": 0}}
+            relogged = {"dead": False, "last_probe": "2000-01-04 00:00", "last_probe_ok": False,
+                        "uses": {"rc": 0, "gated": 1, "other": 0}}
+            (ds / "pc.json").write_text(json.dumps({"host": "pc", "epoch": time.time(), "config_dir_auth": {
+                "a": ok_dir, "b": unprobed, "c": relogged, "r": dead({"rc": 1, "gated": 0, "other": 0})}}))
+            sl, sc = switch_check(ds, "book.local")
+            assert sc == 1 and sl[0].startswith("book の設定フォルダ (beat ") and alias_of(sl[1:]) == ["cron", "mix", "old"] \
+                and all(x.startswith("🔴 book: 本番にすると止まる") for x in sl[1:]) \
+                and "CLAUDE_CONFIG_DIR=~/.claude-cron claude auth login" in sl[1] and "使い手の数が無い旧 beat" in sl[3], sl
+            pl, pc = switch_check(ds, "pc")
+            assert pc == 0 and [x[:1] for x in pl[1:]] == ["✅", "⚪", "⚪"] and "--probe ~/.claude-b" in pl[2] \
+                and not any("~/.claude-r" in x for x in pl), "RC だけのフォルダは切り替えで変わらないので出さない"
+            ml, mc = switch_check(ds, "nowhere")
+            assert mc == 2 and ml[0].startswith("ℹ️ nowhere: fleet の beat が無い"), ml
+            (ds / "bare.json").write_text(json.dumps({"host": "bare", "epoch": time.time()}))
+            bl, bc = switch_check(ds, "bare")
+            assert bc == 2 and "設定フォルダの判定が無い" in bl[0], bl
+        ok += 1
         # 20: 予定の run が log に残っていない (本番ホストの関門つき claude -p だけ / 1 本 🟠・2 本以上 🔴 / since より前は見ない)
         import datetime as _dt
         T = lambda *a: _dt.datetime(*a).timestamp()
@@ -771,7 +885,7 @@ def selftest():
             "掃除が済み設定も届いた machine は黙る"
         assert gc_findings("mini", {"host": "mini"}, now) == [], "旧 beat (gc・git_gc 欄なし、 macOS 以外) は黙る"
         ok += 1
-    print(f"selftest: {ok}/22 PASS")
+    print(f"selftest: {ok}/23 PASS")
 
 
 def main():
@@ -784,11 +898,21 @@ def main():
                     help="enabled な desktop scheduled task を 🔴 surface (= 無人ジョブ launchd-only 方針のマシン向け opt-in)")
     ap.add_argument("--routine-ledger",
                     help="routine-host-gate.py の台帳 (= 本番ホスト。 予定の run が log に残っているかを見る、 docstring)")
+    ap.add_argument("--switch-check", metavar="HOST",
+                    help="本番を HOST に切り替える前に、 その beat の関門つきの定期実行が使う設定フォルダを出す (docstring)")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
         selftest()
         return
+    if args.switch_check:
+        dir_ = Path(args.dir).expanduser() if args.dir else None
+        if dir_ is None or not dir_.is_dir():
+            print(f"ℹ️ {args.switch_check}: fleet の beat の dir が無い (--dir)")
+            sys.exit(2)
+        lines, code = switch_check(dir_, args.switch_check)
+        print("\n".join(lines))
+        sys.exit(code)
     if not args.dir:
         sys.exit(0)
     roles = {}

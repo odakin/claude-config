@@ -15,6 +15,7 @@ X として無人の `claude -p` / Remote Control が使う設定フォルダ (`
   check-desktop-logout-auth.py --verbose           # 確かめ中のものも出す
   check-desktop-logout-auth.py --schedule-probes   # 表示 + 未予約のログアウトに問い合わせを予約 + 長く更新の無いフォルダを今確かめる
   check-desktop-logout-auth.py --probe DIR [--tag T]   # DIR に最小の claude -p を 1 回、 結果を ledger に追記
+  check-desktop-logout-auth.py --switch-check      # この機械を本番にする前に、 関門つきの定期実行が使うフォルダの状態を出す
   check-desktop-logout-auth.py --ensure-watch      # 見張りが無い・違う時だけ置く (config-bootstrap が毎 session 呼ぶ、 冪等)
   check-desktop-logout-auth.py --install-watch / --uninstall-watch   # 15 分ごとの --schedule-probes を launchd に
   check-desktop-logout-auth.py --selftest
@@ -41,6 +42,12 @@ X として無人の `claude -p` / Remote Control が使う設定フォルダ (`
   - job の本数 = plist の本数と、 うちこの機械で止まる本数を分けて出す。 止まる = 起動行が本番ホストの関門
     (routine-host-gate.py) を通り、 台帳の host がこの機械でない。 関門の本体は git fetch をするので呼ばず、 台帳の
     手元の写しを読む。 読めなければ止まると言わない (関門の fail-open と同じ)
+  - 待機中だけ = 使う job が全部この機械で止まる関門つきの定期実行 (RC のサーバーも関門なしの job も使わない) フォルダ
+    (判定 = scripts/lib/config_dir_auth.py の standby_only、 他の機械の分は fleet の reader が同じ判定で外す)。 切れても
+    🔴 にせず (止まるものが無い)、 --verbose でだけ ⚪ で出す。 問い合わせが失敗しても通知を出さない。 本番を切り替える
+    手順が --switch-check (この機械) / check-fleet-status.py --switch-check (他の機械) で確かめる
+  - --switch-check = 関門つきの定期実行が使うフォルダごとに 1 行 (🔴 切れた / ✅ 最後の問い合わせが通った / ⚪ 記録が無い・
+    失敗の後に認証が更新された)。 待機中かを問わない。 🔴 が 1 つでもあれば exit 1
   - 毎日の確認 (stale-check) = keychain が STALE_H 時間以上更新されず、 その間に問い合わせもしていないフォルダを、
     見張りが今確かめる (= ログアウトと無関係に切れた場合も 1 日以内に分かる。 RC しか使わないフォルダはここでしか確かめない)
   - 確かめ中で失敗の無いものは既定では出さない (--verbose で「確かめ中」 と出す)
@@ -226,16 +233,40 @@ def _who(d: str, labels: list[str], standby: set[str]) -> str:
     return f"{d} ({len(labels)} 本の launchd job が使う{note})"
 
 
+def standby_only_dirs(dirs: dict[str, list[str]], standby: set[str], uses: dict[str, dict]) -> set[str]:
+    """待機中だけのフォルダ (docstring の「待機中だけ」)。 uses = config_dir_auth.dir_uses の結果。
+    この機械が本番でない (= active False) と言えるのは、 そのフォルダの関門つきの job が全部 standby にあるときだけ。"""
+    out = set()
+    for d, labels in dirs.items():
+        u = uses.get(d.rstrip("/"))
+        n = sum(1 for x in labels if x in standby)
+        active = False if (u and n and n == u.get("gated", 0)) else None
+        if cda.standby_only(u, active):
+            out.add(d)
+    return out
+
+
+def _since(x: dict) -> str:
+    since = (f"{_hm(x['first'])} の問い合わせから {x['n']} 回続けて失敗、 最後 = {_hm(x['t'])}〔{x['tag']}〕" if x["n"] > 1
+             else f"{_hm(x['t'])} の問い合わせ〔{x['tag']}〕が失敗")
+    return since + (f"、 その前に通ったのは {_hm(x['last_ok'])}" if x["last_ok"] else "")
+
+
 def render(items: list[dict], script: str, verbose: bool = False, dead: list[dict] | None = None,
-           standby: set[str] | None = None) -> list[str]:
-    """🔴 = 切れたフォルダ (dead_dirs、 きっかけを問わない)。 ⚪ = ログアウト後に確かめ中 (--verbose のときだけ)。"""
+           standby: set[str] | None = None, standby_dirs: set[str] | None = None) -> list[str]:
+    """🔴 = 切れたフォルダ (dead_dirs、 きっかけを問わない。 待機中だけのフォルダ = standby_dirs は除く)。
+    ⚪ = ログアウト後に確かめ中 / 切れた待機中だけのフォルダ (どちらも --verbose のときだけ)。"""
     lines = []
     standby = standby or set()
+    standby_dirs = standby_dirs or set()
     for x in dead or []:
-        since = (f"{_hm(x['first'])} の問い合わせから {x['n']} 回続けて失敗、 最後 = {_hm(x['t'])}〔{x['tag']}〕" if x["n"] > 1
-                 else f"{_hm(x['t'])} の問い合わせ〔{x['tag']}〕が失敗")
-        prev = f"、 その前に通ったのは {_hm(x['last_ok'])}" if x["last_ok"] else ""
-        lines.append(f"🔴 {_who(x['dir'], x['labels'], standby)} は切れた ({since}{prev}、 その後ログインし直していない)。"
+        if x["dir"] in standby_dirs:
+            if verbose:
+                lines.append(f"⚪ 待機中だけ: {_who(x['dir'], x['labels'], standby)} は切れた ({_since(x)}) が、 使う job は全部"
+                             f"この機械で止まる = 止まるものは無い。 この機械を本番にする前に CLAUDE_CONFIG_DIR={x['dir']}"
+                             f" claude auth login (切り替えの道具が --switch-check で確かめる)")
+            continue
+        lines.append(f"🔴 {_who(x['dir'], x['labels'], standby)} は切れた ({_since(x)}、 その後ログインし直していない)。"
                      f" 直す = そのマシンで CLAUDE_CONFIG_DIR={x['dir']} claude auth login")
     dead_set = {x["dir"] for x in dead or []}
     for it in items:
@@ -247,6 +278,43 @@ def render(items: list[dict], script: str, verbose: bool = False, dead: list[dic
             lines.append(f"⚪ 確かめ中: desktop で {it['email']} を {_hm(it['logout'])} にログアウトした後、 {who} {how}。"
                          f" 今すぐ確かめる = python3 {script} --probe {it['dir']}")
     return lines
+
+
+def _is_standby_only(config_dir: str, agents_dir: Path | None = None) -> bool:
+    """待機中だけのフォルダか (問い合わせが失敗しても通知を出さない判定)。 読めなければ False (= 今どおり通知する)。"""
+    agents_dir = agents_dir or LAUNCH_AGENTS
+    try:
+        dirs = watched_dirs(agents_dir)
+        return config_dir in standby_only_dirs(dirs, standby_labels(agents_dir), cda.dir_uses(agents_dir))
+    except Exception:
+        return False
+
+
+def switch_check_lines(dirs: dict[str, list[str]], mdat_of, rows: list[dict], uses: dict[str, dict], script: str,
+                       host: str = "") -> tuple[list[str], int]:
+    """この機械を本番にする前の確認 (docstring の --switch-check)。 (行, exit code)。 待機中かを問わない。"""
+    dead = {x["dir"]: x for x in dead_dirs(dirs, mdat_of, rows)}
+    lines, bad = [], False
+    for d in sorted(dirs):
+        u = uses.get(d.rstrip("/"))
+        if not u or not u.get("gated"):
+            continue   # 関門つきの定期実行が使わない = 切り替えで変わらない (RC 等は普段の 🔴 が出す)
+        who = f"{d} (関門つきの定期実行 {u['gated']} 本が使う)"
+        last = cda.last_probe(rows, d)
+        if d in dead:
+            bad = True
+            lines.append(f"🔴 本番にすると止まる = {who} が切れた ({_since(dead[d])}、 その後ログインし直していない)。"
+                         f" 直す = CLAUDE_CONFIG_DIR={d} claude auth login")
+        elif last is None:
+            lines.append(f"⚪ {who} は問い合わせの記録が無い = 通るかは分からない (確かめる = python3 {script} --probe {d})")
+        elif last["ok"]:
+            lines.append(f"✅ {who} は最後の問い合わせ {_hm(last['t'])}〔{last['tag']}〕が通った")
+        else:
+            lines.append(f"⚪ {who} は最後の問い合わせ {_hm(last['t'])} が失敗したが、 その後に認証が更新された"
+                         f" (ログインし直した見込み。 確かめる = python3 {script} --probe {d})")
+    if not lines:
+        lines.append("ℹ️ 関門つきの定期実行が使う設定フォルダが無い (この機械の LaunchAgents)")
+    return [f"この機械{f' ({host})' if host else ''} の設定フォルダ:"] + lines, (1 if bad else 0)
 
 
 # ── 問い合わせ ─────────────────────────────────────────────
@@ -293,7 +361,7 @@ def probe(config_dir: str, tag: str, claude: str | None = None, ledger: Path = L
     with ledger.open("a", encoding="utf-8") as fh:
         fh.write("\t".join([time.strftime("%Y-%m-%d %H:%M:%S"), tag, config_dir, status,
                             f"keychain {fmt(before)} -> {fmt(after)}", " ".join(raw.split())[:160]]) + "\n")
-    if not ok and not unknown:
+    if not ok and not unknown and not _is_standby_only(config_dir):   # 待機中だけのフォルダは通知しない (docstring)
         notify = Path(__file__).resolve().parent / "claude-notify.sh"
         if notify.exists():
             subprocess.run(["sh", str(notify), "--title", f"認証切れ: {Path(config_dir).name}",
@@ -482,6 +550,41 @@ def selftest() -> int:
            and standby_labels(gate_dir, me={"other"}) == set())
         ck("関門の無い job と台帳を読めない job は止まると言わない", "free" not in standby_labels(gate_dir, me={"me"}) and "g.gone" not in standby_labels(gate_dir, me={"me"}))
         ck("この機械の名前は関門の関数で取れる", bool(_my_hostnames()))
+        # 待機中だけのフォルダ: 使う job が全部この機械で止まる関門つきなら 🔴 にせず、 切り替えの確認でだけ 🔴
+        ag2 = td / "agents2"; ag2.mkdir()
+        mixd = td / ".claude-mix"; mixd.mkdir()
+        gate_cmd = lambda d: (f'export CLAUDE_CONFIG_DIR="{d}"; cd x && {{ python3 "$HOME/c/routine-host-gate.py" "{td}"'  # noqa: E731
+                              f' {led_host.name}; _g=$?; }} && exec claude -p x')
+        for name, cmd in (("s.cron1", gate_cmd(cron)), ("s.cron2", gate_cmd(cron)), ("s.mix", gate_cmd(mixd)),
+                          ("s.mixfree", f'export CLAUDE_CONFIG_DIR="{mixd}"; exec claude -p y'),
+                          ("s.rc", f'export CLAUDE_CONFIG_DIR="{other}"; exec claude remote-control --name x')):
+            with (ag2 / f"{name}.plist").open("wb") as fh:
+                plistlib.dump({"Label": name, "ProgramArguments": ["/bin/sh", "-c", cmd]}, fh)
+        dirs2, uses2 = watched_dirs(ag2), cda.dir_uses(ag2)
+        sb_me, sb_prod = standby_labels(ag2, me={"me"}), standby_labels(ag2, me={"other"})
+        ck("待機中だけ = 関門つきの job が全部この機械で止まるフォルダ (RC・関門なしも使うフォルダは外す)",
+           standby_only_dirs(dirs2, sb_me, uses2) == {str(cron)})
+        ck("この機械が本番ホストなら待機中だけのフォルダは無い", standby_only_dirs(dirs2, sb_prod, uses2) == set())
+        rows2 = [{"t": t_out + 7200, "tag": "stale-check", "dir": d, "ok": False} for d in (str(cron), str(other), str(mixd))]
+        dd2 = dead_dirs(dirs2, lambda d: before, rows2)
+        r_sb = render([], "x", dead=dd2, standby=sb_me, standby_dirs=standby_only_dirs(dirs2, sb_me, uses2))
+        ck("待機中だけのフォルダは切れても 🔴 にしない (RC と関門なしの job が使うフォルダは 🔴 のまま)",
+           len(r_sb) == 2 and all(x.startswith("🔴") for x in r_sb) and not any(f"{cron} (" in x for x in r_sb))
+        r_sbv = render([], "x", verbose=True, dead=dd2, standby=sb_me, standby_dirs=standby_only_dirs(dirs2, sb_me, uses2))
+        ck("--verbose では待機中だけのフォルダを ⚪ で、 本番にする前の login の command つきで出す",
+           any(x.startswith("⚪ 待機中だけ:") and f"CLAUDE_CONFIG_DIR={cron} claude auth login" in x for x in r_sbv))
+        r_prod = render([], "x", dead=dd2, standby=sb_prod, standby_dirs=standby_only_dirs(dirs2, sb_prod, uses2))
+        ck("本番ホストの機械では今どおり 3 つとも 🔴", len(r_prod) == 3 and all(x.startswith("🔴") for x in r_prod))
+        sw, sw_code = switch_check_lines(dirs2, lambda d: before, rows2, uses2, "x", host="me")
+        ck("切り替えの確認 = 関門つきの定期実行が使うフォルダだけ、 待機中を問わず切れたら 🔴 (RC だけのフォルダは出さない)",
+           sw_code == 1 and sw[0] == "この機械 (me) の設定フォルダ:" and len(sw) == 3
+           and all(x.startswith("🔴 本番にすると止まる") for x in sw[1:]) and not any(str(other) in x for x in sw))
+        sw_ok, ok_code = switch_check_lines(dirs2, lambda d: before, [{"t": t_out, "tag": "verdict", "dir": str(cron), "ok": True}],
+                                            uses2, "x")
+        ck("通ったフォルダは ✅、 記録の無いフォルダは ⚪ と問い合わせの command (exit 0)",
+           ok_code == 0 and [x[:1] for x in sw_ok[1:]] == ["✅", "⚪"] and "--probe" in sw_ok[2])
+        ck("通知を出さない判定 = 待機中だけのフォルダ (この機械の名前で台帳を読む)",
+           _is_standby_only(str(cron), ag2) == ("other" not in _my_hostnames()) and not _is_standby_only(str(other), ag2))
         ck("失敗の後にログインし直せば 🔴 は消える", dead_dirs(dirs, lambda d: t_out + 9000, fail_row) == [])
         # きっかけの無い切れ: ログアウトが無くても、 長く更新されていないフォルダを確かめて失敗したら 🔴
         now = t_out + 3 * 86400
@@ -558,8 +661,16 @@ def main(argv: list[str]) -> int:
         for d in plan_stale(dirs, mdat_of, rows, time.time()):
             probe(d, "stale-check")
         rows = read_ledger(LEDGER)
+    standby = standby_labels(LAUNCH_AGENTS)
+    uses = cda.dir_uses(LAUNCH_AGENTS)
+    if "--switch-check" in argv:
+        lines, code = switch_check_lines(dirs, mdat_of, rows, uses, str(Path(__file__).resolve()),
+                                         host=os.uname().nodename.split(".")[0])
+        print("\n".join(lines))
+        return code
     for line in render(items, str(Path(__file__).resolve()), verbose="--verbose" in argv,
-                       dead=dead_dirs(dirs, mdat_of, rows), standby=standby_labels(LAUNCH_AGENTS)):
+                       dead=dead_dirs(dirs, mdat_of, rows), standby=standby,
+                       standby_dirs=standby_only_dirs(dirs, standby, uses)):
         print(line)
     return 0
 
