@@ -96,6 +96,12 @@ GitHub の上限 (公式 docs: [About large files on GitHub](https://docs.github
   `ControlMaster auto` / `ControlPath ~/.ssh/cm-%r@%h-%p` / `ControlPersist 10m` を足すと、 2 回目から既存の接続を使い回して
   1 秒未満になる (実測)。 `~/.ssh/config` は機械ごとなので、 手で直さず、 setup か session 開始の自動適用に「効いていなければ足す」 段を置く
   (効いているかは `ssh -G <host>` の `controlmaster` の行で見る)。
+- <a id="stalled-control-master"></a>⚠️ **使い回す接続 (ControlMaster) が止まると、 それに載る fetch・push・ls-remote が全部ぶら下がる** (実測: 道具の git の時間切れが続き、 時間切れで親が終わった後も ssh の子が残った)。
+  `ssh -O check <host>` は止まっていても「Master running」 と答えるので、 生きているかの判定に使わない。
+  切り分け = 使い回しを外した直の接続で同じ操作を回す (`GIT_SSH_COMMAND='ssh -o ControlMaster=no -o ControlPath=none' git ls-remote origin <branch>`)。
+  こちらが数秒で通れば、 止まっているのは使い回す接続の側 (接続そのものが止まったのか、 1 本の接続に載せた通信の数が上限に当たったのかは切り分けていない)。
+  自分の操作だけを先に通すなら、 同じ環境変数を付けて回す (使い回す接続には触らない)。
+  直すなら `ssh -O exit <host>` で閉じる = 次の接続で作り直される。 載っていた通信は失敗するので、 同じ機械で動いている他の作業は再送になる。
 - **git-crypt の repo を一時 dir に clone して `git-crypt unlock` する道具は、 file 数に比例して遅くなる** — unlock は tracked file
   1 本ごとに filter の process を起こす (実測: 1 本 数十 ms、 千件で数十秒)。 毎回読む道具は clone をやめ、 手元の checkout に `fetch`
   して、 要る blob だけ `git cat-file --filters <rev>:<path>` で復号し、 blob id で cache する (暗号文は中身で決まる id なので cache は古くならない)。
