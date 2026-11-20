@@ -3918,6 +3918,24 @@ UTF-8 フラグ付き zip (最近の Windows / macOS 生成) は decode が例�
 - 頁を引く前に、 その頁の footer の数字を確かめる: `page.get_text("words")` のうち y が頁の下端 1 割に入る語 (= 頁番号)。 冊子の番号で書き、 記録には「冊子 pN (= PDF の M 枚目)」 と両方残す
 - 相手 (事務) が頁を引いてきたら、 それは冊子の番号として読む
 
+## <a id="pdf-preview-font-compatibility"></a>PDFの日本語だけがプレビューで消えるとき
+
+同じPDFがローカルの描画画像では読めるのに、別のビューアでは日本語だけ消えることがある。まず問題の表示面・同じページ・同じファイルかを照合し、組版の問題とフォント描画の互換性を切り分ける。題目や本文の言い換え、文字サイズの変更で対処しない。
+
+1. 元PDFを画像に描画して日本語の字形を目視し、問題のビューアの表示と比べる。
+2. `pdffonts source.pdf` で埋め込み・種類・encoding・ToUnicodeの有無を読む。埋め込み済みだけで全ビューアの描画成功と判定しない。ToUnicodeの有無だけで欠落の原因も断定しない。
+3. 元PDFの描画が正常なら、文字を図形へ変換した別のプレビュー用PDFを作って比較する。
+
+```sh
+gs -q -sDEVICE=pdfwrite -dNoOutputFonts -dBATCH -dNOPAUSE \
+  -sOutputFile=preview-outlined.pdf source.pdf
+pdffonts preview-outlined.pdf
+```
+
+派生物はページ数・用紙寸法・フォント資源が0件であることを照合し、元PDFと同じ条件で描画して全体と文字の寄りを目視する。図形化した文字は検索・コピーの文字情報を失うため、文字を保持する元PDFを原本として保管する。最後は問題のビューアでも表示を確認する。別の描画エンジンの正常画像だけを、そのビューアで直った根拠にしない。
+
+この方法は正常な字形を図形へ変換する。元PDFの描画自体が化けていれば、その誤った字形も図形化される。[matplotlibのCJK図をTeXへ取り込んだ後に字形が壊れる事例](latex.md#matplotlib-cjk-figure-embedding)と区別し、生成元から直す。
+
 ## <a id="related-repos"></a>関連リポ
 
 - 実例: ある grant 申請 repo の specific 助成事業 dir 内の `fill_xlsx.py` (= 様式 1 xlsx 自動 fill)

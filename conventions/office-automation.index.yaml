@@ -776,6 +776,9 @@ sections:
   - id: printed-page-number
     level: 2
     title: "人に頁を示すときは冊子の頁番号で — PDF の何枚目かとは違う"
+  - id: pdf-preview-font-compatibility
+    level: 2
+    title: "PDFの日本語だけがプレビューで消えるとき"
   - id: related-repos
     legacy: "13"
     level: 2
