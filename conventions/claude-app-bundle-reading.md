@@ -19,7 +19,7 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 
 道具 = [`scripts/claude-app-bundle.py`](../scripts/claude-app-bundle.py)。 読んだ結論には **`version` の出力 (app と engine の版) を添える** — 挙動は版で変わる。
 
-**Windows (Store 版)**: 画面の chunk は `C:\Program Files\WindowsApps\Claude_<版>_x64__pzs8sxrjxfjjc\app\resources\ion-dist\assets\v1\*.js`、 main process は同 `app\resources\app.asar`、 埋込 engine は `%APPDATA%\Claude\claude-code\<版>\<hash>\claude.exe`。 動いている版と path は `Get-Process` の `Path` で分かる。 `WindowsApps` 配下は **dir への `cd` と `ls` の glob は Permission denied だが、 file は full path を渡せば読める** (`grep -l … "<dir>/*.js"` は失敗、 `grep -rl … "<dir>"` と `cp "<file>" <scratch>` は通る)。 1 行が数十 KB の chunk に `.{0,N}` の grep を当てると固まるので、 scratch に写して Python で位置を指定して切り出す。
+**Windows (Store 版、 `ion-dist` を持つ版まで = 6.x は [#code-tab-remote-renderer](#code-tab-remote-renderer))**: 画面の chunk は `C:\Program Files\WindowsApps\Claude_<版>_x64__pzs8sxrjxfjjc\app\resources\ion-dist\assets\v1\*.js`、 main process は同 `app\resources\app.asar`、 埋込 engine は `%APPDATA%\Claude\claude-code\<版>\<hash>\claude.exe`。 動いている版と path は `Get-Process` の `Path` で分かる。 `WindowsApps` 配下は **dir への `cd` と `ls` の glob は Permission denied だが、 file は full path を渡せば読める** (`grep -l … "<dir>/*.js"` は失敗、 `grep -rl … "<dir>"` と `cp "<file>" <scratch>` は通る)。 1 行が数十 KB の chunk に `.{0,N}` の grep を当てると固まるので、 scratch に写して Python で位置を指定して切り出す。
 
 ## <a id="trace-from-screen-text"></a>画面の文言から原因を辿る
 
@@ -48,6 +48,16 @@ desktop app の画面の挙動 (リンクの開き方、 通知、 エラー文�
 - **短い答えを確かめた事実に読み替えない**: 「無い」 は「消えた (見た)」 とも「見つからない (探せなかった)」 とも読める = 選択肢を分けて問う。 読み替えて規則や記録に「画面で確かめた」 と書かない (実測: 「無い」 を消えたと読んで規則に書き、 本人に「知らない、 自分で見て」 と返された)。
 - **答えの形を指定する**: 確認を 2 つ以上頼むときの書き方 = [`concise-output.md#decision-questions`](concise-output.md#decision-questions) (実測: 短い返事「1」 が「1 つ目だけ」 とも「問い 1 は OK」 とも読めた)。
 - 実験の入力を最終メッセージに置くときは、 自分の Stop hook に引っかからない形を選ぶ (例: [`hooks/chat-file-ref-enforce.sh`](../hooks/chat-file-ref-enforce.sh) は「どこにも無い path」 と「基準フォルダから在る path」 を拾わない)。
+
+## <a id="code-tab-remote-renderer"></a>Code タブの描画 chunk が本体に無いとき (remote の bundle)
+
+新しい版 (実測 = Windows の Store 版 6.28899.2) は `ion-dist` を持たず、 `app\resources\app.asar` の `.vite/renderer/*` には app の窓 (about・quick・main の枠) しか無い。 Code タブのチャット (Markdown と KaTeX の描画) は `https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/<chunk>.js` から読む remote の bundle で、 asar を `katex` で grep しても mermaid しか当たらない。 読む手順:
+
+1. **Chromium の code cache から chunk の URL を引く**: `%APPDATA%\Claude\Code Cache\js\<hash>_0` (macOS は `~/Library/Application Support/Claude/Code Cache/js/`) は V8 の compile cache で、 先頭 4 KB に元の URL、 本文に文字列と正規表現の literal が残る (関数の論理は無い)。 探す語 (判定の正規表現の文字列や関数名 `inlineGuard`) で `grep -rlaF` し、 当たった file の mtime で新しい版を選んで URL を読む。 同じ名前の前半で hash の違う file が並ぶ = 配信の版 (4 版が残っていた)。
+2. **chunk を取る**: その URL を `curl` で scratch の空の dir に落とす (公開の静的 asset、 読むだけで実行しない)。 判定の module は数 KB なので `;function` で改行して全文が読める。
+3. **読んだ版の記録** = chunk の名前 (`ce044ea01-<hash>.js`) と app の版 (`Get-Process` の Path)。
+
+実例 = [chat-math-rendering.md#code-tab-katex](chat-math-rendering.md#code-tab-katex) の `\(…\)` の guard (`\`+記号を空白にしてから記号を見る処理を hook に写した、 2026-11-21)。
 
 ## <a id="instances"></a>実例
 
