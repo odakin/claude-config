@@ -26,8 +26,9 @@ mode:
   (既定) --list    全件 (1 件 2 行)
   --digest         session の一覧用の行 (0 件なら何も出さない。 最大 --max-rows 行 + 残りの件数)
   --refresh-cache  対象の項目に結ばれた、 欄の無い entry の message の添付を Gmail で引いて --cache に書く (読むだけ。 shim の見張りが回す)
-  --sweep          過去の分の洗い出し: 要約・件名に添付の語があり、 欄が absent / locked の entry × 開いた項目 (日付を問わない)。
-                   近い予定・期限の順 (今日以降を先に、 日付の無い項目は後)
+  --sweep          過去の分の洗い出し: 保存していない添付がある entry × 開いた項目 (日付を問わない、 判定は上と同じ =
+                   写しがあれば Gmail の添付、 無ければ要約・件名の語)。 近い予定・期限の順 (今日以降を先に、 日付の無い項目は後)。
+                   写しを全部の開いた項目に広げるのは --refresh-cache --all
   --selftest       fixture (項目・entry・予定・写し) で述語を固定する
 
 伏せる語 (--mask-word、 複数): 項目の id・entry の id・件名・予定の題にこの語がある行は、 中身を出さずに件数の行にする
@@ -226,20 +227,21 @@ def findings(todos: list[dict], entries: list[dict], events: list[dict], cache: 
 
 
 def sweep(todos: list[dict], entries: list[dict], events: list[dict], today: date,
-          out_categories: set[str] | None = None) -> list[dict]:
-    """過去の分: 要約・件名に添付の語がある entry (欄 absent / locked) × 開いた項目。 日付を問わず、 近い日の順。"""
+          out_categories: set[str] | None = None, cache: dict | None = None) -> list[dict]:
+    """過去の分: 保存していない添付がある entry × 開いた項目 (日付を問わず、 近い日の順)。 判定は entry_finding と同じ =
+    添付の写し (cache) があれば Gmail の添付で、 無い message は要約・件名の語で。 写しが「添付なし」 と言う entry は出さない。"""
     inbox_by_id, inverse = build_index(entries)
     out = []
     for t in todos:
         ds = [d for d, _w in todo_dates(t, events, today) if d >= today]
         for e in entries_of(t, entries, inbox_by_id, inverse):
-            st = attachment_record.state_of(e.get("attachments"))
             if not entry_inbound(e, out_categories or set()):
                 continue
-            if st not in ("absent", "locked") or not attachment_record.mentions_attachment(e.get("summary"), e.get("subject")):
+            f = entry_finding(e, cache or {})
+            if not f:
                 continue
             out.append({"todo": t["id"], "ledger": t["_ledger"], "entry": e["id"], "subject": str(e.get("subject") or ""),
-                        "state": st, "on": min(ds) if ds else None})
+                        "state": f["kind"], "on": min(ds) if ds else None})
     return sorted(out, key=lambda x: (x["on"] is None, x["on"] or date.max, x["todo"], x["entry"]))
 
 
@@ -371,6 +373,10 @@ def _selftest() -> int:
     sw = sweep([dict(todo, deadline=None)], [e_unsaved, e_saved, dict(e_unsaved, id="y", summary="会議の日程")], [], today)
     check([s["entry"] for s in sw] == ["2030-11-10-notice-received"] and sw[0]["on"] is None,
           "洗い出し: 添付の語のある欄なしの便だけ、 日付の無い項目も出す")
+    check(sweep([dict(todo, deadline=None)], [e_unsaved], [], today, cache={"aaaa000000000001": []}) == []
+          and sweep([dict(todo, deadline=None)], [dict(e_unsaved, summary="返事")], [], today,
+                    cache={"aaaa000000000001": ["案内.zip"]})[0]["state"] == "gmail",
+          "洗い出し: 写しが添付なしと言う便は出さず、 写しが添付ありと言えば語が無くても出す")
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "L" / "inbox").mkdir(parents=True)
@@ -415,6 +421,7 @@ def main(argv=None) -> int:
     g.add_argument("--list", action="store_true")
     g.add_argument("--digest", action="store_true")
     g.add_argument("--refresh-cache", action="store_true")
+    ap.add_argument("--all", action="store_true", help="--refresh-cache で、 期限・予定の窓の外の開いた項目の便も引く (過去分の洗い出し用)")
     g.add_argument("--sweep", action="store_true")
     g.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
@@ -436,10 +443,11 @@ def main(argv=None) -> int:
             print("--refresh-cache には --cache が要る (exit 1)", file=sys.stderr)
             return 1
         return refresh_cache(cache_path, todos, entries, events, today, args.window_days,
-                             [x for x in args.accounts.split(",") if x], Path(args.creds_dir).expanduser(), outc)
+                             [x for x in args.accounts.split(",") if x], Path(args.creds_dir).expanduser(), outc,
+                             sweep_too=args.all)
     if args.sweep:
-        rows = sweep(todos, entries, events, today, outc)
-        print(f"# 添付の語があり保存の記録が無い便 × 開いた項目 = {len(rows)} 件 (近い日の順)")
+        rows = sweep(todos, entries, events, today, outc, load_cache(cache_path))
+        print(f"# 保存していない添付がある便 × 開いた項目 = {len(rows)} 件 (近い日の順。 [gmail] = 写しが添付ありと言う / [mention] = 写しが無く要約・件名に添付の語 / [locked] = 暗号化 zip が未展開)")
         for r in rows:
             masked = _masked({"todo": r["todo"], "entry": r["entry"], "subject": r["subject"]}, args.mask_word)
             on = r["on"].isoformat() if r["on"] else "日付なし"
