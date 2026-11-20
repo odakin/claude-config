@@ -41,7 +41,7 @@ claude-config/
 <!-- AUTO-TREE:conventions BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check、 源 = conventions/*.md 冒頭の doc-meta。 表示 = when 〔trigger〕 のみ、 詳細 summary は conventions/README.md 側 = 2026-09-01 auto-load 税 縮退) -->
 ├── conventions/          # ドメイン固有規約 (各行の説明 = doc-meta の when 〔いつ読むか〕。 詳細 summary + カテゴリ index = conventions/README.md)
 │   ├── academic-program-verification.md    # 研究者向けの割引・無償プログラム (AI ベンダーの academic plan 等) に申請するとき + 所属確認フォームの「研究室ページ」「機関メール」 欄を埋めるとき + 審査で即時不合格になったとき + 手動審査で不承認になり問い合わせるとき (#after-decline)
-│   ├── actor-attribution.md                # 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time) + owner の名義で出す文面に予定・約束を書く瞬間 (#plan-not-owner-promise) + owner に出す問いの推す答えを書く前と、 外へ送る直前 (= 前の決定・額・約束を引いて並べる、 #prior-record-before-recommending) + 前の決定・規則に従う・前例どおりで閉じる瞬間と、 決定が文案・検査とぶつかった瞬間 (= その理由が今も成り立つか、 #premise-before-rank)
+│   ├── actor-attribution.md                # 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time) + owner の名義で出す文面に予定・約束を書く瞬間 (#plan-not-owner-promise) + owner に出す問いの推す答えを書く前と、 外へ送る直前 (= 前の決定・額・約束を引いて並べる、 #prior-record-before-recommending) + 前の決定・規則に従う・前例どおりで閉じる瞬間と、 決定が文案・検査とぶつかった瞬間 (= その理由が今も成り立つか、 #premise-before-rank) + 「各位」 宛・ML 宛の総括文書 (依頼・要領・時間割) の役割と時刻を、 本人の段取りとして記録・予定・返事に書く前 (#role-generic-notice)
 │   ├── agent-rule-ownership.md             # agent が規則・禁止・必須手順を適用外と判断する前、規則や検査の配線・例外を変更する前、規則との衝突を理由に別経路を選ぶ前、本人の求めを断る前と作業を本人に戻す前 (#refusal-not-in-owner-rules / #check-the-rule-fits-before-refusing)
 │   ├── android-chromium-remote-debug.md    # Android 実機の Brave/Chrome を remote debug (WiFi ADB + CDP) するとき
 │   ├── ask-user-question.md                # AskUserQuestion (選択肢 UI) の使用可否・使い所を判断するとき
@@ -122,7 +122,7 @@ claude-config/
 │   ├── macos-post-update-slowdown.md       # macOS update 直後に体感が重いとき + 定期メンテ棚卸し
 │   ├── macos-side-by-side-app-migration.md # macOS で「新しいバージョンを使用」「旧版は削除できます」等が繰り返し出るとき + 同じアプリの旧新版が別 bundle で共存するとき + 旧版を退避して書類の既定アプリを新版へ切り替えるとき
 │   ├── macos-tahoe-wallpaper.md            # macOS Tahoe (26.x) で wallpaper 変更を script/CLI/API から自動化しようとする前 + 起きてる wallpaper rotation が視覚的に効いてないと感じたとき + スクリーンセーバーを止める・始めるまでの時間を変える手順を人に案内する前 (#screensaver-start-setting)
-│   ├── mail-thread-ledger.md               # mail を YAML の台帳に記録する道具を入れる・使うとき + 既存の台帳に「読んだ位置」 の印を機械で足すとき + 未記録の返事を見張る検出器と記録の道具が同じ id を別々に読んでいると気づいたとき
+│   ├── mail-thread-ledger.md               # mail を YAML の台帳に記録する道具を入れる・使うとき + 既存の台帳に「読んだ位置」 の印を機械で足すとき + 未記録の返事を見張る検出器と記録の道具が同じ id を別々に読んでいると気づいたとき + 本文が「詳細は添付」 の便・添付つきの便を記録するとき、 暗号化 zip のパスワードが別便のとき (#attachment-substance)
 │   ├── manuscript-claim-ownership.md       # AI agent (Claude / Codex / 他 vendor / sub-agent / 無人 worker) が原稿 (.tex) の表題・概要・序論・結論・数式に触れる前 + 著者の依頼を「承認」 と読みそうになった瞬間 + manuscript-claim-guard に deny されたとき + agent の編集権限を定める規則 (本 doc・各層の参照・gate の設定と配線) を変える前
 │   ├── manuscript-value-triage.md          # 他人 (共同研究者・学生) の投稿前 draft や自分の原稿を「価値」 で読む時 + 投稿先の重さ (letter / 通常論文) を選ぶ時 + 進捗報告の draft に返事を書く時 + 原稿の主張が先行研究に対して新しいかを文献で確かめる依頼を受けた時 (#prior-work-check)
 │   ├── matplotlib-3d-illustrations.md      # matplotlib の 3D (mplot3d) で半透明の模式イラスト (平面波・波束・濃度場などスライド/論文の概念図) を描くとき
@@ -212,7 +212,7 @@ claude-config/
 ├── notify-app/                  # macOS 通知の投稿元 applet (= 通知の click に行き先を与える)。 install.sh が build + deploy、 click 先は --click-script で呼ぶ側の層が渡す（正本 = conventions/macos-clickable-notifications.md）
 <!-- agent-free:begin id=auto-tree-scripts -->
 <!-- AUTO-TREE:scripts BEGIN (generate-tree.py --write が生成 — 手編集禁止、 同期検査 = --check。 全列挙 + 説明は scripts/README.md 〔生成物〕 へ移設 = 2026-09-01) -->
-├── scripts/              # 運用 script 群 (455 file + formcase/ 26 module + lib/ 87 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
+├── scripts/              # 運用 script 群 (456 file + formcase/ 26 module + lib/ 88 helper。 全列挙 + 説明 = scripts/README.md 〔生成物〕、 説明の源 = 各 file header 1 行目)
 <!-- AUTO-TREE:scripts END -->
 <!-- agent-free:end id=auto-tree-scripts -->
 ├── templates/                          # 個人層 / 共有プロジェクトの bootstrap skeleton 一式

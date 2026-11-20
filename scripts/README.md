@@ -122,6 +122,7 @@
 - **[check-unbraced-multibyte-var.mutants.json](check-unbraced-multibyte-var.mutants.json)** — check-unbraced-multibyte-var.py の selftest の foil に歯があることを、 述語・読み方・終了値の一部を外した mutant 8 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[check-unbraced-multibyte-var.py](check-unbraced-multibyte-var.py)** — shell script で波括弧の無い変数の直後に全角文字が続く形 (`"$name、"`) を見つける: commit gate の段 (--staged、 違反で exit 1) + fleet の棚卸し (--tree) (UTF-8 の locale では macOS の bash が全角文字の先頭 byte を変数名に取り込み、 set -u なら落ち、 無ければ値が黙って消える)。
 - **[check-unpublished-quote.py](check-unpublished-quote.py)** — Stop verbatim text of unpublished documents (your private manuscripts, and third-party records you keep privately) from being committed to a public repo: matches quoted spans, long prose runs and Japanese character runs in the staged added lines or a commit message against hashed shingles of the declared sources; --selftest.
+- **[check-unsaved-attachments.py](check-unsaved-attachments.py)** — 近い予定・期限を持つ開いた項目に結ばれた便の、 保存していない添付を出す engine (読むだけ)。
 - **[check-value-index.py](check-value-index.py)** — 本人が暗号化して持つ値 (電話・口座・生年月日・住所) が、 平文の追加行や commit message に写るのを止める。--selftest 内蔵。
 - **[check-xlsx-integrity.py](check-xlsx-integrity.py)** — xlsx の Excel「破損」判定源を Excel 不要・決定論で検出（XML well-formed〔unbound prefix〕/ rels 両方向参照整合 / rId 重複 / Content_Types coverage。 zip 直編集 xlsx の納品前 gate、 office-automation.md#openpyxl-destroys-drawings）
 - **[check-yaml-lint.py](check-yaml-lint.py)** — fleet 横断 YAML hazard lint (yamllint を危険 rule 限定で全 repo の tracked yaml に回す。 truthy / dup-key / implicit-octal / syntax、 git-crypt lock file skip、 yamllint 未 install や root 不在は SKIP、 --selftest は毒入り fixture で検出能力自体を検証。 規約 = conventions/yaml-hazards.md#yamllint-hazard-config)
@@ -497,6 +498,7 @@
 - **[lib/agents-entrypoint-warn.test.sh](lib/agents-entrypoint-warn.test.sh)** — CLAUDE.md だけの repo で鳴り、 AGENTS.md を stage / track すると・opt-out で・CLAUDE.md が無いと鳴らない
 - **[lib/artifact-presentation.mjs](lib/artifact-presentation.mjs)** — Shared @oai/artifact-tool presentation builder: editable primitives, notes, finalization, and page renders.
 - **[lib/artifact-presentation.test.mjs](lib/artifact-presentation.test.mjs)** — Hermetic self-test for artifact-presentation.mjs; uses a fake slide API and needs no Office app.
+- **[lib/attachment_record.py](lib/attachment_record.py)** — mail の台帳の entry に書く `attachments:` 欄の書式と、 その状態の読み方 (書き手と読み手の単一 home)。
 - **[lib/attributed_quotes.py](lib/attributed_quotes.py)** — 外に出す文の中で他人 (referee・共著者・文献) に帰して引いた文が、 原文の部分文字列かを数える engine (CLI = scripts/check-attributed-quotes.py、 送信の道具 discord-post.py と送信の CLI が import する)。
 - **[lib/browser_tab.py](lib/browser_tab.py)** — 起動中の Chromium 系 browser に裏で tab を 1 枚開かせ、 行き先を見て、 自分が開いた tab だけを閉じる (macOS)。 SSO 保護サイトの login 切れからの復帰用
 - **[lib/chat_file_refs.py](lib/chat_file_refs.py)** — chat の最終発話にある file 参照 (markdown link の href と、 path に見える inline code) を、 Claude Code desktop app の右パネルと同じ基準で解決し、 開けないものに正しい path を添えて返す共通部品 (Stop hook chat-file-ref-enforce.sh と校正が共用)

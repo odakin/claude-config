@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: mail を YAML の台帳に記録する道具を入れる・使うとき + 既存の台帳に「読んだ位置」 の印を機械で足すとき + 未記録の返事を見張る検出器と記録の道具が同じ id を別々に読んでいると気づいたとき
+when: mail を YAML の台帳に記録する道具を入れる・使うとき + 既存の台帳に「読んだ位置」 の印を機械で足すとき + 未記録の返事を見張る検出器と記録の道具が同じ id を別々に読んでいると気づいたとき + 本文が「詳細は添付」 の便・添付つきの便を記録するとき、 暗号化 zip のパスワードが別便のとき (#attachment-substance)
 category: mail
-summary: mail の記録は thread 1 つに entry 1 つ、 id は道具 (scripts/record-reply.py) だけが書き、 読んだ位置の印 recorded_upto と索引 messages[] で「どこまで記録したか」 を明示する。 台帳の形 (索引の名前は相手 = 自分発は宛先、 下書きは message でない)・手順 (dry-run → --apply、 --check、 --migrate は message として記録した id だけ、 --relabel で索引を今の規則に引き直す)・失敗の向き (再 parse で戻す / 引けない thread を未記録に倒さない / cache は移行専用)・shim の作り方。
+summary: mail の記録は thread 1 つに entry 1 つ、 id は道具 (scripts/record-reply.py) だけが書き、 読んだ位置の印 recorded_upto と索引 messages[] で「どこまで記録したか」 を明示する。 台帳の形 (索引の名前は相手 = 自分発は宛先、 下書きは message でない)・手順 (dry-run → --apply、 --check、 --migrate は message として記録した id だけ、 --relabel で索引を今の規則に引き直す)・失敗の向き (再 parse で戻す / 引けない thread を未記録に倒さない / cache は移行専用)・添付の中身を記録に入れる規則 (記録の turn で開いて保存し当日の事実を要約へ、 --apply は保存先か保存しない理由を求める、 暗号化 zip はパスワードの便を見張る、 近い予定の前に保存していない添付を出す網)・shim の作り方。
 -->
 # mail の記録台帳 — thread 単位の entry と、 読んだ位置の印
 
@@ -22,6 +22,7 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 | `messages` | 1 通 1 行 `"mid:<hex> <日時> ← <差出人>"` / `"mid:<hex> <日時> → <宛先>"` = **機械が書く索引**。 名前は常に**相手** (← 相手発 = 差出人 / → 自分発 = 宛先。 自分を除いた最初の宛先 + ` +N`、 To が自分だけなら Cc → Bcc)。 本文・snippet は書かない。 下書き (Gmail の DRAFT) は message ではない = 載せない | 道具だけ |
 | `category` | message の素性 (received / sent)。 案件の状態は項目側 | 道具 (既存 entry は触らない) |
 | `related_todo` | 結ぶ項目の id (裸) | 道具 (無ければ足す) |
+| `attachments` | この記録で入った message の添付を保存したか (`保存済み: <名前> → <保存先>` / `保存しない (<理由>): <名前>` / 暗号化 zip を開いていなければ `(暗号化 zip・未展開 …)` が付く)。 書式と状態の読み方 = [`scripts/lib/attachment_record.py`](../scripts/lib/attachment_record.py)、 規則 = [#attachment-substance](#attachment-substance) | 道具 (`--attachments-saved` / `--attachments-skip` の結果。 人が書いた値の後ろに足す) |
 | `summary` | 3 行まで。 事実の正本 (金額・日付・決定) は書かず pointer だけ。 新規 entry を `--summary` 無しで作ると印 `(summary not written)` が入る = 道具がそう知らせる。 印だけの要約は後から同じ道具の `--summary` で埋まる (中身のある要約は道具が変えない = 手で直す) | 人 / agent (道具に渡す) |
 
 印と索引の値は harvester の契約の中の書式 (`messageId:` / `mid:` 接頭辞) で書く = 読み手を変えない。 道具の出力の形は harvester の fixture に載せて固定する。
@@ -54,6 +55,16 @@ entry (`record-reply.py --schema` が出す 1 例が正本。 既存の house st
 - <a id="ledger-rebase-conflict"></a>**台帳の rebase 衝突は upstream 側を取って記録の道具を回し直す** — 暗号化した台帳は conflict marker が読めず、 手で混ぜられない。 `git checkout --ours <台帳>` (rebase の中の ours は upstream 側、 theirs が自分の commit) → 記録の道具を、 項目の現在地を二重に書かない形で回し直す → `git add` → `git rebase --continue`。 push の前に自分の commit の diff を読み、 自分の行だけかを確かめる。 道具が毎回 Gmail から引き直す作りなら、 回し直しで記録は失われない (実測)。
 - **label を書く側の展開範囲は狭く保つ**: 記録済み id の読み手 (検出器) は全 string を読んでよいが、 mail に label を書く同期 script は id を持つ field だけを読む。 散文の引用まで thread 展開すると open 項目が引いた thread が全部「処理中」 になる (実測)。
 
-## <a id="adoption"></a>4. 導入 (shim の作り方)
+## <a id="attachment-substance"></a>4. 添付の中身を記録に入れる
+
+本文が「詳細は添付」「別紙のとおり」 の便は、 中身が添付にしか無い。 **記録する turn で添付を開いて保存し、 当日に要る事実を要約に書く** (服装・集合の時刻と場所・自分の担当と終わる時刻・提出物と締切)。 「添付にある」「添付を参照」 と書いた要約は記録ではない: 後で事実を尋ねられたとき、 記録を探しても答えが出ず、 その場で添付を開くことになる (実測)。 予定に効く事実は、 同じ turn で予定の説明欄にも書く (書く項目は個人層の予定の規則が決める)。
+
+- **道具の止め**: `record-reply.py` の dry-run は、 この記録で入る message の添付を名前・大きさ・暗号化 zip か (zip を読むだけで保存しない) で一覧し、 保存の command (shim が `--attachment-save-hint` で渡す) を出す。 `--apply` は **`--attachments-saved <dir>`** (添付の名前が全部その dir に在ることを確かめる) か **`--attachments-skip '<理由>'`** が無いと止まる。 結果は entry の `attachments:` に書く (§1 の表)。 署名の画像のような本文に埋めた画像 (Content-ID を持ち inline の image) は添付に数えない (`lib/gmail_read.attachment_parts`)。 止めを道具に置くのは、 規則の文だけでは記録の turn に添付が目に入らないため (dry-run が添付を見せていなかった)。
+- **暗号化 zip**: パスワードは別便で来る。 未着なら、 パスワードの便を見張る (結ぶ項目に見張りの query を立てる = 個人層の項目の書式) を同じ turn で立て、 届いた turn で開く。 保存先に zip の中身が無いと、 道具は `attachments:` に「未展開」 と書き、 下の網が出し続ける。 開いたら要約と `attachments:` を直す。
+- **取り込む前の検査**: 添付はネット由来の file = 保存先に入れる前と開く前に [`downloaded-file-scan.md`](downloaded-file-scan.md) を通す。 要確認が出たら開かずに本人に見せる。
+- **網** (既に記録した便と、 止めを入れる前の記録): [`scripts/check-unsaved-attachments.py`](../scripts/check-unsaved-attachments.py) が、 近い予定 (説明欄が項目の id を名指す) か期限を持つ開いた項目に結ばれた、 相手から届いた便のうち、 `attachments:` が無く Gmail に添付がある (写し = `--refresh-cache`)、 または要約・件名に添付の語がある、 または「未展開」 のものを出す。 自分が送った message の添付は数えない (手元に原本がある)。 過去の分の洗い出し = `--sweep`。
+- **全員宛ての文書の役割**: 添付が「各位」 宛の総括文書 (全員の役割と時刻を並べた依頼・要領・時間割) なら、 本人の担当を割り当ての記録で確かめてから要約に書く = [`actor-attribution.md#role-generic-notice`](actor-attribution.md#role-generic-notice)。
+
+## <a id="adoption"></a>5. 導入 (shim の作り方)
 
 下の層に同名の shim を置き、 個人の値を option で渡して engine を `os.execv` する (= [`check-script-layering.py`](../scripts/check-script-layering.py) が shim と認める形)。 渡すもの: `--root` / `--ledger` (複数) / `--accounts` (試す順、 先頭 = 既定) / `--creds-dir` / `--owner-token` (自分発の判定) / `--status-enum` / `--category-in` `--category-out` / `--ctx-reply` `--ctx-sent` `--ctx-new-in` `--ctx-new-out` (現在地の template、 §1) / `--tz` / `--cache-dir` / `--month-header`。 shim の `--selftest` は配線の canary (台帳 dir の存在 / enum の parity / 層1 の file) を見てから engine の selftest を回す。 読み手の検出器は `lib/recorded_ids.py` を import し、 その一覧と delegation 検査を shim 側の selftest に持たせる ([`email-surface-pattern.md#recorded-id-notation`](email-surface-pattern.md#recorded-id-notation))。

@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time) + owner の名義で出す文面に予定・約束を書く瞬間 (#plan-not-owner-promise) + owner に出す問いの推す答えを書く前と、 外へ送る直前 (= 前の決定・額・約束を引いて並べる、 #prior-record-before-recommending) + 前の決定・規則に従う・前例どおりで閉じる瞬間と、 決定が文案・検査とぶつかった瞬間 (= その理由が今も成り立つか、 #premise-before-rank)
+when: 共同作業の成果物・記録・発言を特定の人物に帰属して報告・記録・文面化する前 (= commit author / 最終編集者 / メール送信者 / 議事メモの書き手 等の「運搬者」欄を見た瞬間) + 対外文書で第三者を名指しして誤り・訂正・批判・優先権を主張する文を書く瞬間 (= claim-target 軸) + 記録に「決定」「方針」「担当」 と書く瞬間 (= 決定の状態の軸、 #decision-state-at-record-time) + owner の名義で出す文面に予定・約束を書く瞬間 (#plan-not-owner-promise) + owner に出す問いの推す答えを書く前と、 外へ送る直前 (= 前の決定・額・約束を引いて並べる、 #prior-record-before-recommending) + 前の決定・規則に従う・前例どおりで閉じる瞬間と、 決定が文案・検査とぶつかった瞬間 (= その理由が今も成り立つか、 #premise-before-rank) + 「各位」 宛・ML 宛の総括文書 (依頼・要領・時間割) の役割と時刻を、 本人の段取りとして記録・予定・返事に書く前 (#role-generic-notice)
 category: harness-core
-summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + claim-target 軸 (= 主張は誰についてのものか — 自己生成した名指しの無検証断定・内部略称の衝突展開) + 決定の状態の軸 (= 決定 / 提案 / 他 session の自己申告を記録の瞬間に確かめる、 両方向に壊れる。 台帳の予定を owner の一人称の約束として文面に書かない) + 機械化不能の honest 限界
+summary: carrier proxy (= commit author / push 者 / 送信者 / 記録の書き手) を内容の判断主体・発言主体と等値しない — 帰属 5 規律 (proxy 種類の明示 / collaborative default = group product / inline marker = 宛先 tag / 発言者 ≠ 記録者 / load-bearing 帰属は複数 proxy verify) + claim-target 軸 (= 主張は誰についてのものか — 自己生成した名指しの無検証断定・内部略称の衝突展開) + 決定の状態の軸 (= 決定 / 提案 / 他 session の自己申告を記録の瞬間に確かめる、 両方向に壊れる。 台帳の予定を owner の一人称の約束として文面に書かない) + 宛先の軸 (= 全員宛ての総括文書の役割を、 割り当ての記録で確かめてから本人の段取りとして書く、 #role-generic-notice) + 機械化不能の honest 限界
 -->
 # Actor / statement attribution — 行為・発言の帰属規律
 
@@ -77,6 +77,12 @@ owner に出す問いの推す答え (どれを選ぶか・外へ送るか・払
 20. **下請けに渡す依頼書には、 owner の決定を言い換えでなく、 発言そのもの・その発言が答えた推す答えの全文・17 の前の記録の行で渡す。** 言い換えは owner の答えより広くなり (11 の逆向き)、 前の記録も落ちたまま下請けに届く。 下請けは、 依頼書の決定が前の記録と食い違うと見えたら、 書く前に依頼元に問い返す (相手の出方の予想として成果物の中に書いて先へ進まない)。 依頼書の決定と、 文案・検査・後の変更がぶつかったときも同じで、 取り下げも押し通しもしない。 問い返す形は「どちらを取るか」 でなく「この決定の前提 (理由) は今も成り立つか、 証拠はこう」。 依頼元は格 (owner の決定だから) で答えず、 前提で答える (前提を確かめられなければ owner に問う。 [#premise-before-rank](#premise-before-rank))。 台帳の決定を方針として引く依頼書には、 ぶつかったときのこの扱いを 1 行書く。
 
 兄弟 = 締めの [`closing-sweep.md#leftovers-check`](closing-sweep.md#leftovers-check) (残りに入れる前に会話で決まっていないかを確かめる) と、 本 file の 11 (記録する時の決定の状態)。 17 は推す答えを作る時、 11 は決定を記録する時の形。 前の決定に従う向き (理由の消えた決定) の一般形 = [`convention-design-principles.md#premise-dropped-at-copy`](../docs/convention-design-principles.md#premise-dropped-at-copy) (規則は前提より長生きする、 の決定の台帳の版)。
+
+## <a id="role-generic-notice"></a>第五の軸: 宛先 (その文書は本人の段取りか、 全員の役割の一覧か)
+
+「各位」 宛・ML 宛の総括文書 (依頼・要領・時間割・当日の案内) は、 **関わる全員の役割と時刻を並べたもの**であって、 受け取った一人の段取りではない。 その文書に書かれた役割 (受付・司会・記録・誘導) と終わる時刻を、 本人の担当として読むと、 担当でない役の拘束を本人に伝えることになる (実測: 総括文書にあった、 ある役の終わる時刻を本人の拘束と伝えたが、 その役は割り当ての記録で別の人の担当だった)。
+
+21. **全員宛ての文書の役割を本人の段取りとして述べる前に、 本人の担当を割り当ての記録で確かめる。** 割り当ての記録 = 分担の表・担当者の決定の便・主任や事務が本人に割り振った便。 総括文書と割り当ての記録が別の thread・別の便にあることが多い (総括文書は事務から全員へ、 割り当ては部署の中の ML で)。 確かめた後は「本人の担当 = X (根拠 = <割り当ての記録>)。 総括文書の他の役 (Y = 〜<時刻>) は担当外」 と分けて書く。 割り当ての記録が見つからなければ、 「総括文書では Y 担当は 〜<時刻>。 本人が Y 担当かは記録に無い」 と書き、 本人の段取りとして断定しない。 記録の要約・予定の説明欄に写すときも同じ (写した時点で本人の段取りの顔になる)。 逆向きの盲点 = 全員宛ての便に紛れた本人の義務を拾い損ねる [`../docs/convention-design-principles.md#broadcast-obligation-blind-spot`](../docs/convention-design-principles.md#broadcast-obligation-blind-spot)。 添付の総括文書を記録に入れる手順 = [`mail-thread-ledger.md#attachment-substance`](mail-thread-ledger.md#attachment-substance)。
 
 ## <a id="attribution-evidence"></a>再発 evidence (genericized)
 

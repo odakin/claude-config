@@ -72,7 +72,13 @@ selftest (= 偽の Gmail + 2 台帳の fixture、 API に触らない): t1 legac
   t21 空の要約 (印だけの要約は --summary で埋まる、 中身のある要約・inline の要約は変えない、 dry-run は知らせるだけ) /
   t22 結ぶ項目の決定欄 (`--decided-field`) を dry-run に全文出す・送った便を承認した本人の答え (`--asks-ledger` = 問いの台帳) が
   決定欄に無ければ 1 行で知らせる (承認の候補 = 送信の前後の時間内に答えた外への送信の問いで、 key がこの項目を名指すか、
-  他の項目を名指さず同じ session が問うたもの。 止めない)。
+  他の項目を名指さず同じ session が問うたもの。 止めない) / t23 添付 (dry-run に一覧・暗号化 zip・保存の command、 --apply は
+  --attachments-saved <dir> 〔全部の名前が在る〕 か --attachments-skip '<理由>' が無いと止まる、 entry の attachments: に書く、
+  暗号化 zip の中身が隣に無ければ「未展開」、 人が書いた値の後ろに足す)。
+添付 (2026-11-21、 規約 = conventions/mail-thread-ledger.md#attachment-substance): この記録で入る message に添付があれば、
+  dry-run は名前・大きさ・暗号化 zip か (zip を読むだけで保存しない) と保存の command (`--attachment-save-hint`、 shim が渡す) を出し、
+  `--apply` は `--attachments-saved <dir>` (添付の名前が全部 dir に在る) か `--attachments-skip '<理由>'` を求める。 結果は entry の
+  `attachments:` (書式 = lib/attachment_record.py)。 署名の画像のような本文に埋めた画像は添付に数えない (lib/gmail_read.attachment_parts)。
 下書き: Gmail は未送信の下書きも thread の message として返す。 lib/gmail_read が既定で除く (= 記録しない・返事の
   判定に入れない)。 下書きを記録してしまった既存の行は --relabel が外す。
 """
@@ -104,6 +110,7 @@ from todo_thread_links import handover_map, harvest_todo_refs, norm_account, own
 from todo_ledger import (LEGACY_NAME as TODO_LEGACY_NAME, TodoLedgerError, dedent_entry,  # noqa: E402
                          entry_text as todo_entry_text, indent_entry, load_todos_with_paths)
 import gmail_read  # noqa: E402
+import attachment_record  # noqa: E402
 
 SUMMARY_MAX_LINES = 3
 HEX_RE = re.compile(r"^[0-9a-f]{16,}$")
@@ -140,6 +147,7 @@ class Config:
     require_replaces: bool = False           # True = 現在地のある項目を書く --apply に、 dry-run が見せた鍵 (--replaces) を求める
     decided_field: str = "decided"           # 項目の決定欄 (dry-run に全文を出す。 送った便を承認した本人の答えがここにあるかを照らす)
     asks_ledger: Path | None = None          # 本人への問いの台帳 (ai-collaboration board_asks.py の JSON lines)。 None = 照らさない
+    attachment_save_hint: str = ""           # 添付を保存する command の形 ({account} / {mid} を埋める。 shim が渡す。 空 = 道具の名を出さない)
 
     def tzinfo(self):
         if self.tz == "local":
@@ -246,6 +254,9 @@ class Gmail:
     def thread_of_message(self, account: str, mid: str) -> str | None:
         return gmail_read.thread_of_message(self.service(account), mid)
 
+    def attachment_bytes(self, account: str, mid: str, att_id: str) -> bytes | None:
+        return gmail_read.attachment_bytes(self.service(account), mid, att_id)
+
 
 # ============================================================
 # 純関数 (表示・生成・判定)
@@ -339,7 +350,7 @@ def yaml_str(s: str) -> str:
 
 
 def render_new_entry(cfg: Config, entry_id: str, msgs: list[dict], record_ids: list[str], account: str,
-                     todo_ids: list[str], summary: str, tid: str) -> str:
+                     todo_ids: list[str], summary: str, tid: str, attachments: str = "") -> str:
     rec = [m for m in msgs if m["id"] in record_ids]
     anchor, latest = rec[0], rec[-1]
     ours = owner_from(anchor.get("from", ""), cfg.owner_tokens)
@@ -355,6 +366,8 @@ def render_new_entry(cfg: Config, entry_id: str, msgs: list[dict], record_ids: l
               f"  recorded_upto: {yaml_str(upto_value(cfg, latest))}", "  messages:"]
     lines += [f"    - {yaml_str(message_line(cfg, m))}" for m in rec]
     lines.append(f"  category: {cfg.category_out if owner_from(latest.get('from', ''), cfg.owner_tokens) else cfg.category_in}")
+    if attachments:
+        lines.append(f"  attachments: {yaml_str(attachments)}")
     if todo_ids:
         lines.append("  related_todo:")
         lines += [f'    - "{t}"' for t in todo_ids]
@@ -638,7 +651,7 @@ def write_verified(path: Path, new_text: str, verify) -> None:
         raise WriteFailed(f"{path}: {why} — 元の text に戻した")
 
 
-def _verify_inbox(entry_id: str, n_before: int, created: bool, want_mids: set[str]):
+def _verify_inbox(entry_id: str, n_before: int, created: bool, want_mids: set[str], want_att: str | None = None):
     def v(data):
         if not isinstance(data, list):
             return "list として読めない"
@@ -652,6 +665,8 @@ def _verify_inbox(entry_id: str, n_before: int, created: bool, want_mids: set[st
             return "; ".join(probs)
         if not want_mids <= harvest_entry(e):
             return "round-trip: 書いた mid が harvester で拾われない"
+        if want_att and want_att not in str(e.get("attachments") or ""):
+            return "attachments が期待と違う"
         return None
     return v
 
@@ -789,6 +804,130 @@ def show_plan(cfg: Config, p: dict, out=print) -> None:
         out(f"  ⚠️ {w}")
 
 
+# ============================================================
+# 添付 (この記録で入る message の添付を一覧し、 保存したか・保存しない理由を求めて entry に書く)
+# 規約 = conventions/mail-thread-ledger.md#attachment-substance、 書式と状態 = lib/attachment_record.py
+# ============================================================
+ZIP_PEEK_MAX = 30 * 1024 * 1024   # これより大きい zip は暗号化を確かめに読まない (読むだけでも重い)
+
+
+def plan_attachments(p: dict) -> list[dict]:
+    """この記録で入る message (p["record"]) の添付 = [{mid, filename, mimeType, size, attachmentId, encrypted}] (純関数)。
+    既に entry に在る message の添付は数えない (= 前の記録の時点で扱った)。"""
+    rec = set(p.get("record") or [])
+    return [dict(a, mid=m["id"], encrypted=None) for m in p.get("msgs") or [] if m["id"] in rec
+            for a in (m.get("attachments") or [])]
+
+
+def peek_encryption(gmail, account: str, atts: list[dict]) -> None:
+    """zip の添付を読み (保存しない)、 暗号化の印を a["encrypted"] に入れる。 読めなければ None のまま。"""
+    reader = getattr(gmail, "attachment_bytes", None)
+    if reader is None:
+        return
+    for a in atts:
+        if gmail_read.is_zip(a) and a.get("attachmentId") and int(a.get("size") or 0) <= ZIP_PEEK_MAX:
+            a["encrypted"] = gmail_read.zip_encrypted(reader(account, a["mid"], a["attachmentId"]))
+
+
+def _human_size(n) -> str:
+    n = int(n or 0)
+    return f"{n / 1048576:.1f} MB" if n >= 1048576 else (f"{n / 1024:.0f} KB" if n >= 1024 else f"{n} B")
+
+
+def _att_kind(a: dict) -> str:
+    if gmail_read.is_zip(a):
+        return {True: "暗号化 zip", False: "zip (暗号化なし)", None: "zip (暗号化か読めなかった)"}[a.get("encrypted")]
+    return a.get("mimeType") or "?"
+
+
+def show_attachments(cfg: Config, p: dict, out=print) -> None:
+    atts = p.get("attachments") or []
+    if not atts:
+        return
+    out(f"\n  📎 添付 {len(atts)} 件 (この記録で入る message。 「添付にある」 は記録ではない = 開いて保存し、 当日に要る事実を要約に書く):")
+    for a in atts:
+        out(f"     - {a.get('filename')}  ({_human_size(a.get('size'))}, {_att_kind(a)})  mid:{a['mid']}")
+    for mid in dict.fromkeys(a["mid"] for a in atts):
+        if cfg.attachment_save_hint:
+            out("     保存: " + cfg.attachment_save_hint.format(account=p["account"], mid=mid))
+    out("     取り込む前に検査を通す (ネット由来の file)。 保存したら --attachments-saved <dir>、 保存しないなら --attachments-skip '<理由>'")
+    if any(a.get("encrypted") for a in atts):
+        out("     🔒 暗号化 zip = パスワードは別便で来る。 まだ届いていなければ、 その便を見張る (項目の watch_query) を立て、 届いた turn で開く")
+
+
+def _display_dir(cfg: Config, d: Path) -> str:
+    try:
+        return str(d.resolve().relative_to(cfg.root.resolve())) + "/"
+    except ValueError:
+        home = Path.home()
+        try:
+            return "~/" + str(d.resolve().relative_to(home.resolve())) + "/"
+        except ValueError:
+            return str(d) + "/"
+
+
+def attachments_decision(cfg: Config, args, atts: list[dict]) -> tuple[str | None, str | None, list[str]]:
+    """(entry の attachments: に書く値, --apply を止める理由, 知らせ)。 添付つきの message を記録する --apply は、
+    保存した dir (--attachments-saved) か保存しない理由 (--attachments-skip) を求める。
+
+    なぜ (実測): 本文が「詳細は添付」 の便を、 要約に「添付にある」 と書くだけで記録し、 添付 (暗号化 zip、 パスワードは
+    別便) を開かなかった。 当日の事実 (服装・担当) を本人が尋ねたとき、 記録のどこにも無かった。 止めを道具に置くのは、
+    規則の文だけでは記録の turn に添付が目に入らないため (dry-run が添付を見せていなかった)。"""
+    saved = getattr(args, "attachments_saved", None)
+    skip = getattr(args, "attachments_skip", None)
+    notes: list[str] = []
+    if not atts:
+        if saved or skip is not None:
+            notes.append("ℹ️ この記録で入る message に添付は無い = --attachments-saved / --attachments-skip は使わない")
+        return None, None, notes
+    if saved and skip is not None:
+        return None, "--attachments-saved と --attachments-skip は片方だけ (exit 1)", notes
+    if skip is not None:
+        if not skip.strip():
+            return None, "--attachments-skip には保存しない理由を書く (exit 1)", notes
+        return attachment_record.value_for(atts, skip_reason=skip), None, notes
+    if not saved:
+        return None, ("添付つきの message を記録する --apply は、 添付を開いて保存した dir を --attachments-saved <dir> で渡すか、"
+                      " 保存しない理由を --attachments-skip '<理由>' で書く (exit 1)"), notes
+    d = Path(saved).expanduser()
+    if not d.is_absolute():
+        d = Path.cwd() / d if (Path.cwd() / d).is_dir() else cfg.root / d
+    missing = attachment_record.missing_in_dir(atts, d)
+    if missing:
+        return None, f"--attachments-saved {saved} に無い添付: {', '.join(missing)} (保存してから渡す、 exit 1)", notes
+    locked = any(a.get("encrypted") for a in atts) and not attachment_record.extracted_beside(atts, d)
+    if locked:
+        notes.append("🔒 暗号化 zip の中身が保存先に無い = 「未展開」 と書く。 パスワードの便が届いた turn で開き、 要約と attachments: を直す")
+    return attachment_record.value_for(atts, saved_dir=_display_dir(cfg, d), locked=locked), None, notes
+
+
+def set_attachments_text(text: str, entry_id: str, value: str) -> str:
+    """entry の attachments: を書く (純関数)。 欄が無い・「なし」・「未展開」 なら置き換え、 人が書いた別の値があれば後ろに足す。"""
+    lines = text.split("\n")
+    b = find_block(lines, entry_id)
+    if not b:
+        return text
+    s, e = b
+    new_line = f"  attachments: {yaml_str(value)}"
+    sp = field_span(lines, s, e, "attachments")
+    if sp:
+        try:
+            old = (_yaml_safe_load("\n".join(l[2:] if l.startswith("  ") else l for l in lines[sp[0]:sp[1]])) or {}).get("attachments")
+        except Exception:
+            old = None
+        if str(old or "") == value or (value in str(old or "") and attachment_record.state_of(old) != "locked"):
+            return text
+        if attachment_record.state_of(old) not in ("absent", "none", "locked"):
+            new_line = f"  attachments: {yaml_str(str(old).strip() + ' / ' + value)}"
+        lines[sp[0]:sp[1]] = [new_line]
+    else:
+        pos = next((fs[1] for fs in (field_span(lines, s, e, f) for f in ("category",)) if fs), None)
+        if pos is None:
+            pos = next((fs[0] for fs in (field_span(lines, s, e, f) for f in ("summary", "notes")) if fs), _block_tail(lines, s, e))
+        lines[pos:pos] = [new_line]
+    return "\n".join(lines)
+
+
 def compose_context(cfg: Config, p: dict, today: str, nxt: str) -> str:
     rec = [m for m in p["msgs"] if m["id"] in p["record"]]
     latest = rec[-1] if rec else p["msgs"][-1]
@@ -811,9 +950,11 @@ def apply_plan(cfg: Config, p: dict, ledger: Ledger, todo_id: str | None, args, 
         new_text = update_entry_text(cfg, text, entry["id"], msgs, rec_ids, todo_id, add_thread=True, tid=tid)
         if args.summary and summary_is_empty(entry):
             new_text = fill_summary_text(new_text, entry["id"], args.summary)
+        if p.get("att_value"):
+            new_text = set_attachments_text(new_text, entry["id"], p["att_value"])
         if new_text != text:
             want = set(rec_ids) | (harvest_entry(entry) & {m["id"] for m in msgs})
-            write_verified(path, new_text, _verify_inbox(entry["id"], n_before, False, want))
+            write_verified(path, new_text, _verify_inbox(entry["id"], n_before, False, want, p.get("att_value")))
             written.append(path)
         else:
             out(f"  (entry {entry['id']} は変更なし)")
@@ -822,8 +963,10 @@ def apply_plan(cfg: Config, p: dict, ledger: Ledger, todo_id: str | None, args, 
         y, mo = int(c["id"][:4]), int(c["id"][5:7])
         text = c["path"].read_text(encoding="utf-8") if c["path"].exists() else cfg.month_header.format(year=y, month=mo) + "\n"
         n_before = len([x for x in (_yaml_safe_load(text) or []) if isinstance(x, dict)])
-        entry_text = render_new_entry(cfg, c["id"], msgs, rec_ids, p["account"], [todo_id] if todo_id else [], args.summary or "", tid)
-        write_verified(c["path"], append_entry_text(text, entry_text), _verify_inbox(c["id"], n_before, True, set(rec_ids)))
+        entry_text = render_new_entry(cfg, c["id"], msgs, rec_ids, p["account"], [todo_id] if todo_id else [], args.summary or "", tid,
+                                      attachments=p.get("att_value") or "")
+        write_verified(c["path"], append_entry_text(text, entry_text),
+                       _verify_inbox(c["id"], n_before, True, set(rec_ids), p.get("att_value")))
         written.append(c["path"])
     return written
 
@@ -994,7 +1137,10 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
         seen_roots.add(msgs[0]["id"])
         tid = getattr(gmail, "last_tid", None) or tid   # 返信の messageId から引き直した場合は本当の thread id
         p = plan_thread(cfg, tid, acct, msgs, ledger, todo_id, args)
+        p["attachments"] = plan_attachments(p)
+        peek_encryption(gmail, acct, p["attachments"])
         show_plan(cfg, p, out)
+        show_attachments(cfg, p, out)
         if p["home"]:
             if not summary_is_empty(p["home"][2]):
                 if args.summary:
@@ -1025,6 +1171,22 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
             + (dec.replace("\n", "\n  ") if dec else "(無し)"))
         for g in approval_gaps(cfg, todo_id, ledger, plans):
             out(g)
+    att_refusals: list[str] = []
+    att_notes: list[str] = []
+    for p in plans:
+        val, refusal, notes = attachments_decision(cfg, args, p.get("attachments") or [])
+        p["att_value"] = val
+        att_notes += notes
+        if refusal:
+            att_refusals.append(refusal)
+        elif val:
+            out(f"  (--apply で entry の attachments: に書く = {val})")
+    for n in dict.fromkeys(att_notes):
+        out(f"  {n}")
+    for r in dict.fromkeys(att_refusals):
+        out(f"\n✗ 添付: {r}")
+    if att_refusals and args.apply:
+        return 1
     if todo_id and not args.no_todo and not args.next:
         out("\n結ぶ項目の現在地を書くには --next \"<次の一手 1 行>\" が要る (項目を触らないなら --no-todo)")
         if args.apply:
@@ -1384,8 +1546,12 @@ def run_relabel(cfg: Config, name: str, ledger: Ledger, gmail, apply: bool, limi
 # selftest (= 偽の Gmail + 2 台帳の fixture)
 # ============================================================
 class FakeGmail:
-    def __init__(self, threads: dict[tuple[str, str], list[dict]], accounts=("acct-a", "acct-b")):
+    def __init__(self, threads: dict[tuple[str, str], list[dict]], accounts=("acct-a", "acct-b"), blobs=None):
         self.threads, self.accounts = threads, set(accounts)
+        self.blobs = blobs or {}   # (mid, attachmentId) → bytes (添付の中身)
+
+    def attachment_bytes(self, account, mid, att_id):
+        return self.blobs.get((mid, att_id))
 
     def service(self, account):
         return object() if account in self.accounts else None
@@ -1899,6 +2065,80 @@ def _selftest() -> int:
                 os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
             else:
                 os.environ["CLAUDE_CODE_SESSION_ID"] = saved_sid
+
+        # t23 添付 (2026-11-21): 添付つきの message の --apply は、 保存した dir か保存しない理由が無いと止まる
+        import io as _io
+        import zipfile as _zf
+        _b = _io.BytesIO()
+        with _zf.ZipFile(_b, "w") as _z:
+            _z.writestr("a.txt", "x")
+        enc = bytearray(_b.getvalue())
+        enc[6] |= 0x1
+        enc[enc.find(b"PK\x01\x02") + 8] |= 0x1
+        t_tid, t_mid2 = "eeee000000000001", "eeee000000000002"
+        att_msg = msg(t_tid, T, CP, subj="案内")
+        att_msg["attachments"] = [{"filename": "案内.zip", "mimeType": "application/zip", "size": 2048, "attachmentId": "z1"},
+                                  {"filename": "別紙.pdf", "mimeType": "application/pdf", "size": 900, "attachmentId": "p1"}]
+        threads_t = dict(threads)
+        threads_t[("acct-a", t_tid)] = [att_msg, msg(t_mid2, T + 1000, CP, subj="パスワード")]
+        gm_t = FakeGmail(threads_t, blobs={(t_tid, "z1"): bytes(enc)})
+        (td / "lt" / "inbox").mkdir(parents=True)
+        (td / "lt" / "todo").mkdir()
+        (td / "lt" / "todo" / "2030-05-01-t.yaml").write_text(
+            f'id: "2030-05-01-t"\ntask: "t"\nstatus: open\nemail_ref: "threadId:{t_tid}"\n', encoding="utf-8")
+        cfg_t = Config(root=td, ledgers=["lt"], accounts=("acct-a",), owner_tokens=("owner@",), tz="UTC",
+                       cache_dir=td / "cache", attachment_save_hint="save {account} {mid}")
+        ns_t = argparse.Namespace(target="2030-05-01-t", todo=None, account=None, next="read the attachment", status=None,
+                                  summary="s", slug="t-thread", id=None, ledger_for_new=None, no_todo=False, apply=False,
+                                  replaces=None, attachments_saved=None, attachments_skip=None)
+        snap_t = {q: q.read_text(encoding="utf-8") for q in (td / "lt").rglob("*.yaml")}
+        out_lines.clear()
+        rc = run_record(cfg_t, ns_t, Ledger(cfg_t), gm_t, "2026-09-22", pr)
+        text = "\n".join(out_lines)
+        check(rc == 0 and "📎 添付 2 件" in text and "案内.zip" in text and "暗号化 zip" in text and "save acct-a " + t_tid in text
+              and "✗ 添付:" in text and "--attachments-saved" in text,
+              "t23 dry-run は添付の一覧 (名前・大きさ・暗号化 zip か) と保存の command と、 --apply が止まる理由を出す")
+        rc = run_record(cfg_t, argparse.Namespace(**{**vars(ns_t), "apply": True}), Ledger(cfg_t), gm_t, "2026-09-22", pr)
+        check(rc == 1 and snap_t == {q: q.read_text(encoding="utf-8") for q in (td / "lt").rglob("*.yaml")},
+              "t23 --attachments-saved も --attachments-skip も無い --apply は止まり、 台帳は不変")
+        rc = run_record(cfg_t, argparse.Namespace(**{**vars(ns_t), "apply": True, "attachments_skip": "  "}), Ledger(cfg_t), gm_t,
+                        "2026-09-22", pr)
+        check(rc == 1, "t23 理由の空の --attachments-skip は止まる")
+        sd = td / "lt" / "docs" / "att"
+        sd.mkdir(parents=True)
+        (sd / "案内.zip").write_bytes(bytes(enc))
+        out_lines.clear()
+        rc = run_record(cfg_t, argparse.Namespace(**{**vars(ns_t), "apply": True, "attachments_saved": str(sd)}), Ledger(cfg_t), gm_t,
+                        "2026-09-22", pr)
+        check(rc == 1 and any("無い添付: 別紙.pdf" in ln for ln in out_lines),
+              "t23 --attachments-saved の dir に無い添付があれば止まり、 その名前を出す")
+        (sd / "別紙.pdf").write_bytes(b"%PDF")
+        out_lines.clear()
+        rc = run_record(cfg_t, argparse.Namespace(**{**vars(ns_t), "apply": True, "attachments_saved": str(sd)}), Ledger(cfg_t), gm_t,
+                        "2026-09-22", pr)
+        e23 = next(x for f in (td / "lt" / "inbox").glob("*.yaml") for x in (_yaml_safe_load(f.read_text(encoding="utf-8")) or [])
+                   if x.get("id") == "2026-09-22-t-thread-received")
+        check(rc == 0 and e23.get("attachments") == "保存済み: 案内.zip, 別紙.pdf → lt/docs/att/ (暗号化 zip・未展開 = パスワードの便を待つ)"
+              and attachment_record.state_of(e23["attachments"]) == "locked",
+              "t23 全部の添付が保存先にあれば書く。 暗号化 zip の中身が隣に無ければ「未展開」")
+        pe23 = next((td / "lt" / "inbox").glob("*.yaml"))
+        txt23 = pe23.read_text(encoding="utf-8")
+        up = set_attachments_text(txt23, "2026-09-22-t-thread-received", "保存済み: 案内.zip, 別紙.pdf → lt/docs/att/")
+        e_up = next(x for x in _yaml_safe_load(up) if x.get("id") == "2026-09-22-t-thread-received")
+        check(e_up["attachments"] == "保存済み: 案内.zip, 別紙.pdf → lt/docs/att/" and set_attachments_text(up, "2026-09-22-t-thread-received",
+              "保存済み: 案内.zip, 別紙.pdf → lt/docs/att/") == up,
+              "t23 「未展開」 は開いた後の値で置き換わる・同じ値は二度書かない")
+        hand = '- id: "x1"\n  subject: "s"\n  attachments: "a.xlsx (= 参考)"\n  summary: |\n    s\n'
+        e_hand = _yaml_safe_load(set_attachments_text(hand, "x1", "保存済み: b.pdf → d/"))[0]
+        e_none = _yaml_safe_load(set_attachments_text(hand.replace('"a.xlsx (= 参考)"', "なし"), "x1", "保存済み: b.pdf → d/"))[0]
+        check(e_hand["attachments"] == "a.xlsx (= 参考) / 保存済み: b.pdf → d/" and e_none["attachments"] == "保存済み: b.pdf → d/",
+              "t23 人が書いた値の後ろには足し、 「なし」 は置き換える")
+        check(not attachments_decision(cfg_t, argparse.Namespace(attachments_saved=None, attachments_skip=None), [])[1]
+              and attachments_decision(cfg_t, argparse.Namespace(attachments_saved=str(sd), attachments_skip="x"),
+                                       [{"filename": "a"}])[1] is not None
+              and attachments_decision(cfg_t, argparse.Namespace(attachments_saved=None, attachments_skip="署名の画像"),
+                                       [{"filename": "logo.png"}])[0] == "保存しない (署名の画像): logo.png",
+              "t23 添付が無ければ止めない・saved と skip の両方は止める・skip の値")
     finally:
         shutil.rmtree(td, ignore_errors=True)
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")
@@ -1920,7 +2160,8 @@ def build_config(args) -> Config:
                  cache_dir=Path(args.cache_dir).expanduser(), month_header=args.month_header,
                  require_replaces=str(args.require_replaces or "").strip().lower() in ("on", "1", "true", "yes"),
                  decided_field=getattr(args, "decided_field", None) or "decided",
-                 asks_ledger=Path(args.asks_ledger).expanduser() if getattr(args, "asks_ledger", None) else None)
+                 asks_ledger=Path(args.asks_ledger).expanduser() if getattr(args, "asks_ledger", None) else None,
+                 attachment_save_hint=getattr(args, "attachment_save_hint", None) or "")
     return cfg
 
 
@@ -1936,6 +2177,8 @@ def main(argv=None) -> int:
     ap.add_argument("--id", help="新規 entry の id (完全指定)")
     ap.add_argument("--ledger-for-new", help="新規 entry を置く台帳 (既定 = 項目の台帳、 無ければ最初の台帳)")
     ap.add_argument("--no-todo", action="store_true")
+    ap.add_argument("--attachments-saved", metavar="DIR", help="この記録で入る message の添付を開いて保存した dir (添付の名前が全部そこに在るかを確かめ、 entry の attachments: に書く)")
+    ap.add_argument("--attachments-skip", metavar="REASON", help="添付を保存しない理由 (entry の attachments: に「保存しない (<理由>)」 と書く)")
     ap.add_argument("--replaces", help="上書きする現在地の鍵 (dry-run が「上書きの鍵」 として見せる 8 桁)。 読んだ後に現在地が変わっていたら --apply を止める")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--check", action="store_true")
@@ -1968,6 +2211,7 @@ def main(argv=None) -> int:
                     " 本人の答えが決定欄に無いときに知らせる")
     ap.add_argument("--cache-dir", default=str(Path.home() / ".cache" / "record-reply"))
     ap.add_argument("--month-header", default="# {year}-{month:02d} mail ledger")
+    ap.add_argument("--attachment-save-hint", default="", help="添付を保存する command の形 ({account} / {mid} を埋めて dry-run に出す。 shim が渡す)")
     ap.add_argument("--require-replaces", default="off", help="on = 現在地のある項目を書く --apply に --replaces を求める (shim が渡す)")
     args = ap.parse_args(argv)
     if args.selftest:

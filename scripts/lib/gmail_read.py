@@ -147,8 +147,73 @@ def walk_text(payload: dict) -> str:
     return ""
 
 
+def _part_header(part: dict, name: str) -> str:
+    for h in part.get("headers", []) or []:
+        if h.get("name", "").lower() == name.lower():
+            return h.get("value", "")
+    return ""
+
+
+def attachment_parts(payload: dict) -> list[dict]:
+    """payload を辿り、 添付 = file 名を持つ part を [{filename, mimeType, size, attachmentId}] で返す (出現順)。
+
+    本文に埋めた画像 (署名の logo など = Content-ID を持ち、 Content-Disposition が attachment でない image/*) は外す
+    (= 外さないと、 署名に画像がある相手の便がすべて「添付あり」 になり、 添付を確かめる止めが形だけになる)。
+    小さい part は attachmentId でなく body.data に中身を持つことがある = attachmentId は空文字で返す。"""
+    out: list[dict] = []
+
+    def _walk(p: dict) -> None:
+        body = p.get("body") or {}
+        name = p.get("filename") or ""
+        if name and (body.get("attachmentId") or body.get("data")):
+            mime = (p.get("mimeType") or "").lower()
+            disp = _part_header(p, "Content-Disposition").lower()
+            inline_image = mime.startswith("image/") and bool(_part_header(p, "Content-ID")) and not disp.startswith("attachment")
+            if not inline_image:
+                out.append({"filename": name, "mimeType": mime, "size": int(body.get("size") or 0),
+                            "attachmentId": body.get("attachmentId") or ""})
+        for c in p.get("parts", []) or []:
+            _walk(c)
+
+    _walk(payload or {})
+    return out
+
+
+def is_zip(att: dict) -> bool:
+    return att.get("filename", "").lower().endswith(".zip") or att.get("mimeType", "") in (
+        "application/zip", "application/x-zip-compressed", "application/x-zip")
+
+
+def zip_encrypted(data: bytes | None) -> bool | None:
+    """zip の中に暗号化された member があるか (general purpose bit 0)。 None = zip として読めない・中身が無い。"""
+    if not data:
+        return None
+    import io
+    import zipfile
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            infos = z.infolist()
+    except Exception:
+        return None
+    return any(i.flag_bits & 0x1 for i in infos)
+
+
+def attachment_bytes(service, message_id: str, attachment_id: str) -> bytes | None:
+    """添付の中身 (読むだけ、 保存しない)。 失敗 = None。"""
+    if service is None or not attachment_id:
+        return None
+    try:
+        r = service.users().messages().attachments().get(userId="me", messageId=message_id, id=attachment_id).execute()
+        data = r.get("data") or ""
+        return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
+    except Exception:
+        return None
+
+
 def normalize_messages(raw_messages: list[dict], full: bool, include_drafts: bool = False) -> list[dict]:
-    """API の thread.messages → [{id, from, to, cc, bcc, subject, date, internalDate, labels, body}] を internalDate 昇順で。
+    """API の thread.messages → [{id, from, to, cc, bcc, subject, date, internalDate, labels, body, attachments}] を internalDate 昇順で。
+
+    attachments = attachment_parts (full のときだけ。 metadata では part が来ないので空)。
 
     bcc は自分発の控えにだけ残る header (= 宛先が Bcc だけの送信で相手を知る唯一の手がかり)。
     **下書き (label DRAFT) は既定で除く** (threads.get は未送信の下書きも thread の message として返す = 除かないと、
@@ -165,6 +230,7 @@ def normalize_messages(raw_messages: list[dict], full: bool, include_drafts: boo
             "from": header(m, "From"), "to": header(m, "To"), "cc": header(m, "Cc"), "bcc": header(m, "Bcc"),
             "subject": header(m, "Subject") or "(no subject)", "date": header(m, "Date"),
             "body": walk_text(m.get("payload", {})) if full else "",
+            "attachments": attachment_parts(m.get("payload", {})) if full else [],
         })
     out.sort(key=lambda x: int(x.get("internalDate") or 0))
     return out
@@ -227,6 +293,41 @@ def selftest() -> int:
            [m["id"] for m in normalize_messages(raw_d, full=False)] == ["s"]
            and [(m["id"], m["labels"]) for m in normalize_messages(raw_d, full=False, include_drafts=True)]
            == [("s", ["SENT"]), ("d", ["DRAFT"])])
+    mixed = {"mimeType": "multipart/mixed", "parts": [
+        {"mimeType": "multipart/related", "parts": [
+            {"mimeType": "text/html", "body": {"data": b64("<p>本文</p>")}},
+            {"mimeType": "image/png", "filename": "logo.png", "headers": [{"name": "Content-ID", "value": "<x@y>"},
+                                                                           {"name": "Content-Disposition", "value": "inline"}],
+             "body": {"attachmentId": "img1", "size": 900}}]},
+        {"mimeType": "application/zip", "filename": "資料.zip", "headers": [{"name": "Content-Disposition", "value": "attachment"}],
+         "body": {"attachmentId": "att1", "size": 12345}},
+        {"mimeType": "image/jpeg", "filename": "photo.jpg", "headers": [{"name": "Content-ID", "value": "<p@y>"},
+                                                                        {"name": "Content-Disposition", "value": "attachment"}],
+         "body": {"attachmentId": "att2", "size": 50}}]}
+    atts = attachment_parts(mixed)
+    expect("attachment_parts: 本文に埋めた画像 (Content-ID + inline) は外し、 添付の zip と attachment の画像は残す",
+           [(a["filename"], a["attachmentId"], a["size"]) for a in atts] == [("資料.zip", "att1", 12345), ("photo.jpg", "att2", 50)])
+    expect("attachment_parts: 添付の無い payload は空", attachment_parts(plain) == [] and attachment_parts({}) == [])
+    expect("is_zip: 拡張子か MIME", is_zip({"filename": "a.ZIP"}) and is_zip({"filename": "a", "mimeType": "application/x-zip-compressed"})
+           and not is_zip({"filename": "a.pdf", "mimeType": "application/pdf"}))
+    import io
+    import zipfile as _zf
+    buf = io.BytesIO()
+    with _zf.ZipFile(buf, "w") as z:
+        z.writestr("a.txt", "x")
+    plain_zip = buf.getvalue()
+    enc_zip = bytearray(plain_zip)
+    # local header (offset 6) と central directory (offset 8) の general purpose bit 0 を立てる = 暗号化 zip の印
+    enc_zip[6] |= 0x1
+    cd = enc_zip.find(b"PK\x01\x02")
+    enc_zip[cd + 8] |= 0x1
+    expect("zip_encrypted: 暗号化の印 (bit 0) を読む・平の zip は False・zip でない / 空は None",
+           zip_encrypted(bytes(enc_zip)) is True and zip_encrypted(plain_zip) is False
+           and zip_encrypted(b"not a zip") is None and zip_encrypted(None) is None)
+    expect("normalize_messages: full なら attachments、 metadata なら空",
+           normalize_messages([{"id": "m", "internalDate": "1", "payload": mixed}], full=True)[0]["attachments"] == atts
+           and normalize_messages([{"id": "m", "internalDate": "1", "payload": mixed}], full=False)[0]["attachments"] == [])
+    expect("attachment_bytes: service 無し・id 無しは None", attachment_bytes(None, "m", "a") is None and attachment_bytes(object(), "m", "") is None)
     expect("thread_messages / thread_of_message: service 無しは None", thread_messages(None, "x") is None and thread_of_message(None, "x") is None)
     expect("load_account_creds: 無い account は None", load_account_creds(Path("/nonexistent-dir-for-selftest"), "x") is None)
     import io
