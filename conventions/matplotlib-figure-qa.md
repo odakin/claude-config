@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands) + スライド・文書に置く図の大きさと文字の pt を決めるとき・図の文字が頁で小さく見えるとき (#draw-at-placed-size) + matplotlib の絵を並べて短い動画 (紹介・タイトル映像、 音楽つき) を作るとき (#short-video-from-frames)
+when: matplotlib で図 (論文・研究費調書・発表スライド・様式) を生成する script を書く/直すとき + 物理の模型から図解 (バナー・表紙・スライドの飾り) を描くとき (#model-based-illustration-check) + 曲線上の点・基準線・必要量に注記と矢印を付けるとき (#annotation-colors-and-arrows) + 図の文字列の数式が `Unknown symbol` で落ちたとき (#mathtext-unsupported-commands) + スライド・文書に置く図の大きさと文字の pt を決めるとき・図の文字が頁で小さく見えるとき (#draw-at-placed-size) + matplotlib の絵を並べて短い動画 (紹介・タイトル映像、 音楽つき) を作るとき (#short-video-from-frames) + 日本語入り図のPDFで文字が欠けるとき・SVGからPDFへの変換で透明な塗りが濃くなるとき (#outlined-svg-pdf)
 category: paper
 summary: matplotlib 図の「全ラベル枠内」機械 gate (assert_texts_inside = render 済み extent を axes 枠と照合し 1 px 超過で図の生成自体を落とす)・既存図を置換するときの情報 inventory / snapshot / actual-render layering review・機構 fact・射程の限界・絵を ffmpeg に流して短い動画を作る経路 (#short-video-from-frames)
 -->
@@ -247,3 +247,32 @@ matplotlib の mathtext は LaTeX の部分集合で、 `\tfrac` のような命
 - **正しくした計算でも sha256 は変わりうる**: PDF の backend は path の座標を pt の小数 6 桁に丸めて書く = 値の $10^{-15}$ 程度の変化でも、 丸めの境目にある 1 点の座標が 1 桁変わる (実測: 1 点が $2\times10^{-6}$ pt)。 そのとき生の bytes はほぼ全体が違って見える (中身の流れが Flate で圧縮され、 後ろの object の位置もずれるため) = `cmp` の件数は差の大きさを表さない。
 - **違ったら中身で比べる**: `stream … endstream` を `zlib.decompress` で展開して並べ、 `diff` する (描画の命令と座標が行で出る)。 流れの外は、 流れを伏せて行ごとに突き合わせ、 差が流れの長さ (`/Length`) と目次の位置 (xref の各行・`startxref`) のずれだけかを数える。 PNG は画素ごとの差を数える (差のある画素の数と、 最大の段差)。
 - **報告は差の中身で書く**: 「sha256 が変わった」 で止めず、 「座標 N 点、 最大 Δ pt / 画素 M 個、 最大 k 段」 と書く。 「sha256 不変」 が依頼の条件で、 より正しい計算がそれを破るなら、 両方の形と差を並べて依頼元に決めてもらう (どちらかを黙って選ばない)。
+
+
+## <a id="outlined-svg-pdf"></a>日本語の文字をSVGでパスにしてPDFへ渡す — 透明な塗りも比べる
+
+matplotlibからCJKフォントを直接PDFへ埋め込む経路で文字が欠ける場合は、文字を描く段階で
+SVGのパスへ変え、そのSVGをPDFへ変換する方法がある。壊れたPDFを後からパス化する経路とは異なる。
+直接埋め込みの既知の症状は [LaTeXの図取り込み](latex.md#matplotlib-cjk-figure-embedding) を参照する。
+
+```python
+import io
+import fitz
+import matplotlib
+
+svg = io.BytesIO()
+with matplotlib.rc_context({'svg.fonttype': 'path'}):
+    fig.savefig(svg, format='svg', facecolor=background)
+with fitz.open('svg', svg.getvalue()) as source:
+    pdf_bytes = source.convert_to_pdf()
+with fitz.open('pdf', pdf_bytes) as pdf:
+    pdf.save(output_pdf)
+```
+
+- 元のfigureのPNGと、変換後PDFを画像化したものを並べ、CJK・数字・記号の字形と色を確認する。
+  パス化すると文字検索・コピーのための文字層は失われる。文字層が必要な成果物は別の書体・埋め込み経路で検証する。
+- SVGからPDFへの変換では、塗りの透明度が保持されず、淡い帯が元の色のまま濃く出ることがある (実測)。
+  背景が単一色で、帯がほかの塗りと重ならない図なら、RGB各成分を
+  `opaque = alpha * foreground + (1 - alpha) * background` で先に混ぜ、
+  PNG・SVGの両方へ同じ不透明色を渡す。重なる図形や透明背景は、透明度を保持する経路で描画を比べる。
+- 文字と色の片方だけの修正で検証を終えず、修正後の最終PDFを画像化してもう一度見る。
