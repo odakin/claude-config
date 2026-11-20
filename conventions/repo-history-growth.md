@@ -98,6 +98,7 @@ GitHub の上限 (公式 docs: [About large files on GitHub](https://docs.github
   (効いているかは `ssh -G <host>` の `controlmaster` の行で見る)。
 - <a id="stalled-control-master"></a>⚠️ **使い回す接続 (ControlMaster) が止まると、 それに載る fetch・push・ls-remote が全部ぶら下がる** (実測: 道具の git の時間切れが続き、 時間切れで親が終わった後も ssh の子が残った)。
   `ssh -O check <host>` は止まっていても「Master running」 と答えるので、 生きているかの判定に使わない。
+  止まっている印 = `ssh -v -o BatchMode=yes -T <host>` の出力が `debug1: auto-mux: Trying existing master at '<ControlPath>'` (と、 その直後の 1 行) で止まって進まない (止まっていれば返らないので、 時間切れを付けて回す。 実測: host への TCP の接続は数十 ms で通るのに、 この行の後で 15 秒待っても進まなかった)。
   切り分け = 使い回しを外した直の接続で同じ操作を回す (`GIT_SSH_COMMAND='ssh -o ControlMaster=no -o ControlPath=none' git ls-remote origin <branch>`)。
   こちらが数秒で通れば、 止まっているのは使い回す接続の側 (接続そのものが止まったのか、 1 本の接続に載せた通信の数が上限に当たったのかは切り分けていない)。
   自分の操作だけを先に通すなら、 同じ環境変数を付けて回す (使い回す接続には触らない)。
