@@ -8,7 +8,7 @@ context から思い出すと、 file に残らない形 (heredoc で interprete
 script は subagent-reports.py、 headless の worker の script は headless-worker-reports.py が出す = 本 script は session 本体の分。
 
 拾うもの (session 本体の記録 <projects-dir>/<project>/<session id>.jsonl の道具の呼び出し):
-  1. file に書いた script — Write / Edit / MultiEdit / NotebookEdit の path と、 Bash の `cat > path <<EOF` / `tee path <<EOF`
+  1. file に書いた script — Write / Edit / MultiEdit / NotebookEdit の path と、 Bash の `cat > path <<EOF` (追記の `cat >> path` も) / `tee path <<EOF`
      のうち、 拡張子が script のもの (SCRIPT_EXT) か本文が shebang で始まるもの。 相対 path は、 同じ command の中の
      `cd <dir> &&` / `cd <dir>;` を順に当てた位置から解決する (記録の cwd は command を打つ前の位置 = その cd を含まない。
      実測: `cd <下の dir> && cat > x.py` を 1 つ上の dir で探し、 commit 済みの file を「もう無い」 と出した)。
@@ -120,7 +120,7 @@ def path_args(cmd, ext):
             out.append((pos, unquote_path(val)))
     return sorted(out)
 CAT_TO_FILE_RE = re.compile(
-    r"(?:cat|tee)\s+(?:-a\s+)?>?\s*(['\"]?)([^\s'\";&|<>]+)\1\s*<<-?\s*(['\"]?)(\w+)\3[^\n]*\n(.*?)\n\s*\4\s*(?:\n|$)", re.S)
+    r"(?:cat|tee)\s+(?:-a\s+)?(?:>>?)?\s*(['\"]?)([^\s'\";&|<>]+)\1\s*<<-?\s*(['\"]?)(\w+)\3[^\n]*\n(.*?)\n\s*\4\s*(?:\n|$)", re.S)
 # 同じ command の中の `cd <dir> &&` / `cd <dir>;` (記録の cwd は command を打つ前の位置 = この cd を含まない)。
 # 引用符で囲んだ cd 先は空白を含んでよい (実測: `cd "…/related papers" && …` に当たらず、 その後の相対の path を
 # 記録の cwd で解いて「もう無い」 と出した)
@@ -644,6 +644,9 @@ def selftest():
         check(set(files) == {os.path.join(repo, "kept.py"), os.path.join(repo, "dirty.py"), tmpscript,
                              os.path.join(repo, "gen.sh"), os.path.join(repo, "sub", "gen2.sh")},
               "file に書いた script = 5 本 (md は数えない、 cat > も拾う、 同じ command の cd 先で解決する)")
+        appended = CAT_TO_FILE_RE.search("cat >> /a/x.py <<'EOF'\nprint(1)\nEOF")
+        check(appended is not None and appended.group(2) == "/a/x.py",
+              "cat >> (追記の形) の書き先も file に書いた script と拾う (実測: cat >> で書いた確かめの script を数え落とした)")
         check(file_status(os.path.join(repo, "sub", "gen2.sh"))[0] == "✅", "cd 先に書いて commit 済みの file は ✅ (cd の前の位置で探して ❌ にしない)")
         check(_cwd_at("cd /a/b && cd c && cat > f", 22, "/x") == "/a/b/c" and
               _cwd_at('cd "$D" && cat > f', 12, "/x") == "/x/$D", "cd を順に当てる / 展開できない変数の cd 先は path に残す")
