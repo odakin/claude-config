@@ -215,7 +215,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 ## <a id="report"></a>5. 横断 sweep と報告
 
 - 最後の commit の後に 1 回、 error を見つけるつもりで横断を見る (変えた関数の他の呼び元、 消した語の残り、 壊れた link)。
-  壊れた link は手書きの検査を書かず道具で見る: `python3 scripts/fix-md-links.py --base <作業ルート> --files <変えた md> --list` (0 件なら `missing target: 0`)。
+  壊れた link は手書きの検査を書かず道具で見る: `python3 scripts/fix-md-links.py --base <作業ルート> --files <変えた md> --list` (0 件なら `missing target: 0`)。 `--files` は作業ディレクトリからの path として読まれる = 作業ルートからの path を別の dir (repo の中など) から渡すと、 どの file も読まずに `missing target: 0` と出る (実測) = 絶対 path で渡す。 0 件を信じる前に、 存在しない file への link を 1 本書いた一時の md (git repo の中) を同じ形で渡し、 1 件と出るのを見る。
 - <a id="stop-own-watches"></a>**最終 message の前に、 この session の背景の作業を道具で数え、 要らなくなった見張りを止める**:
   `python3 scripts/lib/session_background_tasks.py self` が、 生きている背景の作業 (Bash の背景・前景から背景へ移った command・Monitor。
   subagent が仕掛けたものは誰のかを添える) を並べ、 見張りか (掲示板の `watch`・`touching --wait`、 照合の `--wait` / `--wait-due`、
