@@ -4364,18 +4364,37 @@ _NATIVE_RE = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
 _EVENT_ID_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[a-z0-9][a-z0-9-]{5,63}$")
 _DELEGATION_KEYS = {"version", "enabled", "rule", "owner_ruling", "board_root", "reviewer_roles", "repos", "owner_paths"}
 _SETTINGS_JSON = ("*settings*.json", ".codex/hooks.json")
-# 書き込みの形 (検収係が候補・対象を書いていないかの照合)。 path を名指す command は、 読む形と分かるもの (下の一覧)
-# だけを読むと数え、 それ以外は書いたと数える (形の分からない command は書いた側に倒す = 盲検の実測: `env cp` を
-# 知らない command として通していた)。 前に付く包み (env・command・nice …) は外してから見る
+# 書き込みの形 (検収係が候補・対象を書いていないかの照合)。 数えるのは、 その file を書く先に名指した呼び出しだけ =
+# 編集 tool の file・出力の redirect の先・読む形と分からない command の引数 (本人の裁定で照合をここに絞った。 実測:
+# 読むだけの command の相対の glob・/dev/null と fd の付け替えの redirect・cd・変数の代入・ありふれた 1 行の一致を
+# 書いたと数え、 委任の道が通らなかった)。 読む形と分からない command は書く側に倒す (盲検の実測: `env cp` を知らない
+# command として通していた)。 前に付く包み (env・command・nice …) は外してから見る
 _WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 _COPY_CMDS = {"cp", "install", "rsync", "ditto", "gcp"}  # ln は写しでなく別名を作る = 書く形
 _MOVE_CMDS = {"mv", "gmv"}  # 名指した file を動かす = 書く
 # 読む形と数える command。 file に書く option を持つもの (sort -o・rg --pre・less の command 等) は入れない
 _READ_CMDS = {"cat", "head", "tail", "grep", "egrep", "fgrep", "rg", "diff", "cmp", "comm",
               "shasum", "sha256sum", "sha1sum", "md5", "md5sum", "wc", "ls", "stat", "file", "readlink", "realpath",
-              "nl", "od", "hexdump", "test", "[", "echo", "printf",
-              "cd", "pushd", "popd", "pwd", "true", ":"}  # 後の 6 つは何も書かない組み込み
-_READ_GIT = {"diff", "show", "log", "blame", "status", "ls-files", "ls-tree", "cat-file", "rev-parse", "grep", "check-attr"}
+              "nl", "od", "hexdump", "test", "[", "[[", "echo", "printf",
+              "cut", "tr", "column", "fold", "rev", "tac", "paste", "expand", "jq", "basename", "dirname", "du",
+              "cd", "pushd", "popd", "pwd", "true", ":", "read", "sleep"}  # 後の 8 つは何も書かない組み込み
+# 読む形の command のうち、 書く option を 1 つも持たないもの = 展開した語 ($x) が option になっても書かない (rg --pre・
+# file -C は書く・動かす option を持つので外す)
+_PURE_READ_CMDS = _READ_CMDS - {"rg", "file"}
+_READ_GIT = {"diff", "show", "log", "blame", "status", "ls-files", "ls-tree", "cat-file", "rev-parse", "grep", "check-attr",
+             # 作業ツリーの file を書かない形 (refs・設定でない .git の中だけ)。 fetch は --upload-pack (外の command) を除く
+             "fetch", "rev-list", "merge-base", "for-each-ref", "show-ref", "describe", "shortlog", "name-rev",
+             "count-objects", "diff-tree", "diff-index", "diff-files", "whatchanged", "branch", "tag", "cherry",
+             "range-diff", "check-ignore", "ls-remote", "reflog", "var", "version", "help"}
+# 作業ツリーの file を書かないと分かる git の subcommand (refs・設定・object・remote だけ)。 対象・候補の dir で打っても
+# 書いたと数えない。 これと読む形 (_READ_GIT) の外は、 その dir で打てば数える (知らない subcommand = alias も)
+_GIT_NON_TREE = {"push", "tag", "notes", "remote", "config", "gc", "prune", "repack", "fsck", "hash-object", "update-ref",
+                 "symbolic-ref", "pack-refs", "maintenance", "credential", "add"}
+_GIT_STDIN_WRITERS = {"apply", "am", "checkout-index"}  # 標準入力・引数の中身 (patch・path) を作業ツリーに書く
+_FIND_ACTIONS = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fls", "-fprint", "-fprint0", "-fprintf"}  # 消す・走らせる・file に出す
+_LIST_HEADS = {"for", "select"}  # `for x in …` = 語の並びを変数に渡すだけ (書かない。 並べた語は literal の名指しに数える)
+_INPUT_REDIRS = {"<", "<<<", "<<", "<<-"}  # 中身を command の入力に渡す redirect (heredoc も)
+_INTERPRETER_RE = re.compile(r"python[0-9.]*|bash|sh|zsh|dash|ksh|perl|ruby|node|osascript")  # inline の program を -c / -e で取る
 _WRAPPERS = {"env", "command", "builtin", "exec", "nice", "nohup", "time", "timeout", "sudo", "caffeinate", "xargs",
              "stdbuf", "ionice", "doas"}
 _KEYWORDS = {"!", "if", "then", "else", "elif", "do", "while", "until", "{"}  # 自分では何も動かさない shell の語
@@ -4385,7 +4404,7 @@ _SHELL_OPS = sorted(["&&", "||", ";;", "|&", "<<<", "<<-", "<<", ">>", "<>", ">|
 _SEP_OPS = {";", "&", "&&", "||", "|", "|&", "\n", "(", ")", ";;"}
 _PIPE_OPS = {"|", "|&"}
 _OUT_REDIRS = {">", ">>", ">|", "&>", "&>>", "<>", ">&"}
-_HEREDOC_OPS = {"<<", "<<-", "<<<"}
+_HEREDOC_OPS = {"<<", "<<-"}  # 本文が後の行に続く形 (字句に分けると本文が command の語に混ざる)。 `<<<` は入力の redirect
 
 
 def delegation_base() -> Path:
@@ -4946,6 +4965,11 @@ def _posted_receipt(uses: dict, results: dict, event_id: str, target: Path, cand
             parsed = parsed[1:]
         while parsed and parsed[-1][:2] == ("op", "\n"):
             parsed = parsed[:-1]
+        # 末尾の fd の付け替え (`2>&1`) は付けてよい = 出力を混ぜるだけで、 何も書かず `posted` の行も隠さない (実測: 習慣の
+        # `2>&1` を付けた approve-edit が受け取りに数えられなかった)。 pipe・; && ・ほかの redirect は今までどおり数えない
+        while len(parsed) >= 2 and parsed[-2][:2] == ("op", ">&") and parsed[-1][0] == "w" \
+                and re.fullmatch(r"[0-9]+", parsed[-1][1]) and not parsed[-1][2]:
+            parsed = parsed[:-2]
         if not parsed or any(kind == "op" or exp for kind, _, exp in parsed):
             continue
         toks = [t for _, t, _ in parsed]
@@ -4992,21 +5016,6 @@ def _pickup_boundary(uses: dict, results: dict, events: list[dict], request_id: 
     found = [first[str(u.get("msg") or f"use:{k}")] for k, u in uses.items()
              if hit.search(str((results.get(k) or {}).get("text") or ""))]
     return min(found) if found else None
-
-
-def _added_lines(old: str, new: str) -> list[str]:
-    """候補が足した行 (6 字以上、 空白を潰したもの)。 検収係がそれを書いていないかを見るのに使う。 diff の文でなく行の
-    対応 (SequenceMatcher の opcode) から取る (盲検の実測: `+++` で始まる行を diff の見出しと読んで落とした)。"""
-    import difflib
-    a, b = (old or "").splitlines(), (new or "").splitlines()
-    out = []
-    for tag, _i1, _i2, j1, j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
-        if tag in ("insert", "replace"):
-            for ln in b[j1:j2]:
-                s = collapse_ws(ln).strip()
-                if len(s) >= 6:  # 16 字では短い行 (`echo more`) の下書きを見落とした = 盲検の実測
-                    out.append(s)
-    return out
 
 
 def _names_path(token: str, targets: list[Path], rels: list[str]) -> bool:
@@ -5212,13 +5221,41 @@ def _segment_reads(words: list[str], targets: list[Path], rels: list[str]) -> bo
         return False
     if cmd in _READ_CMDS:
         return True
+    if cmd in ("find", "gfind"):  # 名を出すだけの形 (消す・command を走らせる・file に出す主を持たないもの)
+        return not any(w in _FIND_ACTIONS or w.startswith("-fprint") for w in rest)
+    if cmd in ("sort", "gsort"):  # -o・--output は出力の file
+        return not any(w.startswith(("-o", "--output")) or (re.fullmatch(r"-[A-Za-z]+", w) and "o" in w) for w in rest)
+    if cmd in ("uniq", "guniq"):  # 2 つ目の file の名は出力の file
+        return len([w for w in rest if not w.startswith("-")]) <= 1
+    if cmd in ("awk", "gawk", "nawk"):
+        # 行を出すだけの program: file を読み込む option (-f・-i・--include・-E) が無く、 program に command を走らせる形
+        # (system()・`| getline`) と print の出力の redirect・pipe (print … > / >> / |) が無いこと
+        if any(w.startswith(("-f", "-i", "--include", "-E", "--exec", "--file")) for w in rest):
+            return False
+        prog, skip = "", False
+        for w in rest:
+            if skip:
+                skip = False
+            elif w in ("-F", "-v"):
+                skip = True  # 値を次の語に持つ option
+            elif not w.startswith("-"):
+                prog = w
+                break
+        return not re.search(r"system\s*\(|\|\s*getline|\bprintf?\b[^;{}\n]*[|>]", prog)
     if cmd in ("sed", "gsed"):
         # 読むと数えるのは行を出すだけの script (`-n 1,20p` の形) だけ。 w・W・e・r の命令や -i は書く・動かす形
         # (盲検の実測: `sed -n 'w <対象>'` を読む形と数えていた)
         if any(w.startswith(("-i", "--in-place", "-e", "--expression", "-f", "--file")) for w in rest):
             return False
         script = next((w for w in rest if not w.startswith("-")), "")
-        return bool(re.fullmatch(r"(?:[0-9$]+(?:,[0-9$]+)?|/[^/\n]*/)?[pq]", script))
+        # 行の番号を変数で書いた形 (`"${n}p"`) は番号として読む (変数だけの script は読む形にしない)
+        script = re.sub(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*(?=[0-9,pq$])", "1", script)
+        if re.fullmatch(r"(?:[0-9$]+(?:,[0-9$]+)?|/[^/\n]*/)?[pq]", script):
+            return True
+        # 置換だけの script (`s/…/…/g` を ; で並べたもの、 区切りの字は / | # ,)。 w (file に書く)・e (command を走らせる)
+        # の旗は書く形
+        sub = r"(?:[0-9$]+(?:,[0-9$]+)?|/[^/\n]*/)?s([/|#,])(?:(?!\1).)*\1(?:(?!\1).)*\1[gIip0-9]*"
+        return bool(re.fullmatch(rf"{sub}(?:;\s*{sub})*;?", script))
     if cmd in _MOVE_CMDS:
         return False
     if cmd in _COPY_CMDS:
@@ -5229,14 +5266,23 @@ def _segment_reads(words: list[str], targets: list[Path], rels: list[str]) -> bo
             if rest[i] == "-c" or rest[i].startswith(("--config-env", "--exec-path")):
                 return False  # 設定で外の command (pager・diff の外部の道具) を走らせうる
             i += 2 if rest[i] == "-C" else 1
+        if i < len(rest) and rest[i] == "apply":  # 当てずに確かめるだけの形 (--check・--stat …、 --apply なし)
+            return (any(w in ("--check", "--stat", "--numstat", "--summary") for w in rest[i + 1:])
+                    and "--apply" not in rest[i + 1:])
         if i >= len(rest) or rest[i] not in _READ_GIT:
             return False
         # 出力を file に書く・外の道具を走らせる option (盲検の実測: `git diff --no-index --output=<対象>` が通った)
-        return not any(w.startswith(("--output", "--open-files-in-pager", "-O", "--ext-diff")) for w in rest[i + 1:])
+        return not any(w.startswith(("--output", "--open-files-in-pager", "-O", "--ext-diff", "--upload-pack"))
+                       for w in rest[i + 1:])
     if re.fullmatch(r"python[0-9.]*", cmd) and rest:
         line = " ".join(rest)
         if PurePosixPath(rest[0]).name == "board.py" and re.search(r"(?<![\w-])(approve-edit|edit-approvals|show|inbox)(?![\w-])", line):
             return True  # 承認の event を書く・読む掲示板の command (--file / --candidate は読むだけ)
+        if PurePosixPath(rest[0]).name in ("board.py", "board_asks.py") and len(rest) > 1 \
+                and re.fullmatch(r"[a-z][a-z-]*", rest[1]) and rest[1] != "launch":
+            # 掲示板の道具と問いの台帳は、 掲示板・送り出しの dir・台帳にだけ書く (要約・--deliverable・--evidence の path は
+            # 記録するだけ)。 launch は別の窓を起こす
+            return True
         if any(k in rest[0] for k in ENGINE_TOKENS):
             sub = next((w for w in rest[1:] if not w.startswith("-")), "")
             return sub == "scan" or "--dry-run" in rest  # 守りの道具の空回しと差分の表示は書かない
@@ -5316,84 +5362,260 @@ def _shell_tokens(command: str) -> list[tuple[str, str, bool]] | None:
 
 
 def _shell_split(tokens: list[tuple[str, str, bool]]) -> list[dict]:
-    """単純な command ごとの {words, redirs: [(記号, 先の語)], after_pipe} の並び。"""
+    """単純な command ごとの {words, wexp (語ごとに展開を含むか), redirs: [(記号, 先の語, 先が展開を含むか)], after_pipe,
+    procsub (process substitution を語に持つか)} の並び。"""
     segs: list[dict] = []
-    cur: dict = {"words": [], "redirs": [], "after_pipe": False}
+
+    def new(carry: bool = False) -> dict:
+        return {"words": [], "wexp": [], "redirs": [], "after_pipe": carry, "procsub": False}
+
+    cur = new()
     pending: str | None = None
     outer: list[dict] = []  # process substitution (`<(…)` `>(…)`) の外の command (中の command は別の単純な command)
-    for kind, text, _ in tokens:
+    for kind, text, exp in tokens:
         if kind == "op" and text in ("<(", ">("):
             cur["words"].append(text + "…)")
+            cur["wexp"].append(False)
+            cur["procsub"] = True
             outer.append(cur)
-            cur = {"words": [], "redirs": [], "after_pipe": False}
+            cur = new()
             continue
         if kind == "op" and text == ")" and outer:
             if pending is not None:
-                cur["redirs"].append((pending, ""))
+                cur["redirs"].append((pending, "", False))
                 pending = None
             segs.append(cur)
             cur = outer.pop()
             continue
         if kind == "op" and text in _SEP_OPS:
             if pending is not None:
-                cur["redirs"].append((pending, ""))
+                cur["redirs"].append((pending, "", False))
                 pending = None
             segs.append(cur)
             # 区切りの後の空の command (`a |` + 改行 + `b`) は pipe を引き継ぐ
             carry = text in _PIPE_OPS or (cur["after_pipe"] and not cur["words"] and not cur["redirs"])
-            cur = {"words": [], "redirs": [], "after_pipe": carry}
+            cur = new(carry)
         elif kind == "op":
             if pending is not None:
-                cur["redirs"].append((pending, ""))
+                cur["redirs"].append((pending, "", False))
             pending = text
         elif pending is not None:
-            cur["redirs"].append((pending, text))
+            cur["redirs"].append((pending, text, exp))
             pending = None
         else:
             cur["words"].append(text)
+            cur["wexp"].append(exp)
     if pending is not None:
-        cur["redirs"].append((pending, ""))
+        cur["redirs"].append((pending, "", False))
     segs.append(cur)
     segs.extend(outer)  # 閉じない process substitution の外の command も見る
     return [s for s in segs if s["words"] or s["redirs"]]
 
 
-def _all_read(toks: list[tuple[str, str, bool]], targets: list[Path], rels: list[str]) -> bool:
-    """command の全体が読む形と分かるか: 展開・heredoc・process substitution・出力の redirect を含まず、 どの単純な
-    command も読む形と分かる command (cd などの書かない組み込みを含む)。 pipe・; && || で繋いでよいのは読む command どうし
-    (4 回目の盲検: process substitution の中で候補を読み、 外の bash がその中身を実行して対象を書いた)。"""
-    if any(exp for _, _, exp in toks):
-        return False
-    if any(kind == "op" and (text in _HEREDOC_OPS or text in _OUT_REDIRS or text in ("<(", ">("))
-           for kind, text, _ in toks):
-        return False
-    return all(_segment_reads(_unwrap(s["words"]), targets, rels) for s in _shell_split(toks))
+def _names_file(word: str, targets: list[Path], rels: list[str], loose: bool = True) -> bool:
+    """語が対象・候補の file を literal で名指すか (dir は数えない)。 対象の絶対 path を中に含む語 (`python3 -c` の文の中も)、
+    相対の名と同じか中に含む語、 最後の段が file の名と同じ相対の語 (相対の語の場所は分からない)。 loose なら、 file の名を
+    語の切れ目で中に含む相対の語も (読む形でない command の code の文 = `open('check.sh','w')`)。 loose でないのは、 展開・
+    pipe で渡りうる path の名指し (named) を数えるとき = 検索語・文の中の名は path を渡さない (較正の実測: grep の検索語の
+    中の file の名で、 同じ command の別の redirect を書いたと数えた)。 絶対 path の語は解決した path だけで見る (5 回目の
+    盲検: 写しの dir の `<写し>/hooks/check.py` を、 相対の名の部分一致で対象と読んだ)。"""
+    if _names_path(word, targets, rels) or any(str(x) in word for x in targets):
+        return True
+    piece = word.split("=", 1)[-1]
+    try:
+        if Path(os.path.expanduser(piece)).is_absolute():
+            return False
+    except (OSError, ValueError):
+        pass
+    if any(r and r in word for r in rels):
+        return True
+    if any(x.name and PurePosixPath(piece).name == x.name for x in targets):
+        return True
+    return loose and any(x.name and re.search(rf"(?<![\w.-]){re.escape(x.name)}(?![\w-])", word) for x in targets)
 
 
-def _reads_only(command: str) -> bool:
-    """command の全体が読む形と分かるか (掲示板の approve-edit と守りの道具の --dry-run を含む)。"""
-    toks = _shell_tokens(command)
-    return toks is not None and _all_read(toks, [], [])
+def _text_names_file(text: str, targets: list[Path], rels: list[str]) -> bool:
+    """文 (heredoc の本文) が対象・候補の file を literal で名指すか = 絶対 path・相対の名・file の名 (語の切れ目で) を含む。"""
+    return (any(str(x) in text for x in targets) or any(r and r in text for r in rels)
+            or any(x.name and re.search(rf"(?<![\w.-]){re.escape(x.name)}(?![\w-])", text) for x in targets))
+
+
+_HEREDOC_START = re.compile(r"<<(-?)[ \t]*(?:'([^'\n]+)'|\"([^\"\n]+)\"|\\?([A-Za-z_][\w.-]*))")
+
+
+def _split_heredocs(command: str) -> tuple[str, list[str]] | None:
+    """heredoc の本文を command から外す = (本文を外した command, 本文の並び)。 本文は記号の行の次の行から、 区切りの語だけの
+    行 (`<<-` は前の tab を除いて) の前まで。 区切りの行が無いときと、 外した後の command の heredoc の記号の数が本文の数と
+    合わない (引用の中の `<<` を記号と読んだ) ときは None = 今までどおり語で照らす。"""
+    lines = command.split("\n")
+    out: list[str] = []
+    bodies: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        i += 1
+        for m in _HEREDOC_START.finditer(line):
+            if line[max(0, m.start() - 1):m.start()] == "<":
+                continue  # `<<<` (here-string) は本文を持たない
+            delim = m.group(2) or m.group(3) or m.group(4)
+            body: list[str] = []
+            while i < len(lines) and (lines[i].lstrip("\t") if m.group(1) else lines[i]) != delim:
+                body.append(lines[i])
+                i += 1
+            if i >= len(lines):
+                return None
+            i += 1  # 区切りの行
+            bodies.append("\n".join(body))
+    stripped = "\n".join(out)
+    toks = _shell_tokens(stripped)
+    if toks is None or sum(1 for k, t, _ in toks if k == "op" and t in _HEREDOC_OPS) != len(bodies):
+        return None
+    return stripped, bodies
+
+
+def _not_a_file(op: str, dest: str) -> bool:
+    """file に書かない redirect の先 = fd の付け替え・閉じ (`2>&1`・`>&-`) と /dev の下 (/dev/null など)。"""
+    return (op in (">&", "<&") and re.fullmatch(r"[0-9]+-?|-", dest) is not None) or dest.startswith("/dev/")
 
 
 def shell_writes(command: str, targets: list[Path], rels: list[str]) -> bool:
-    """command がその path を書く形か。 字句を解いた語のどれかが対象・候補・対象を下に持つ dir・相対で同じ名に当たる
-    command は、 全体が読む形と分かる (_all_read) ときだけ書いていないと数え、 それ以外は書いた側に倒す (変数・置換・
-    heredoc・process substitution・出力の redirect・読む形でない command を 1 つでも含む)。 字句に分けられない command は、
-    対象の名を含めば書いた側。 規則の文 = 名指す command は読む形の command だけで、 path を literal で書く。"""
-    toks = _shell_tokens(command)
+    """command がその path を書く形か。 数えるのは、 対象・候補を書く先に名指した単純な command だけ (本人の裁定で照合を
+    ここに絞った。 実測: 読むだけの command の相対の glob・/dev/null と fd の付け替えの redirect・cd・変数の代入を書いたと
+    数え、 委任の道が通らなかった):
+      1. 出力の redirect の先が対象・候補・それを書きうる dir に当たる (fd の付け替え・/dev の下は数えない)。 先が展開なら、
+         同じ command のどこかで対象・候補の file を literal で名指していれば数える
+      2. 読む形と分からない command (_segment_reads) の引数が対象・候補・それを書きうる dir に当たる。 置換 (`$(…)`・
+         backtick) を中に持つ語は、 中の command が見えないので、 どの command の語でも名指していれば数える
+      3. 読む形と分からない command が、 展開した語・pipe・入力の redirect・process substitution から path や中身を受け取り、
+         同じ command のどこかで対象・候補の file を literal で名指している (`echo <対象> | xargs rm`・`bash <(cat <候補>)`・
+         `f=<対象>; rm "$f"`)
+      4. 読む形とも作業ツリーを書かない形 (push・tag・config …) とも分からない git の command を、 対象・候補の dir に
+         `cd` した後か `-C` で打つ (名指しの語の無いまま作業ツリーを書き換える = checkout・stash・pull・alias …)。
+         patch を受け取る git (apply・am) は、 名指した path の中身を受け取れば場所に依らず数える
+    数えないもの = 読む形の command の引数・cd・変数の代入だけの語。 読む形の command でも、 書く option を持ちうるもの
+    (rg・file・xxd …) は、 展開した語があれば読む形と数えない (option が分からない)。 git・sed・掲示板の道具は
+    subcommand・option・script を literal の語で見て、 展開した語は値と読む。 相対の語は前の `cd <path>` の行き先からも解く
+    (path の形の語だけ。 対象の外の dir では裸の名を解かない)。 heredoc の本文は command の
+    語から外し、 その command の入力として 3 に数える (本文が対象・候補を名指していれば「名指した」 に数える)。 本文を
+    分けられない heredoc と字句に分けられない command は、 対象・候補・dir を名指す語があれば書いた側に倒す (今までどおり)。
+    規則の文 = 名指す command は読む形の command にし、 path を literal で書く。"""
+    dirs = _guarded_dirs(targets, rels)
+    split = _split_heredocs(command) if "<<" in command else (command, [])
+    toks = _shell_tokens(split[0] if split else command)
     if toks is None:
         return any(x.name in command for x in targets) or any(r in command for r in rels)
-    dirs = _guarded_dirs(targets, rels)
-    if not any(kind == "w" and _involves(text, targets, rels, dirs) for kind, text, _ in toks):
-        return False
-    return not _all_read(toks, targets, rels)
+    if split is None:  # 本文を分けられない heredoc = 本文の語も command の語として照らす (今までどおり)
+        return any(kind == "w" and _involves(text, targets, rels, dirs) for kind, text, _ in toks)
+    cwd: list[Path | None] = [None]  # 前の `cd <literal の path>` の行き先 (相対の語をここから解いて、 今の判定に足す)
+
+    def involves(w: str) -> bool:
+        if _involves(w, targets, rels, dirs) or _names_file(w, targets, rels):
+            return True
+        piece = (w.split("=", 1)[-1] if w.startswith("-") else w).replace("{}", "")  # `{}` = xargs・find の置き場 (glob でない)
+        if cwd[0] is None or not piece or piece.startswith(("/", "~", "-", "$")) or re.search(r"[\s'\"()<>|;&$`\\]", piece):
+            return False  # path の形の語だけを解く (code の切れ端・正規表現を path にしない = 較正の実測)
+        inside = any(cwd[0] == d or d in cwd[0].parents for d in dirs)
+        if "/" not in piece and not piece.startswith(".") and not inside:
+            return False  # 対象の外の dir では、 裸の名 (`--project <repo の名>` の値) を path に解かない (較正の実測)
+        full = os.path.normpath(str(cwd[0] / piece))
+        groot = _glob_root(full)
+        if groot is not None:
+            # 解いた glob は、 土台の dir が対象・候補の上 (同じ dir か祖先) で、 対象の repo の中にあるときだけ (上の dir の
+            # glob・横の dir の glob にしない = 較正の実測: `xargs -I{}` の `{}` を、 repo の中の別の dir の glob と読んだ)
+            return any((groot == x.parent or groot in x.parents) and (groot in dirs or any(d in groot.parents for d in dirs))
+                       for x in targets)
+        return _involves(full, targets, rels, dirs)
+
+    segs = _shell_split(toks)
+    named = (any(_names_file(w, targets, rels, loose=False) for s in segs for w in s["words"])
+             or any(_names_file(d, targets, rels, loose=False) for s in segs for _, d, _ in s["redirs"])
+             or any(_text_names_file(b, targets, rels) for b in split[1]))
+    in_dir = False  # 対象・候補の dir に cd した後か
+    for s in segs:
+        for op, dest, exp in s["redirs"]:
+            if op not in _OUT_REDIRS or not dest or _not_a_file(op, dest):
+                continue
+            if involves(dest) or (exp and named):
+                return True
+        if any(e and ("$(" in w or "`" in w) and involves(w) for w, e in zip(s["words"], s["wexp"])):
+            return True
+        words = _unwrap(s["words"])
+        if not words:
+            continue
+        wexp = s["wexp"][len(s["words"]) - len(words):]
+        prog = PurePosixPath(words[0]).name
+        if prog in ("cd", "pushd"):
+            in_dir = in_dir or any(involves(w) for w in words[1:])  # 相対の cd も前の行き先から解く
+            arg = [w for w in words[1:] if not w.startswith("-")]
+            if len(arg) == 1 and not any(wexp) and arg[0].startswith(("/", "~")):
+                cwd[0] = Path(os.path.normpath(os.path.expanduser(arg[0])))
+            elif len(arg) == 1 and not any(wexp) and cwd[0] is not None:
+                cwd[0] = Path(os.path.normpath(str(cwd[0] / arg[0])))
+            else:
+                cwd[0] = None  # 行き先の分からない cd (変数・`cd -`・引数なし) の後は解かない
+        if prog in _LIST_HEADS or (any(wexp) and prog in _PURE_READ_CMDS):
+            continue  # 並べた語は literal の名指し (named) に数える。 書く option の無い読む command は展開しても書かない
+        # git と sed は subcommand・option・script を literal の語で見る (展開した語は値 = `git show origin/main:$f`・
+        # `git branch -r --contains $c`・`sed -n "${n}p"`。 subcommand・script が展開だけなら読む形の一覧に当たらない)
+        board_tool = bool(re.fullmatch(r"python[0-9.]*", prog)) and len(words) > 1 and \
+            PurePosixPath(words[1]).name in ("board.py", "board_asks.py")
+        if (not any(wexp) or prog in ("git", "sed", "gsed") or board_tool) and _segment_reads(words, targets, rels):
+            continue
+        fed_args = any(wexp) or s["procsub"]
+        fed_stdin = s["after_pipe"] or any(op in _INPUT_REDIRS for op, _, _ in s["redirs"])
+        if prog == "git":
+            # git: `-C <dir>` の値は cd と同じ = 作業する場所。 作業ツリーを書き換える subcommand だけを、 対象・候補の
+            # dir で打ったとき・中身 (patch) を受け取ったときに数える (commit の message・push を数えない = 較正の実測:
+            # heredoc の commit message の中の file 名と `git -C <repo> push` で数えていた)。 残りの語に対象・候補を
+            # 名指す形 (`git add <対象>`・`git checkout -- <対象>`) は今までどおり数える
+            sub, where = _git_sub(words[1:])
+            here = in_dir or any(_involves(w, targets, rels, dirs) for w in where)
+            if any(involves(w) for w in words[1:] if w not in where):
+                return True
+            # 対象・候補の dir では、 作業ツリーを書かないと分かる subcommand (push・tag・config …) の外を数える (知らない
+            # subcommand = alias も、 読む形の subcommand に外の command を走らせる option を付けた形も、 hook が file を
+            # 直しうる commit も)。 中身を受け取って作業ツリーに書く subcommand (apply・am …) は、 名指した path の中身を
+            # 受け取れば場所に依らず数える
+            if (here and sub not in _GIT_NON_TREE) or (sub in _GIT_STDIN_WRITERS and named and (fed_args or fed_stdin)):
+                return True
+            continue
+        if any(involves(w) for w in words):
+            return True
+        # 中身を受け取る経路: 引数 (展開・process substitution) と標準入力 (pipe・入力の redirect・heredoc)。 inline の
+        # program (`python3 -c …`・`bash -c …`・`perl -e …`) は標準入力を data として読む = 標準入力の経路は数えない
+        flag = "c" if re.fullmatch(r"python[0-9.]*|bash|sh|zsh|dash|ksh", prog) else "e"
+        inline = bool(_INTERPRETER_RE.fullmatch(prog)) and any(
+            re.fullmatch(rf"-[a-zA-Z]*{flag}[a-zA-Z]*", w) or w == "--eval" for w in words[1:])
+        if named and (fed_args or (fed_stdin and not inline)):
+            return True
+    return False
+
+
+def _git_sub(rest: list[str]) -> tuple[str, list[str]]:
+    """git の (subcommand, 作業する場所の語)。 subcommand = 前の option と -C などの値を飛ばした最初の語、 場所 = -C・
+    --work-tree・--git-dir の値 (`--work-tree=<dir>` の形も)。"""
+    i, where = 0, []
+    while i < len(rest) and rest[i].startswith("-"):
+        if rest[i] in ("-C", "--git-dir", "--work-tree"):
+            where += rest[i + 1:i + 2]
+            i += 2
+        elif rest[i] == "-c":
+            i += 2
+        else:
+            if rest[i].startswith(("--work-tree=", "--git-dir=")):
+                where.append(rest[i])
+            i += 1
+    return (rest[i] if i < len(rest) else ""), where
 
 
 def reviewer_wrote_target(uses: dict[str, dict], targets: list[Path], rels: list[str],
-                          results: dict | None = None, added: list[str] | None = None) -> str:
-    """検収係が対象か候補を書いたか、 候補の足した行を自分で書いたか (下書きを書いて worker に写させた形 = 盲検の実測)。
-    編集 tool は誤りで返った呼び出しを数えない (書けていない)。 shell は結果に依らず数える (途中まで書いたことがある)。"""
+                          results: dict | None = None) -> str:
+    """検収係が対象か候補を書いたか = 編集 tool でその file を書いた呼び出しか、 shell でその file を書く先に名指した
+    呼び出し (shell_writes)。 本人の裁定で照合をここに絞った (実測: 候補の足した行と同じありふれた 1 行 (`import sys`) が
+    前の command の文に在っただけで「下書きを書いた」 と数え、 委任の道が通らなかった) = 候補の文を別の file に書いて
+    worker に写させた形は見ない (掲示板・message で渡す形と同じ)。 編集 tool は誤りで返った呼び出しを数えない (書けて
+    いない)。 shell は結果に依らず数える (途中まで書いたことがある)。"""
     results = results or {}
     for k, u in uses.items():
         inp = u.get("input") or {}
@@ -5403,20 +5625,10 @@ def reviewer_wrote_target(uses: dict[str, dict], targets: list[Path], rels: list
             fp = str(inp.get("file_path") or inp.get("notebook_path") or "")
             if fp and _names_path(fp, targets, rels):
                 return f"{u.get('name')} で {fp}"
-            body = " ".join(str(x) for x in (inp.get("content"), inp.get("new_string"), inp.get("new_source"),
-                                             *[e.get("new_string") for e in inp.get("edits") or [] if isinstance(e, dict)])
-                            if x)
-            hit = next((a for a in added or [] if a in collapse_ws(body)), "")
-            if hit:
-                return f"{u.get('name')} で候補の足した行「{hit[:40]}」"
         if u.get("name") == "Bash":
             cmd = str(inp.get("command") or "")
             if shell_writes(cmd, targets, rels):
                 return "shell で「" + collapse_ws(cmd)[:80] + "」"
-            # 候補の足した行を含む command は、 読む形と分かるもの以外を下書きを書いた形と数える (heredoc・redirect に限らない
-            # = 盲検の実測: `python3 -c …write_text(…)` で書いた下書きを見落とした)
-            if any(a in collapse_ws(cmd) for a in added or []) and not _reads_only(cmd):
-                return "shell で候補の足した行を書いた「" + collapse_ws(cmd)[:60] + "」"
     return ""
 
 
@@ -5601,20 +5813,21 @@ def verify_reviewer_approval(event_id: str, session: tuple[str, str], repo: Path
         return None, problem
     if not _posted_receipt(uses, results, event_id, target.resolve(strict=False), cand_p):
         return None, ("検収係の会話記録に、 この event を書いた掲示板の approve-edit (その file と候補を名指し、 成功して"
-                      " `posted <event id>` を出したもの) が無い")
+                      " `posted <event id>` を出したもの) が無い = 検収係に approve-edit を 1 つの単純な command で打ち直して"
+                      "もらう (付けてよいのは末尾の `2>&1` だけ。 pipe・`;`・`&&`・ほかの redirect・変数を付けない)。 前景で"
+                      "終わらせて tool の結果に `posted <event id>` を残し (背景に回ると結果に出ない)、 新しい event id で当てる")
     targets = [target.resolve(strict=False)] + ([cand_p] if cand_p else [])
-    added = _added_lines(head_text(repo, rel), new)
     start = _pickup_boundary(uses, results, events, str(req.get("event_id") or ""))
     if start is None:
-        wrote = reviewer_wrote_target(uses, targets, [rel], results, added)
+        wrote = reviewer_wrote_target(uses, targets, [rel], results)
     else:
-        # 引き受けの前は候補の側だけ (候補の file と候補の足した行)、 後は今までどおり全部 (本人の裁定 H39)。 候補が対象と
+        # 引き受けの前は候補の側だけ (候補の file)、 後は今までどおり全部 (本人の裁定 H39)。 候補が対象と
         # 同じ相対の名の位置 (別の木の写し) に在るときは、 相対の名がどちらを指すか分けられない = 前でも相対の名を見る
         keys = list(uses)
         cand_rels = [rel] if cand_p and str(cand_p).endswith("/" + rel) else []
         wrote = (reviewer_wrote_target({k: uses[k] for k in keys[:start]}, [cand_p] if cand_p else [], cand_rels,
-                                       results, added)
-                 or reviewer_wrote_target({k: uses[k] for k in keys[start:]}, targets, [rel], results, added))
+                                       results)
+                 or reviewer_wrote_target({k: uses[k] for k in keys[start:]}, targets, [rel], results))
     if wrote:
         return None, f"検収係が候補か対象を書いている ({wrote}) = 書いた者と確かめる者が別でない"
     return {"source": "reviewer", "reviewer_event": event_id, "reviewer_role": role, "reviewer_native": native,
@@ -7607,8 +7820,11 @@ def reviewer_approval_selftests(check) -> None:
             eid, cp = approval("hooks/check.sh", hook1, mode="100755",
                                wrote={"name": "Write", "input": {"file_path": str(root / "draft.txt"),
                                                                  "content": "#!/bin/sh\necho checked\necho also-checked\n"}})
-            refused("[reviewer-B8] 検収係が候補の足した行を自分で書いていたら受けない (下書きを写させた形)", "hooks/check.sh",
-                    hook1, eid, cp, "足した行")
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-B8] 照合はその file と候補への書き込みだけ: 検収係が候補の足した行を別の file に書いていても、"
+                  " 対象と候補を書いていなければ受ける (本人の裁定で絞った = 下書きを写させた形は見ない)",
+                  rc == 0 and (work / "hooks/check.sh").read_text() == hook1)
+            restore()
             (home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl").unlink()
             eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
             tp = home / ".claude" / "projects" / "p" / f"{reviewer_sid}.jsonl"
@@ -7700,8 +7916,28 @@ def reviewer_approval_selftests(check) -> None:
                     eid, cp, "書いている")
             eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
             window(eid, cp, call("Write", {"file_path": str(root / "draft-p5.txt"), "content": hook1}, "ok"), picked())
-            refused("[reviewer-P4] 候補の足した行を引き受けの前に自分で書いていても今どおり断る (下書きを写させた形)",
-                    "hooks/check.sh", hook1, eid, cp, "足した行")
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-P4] 候補の足した行を引き受けの前に別の file に書いただけなら受ける (照合はその file と候補への"
+                  "書き込みだけ)", rc == 0 and (work / "hooks/check.sh").read_text() == hook1)
+            restore()
+            # 実測の誤検出の形 (直す前はどれも断った): 前の検収で掲示板の event を読んだ command (相対の glob・/dev/null・
+            # 変数)、 候補の足した行と同じ 1 行を含む python -c、 引き受けの後の 2>&1 つきの読む command と git fetch
+            board_read = ("cd /tmp/board-x/events && ls -d */*/ | command grep -n '' >/dev/null; f=$(ls */*/*-x.json); "
+                          "echo \"$f\"; python3 -c \"import json,sys; print(json.load(open(sys.argv[1]))['k'])\" \"$f\"")
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Bash", {"command": board_read}, "x"),
+                   call("Bash", {"command": "python3 -c \"import sys; print('echo also-checked')\""}, "echo also-checked"),
+                   picked(), call("Bash", {"command": f"cat {work / 'hooks/check.sh'} 2>&1 | head -3"}, "x"),
+                   call("Bash", {"command": f"diff {cp} {work / 'hooks/check.sh'} 2>&1; git -C {work} fetch -q"}, ""))
+            rc, out = run("hooks/check.sh", cp, eid)
+            check("[reviewer-P9] 読むだけの command (相対の glob・/dev/null・変数・2>&1・git fetch) と、 足した行と同じ 1 行を"
+                  "含む python -c だけの検収係の窓は承認できる", rc == 0 and (work / "hooks/check.sh").read_text() == hook1)
+            restore()
+            eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
+            window(eid, cp, call("Bash", {"command": board_read}, "x"), picked(),
+                   call("Bash", {"command": f"cat {cp} > {work / 'hooks/check.sh'} 2>&1"}, ""))
+            refused("[reviewer-P9] 同じ窓でも、 引き受けの後に対象を redirect の先にした command があれば今どおり断る",
+                    "hooks/check.sh", hook1, eid, cp, "書いている")
             eid, cp = approval("hooks/check.sh", hook1, mode="100755", transcript=False)
             window(eid, cp, call("Bash", {"command": run_test}, "checked"))
             refused("[reviewer-P5] 引き受けの印が会話記録に無ければ全部を見る (掲示板にだけ在る印は境にしない)",
@@ -7847,11 +8083,14 @@ def reviewer_approval_selftests(check) -> None:
                   and _head_mode(work, "no/such") == "000000")
             draft_uses = {"d1": {"name": "Bash", "main": True, "input": {"command":
                          f"python3 -c \"import pathlib; pathlib.Path('/tmp/d.txt').write_text('echo also-checked')\""}}}
-            check("[reviewer-N6] 候補の足した行を python -c で書いた下書きも、 検収係が書いた形と数える",
-                  "足した行" in reviewer_wrote_target(draft_uses, t, r, {}, ["echo also-checked"]))
+            cand_uses = {"d2": {"name": "Bash", "main": True, "input": {"command":
+                        f"python3 -c \"import pathlib; pathlib.Path('{cp}').write_text('echo also-checked')\""}}}
+            check("[reviewer-N6] 照合はその file と候補への書き込みだけ: 候補の足した行を別の file に書いた下書きは数えず"
+                  " (本人の裁定で絞った)、 候補そのものに python -c で書いたら数える",
+                  reviewer_wrote_target(draft_uses, t, r, {}) == "" and reviewer_wrote_target(cand_uses, t, r, {}) != "")
             check("[reviewer-N6] 候補の足した行を読む command と掲示板の approve-edit で名指すのは書いた形にしない",
                   reviewer_wrote_target({"g1": {"name": "Bash", "main": True, "input": {"command":
-                                        f"grep -n 'echo also-checked' {cp}"}}}, t, r, {}, ["echo also-checked"]) == "")
+                                        f"grep -n 'echo also-checked' {cp}"}}}, t, r, {}) == "")
             check("[reviewer-21] shell: 検収係の掲示板の command・守りの道具の空回し・git の読む形は書いたことにしない",
                   not shell_writes(f"python3 /x/board.py approve-edit --file {t[0]} --candidate {cp}", t, r)
                   and not shell_writes(f"python3 /x/scripts/agent-rule-guard.py apply --file {t[0]} --candidate {cp}"
@@ -7867,9 +8106,75 @@ def reviewer_approval_selftests(check) -> None:
                   and shell_writes(f"git diff --no-index --output={t[0]} /dev/null {cp}", t, r)
                   and shell_writes(f"rg --pre=sh x {t[0]}", t, r) and shell_writes(f"mv {cp} /tmp/elsewhere", t, r)
                   and shell_writes(f"cp -t {t[0].parent} {cp}", t, r))
-            check("[reviewer-R3-2] shell: 変数・置換を含む command は、 path を名指していれば書いた側に倒す",
-                  shell_writes(f"echo \"$(cp {cp} {t[0]})\"", t, r) and shell_writes(f"cat $HOME/x {t[0]}", t, r)
-                  and not shell_writes("echo $HOME", t, r))
+            check("[reviewer-R3-2] shell: 置換の中の command と、 書く option を持ちうる command の展開は、 path を名指して"
+                  "いれば書いた側に倒す (書く option の無い読む command は展開しても読む形)",
+                  shell_writes(f"echo \"$(cp {cp} {t[0]})\"", t, r) and shell_writes(f"rg $X {t[0]}", t, r)
+                  and not shell_writes(f"cat $HOME/x {t[0]}", t, r) and not shell_writes("echo $HOME", t, r))
+            # 委任の道の誤検出の直し (本人の裁定で照合をその file と候補を書く先に名指した呼び出しに絞った)。 直す前はどれも
+            # 書いたと数えた形 (実測 = 検収係の窓の読むだけの command で、 委任の承認が通らなかった)
+            check("[reviewer-N15] shell: 読む形の command の引数・/dev/null と fd の付け替え (2>&1) の redirect・cd・変数の"
+                  "代入・相対の glob・作業ツリーを書かない git は書いたことにしない",
+                  not shell_writes("cd /tmp/board-x/events && ls -d */*/ | command grep -n '' >/dev/null; "
+                                   "f=$(ls */*/*-x.json); echo \"$f\"; "
+                                   "python3 -c \"import json,sys; print(json.load(open(sys.argv[1]))['k'])\" \"$f\"", t, r)
+                  and not shell_writes(f"cat {t[0]} 2>&1 | head -5", t, r)
+                  and not shell_writes(f"python3 /x/board.py approve-edit --file {t[0]} --candidate {cp} 2>&1 | tail -4", t, r)
+                  and not shell_writes(f"diff {cp} {t[0]} >/dev/null && echo same", t, r)
+                  and not shell_writes(f"cd {work} && git fetch -q && git log -1 --format=%h", t, r)
+                  and not shell_writes(f"cd {work} && awk 'NR<3' hooks/other.sh && python3 -c 'print(1)'", t, r)
+                  and not shell_writes(f"find {work / 'hooks'} -name '*.sh'", t, r)
+                  and not shell_writes(f"x=$(shasum -a 256 {cp}); echo \"$x\"", t, r)
+                  and not shell_writes(f"for f in {t[0]} {cp}; do shasum -a 256 \"$f\"; done", t, r))
+            check("[reviewer-N15] shell (較正 = 検収係の窓の会話記録で数えていた読むだけの形): filter への pipe・行の番号の"
+                  "変数・展開のある git の読む形・当てない git apply・push・commit の message・掲示板の道具・inline の program",
+                  not shell_writes(f"sed -n '39p' {t[0]} | cut -c1-1600", t, r)
+                  and not shell_writes(f"grep -n x {t[0]} | sort | uniq -c", t, r)
+                  and not shell_writes(f"n=3; sed -n \"${{n}}p\" {t[0]} | cut -c1-80", t, r)
+                  and not shell_writes(f"cd {work} && awk 'NR>=6 && /^10/{{print substr($0,1,80); exit}}' hooks/check.sh", t, r)
+                  and not shell_writes(f"cd {work} && for c in a b; do git branch -r --contains $c | tail -1; done", t, r)
+                  and not shell_writes(f"git -C {work} show origin/main:$f", t, r)
+                  and not shell_writes(f"git -C {work} apply --check /tmp/a.diff", t, r)
+                  and not shell_writes(f"cd {work} && git add -- plans/r.md && git push -q", t, r)
+                  and not shell_writes(f"git commit -q -F - -- CLAUDE.md <<'EOF'\nhooks/check.sh の直し\nEOF", t, r)
+                  and not shell_writes(f"python3 /x/board.py release --root /b --summary 'check.sh を引き受け直す'", t, r)
+                  and not shell_writes(f"python3 /x/board_asks.py ask --root /b --evidence {t[0]} --text q", t, r)
+                  and not shell_writes(f"diff {t[0]} {cp} | python3 -c 'import sys; print(len(sys.stdin.read()))'", t, r)
+                  and not shell_writes(f"cat > /tmp/note.md <<'EOF'\n{t[0]} を読んだ\nEOF", t, r)
+                  and not shell_writes(f"cd {work} && git ls-tree --name-only HEAD hooks/ | sed 's/.*\\.//' | sort | uniq -c",
+                                       t, r)
+                  and not shell_writes(f"cd {work.parent} && python3 -c \"import json,sys; print(json.load(open(sys.argv[1])))\""
+                                       " x", t, r)
+                  and not shell_writes(f"cd {work} && ls | xargs -I{{}} python3 -c 'print(1)' {{}}", t, r)
+                  and not shell_writes(f"cd {work}/scripts && cp /tmp/x lib/*.py", t, r))
+            check("[reviewer-N15] shell (較正の後も止まる本物の例): filter・sed・git・awk・掲示板の道具・heredoc の書く形",
+                  shell_writes(f"sort -o {t[0]} {cp}", t, r) and shell_writes(f"uniq {cp} {t[0]}", t, r)
+                  and shell_writes(f"awk '{{print > \"{t[0]}\"}}' {cp}", t, r)
+                  and shell_writes(f"awk 'BEGIN{{system(\"cp {cp} {t[0]}\")}}'", t, r)
+                  and shell_writes(f"sed \"$x\" -i {t[0]}", t, r) and shell_writes(f"sed $opt {t[0]}", t, r)
+                  and shell_writes(f"git -C {work} apply /tmp/a.diff", t, r) and shell_writes(f"git apply < {cp}", t, r)
+                  and shell_writes(f"cat /tmp/p.diff | git -C {work} apply", t, r) and shell_writes(f"git -C {work} co x", t, r)
+                  and shell_writes(f"git -c core.pager=less -C {work} log", t, r)
+                  and shell_writes(f"cd {work} && git commit -q -m x -- plans/r.md", t, r)
+                  and shell_writes(f"cd {work} && git add hooks/check.sh", t, r)
+                  and shell_writes(f"python3 /x/board.py launch --request x {t[0]}", t, r)
+                  and shell_writes(f"cat {cp} | python3 -", t, r) and shell_writes(f"cat {cp} | bash -e", t, r)
+                  and shell_writes(f"f={t[0]}; python3 -c 'import sys; open(sys.argv[1], \"w\")' \"$f\"", t, r)
+                  and shell_writes(f"python3 - <<'EOF'\nimport pathlib\npathlib.Path('{t[0]}').write_text(\"don't\")\nEOF", t, r)
+                  and shell_writes(f"bash <<'EOF'\ncp {cp} {t[0]}\nEOF", t, r)
+                  and shell_writes(f"sed 's/a/b/w {t[0]}' {cp}", t, r) and shell_writes(f"sed 's/a/b/e' {t[0]}", t, r)
+                  and shell_writes(f"cd {work} && echo x > hooks/check.sh", t, r)
+                  and shell_writes(f"cd {work} && cd hooks && rm ../hooks/check.sh", t, r)
+                  and shell_writes(f"cd {work} && cp /tmp/x hooks/chec*.sh", t, r) and shell_writes(f"cd {work} && cp /tmp/x */", t, r))
+            check("[reviewer-N15] shell: 直した後も、 その file を書く先に名指した形は書いたことにする (本物の例が止まり続ける)",
+                  shell_writes(f"cat {cp} > {t[0]} 2>&1", t, r) and shell_writes(f"echo x >& {t[0]}", t, r)
+                  and shell_writes(f"f={t[0]}; echo x > \"$f\"", t, r) and shell_writes(f"f={t[0]}; rm \"$f\"", t, r)
+                  and shell_writes(f"cat {cp} | bash", t, r) and shell_writes(f"python3 - < {cp}", t, r)
+                  and shell_writes(f"for f in {t[0]}; do sed -i '' s/a/b/ \"$f\"; done", t, r)
+                  and shell_writes(f"find {work / 'hooks'} -name x -delete", t, r)
+                  and shell_writes(f"git -C {work} fetch --upload-pack=sh", t, r)
+                  and shell_writes(f"cd {work} && git stash", t, r) and shell_writes(f"git -C {work} checkout .", t, r)
+                  and shell_writes(f"cd {work / 'hooks'} && python3 -c \"open('check.sh','w').write('x')\"", t, r)
+                  and shell_writes(f"cd {work} && bash hooks/check.sh 2>&1 | tail -3", t, r))
             check("[reviewer-R3-3] shell: 引用の中の ; は区切りでない (読む command を書いた形にしない)",
                   not shell_writes(f"grep -n ';' {cp}", t, r) and not shell_writes(f"grep -n '|' {t[0]}", t, r)
                   and shell_writes(f"grep -n x {cp}; cp {cp} {t[0]}", t, r))
@@ -7881,6 +8186,17 @@ def reviewer_approval_selftests(check) -> None:
             check("[reviewer-R3-3] 受け取り: 行の続き (`\\` + 改行) の複数行の形は 1 つの command、 改行で繋いだ別の command は数えない",
                   _posted_receipt(multi, ok1, "20260101T000000Z-claude-x00001", tgt, cp.resolve())
                   and not _posted_receipt(two, ok1, "20260101T000000Z-claude-x00001", tgt, cp.resolve()))
+            fd_cmd = f"python3 /x/board.py approve-edit --file {tgt} --candidate {cp.resolve()}"
+            rcpt = lambda tail: {"m1": {"name": "Bash", "main": True, "input": {"command": fd_cmd + tail}}}
+            ok_m1 = {"m1": {"text": "posted 20260101T000000Z-claude-x00001\n", "error": False}}
+            check("[reviewer-N16] 受け取り: 末尾の `2>&1` は 1 つの command のまま (pipe・ほかの redirect は今までどおり数えない)",
+                  _posted_receipt(rcpt(" 2>&1"), ok_m1, "20260101T000000Z-claude-x00001", tgt, cp.resolve())
+                  and not _posted_receipt(rcpt(" 2>&1 | tail -4"), ok_m1, "20260101T000000Z-claude-x00001", tgt,
+                                          cp.resolve())
+                  and not _posted_receipt(rcpt(" 2>/tmp/err.txt"), ok_m1, "20260101T000000Z-claude-x00001", tgt,
+                                          cp.resolve())
+                  and not _posted_receipt(rcpt(" >&2 | cat"), ok_m1, "20260101T000000Z-claude-x00001", tgt,
+                                          cp.resolve()))
             # R3-4: 記録の後に作業ツリーで lock の印を足した / 実行の bit を付けた file に、 同じ記録の当て直しは通らない
             tp_n.unlink(missing_ok=True)
             eid, cp4 = approval("hooks/check.sh", hook1, mode="100755")
@@ -7935,8 +8251,6 @@ def reviewer_approval_selftests(check) -> None:
             refused("[reviewer-R3-6] 方針の在りかに末尾の / (dir) は受けない", "hooks/check.sh", hook1, eid, cp7, "作業ルートの直下")
             tp_n.unlink(missing_ok=True)
             set_req()
-            check("[reviewer-R3-7] 足した行は行の対応から取る (`+++` で始まる行も落とさない)",
-                  "+++candidate_owned_line" in _added_lines("a\n", "a\n+++candidate_owned_line\n"))
             check("[reviewer-R3-8] 設定: 新しい入れ物は hooks と permissions だけ (空の allow・関係ない欄は足さない)",
                   not _json_additions(".claude/settings.json", {}, {"permissions": {"allow": []}})[0]
                   and not _json_additions(".claude/settings.json", {}, {"unrelated": {"empty": {}}})[0]
@@ -7960,9 +8274,10 @@ def reviewer_approval_selftests(check) -> None:
                                     f"check.sh: {eid}")
                   and not disclosed({"file": "hooks/check.sh", "reviewer_event": eid, "quote": APPROVAL_QUOTE + eid},
                                     f"check.sh: 本人の直接の承認 {eid}"))
-            check("[reviewer-R4-2] shell: 名指した path に触れる process substitution は書いた形 (中身を外の command が実行しうる)",
+            check("[reviewer-R4-2] shell: 名指した path を process substitution で読む形でない command に渡すと書いた形"
+                  " (中身を外の command が実行しうる)。 読む形の command (diff) が読むだけなら書いた形にしない",
                   shell_writes(f"bash <(cat {cp})", t, r) and shell_writes(f"diff {cp} >(tee {t[0]})", t, r)
-                  and shell_writes(f"diff <(cat {t[0]}) {cp}", t, r))
+                  and not shell_writes(f"diff <(cat {t[0]}) {cp}", t, r))
             # 盲検の指摘の再現 (直す前はどれも当たり commit も通った形・誤って断った形)
             sp_dir = root / "sp dir"
             sp_dir.mkdir(exist_ok=True)
