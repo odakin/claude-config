@@ -162,6 +162,8 @@ opt-out list の両方 — 後者にしか痕跡が無い決着もある (= clas
   台帳の記録はスレッド単位なので、 議論のスレッドの記録が案の段で止まっていると、 そこから答えれば決まる前の案を結論として出す。
   結論を問われて、 結んだスレッドの最後が案・候補・「打ち合わせで決める」 の段なら、 答える前に、 同じ差出人の、 そのスレッドの最後の記録より後の便を件名を問わず 1 query 引く
   (`from:<人> after:<記録の最後の日>`)。 見つけた便は議論の項目に結んで記録する (実測: 議論のスレッドの最後は候補の一覧で、 決まった版は同じ差出人から別の件名で届いていた)
+- <a id="watch-query-domain-or-address"></a>**相手を domain で書くか address で書くか**: 担当者ごとに address が変わる組織 (代理店・宿の窓口) は domain で書く。 同じ domain から関係の無い便も来る相手 (自動送信の address を持つ・同じ出版社の別の雑誌の案内が来る) は address で書く (domain で書くと、 関係の無い便が待っていた返事として並ぶ = 実測)。 決める前に、 その domain から期間内に届いた便の差出人を数える (`from:<domain> after:<日>` の From ごとの通数)
+- <a id="watch-query-message-level"></a>**記録済みのスレッドに後から来る便**: 網 (`unrecorded_threads`) は既定で、 スレッドが記録済みなら、 そのスレッドに後から届いた便を拾わない (既存の項目の量を変えないため)。 同じスレッドの返信で催促や返事を重ねる相手 (一斉の依頼の催促) を見張るなら、 message の id で判定する (`message_only=True` = 記録済みのスレッドの後の便も拾う。 [`recorded_ids`](../scripts/lib/recorded_ids.py) の読み手の述語と同じ向き。 実測: スレッドの記録で落とす判定のままでは、 記録済みのスレッドに届いた相手の返事が出なかった)。 相手が数者に分かれる案件の見張りの持ち方 = [`convention-design-principles.md#broadcast-obligation-blind-spot`](../docs/convention-design-principles.md#broadcast-obligation-blind-spot)
 - 実装 = [`scripts/lib/mail_watch.py`](../scripts/lib/mail_watch.py) の `watch_queries` / `unrecorded_threads`。
   一般則 = [`convention-design-principles.md#retrieval-key-choice`](../docs/convention-design-principles.md#retrieval-key-choice)
   (thread ID でなく送り手・件名という別の鍵で引く)、 予告された inbound の時計は

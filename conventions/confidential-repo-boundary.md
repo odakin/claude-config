@@ -497,6 +497,7 @@ finding は「直す」 か「見た上で残す」 のどちらかで閉じる�
 | owner 側が書いた識別子・非公開 repo 名・未公開の文 | **本文を一般形に直す** (Tier B/C は受理できない) |
 | 開発機の home path が設定・build spec に焼かれている | **bug fix として直す** ([`#personal-path-is-also-a-portability-bug`](#personal-path-is-also-a-portability-bug)) |
 | selftest・doc の**合成例**に書いた絶対 path (`/Users/<誰か>/…`) | **書き換える** = `/tmp/synthetic/…` の形 (Tier A は home dir の path を識別子に数えるので、 合成でも止まる = 実測) |
+| selftest・doc の**合成例**に書いた mail address (`.example` の TLD・実在の無料のメール・大学の形) | **書き換える** = `@example.com` / `@example.org` / `@example.net` / `@example.invalid` (Tier A の許容はこの 4 つの domain の完全一致だけ = `org.example` や subdomain は合成でも止まる、 実測)。 domain の構造 (subdomain・大学・公の機関・無料のメール) を試す address は、 source に literal を置かずに組む (`"@" + "<domain>"` か `"\x40"`) |
 | IDE / game engine 等が生成する cache・log・user 設定を追跡している | **追跡を外す** + その tool の標準 `.gitignore` (dir を名前で走査から外すのではない) |
 | upstream (fork 元・同梱 runtime・exporter) の連絡先・例示 path・版番号 | Tier A の **受理** (token + 理由) |
 | IP に見える版番号 (browser の User-Agent の `Chrome/<major>.0.0.0`・assembly の `Version=<n>.0.0.0` 等) | Tier A の **受理** |

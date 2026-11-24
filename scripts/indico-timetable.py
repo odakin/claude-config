@@ -10,6 +10,7 @@
   indico-timetable.py --json saved.json --match '...'                 # 取得済みの JSON を読む (再取得しない)
   indico-timetable.py <URL> --save timetable.json                     # 取得した JSON を根拠として残す (sha256 を出す)
   indico-timetable.py <URL> --tz America/New_York                     # 手元の時刻の tz (既定 = この機械の tz)
+  indico-timetable.py <URL> --sessions --match 'Session 2'            # session の枠 (始まり・終わり・講演の数・最後の講演の終わり)
   indico-timetable.py --selftest
 
 機構 (実測):
@@ -20,6 +21,8 @@
     tz は会議の tz (例 Europe/Geneva)。 手元の時刻は tz を変換して出す = 夏時間の有無は tz の表 (zoneinfo) に任せ、
     固定の時差を手で足さない。
   - 時間割は会期の前でも動く (講演の追加・時間の変更)。 予定表に入れた後も、 出発前に読み直す。
+  - session の枠の終わり (Session の endDate) は講演の行に出ない = 最後の講演の終わりと枠の終わりは別 (枠の後ろに質疑・閉会の
+    時間がある、 実測)。 座長の予定のように枠を入れるときは `--sessions` で枠の終わりを読む。
 標準 library だけ (urllib / json / zoneinfo)。 zoneinfo の表が無い機 (Windows の素の Python) では手元の時刻を出さずに 1 行言う。
 """
 from __future__ import annotations
@@ -84,6 +87,33 @@ def talks(data: dict) -> list[dict]:
     return sorted(out, key=lambda t: (t["start"], t["title"]))
 
 
+def sessions(data: dict) -> list[dict]:
+    """時間割の JSON → session の枠の list (枠の始まり・終わり・講演の数・最後の講演の終わり)。 時刻順。"""
+    out: list[dict] = []
+
+    def walk(e: dict) -> None:
+        kids = e.get("entries") or {}
+        if not kids:
+            return
+        if e.get("entryType") == "Session" or e.get("slotTitle") is not None:
+            s, en = e.get("startDate") or {}, e.get("endDate") or {}
+            contribs = [k for k in kids.values() if k.get("entryType") != "Break" and not k.get("entries")]
+            ends = sorted(f"{(k.get('endDate') or {}).get('date')}T{((k.get('endDate') or {}).get('time') or '')[:5]}" for k in contribs)
+            title = " · ".join(x for x in (e.get("title"), e.get("slotTitle")) if x)
+            out.append({"title": title, "session": title, "names": [], "n_talks": len(contribs),
+                        "last_talk_end": ends[-1] if ends else "",
+                        "start": f"{s.get('date')}T{(s.get('time') or '')[:5]}", "end": f"{en.get('date')}T{(en.get('time') or '')[:5]}",
+                        "tz": s.get("tz") or "UTC"})
+        for c in kids.values():
+            walk(c)
+
+    for ev in (data.get("results") or {}).values():
+        for day in ev.values():
+            for e in day.values():
+                walk(e)
+    return sorted(out, key=lambda t: (t["start"], t["title"]))
+
+
 def local_times(t: dict, tz: str | None) -> str:
     try:
         from zoneinfo import ZoneInfo
@@ -101,6 +131,13 @@ def show(rows: list[dict], tz: str | None) -> None:
     for t in rows:
         print(f"{t['start'][5:].replace('T', ' ')}-{t['end'][11:]} {t['tz']} | {local_times(t, tz)} | "
               f"{t['session'] or '-'} | {t['title']} | {', '.join(t['names']) or '-'}")
+
+
+def show_sessions(rows: list[dict], tz: str | None) -> None:
+    for t in rows:
+        last = f"、 最後の講演の終わり {t['last_talk_end'][11:]}" if t["last_talk_end"] else ""
+        print(f"{t['start'][5:].replace('T', ' ')}-{t['end'][11:]} {t['tz']} | {local_times(t, tz)} | {t['title']} | "
+              f"講演 {t['n_talks']}{last}")
 
 
 def selftest() -> int:
@@ -122,6 +159,12 @@ def selftest() -> int:
     ok &= [r["title"] for r in rows] == ["A synthetic talk on wave packets", "Another talk"]   # Break は出さない・時刻順
     ok &= rows[0]["session"] == "Session 1: Theory" and rows[1]["names"] == ["B. Sample"]
     ok &= local_times(rows[0], "Asia/Tokyo").startswith("01-14 09:00-09:25")                # UTC 00:00 → JST 09:00
+    data["results"]["1"]["20300114"]["s1"].update({"slotTitle": "Waves", "startDate": {"date": "2030-01-14", "time": "00:00:00", "tz": "UTC"},
+                                                  "endDate": {"date": "2030-01-14", "time": "00:50:00", "tz": "UTC"}})
+    ss = sessions(data)
+    ok &= len(ss) == 1 and ss[0]["title"] == "Session 1: Theory · Waves" and ss[0]["n_talks"] == 1
+    ok &= ss[0]["end"] == "2030-01-14T00:50" and ss[0]["last_talk_end"] == "2030-01-14T00:25"   # 枠の終わり ≠ 最後の講演の終わり
+    ok &= local_times(ss[0], "Asia/Tokyo").startswith("01-14 09:00-09:50")
     ok &= parse_event_url("https://indico.example.org/event/12345/timetable/#all") == ("https://indico.example.org", "12345")
     try:
         parse_event_url("https://example.org/no-event")
@@ -139,6 +182,7 @@ def main() -> int:
     ap.add_argument("--match", help="題・発表者・session 名に当てる正規表現 (大文字小文字を区別しない)")
     ap.add_argument("--tz", help="手元の時刻の tz (既定 = この機械の tz)")
     ap.add_argument("--save", help="取得した JSON を書く path")
+    ap.add_argument("--sessions", action="store_true", help="講演でなく session の枠を出す (枠の終わり・講演の数・最後の講演の終わり)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
@@ -152,11 +196,11 @@ def main() -> int:
     if a.save:
         Path(a.save).write_bytes(raw)
         print(f"保存: {a.save} (sha256 {hashlib.sha256(raw).hexdigest()})")
-    rows = talks(json.loads(raw))
+    rows = (sessions if a.sessions else talks)(json.loads(raw))
     if a.match:
         rx = re.compile(a.match, re.I)
         rows = [t for t in rows if rx.search(" ".join([t["title"], t["session"], *t["names"]]))]
-    show(rows, a.tz)
+    (show_sessions if a.sessions else show)(rows, a.tz)
     print(f"({len(rows)} 件)")
     return 0
 

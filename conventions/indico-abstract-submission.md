@@ -35,10 +35,10 @@ summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機
 
 - event timetable の reminder 設定は **分単位**の数値入力 (1 週間前 = 10080、 1 日前 = 1440)。
 - 採否通知は event page の "Call for Abstracts" に書かれた日付を calendar / TODO に入れる (= Indico から自動では来ない)。
-- <a id="timetable-json-export"></a>**自分の講演・座長の枠の日時は、 時間割の JSON export で読む**: `https://<host>/export/timetable/<event id>.json` (公開の会議ならログインせずに取れる)。 道具 = [`../scripts/indico-timetable.py`](../scripts/indico-timetable.py) (`--match` = 題・発表者・session 名の正規表現、 `--tz` = 手元の時刻の tz、 `--save` = 根拠として JSON を残して sha256 を出す)。
+- <a id="timetable-json-export"></a>**自分の講演・座長の枠の日時は、 時間割の JSON export で読む**: `https://<host>/export/timetable/<event id>.json` (公開の会議ならログインせずに取れる)。 道具 = [`../scripts/indico-timetable.py`](../scripts/indico-timetable.py) (`--match` = 題・発表者・session 名の正規表現、 `--tz` = 手元の時刻の tz、 `--save` = 根拠として JSON を残して sha256 を出す、 `--sessions` = 講演でなく session の枠 〔枠の始まりと終わり・講演の数・最後の講演の終わり〕)。
   - 時間割の画面がボット確認の頁で止まった回でも、 この JSON は User-Agent を付けた素の GET で取れた (実測) = 「Indico が読めない」 で予定表への登録を止めない。
   - 時刻は会議の tz (`Europe/Geneva` など) で出る。 手元の時刻へは tz の表で変換する (夏時間の有無を固定の時差で手で足さない)。
-  - **時間割は会期の前にも動く** (講演の追加で session が延びる・講演の長さが変わる)。 運営から「時間割を更新した」 の便が来たら、 自分の講演の枠だけでなく、 座長など自分が持つ session の終わりの時刻も読み直し、 予定表の予定と照らす (実測: 講演の枠の追加で、 座長を務める session が予定表の終わりの時刻より延びていた)。 session の枠の終わり (Session の `endDate`) と最後の講演の終わりは違うことがある = 予定表には枠の終わりを入れる。
+  - **時間割は会期の前にも動く** (講演の追加で session が延びる・講演の長さが変わる)。 運営から「時間割を更新した」 の便が来たら、 自分の講演の枠だけでなく、 座長など自分が持つ session の終わりの時刻も読み直し、 予定表の予定と照らす (実測: 講演の枠の追加で、 座長を務める session が予定表の終わりの時刻より延びていた)。 session の枠の終わり (Session の `endDate`) と最後の講演の終わりは違うことがある = 予定表には枠の終わりを入れる (講演の行には出ない = `--sessions` で読む)。
 
 ## 5. 記録の最小セット (個人層 / 案件 repo 側)
 
