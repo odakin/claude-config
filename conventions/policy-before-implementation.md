@@ -37,6 +37,7 @@ summary: 実装に入る前に方針を短く出して本人のフィードバ�
 - 直す文は、 今の文と直した文を並べて見せる ([`concise-output.md#show-the-text-being-changed`](concise-output.md#show-the-text-being-changed))。 要約だけで聞くと「見せて」 と返って往復が増える。
 - 推す答えから外れる理由の見当たらない項目は、 決めることとして並べない (推す答えのまま方針に書く = [`concise-output.md#no-reason-to-deviate`](concise-output.md#no-reason-to-deviate))。 本人に決めてもらう項目は [`concise-output.md#decision-questions`](concise-output.md#decision-questions) の形で書く。
 - 並列の下請けの方針は、 揃うのを待たずに届いた順に見せる。 揃った後にまとめるときは、 何本にも共通の中身・違い・子が挙げた「決めてもらうこと」 の全件と採否を表にする ([`multi-session-coordination.md#parallel-collation-table`](multi-session-coordination.md#parallel-collation-table))。
+- <a id="confirm-reading-of-short-instruction"></a>**本人の短い指示が 2 通りに読めるときは、 方針の最初の 1 行に読みを書く** — 「(n) 式を表と同じ形に直す、 と読みました」 のように、 指定書や作業の前に読みを 1 行で見せて確かめる (実測: 2 通りに読める指示を続けて逆に読み、 取り下げの指定を重ねて出した)。 番号で指す指示 (式・節・項目の番号) は、 その番号の対象を開いて指示の中身と照らす。 中身と合わなければ、 合う対象を探して読みを確かめる (実測: 指示の番号と中身が別の式を指していた)。
 
 ## <a id="drafting"></a>文の起草の場合 (返信・返答書・共同研究者や編集者への文)
 
