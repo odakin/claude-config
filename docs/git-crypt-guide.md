@@ -217,4 +217,4 @@ git log -S'<a distinctive part of the line>' --format='%h %ad' --date=short -- <
 - The textconv (git-crypt's diff driver, which decrypts) is on by default, so the plaintext string is searchable. With `--no-textconv` git searches the ciphertext and returns nothing; do not read that as "the text is not in the history" (observed).
 - Plaintext versions from before encryption print `git-crypt: Warning: file not encrypted` to stderr for each version and bury the result; add `2>/dev/null`.
 - `-S` lists, newest first, the commits where the number of occurrences changed; the last line is the commit that introduced the text. Moves that keep the count are invisible.
-- Same root cause as `git show <rev>:<path>` returning ciphertext.
+- Same root cause as `git show <rev>:<path>` returning ciphertext. <a id="git-show-smudge"></a>In an unlocked clone, `git show <rev>:<path> | git-crypt smudge` returns the plaintext (the smudge filter, run by hand). Use this form in tools that write an old version to a scratch directory to build or compare it: `git show` alone writes the ciphertext, and LaTeX or a parser stops at the leading `\0GITCRYPT` (observed).
