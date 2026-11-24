@@ -13,7 +13,8 @@
 
 説明の源 = scripts/generate-tree.py の extract_header_desc (compile して読む = 同じ規則):
   .py = module docstring 1 行目 / .sh .txt .yaml 等 = shebang 直後の最初の # 注釈 / .js 等 = // 注釈 /
-  .json = top-level "_comment" の最初の文。 いずれも先頭の "<名前> — " は外す。
+  .json = top-level "_comment" の最初の文 / .tex .sty .cls = 先頭の % 注釈のうち "% !TEX …" でない最初の行。
+  いずれも先頭の "<名前> — " は外す。
   注釈を持てない file (機械が書く .json 等) は --describe NAME=説明 で渡す。
   subdir は、 その中の README.md の最初の見出し以外の行か --describe で説明する。
 
@@ -133,6 +134,7 @@ def selftest() -> int:
         (d / "b.py").write_text('"""b.py — second tool\n\ndetails not in index\n"""\n# 運用メモ\n', encoding="utf-8")
         (d / "a.sh").write_text("#!/bin/sh\n# a.sh — first tool\n# more\n", encoding="utf-8")
         (d / "state.json").write_text('{"x": 1}\n', encoding="utf-8")
+        (d / "note.tex").write_text("% !TEX TS-program = lualatex\n% note.tex — a short note\n\\documentclass{article}\n", encoding="utf-8")
         (d / "sub").mkdir()
         (d / "sub" / "README.md").write_text("# sub\n\nsub の説明\n", encoding="utf-8")
         (d / "README.md").write_text("hand written\n", encoding="utf-8")
@@ -141,6 +143,7 @@ def selftest() -> int:
         check("— first tool" in out and "— second tool" in out, "名前 prefix を外した説明 1 行目")
         check("details not in index" not in out and "運用メモ" not in out, "2 行目以降と docstring 後の注釈は索引に出ない")
         check(missing == ["state.json"], "注釈を持てない json は説明の欠けとして出る")
+        check("— a short note" in out and "TS-program" not in out, "tex は % !TEX の次の % 注釈を説明にする")
         check("hand written" not in out, "既存 README は源にしない")
         check("sub の説明" in out, "subdir は中の README の本文 1 行目")
         out2, missing2 = render(d, "T", "", {"state.json": "機械が書く状態"}, "gen")

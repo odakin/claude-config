@@ -271,6 +271,7 @@
 - **[latexdiff-review-snapshot.sh](latexdiff-review-snapshot.sh)** — 共著レビュー用「変更点カラー版 PDF」を 1 コマンドで生成・配備（baseline を git rev から取り出し → \input の多 file は両版を平らに → レビュー markup unwrap --strip-cmd/--strip-color → latexdiff → compile → snapshot 命名〔#snapshot-artifact-naming 準拠、head = main tex と sub-file の最終 commit に pin〕→ 同 baseline 旧版 supersede → commit+push+open。behind/dirty guard + --selftest 内蔵、conventions/latex.md#latexdiff-review-snapshot）
 - **[latexdiff-safecmd.py](latexdiff-safecmd.py)** — Derive latexdiff's --append-safecmd list from the manuscript preamble.
 - **[latexdiff-strip-dup-labels.py](latexdiff-strip-dup-labels.py)** — Drop \label{...} from the DELETED side of a latexdiff output, so each label survives only on the new text.
+- **[latexdiff-tables-side-by-side.py](latexdiff-tables-side-by-side.py)** — 表 (tabular) を塊として比べた latexdiff の出力で、 消えた側の表を戻し、 前の表を赤・新しい表を青で上下に並べる。--selftest 内蔵。
 - **[latexdiff-untagged-changes.py](latexdiff-untagged-changes.py)** — Count the paragraphs of a latexdiff output that contain a change but no item tag (``\itemtag{...}``).
 - **[latexdiff-views-check.py](latexdiff-views-check.py)** — Check a finished latexdiff document against the two versions it claims to compare.
 - **[latexdiff-whole-items.py](latexdiff-whole-items.py)** — Rebuild one list (itemize / enumerate) in a latexdiff output so that each item is deleted, added or kept whole.

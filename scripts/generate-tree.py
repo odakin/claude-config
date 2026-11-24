@@ -148,6 +148,20 @@ def extract_header_desc(path: Path):
             first = re.split(r"(?<=。)", comment.strip(), maxsplit=1)[0].strip()
             return strip_name_prefix(first, name) or None
         return None
+    if name.endswith((".tex", ".sty", ".cls")):
+        # TeX は "% …" の注釈。 先頭の "% !TEX …" (TeXShop の engine の指定) は説明でないので飛ばす
+        # (呼び出し側が file ごとに説明を渡す包みを書いていた、 実測)
+        for line in text.splitlines():
+            s = line.strip()
+            if not s:
+                continue
+            if not s.startswith("%"):
+                break
+            body = s.lstrip("%").strip()
+            if not body or body.startswith("!TEX"):
+                continue
+            return strip_name_prefix(body, name) or None
+        return None
     for i, line in enumerate(text.splitlines()):
         if i == 0 and line.startswith("#!"):
             continue
