@@ -658,6 +658,15 @@
           "timeout": 10
         }
       ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/pending-card-rollcall.py",
+          "timeout": 10
+        }
+      ]
     }
   ],
   "PreCompact": [
@@ -689,6 +698,17 @@
           "type": "command",
           "command": "~/.claude/hooks/codex-parent-worker-record-nudge.py",
           "timeout": 5
+        }
+      ]
+    }
+  ],
+  "MessageDisplay": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/chat-math-display-fix.py",
+          "timeout": 10
         }
       ]
     }
