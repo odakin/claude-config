@@ -8,7 +8,9 @@
   人が 1 人に宛てて書いた mail は、 急ぎかどうかを機械が言えなくても、 既定で「読むべきもの」 である。
 
 この module が持つ判定 (呼び出し側 = 台帳の場所・account・Gmail の読み方・表示先を渡す):
-  - queue_candidate(msg, owner_addrs)     その mail が「人から・自分宛て」 か (header だけで判定。 本文は読まない)
+  - queue_candidate(msg, owner_addrs)     その mail が「人から・自分宛て」 か (header だけで判定。 本文は読まない)。
+                                           require_to=False = To に自分が居ない人の mail (Bcc・Cc) も「(一斉)」 の印で入れる
+                                           (account ごとに呼び出し側が選ぶ。 allow_cc=False = Bcc だけ)
   - open_items(cands, recorded, sent_ms)   未記録 ∧ その後に自分が同じ thread で送っていないものを、 thread ごと最新 1 通に
   - attach_deadline_info(item, subject, body, received)   期限の日付と、 急ぎ・締切の語 (日付が読めなかった印)
   - level(item, now) / render(items, now)  古さ・期限・読めなかった印から 🚨 / ⚠️ / 無印を決め、 行にする
@@ -68,6 +70,7 @@ DEADLINE_HORIZON_D = 120
 FRESH_NAMES_CAP = 8   # 無印 (新しい・印なし) を名前で並べる上限 (超えた分は「ほか N 通」)
 NOTE_KINDS = ("要返信", "要作業", "連絡のみ", "分からない")   # 受付メモの種類 (読んだ主体が選ぶ)
 NOTE_ASK_MAX = 60     # 受付メモの用件の上限 (字)
+BROADCAST_MARK = " (一斉)"   # 自分が To に居ない (Bcc・Cc で届いた) 人の mail の行の印 (queue_candidate の require_to=False)
 # 一覧の行頭の印・段の印に使う文字 (メモの文に入っていたら落とす)
 _NOTE_MARK_RE = re.compile("[\U0001F6A8\u26A0\uFE0F\U0001F534\U0001F4EE\U0001F4E9\U0001F4E8\u23F3\u231B\U0001F512\U0001F198\U0001F4CB\U0001F4DD]")
 _JST = timezone(timedelta(hours=9))
@@ -110,10 +113,19 @@ def addressed_to(headers: dict, owner_addrs) -> tuple[bool, int, int]:
     return any(a in owners for a in to), len(to), len(cc)
 
 
-def queue_candidate(msg: dict, owner_addrs, to_max: int = TO_MAX) -> tuple[dict | None, str]:
+def queue_candidate(msg: dict, owner_addrs, to_max: int = TO_MAX, require_to: bool = True,
+                    allow_cc: bool = True) -> tuple[dict | None, str]:
     """msg = {"id", "threadId", "label_ids", "headers", "internal_ms"} → (行列の候補 item | None, 落とした理由)。
 
-    候補 = 送り主が人 ∧ 自分発でない ∧ 自分が To に居る ∧ To の人数 ≤ to_max。 記録済み・返信済みはここでは見ない。"""
+    候補 = 送り主が人 ∧ 自分発でない ∧ 自分が To に居る ∧ To の人数 ≤ to_max。 記録済み・返信済みはここでは見ない。
+
+    require_to=False (account ごとに呼び出し側が選ぶ) = 自分が To に居ない人の mail (Bcc で届いた一斉の案内・Cc の写し) も
+    候補にし、 item に `broadcast` の印を付ける (行に「(一斉)」)。 allow_cc=False なら、 そのうち Bcc で届いた mail (To にも
+    Cc にも自分が居ない) だけを入れ、 Cc の写しは落とす (理由 "cc-only")。 To に自分が居て To が多い mail は今までどおり落とす。
+    なぜ: 「人が自分に宛てて書いた」 を To で定義すると、 人が書いた Bcc の一斉便 (催しの運営が参加者全員に送る依頼・催促) は
+    受付の外に出て、 残る網は件名の語の列挙と引き出し式の一覧だけになる (実測 = 名前も語も無い Bcc の依頼と催促が受付にも
+    一覧にも乗らなかった)。 量は account で大きく違う (個人の account では小さく、 組織の account では学内の一斉で多い = 実測)
+    ので、 宛先で絞るかは account ごとに決める (docs/convention-design-principles.md#broadcast-obligation-blind-spot)。"""
     headers = msg.get("headers") or {}
     frm = _hdr(headers, "from")
     from_addrs = _addrs(frm)
@@ -124,9 +136,11 @@ def queue_candidate(msg: dict, owner_addrs, to_max: int = TO_MAX) -> tuple[dict 
     if kind != "human":
         return None, kind
     in_to, n_to, n_cc = addressed_to(headers, owners)
-    if not in_to:
+    if not in_to and require_to:
         return None, "not-in-to"
-    if n_to > to_max:
+    if not in_to and not allow_cc and any(a in owners for a in _addrs(_hdr(headers, "cc"))):
+        return None, "cc-only"
+    if in_to and n_to > to_max:
         return None, "many-recipients"
     disp = frm.split("<")[0].strip().strip('"') or (from_addrs[0] if from_addrs else frm)
     mid, tid = msg.get("id"), msg.get("threadId") or msg.get("id")
@@ -134,8 +148,8 @@ def queue_candidate(msg: dict, owner_addrs, to_max: int = TO_MAX) -> tuple[dict 
         "id": mid, "threadId": tid, "from": frm, "from_disp": disp,
         "subject": _hdr(headers, "subject").strip(),
         "internal_ms": int(msg.get("internal_ms") or 0),
-        "n_to": n_to, "n_cc": n_cc, "sole": n_to == 1 and n_cc == 0, "root": mid == tid,
-        "unread": "UNREAD" in (msg.get("label_ids") or ()),
+        "n_to": n_to, "n_cc": n_cc, "sole": in_to and n_to == 1 and n_cc == 0, "root": mid == tid,
+        "unread": "UNREAD" in (msg.get("label_ids") or ()), "broadcast": not in_to,
     }, ""
 
 
@@ -279,9 +293,10 @@ def _row(item: dict, now: datetime, lv: str, stable: bool = False) -> str:
     n = item.get("thread_msgs") or 1
     xn = f" ×{n}" if n > 1 else ""
     unread = "未読 " if item.get("unread") else ""
+    bc = BROADCAST_MARK if item.get("broadcast") else ""
     nt = item.get("note") or {}
     memo = f" 📝 {nt.get('kind', '')}: {nt['ask'][:40]}" if nt.get("ask") else ""
-    return (f"  {mark} {unread}{_age_label(age_hours(item, now), stable)} {(item.get('from_disp') or '')[:20]}: {subj[:44]}{xn}"
+    return (f"  {mark} {unread}{_age_label(age_hours(item, now), stable)} {(item.get('from_disp') or '')[:20]}{bc}: {subj[:44]}{xn}"
             f"{due}{unp}{memo}  [{item.get('account', '')}:{item.get('id', '')}]")
 
 
@@ -326,7 +341,8 @@ def render(items: list[dict], now: datetime, names_cap: int = FRESH_NAMES_CAP, s
     out += rows
     fresh = [it for lv, it in ranked if lv == "fresh"]
     if fresh:
-        names = [((it.get("from_disp") or "?")[:14] + ("" if (it.get("subject") or "").strip() else " (件名なし)")) for it in fresh[:names_cap]]
+        names = [((it.get("from_disp") or "?")[:14] + (BROADCAST_MARK if it.get("broadcast") else "")
+                  + ("" if (it.get("subject") or "").strip() else " (件名なし)")) for it in fresh[:names_cap]]
         rest = f" ほか {len(fresh) - names_cap} 通" if len(fresh) > names_cap else ""
         out.append(f"  · {WARN_H} 時間以内 {len(fresh)} 通: " + " / ".join(names) + rest)
     return out
@@ -374,6 +390,27 @@ def _selftest() -> int:
           "候補: 受信箱の分類が広告の mail は対象外")
     check(queue_candidate(msg("m8", "Desk <info@example.com>", "owner@example.org", 1), owner)[0] is not None,
           "候補: info@ は人が書くことがあるので落とさない (一斉配信なら header で落ちる)")
+    # require_to=False (account ごとの選択): Bcc の一斉便 (To が送り主自身か無い)・Cc の写しも「(一斉)」 の印で候補に
+    bcc_none = msg("b1", "Org Office <office@example.net>", "", 1, cc="Staff <staff@example.net>")
+    bcc_self = msg("b2", "Org Office <office@example.net>", "Org Office <office@example.net>", 1)
+    cc_copy = msg("b3", "A <a@example.com>", "b@example.com", 1, cc="owner@example.org")
+    got_b = [queue_candidate(m, owner, require_to=False) for m in (bcc_none, bcc_self, cc_copy)]
+    check(all(c is not None and c["broadcast"] and not c["sole"] for c, _ in got_b),
+          "候補 (To を要求しない): Bcc で届いた人の mail (To 無し・To が送り主自身) と Cc の写しは候補で、 一斉の印")
+    check(all(queue_candidate(m, owner)[1] == "not-in-to" for m in (bcc_none, bcc_self, cc_copy)),
+          "候補 (既定): 同じ 3 通は今までどおり対象外 (To を要求する account は変わらない)")
+    check(queue_candidate(msg("b4", "ML <ml@example.com>", "", 1, **{"List-Id": "<ml.example.com>"}), owner, require_to=False)[1] == "list"
+          and queue_candidate(msg("b5", "Shop <no-reply@example.com>", "", 1), owner, require_to=False)[1] == "auto",
+          "候補 (To を要求しない): ML・自動送信は今までどおり落とす (広げるのは人の mail だけ)")
+    check(queue_candidate(msg("b6", "A <a@example.com>", "owner@example.org, b@example.com, c@example.com, d@example.com", 1),
+                          owner, require_to=False)[1] == "many-recipients",
+          "候補 (To を要求しない): To に自分が居て To が多い mail は今までどおり対象外")
+    bcc_only = [queue_candidate(m, owner, require_to=False, allow_cc=False) for m in (bcc_none, bcc_self, cc_copy)]
+    check(bcc_only[0][0] is not None and bcc_only[1][0] is not None and bcc_only[2] == (None, "cc-only"),
+          "候補 (Bcc だけ): Bcc で届いた mail は入れ、 Cc の写しは落とす (account ごとに Cc を外せる)")
+    sole_c, _ = queue_candidate(human, owner, require_to=False)
+    check(sole_c is not None and not sole_c["broadcast"] and sole_c["sole"],
+          "候補 (To を要求しない): 自分 1 人宛ての mail には一斉の印を付けない")
 
     def cand(mid, days_ago, tid=None, **kw):
         c, _ = queue_candidate(msg(mid, "Hanako Otsu <hanako@example.com>", "owner@example.org", days_ago, tid=tid, **kw), owner)
@@ -423,6 +460,11 @@ def _selftest() -> int:
           "表示: suffix_of の句は 🚨 / ⚠️ の行末にだけ付き、 句の付いた行があるときだけ見出しに head_extra を足す")
     check(render(items, now, suffix_of=lambda it: "", head_extra=" / X")[0] == rows[0],
           "表示: 句の付いた行が無ければ見出しは変わらない")
+    bc_old = dict(z, internal_ms=ms(3.2), account="home", broadcast=True)
+    bc_new = dict(z, id="z2", internal_ms=ms(0.1), account="home", broadcast=True)
+    bc_rows = render([bc_old, bc_new], now)
+    check("Hanako Otsu (一斉): " in bc_rows[1] and "Hanako Otsu (一斉)" in bc_rows[-1] and "(一斉)" not in rows[1],
+          "表示: 一斉の印は 🚨 / ⚠️ の行と無印の名前の両方に付き、 印の無い item には付かない")
     st1 = render([dict(z, internal_ms=ms(1.5), account="work")], now, stable=True)
     st2 = render([dict(z, internal_ms=ms(1.9), account="work")], now, stable=True)
     check(st1[1] == st2[1] and "24時間以上" in st1[1]

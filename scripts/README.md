@@ -565,6 +565,7 @@
 - **[lib/reply_letter.py](lib/reply_letter.py)** — LaTeX で書いた返答書 (referee への point-by-point の返信) を、 答えの単位・文・原稿への参照・記号に分ける engine (CLI = scripts/reply-new-material-check.py と scripts/reply-position-refs.py)。
 - **[lib/repo_roots.py](lib/repo_roots.py)** — 走査の root を 1 つの repo として見るか、 直下の子の repo を数えるかの共通の判定 (repo を並べた作業ルートを fleet scan する道具が使う)。
 - **[lib/run_log.py](lib/run_log.py)** — 検査 script の出力を「証跡 file」 として残す helper (= 後から「いつ何を出したか」 を再構成できるようにする)。
+- **[lib/same_sender.py](lib/same_sender.py)** — 扱っている便の相手 (差出人・宛先) から届いて、 まだ記録していない受信を並べる (相手の照合の述語と Gmail の検索。 --selftest)
 - **[lib/seal_artifact.py](lib/seal_artifact.py)** — 画像の押印 (ハンコ画像) が入った成果物に、作る時に印を付け、出口で見つける。
 - **[lib/sensitive-terms.sh](lib/sensitive-terms.sh)** — 実名 gate (Tier B) の検出語 file を読む共通部品 (source して使う、 bash 3.2 可)
 - **[lib/session_background_tasks.py](lib/session_background_tasks.py)** — 1 つの Claude Code session が仕掛けて今も生きている背景の作業 (Bash の run_in_background・前景から背景へ移った command・Monitor) を並べ、 見張りか・Monitor の残り秒を付ける (照合の道具 child-wrap-check.py と締めの手順 conventions/closing-sweep.md#stop-own-watches の共通の部品。 `<id|self>` で CLI)。

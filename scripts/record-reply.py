@@ -74,7 +74,12 @@ selftest (= 偽の Gmail + 2 台帳の fixture、 API に触らない): t1 legac
   決定欄に無ければ 1 行で知らせる (承認の候補 = 送信の前後の時間内に答えた外への送信の問いで、 key がこの項目を名指すか、
   他の項目を名指さず同じ session が問うたもの。 止めない) / t23 添付 (dry-run に一覧・暗号化 zip・保存の command、 --apply は
   --attachments-saved <dir> 〔全部の名前が在る〕 か --attachments-skip '<理由>' が無いと止まる、 entry の attachments: に書く、
-  暗号化 zip の中身が隣に無ければ「未展開」、 人が書いた値の後ろに足す)。
+  暗号化 zip の中身が隣に無ければ「未展開」、 人が書いた値の後ろに足す) / t24 同じ差出人の未記録 (相手から届いた未記録の受信を
+  新しい順に、 今記録する thread・別の相手は出さず、 記録済みの thread の後の催促は出す、 既定 off)。
+同じ差出人の未記録 (2026-11-24、 規約 = docs/convention-design-principles.md#broadcast-obligation-blind-spot): `--same-sender-days N`
+  (shim が渡す) で、 記録する thread の相手 (相手発の From、 無ければ自分の送信の宛先) から届いて台帳に messageId の無い受信を、
+  同じ account の受信箱 N 日で dry-run と --apply の両方に「🔎 同じ差出人の未記録 M 通: 件名…」 と出す (知らせるだけ・書かない)。
+  照合 = lib/same_sender.py (組織は domain、 大学・公の機関・無料のメール・`--same-sender-own-domain` は address だけ)。
 添付 (2026-11-21、 規約 = conventions/mail-thread-ledger.md#attachment-substance): この記録で入る message に添付があれば、
   dry-run は名前・大きさ・暗号化 zip か (zip を読むだけで保存しない) と保存の command (`--attachment-save-hint`、 shim が渡す) を出し、
   `--apply` は `--attachments-saved <dir>` (添付の名前が全部 dir に在る) か `--attachments-skip '<理由>'` を求める。 結果は entry の
@@ -111,6 +116,7 @@ from todo_ledger import (LEGACY_NAME as TODO_LEGACY_NAME, TodoLedgerError, deden
                          entry_text as todo_entry_text, indent_entry, load_todos_with_paths)
 import gmail_read  # noqa: E402
 import attachment_record  # noqa: E402
+import same_sender  # noqa: E402
 
 SUMMARY_MAX_LINES = 3
 HEX_RE = re.compile(r"^[0-9a-f]{16,}$")
@@ -148,6 +154,8 @@ class Config:
     decided_field: str = "decided"           # 項目の決定欄 (dry-run に全文を出す。 送った便を承認した本人の答えがここにあるかを照らす)
     asks_ledger: Path | None = None          # 本人への問いの台帳 (ai-collaboration board_asks.py の JSON lines)。 None = 照らさない
     attachment_save_hint: str = ""           # 添付を保存する command の形 ({account} / {mid} を埋める。 shim が渡す。 空 = 道具の名を出さない)
+    same_sender_days: int = 0                # > 0 = 記録する thread の相手から届いた未記録の受信を、 受信箱のこの日数で並べる (lib/same_sender.py)
+    same_sender_own_domains: tuple[str, ...] = ()   # 相手の照合で domain で引かない本人の所属 (shim が渡す)
 
     def tzinfo(self):
         if self.tz == "local":
@@ -1101,6 +1109,41 @@ def approval_gaps(cfg: Config, todo_id: str, ledger: Ledger, plans: list[dict], 
     return gaps
 
 
+def same_sender_report(cfg: Config, plans: list[dict], ledger: Ledger, gmail) -> list[str]:
+    """記録する thread の相手から届いて、 まだ記録していない受信 (同じ account の受信箱 cfg.same_sender_days 日) の行。
+    相手 = thread の中の相手発の message の From (相手発が無ければ自分の送信の宛先)。 照合の述語と検索 = lib/same_sender.py
+    (組織は domain、 大学・公の機関・無料のメール・本人の所属は address の完全一致、 自動送信の address は鍵にしない)。
+    記録済み = 台帳の known に messageId がある (thread の一致では落とさない)。 今記録する thread は並べない。
+    知らせるだけ (止めない・書かない)。 なぜ (実測): 相手の 1 通を記録して返事を送った turn の時点で、 同じ差出人の未記録の
+    一斉の依頼・催促が何通も残っていたのに、 道具は同じ相手を見張る開いた項目しか出さず、 隣の便は読まれなかった
+    (docs/convention-design-principles.md#broadcast-obligation-blind-spot)。"""
+    if cfg.same_sender_days <= 0 or not plans:
+        return []
+    by_acct: dict[str, dict] = {}
+    for p in plans:
+        b = by_acct.setdefault(p["account"], {"fields": [], "tids": set(), "mids": set()})
+        others = [m for m in p["msgs"] if not owner_from(m.get("from", ""), cfg.owner_tokens)]
+        b["fields"] += [m.get("from", "") for m in others] or [x for m in p["msgs"] for x in (m.get("to", ""), m.get("cc", ""))]
+        b["tids"].add(p["tid"])
+        b["mids"] |= {m["id"] for m in p["msgs"]}
+    out: list[str] = []
+    for acct, b in by_acct.items():
+        found = same_sender.addresses(*b["fields"])
+        own = [a for a in found if owner_from(a, cfg.owner_tokens)]
+        addrs, doms, _ = same_sender.keys_for(found, cfg.same_sender_own_domains, own, drop_automated=True)
+        if not addrs:
+            continue
+        try:
+            svc = gmail.service(acct)
+        except Exception:  # noqa: BLE001 — 知らせるだけの段
+            svc = None
+        items, err = same_sender.scan(svc, addrs, doms, ledger.known, cfg.same_sender_days, b["tids"], b["mids"])
+        items = [x for x in items if not owner_from(x.get("from") or "", cfg.owner_tokens)]   # 本人の address は token で当てる
+        out += same_sender.lines(items, cfg.same_sender_days, err=err,
+                                 scope=f"相手 = {same_sender.keys_label(addrs, doms)[:80]}、 {acct}")
+    return out
+
+
 def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) -> int:
     if ledger.broken:
         for b in ledger.broken:
@@ -1171,6 +1214,11 @@ def run_record(cfg: Config, args, ledger: Ledger, gmail, today: str, out=print) 
             + (dec.replace("\n", "\n  ") if dec else "(無し)"))
         for g in approval_gaps(cfg, todo_id, ledger, plans):
             out(g)
+    ss_lines = same_sender_report(cfg, plans, ledger, gmail)
+    if ss_lines:
+        out("")
+        for ln in ss_lines:
+            out(ln)
     att_refusals: list[str] = []
     att_notes: list[str] = []
     for p in plans:
@@ -2139,6 +2187,68 @@ def _selftest() -> int:
               and attachments_decision(cfg_t, argparse.Namespace(attachments_saved=None, attachments_skip="署名の画像"),
                                        [{"filename": "logo.png"}])[0] == "保存しない (署名の画像): logo.png",
               "t23 添付が無ければ止めない・saved と skip の両方は止める・skip の値")
+
+        # t24 同じ差出人の未記録 (2026-11-24): 記録する thread の相手から届いた未記録の受信を並べる (知らせるだけ)
+        s_tid = "ffff000000000001"
+        ORG = "Org Desk <desk@example.net>"
+        threads_s = dict(threads)
+        threads_s[("acct-a", s_tid)] = [msg(s_tid, T, ORG, subj="依頼", to=OW)]
+        a1, a2, a3 = "ffff0000000000a1", "ffff0000000000a2", "ffff0000000000a3"
+        box = [{"id": a1, "threadId": a1, "from": "Org Office <office@example.net>", "subject": "Urgent: form", "internal_ms": T + 5000},
+               {"id": a2, "threadId": a1, "from": "Org Office <office@example.net>", "subject": "Re: Urgent: form", "internal_ms": T + 9000},
+               {"id": a3, "threadId": a3, "from": CP, "subject": "別の相手", "internal_ms": T + 7000},
+               {"id": s_tid, "threadId": s_tid, "from": ORG, "subject": "依頼", "internal_ms": T}]
+
+        class _Exec:
+            def __init__(self, v):
+                self.v = v
+
+            def execute(self):
+                return self.v
+
+        class _SSvc:
+            def users(self):
+                return self
+
+            def messages(self):
+                return self
+
+            def list(self, **kw):
+                return _Exec({"messages": [{"id": m["id"], "threadId": m["threadId"]} for m in box]})
+
+            def get(self, **kw):
+                m = next(x for x in box if x["id"] == kw["id"])
+                return _Exec({"id": m["id"], "threadId": m["threadId"], "internalDate": str(m["internal_ms"]),
+                              "payload": {"headers": [{"name": "From", "value": m["from"]}, {"name": "Subject", "value": m["subject"]}]}})
+
+        class _GmS(FakeGmail):
+            def service(self, account):
+                return _SSvc()
+
+        (td / "ls" / "inbox").mkdir(parents=True)
+        (td / "ls" / "todo").mkdir()
+        (td / "ls" / "todo" / "2030-06-01-s.yaml").write_text(
+            f'id: "2030-06-01-s"\ntask: "s"\nstatus: open\nemail_ref: "threadId:{s_tid}"\n', encoding="utf-8")
+        cfg_s = Config(root=td, ledgers=["ls"], accounts=("acct-a",), owner_tokens=("owner@",), tz="UTC",
+                       cache_dir=td / "cache", same_sender_days=30)
+        ns_s = argparse.Namespace(target="2030-06-01-s", todo=None, account=None, next="x", status=None, summary="s", slug="s-thread",
+                                  id=None, ledger_for_new=None, no_todo=False, apply=False, replaces=None, attachments_saved=None,
+                                  attachments_skip=None)
+        out_lines.clear()
+        rc = run_record(cfg_s, ns_s, Ledger(cfg_s), _GmS(threads_s), "2026-09-22", pr)
+        text = "\n".join(out_lines)
+        check(rc == 0 and "🔎 同じ差出人の未記録 2 通 (相手 = example.net、 acct-a、 受信箱 30 日" in text
+              and "Re: Urgent: form" in text and "別の相手" not in text and f"{a2}, {a1}" in text,
+              "t24 dry-run は記録する thread の相手 (組織 = domain) から届いた未記録の受信を新しい順に出す (今記録する thread・別の相手は出さない)")
+        (td / "ls" / "inbox" / "2026-09.yaml").write_text(f'- id: "x-a1"\n  messageId: "{a1}"\n  summary: |\n    x\n', encoding="utf-8")
+        out_lines.clear()
+        run_record(cfg_s, ns_s, Ledger(cfg_s), _GmS(threads_s), "2026-09-22", pr)
+        text = "\n".join(out_lines)
+        check("🔎 同じ差出人の未記録 1 通" in text and f"id = {a2})" in text,
+              "t24 台帳に messageId がある受信は出さず、 同じ thread の後の催促は出す (thread の一致では落とさない)")
+        out_lines.clear()
+        run_record(Config(**{**vars(cfg_s), "same_sender_days": 0}), ns_s, Ledger(cfg_s), _GmS(threads_s), "2026-09-22", pr)
+        check(not any("🔎" in ln for ln in out_lines), "t24 same_sender_days = 0 (既定) なら出さない")
     finally:
         shutil.rmtree(td, ignore_errors=True)
     print(f"selftest: {'ALL PASS' if not fails else f'FAIL {fails}'}")
@@ -2161,7 +2271,9 @@ def build_config(args) -> Config:
                  require_replaces=str(args.require_replaces or "").strip().lower() in ("on", "1", "true", "yes"),
                  decided_field=getattr(args, "decided_field", None) or "decided",
                  asks_ledger=Path(args.asks_ledger).expanduser() if getattr(args, "asks_ledger", None) else None,
-                 attachment_save_hint=getattr(args, "attachment_save_hint", None) or "")
+                 attachment_save_hint=getattr(args, "attachment_save_hint", None) or "",
+                 same_sender_days=int(getattr(args, "same_sender_days", 0) or 0),
+                 same_sender_own_domains=tuple(getattr(args, "same_sender_own_domain", None) or ()))
     return cfg
 
 
@@ -2213,6 +2325,9 @@ def main(argv=None) -> int:
     ap.add_argument("--month-header", default="# {year}-{month:02d} mail ledger")
     ap.add_argument("--attachment-save-hint", default="", help="添付を保存する command の形 ({account} / {mid} を埋めて dry-run に出す。 shim が渡す)")
     ap.add_argument("--require-replaces", default="off", help="on = 現在地のある項目を書く --apply に --replaces を求める (shim が渡す)")
+    ap.add_argument("--same-sender-days", type=int, default=0, help="> 0 = 記録する thread の相手から届いた未記録の受信を、"
+                    " 同じ account の受信箱のこの日数で並べる (知らせるだけ。 0 = 出さない。 shim が渡す)")
+    ap.add_argument("--same-sender-own-domain", action="append", help="相手の照合で domain で引かない本人の所属 (複数可。 shim が渡す)")
     args = ap.parse_args(argv)
     if args.selftest:
         return _selftest()
