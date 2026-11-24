@@ -17,9 +17,11 @@
 - **[approval-source-census.py](approval-source-census.py)** — Count user-message leading tags without printing bodies, paths or session identifiers; --selftest.
 - **[arxiv-package.py](arxiv-package.py)** — arXiv 投稿用の source package を作って検査する (コメント除去 / .bbl + .bib + .bst 同梱 / 包装物だけで組版 / 元原稿と PDF テキスト一致 / bibtex 再実行で .bbl 再現)。 metadata (題・abstract の平文化と照合) と arXiv の組版 PDF との頁ごと照合も。 --selftest 内蔵。 conventions/paper-submission.md#arxiv-package-tool
 - **[ast-unresolved-names.py](ast-unresolved-names.py)** — python の候補を import も実行もせずに AST だけで読み、 関数の中で定義の無い名前が基準の版より増えていないかを比べる (当てる前に写しを回せない道具の候補の確かめ、 静的検査の道具の無い機でも動く)。 --selftest 内蔵。
+- **[audio-apply-cuts.py](audio-apply-cuts.py)** — 録音から、 時刻の表で決めた区間を抜き、 残りを 0.1 秒の crossfade でつないで FLAC に書く。
 - **[audio-bgm-audition.py](audio-bgm-audition.py)** — 本編の下に敷く BGM の音量を声の下で聞き比べて決める道具 (聞き比べの切り出し・間の多い箇所探し・曲の波の大きさ・仕上がりの静かな所)。
 - **[audio-bgm-underlay.py](audio-bgm-underlay.py)** — 仕上がった配信音声 (ジングル + 本編 + ジングル) の本編の下に BGM を敷いた試作を作る (ffmpeg の入口)。
 - **[audio-finish-episode.py](audio-finish-episode.py)** — ポッドキャストの 1 回分を仕上げる: 本編にジングルを頭と尾に付け、音量を揃えて配信用 MP3 に書き出し、測り直して検査する。
+- **[audio-phrase-map.py](audio-phrase-map.py)** — 録音の区間を無音で区切り、 区切りごとに whisper で起こして、 時刻つきの言葉の並びにする。
 - **[audio-shorten-gaps.py](audio-shorten-gaps.py)** — 録音の中の長い「話の間」 (だれも話していない間) を、 決めた秒数に縮める。
 - **[audio-speaker-levels.py](audio-speaker-levels.py)** — 話者つきの文字起こし (WebVTT の cue の本文が「名前: 本文」) と録音から、 話者ごとの声の大きさを測る。
 - **[audio-split-by-frames.py](audio-split-by-frames.py)** — 長い録音 (AAC の .m4a) を、指定したフレームの境目で無劣化 (再符号化なし) に分け、元と一致するかを確かめる。

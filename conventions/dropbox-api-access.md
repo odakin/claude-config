@@ -35,6 +35,8 @@ native / script 用途では **PKCE (S256) で app secret を使わない**: 保
    `POST /2/sharing/list_shared_links` `{"path": …, "direct_only": true}` → `links[0].url`
 
 file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/…?rlkey=…` 形式 (リンクを知る全員が閲覧可、 既定)。
+同じ path の file を中身だけ書き直しても (同期の folder で上書き)、 リンクは変わらない = 渡したリンクのまま新しい版を聞いてもらえる (実測: 上書きの後の取得が同じ URL を返した)。
+書き直しが Dropbox の側に届く前に取得すると、 新しい file では `path/not_found` の 409 になる = 届くまで間を置いて取り直す (実測: 92 MB で 1 分ほど)。
 
 - <a id="members-only-link"></a>**共有フォルダのメンバーだけが開けるリンク** (私的な録音・下書きを、 すでにフォルダを共有している相手に指し示すとき):
   `{"path": …, "settings": {"audience": "no_one", "access": "viewer"}}` で作る。 リンクは場所を指すだけで権限を足さない =
