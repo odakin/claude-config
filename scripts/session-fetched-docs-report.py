@@ -8,7 +8,8 @@
 置き場と保存の規則 = closing-sweep.md#fetched-originals。 本 script は session 本体の分だけを数える (agent・worker の取得は数えない)。
 
 拾うもの (session 本体の記録 <projects-dir>/<project>/<session id>.jsonl の道具の呼び出し):
-  1. arXiv の原典 — Bash の command か WebFetch の URL に arxiv.org/pdf/ か arxiv.org/e-print/ があれば、 その中の arXiv の番号を全部。
+  1. arXiv の原典 — Bash の command か WebFetch の URL に arxiv.org/pdf/・arxiv.org/e-print/・arxiv.org/html/ (本文の HTML 版) か ar5iv の HTML 版があれば、
+     その中の arXiv の番号を全部 (実測: curl で HTML 版を取って式と本文を読んだ session で 0 件と出た)。 abs の頁 (要旨だけ) は数えない。
      loop (`for id in A B C; do curl …/pdf/$id`) も拾える。 session が Write した script の本文にその URL があれば、 その script を
      起動した command の番号も数える (実測: 取得を script に書いて番号を引数で渡すと 0 件と出た)。 URL の無い command の番号は数えない (書誌の API・INSPIRE の検索を除くため)。
      ただし取得の道具 (KNOWN_FETCHERS = ai-collaboration の fetch-literature.py) の起動は、 URL が無くても引数の番号と、
@@ -57,7 +58,7 @@ ssr = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ssr)
 
 DROP_DIRS = ("~/Desktop", "~/Downloads")
-ARXIV_URL_RE = re.compile(r"arxiv\.org/(?:pdf|e-print)/", re.I)
+ARXIV_URL_RE = re.compile(r"arxiv\.org/(?:pdf|e-print|html)/|ar5iv(?:\.labs\.arxiv)?\.org/(?:abs|html)/", re.I)
 # 新しい形 YYMM.NNNNN (2007-04 から) と古い形 archive/YYMMNNN。 版 vN は別に取る
 ARXIV_ID_RE = re.compile(
     r"(?<![\w.])((?:0[7-9]|[1-9]\d)(?:0[1-9]|1[0-2])\.\d{4,5}"
@@ -425,6 +426,10 @@ def selftest():
                                      "d = fitz.open('inside.pdf')\nEOF"})
         # 層1 の頁を読む道具 pdf-locator-grep.py に渡した PDF も読んだ原典 (実測: この道具だけで読んだ session で 0 件と出た)
         Path(lib, "Located title.pdf").write_bytes(b"%PDF-1.4 read with the locator tool")
+        # 本文の HTML 版 (arxiv.org/html/、 ar5iv) は原典の取得として数え、 abs の頁 (要旨だけ) は数えない
+        call(36, "Bash", {"command": "curl -sL https://arxiv.org/html/2501.00014v1 | python3 -c \"import sys; print(len(sys.stdin.read()))\""})
+        call(37, "WebFetch", {"url": "https://ar5iv.labs.arxiv.org/html/2502.00015", "prompt": "p"})
+        call(38, "Bash", {"command": "curl -sL https://arxiv.org/abs/2503.00016 | head"})
         call(35, "Bash", {"command": "python3 /x/ai-collaboration/scripts/pdf-locator-grep.py \"" + lib
                                      + "/Located title.pdf\" --dump /tmp/located.txt"})
         Path(proj, sid + ".jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\n", encoding="utf-8")
@@ -432,8 +437,9 @@ def selftest():
         calls = ssr.read_calls(Path(proj, sid + ".jsonl"))
         arxiv, local = collect(calls, drop_dirs=(drop,))
         check(set(arxiv) == {"2401.00001", "2402.00002", "hep-th/9901001", "2405.00005", "2407.00007", "quant-ph/0311107",
-                             "2409.00009", "hep-ph/0101001", "2410.00010", "2411.00011", "2412.00012"},
-              "arXiv = URL のある command と、 URL を本文に持つ script の引数と、 WebFetch の PDF の番号と、 取得の道具の引数と一覧の番号だけ (loop も、 古い形も。 書誌の API と abs の頁と URL の無い script の引数と検索の道具は数えない)")
+                             "2409.00009", "hep-ph/0101001", "2410.00010", "2411.00011", "2412.00012", "2501.00014", "2502.00015"},
+              "arXiv = URL のある command と、 URL を本文に持つ script の引数と、 WebFetch の PDF の番号と、 本文の HTML 版 (arxiv.org/html/・ar5iv) の番号と、 取得の道具の引数と一覧の番号だけ (loop も、 古い形も。 書誌の API と abs の頁と URL の無い script の引数と検索の道具は数えない)")
+        check(arxiv["2501.00014"]["versions"] == {"v1"}, "HTML 版の URL の版も取る")
         check(arxiv["hep-ph/0101001"]["versions"] == {"v2"}, "取得の道具の引数の版も取る")
         check({"2410.00010", "2411.00011"} <= set(arxiv) and "一覧" in arxiv["2410.00010"]["cmd"],
               "もう無い一覧の file は、 同じ session でその file に書いた command の本文から拾う")
@@ -485,11 +491,11 @@ def selftest():
               "pdf-locator-grep.py に渡した PDF も読む道具に渡した原典として数える")
         res = []
         _capture(lambda: res.append(report(sid[:8], [Path(t, "projects")], root, True, False, drop_dirs=(drop,))))
-        check(res == [(0, 21)], "保存なし・もう無い = 21 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・"
+        check(res == [(0, 23)], "保存なし・もう無い = 23 (2402.00002・hep-th/9901001・2405.00005・2407.00007・quant-ph/0311107・2501.00014・2502.00015・"
               "取得の道具の 5 件・other・vanished・dl・WebFetch の PDF・メールの添付・読む道具に渡した PDF・空白入りの path の 3 件・"
               "引用符の cd の後の相対の path・pdf-locator-grep.py に渡した PDF)")
         out = json.loads(_capture(lambda: report(sid[:8], [Path(t, "projects")], root, True, True, drop_dirs=(drop,))))
-        check(out["unsaved"] == 21 and out["repos"] == 1, "json も同じ数")
+        check(out["unsaved"] == 23 and out["repos"] == 1, "json も同じ数")
     print("selftest: " + ("PASS" if ok else "FAIL"))
     return 0 if ok else 1
 
