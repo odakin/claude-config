@@ -3080,6 +3080,20 @@ if errors:
 
 origin: ある様式の自筆署名 overlay 後の検証。 過去 session で本文の誤り (人名の取り違え) を訂正した PDF に対し signature overlay する際、 (1) text 不変 (= overlay が image-only である保証)、 (4) MUST-ABSENT に旧 hallucination 名を入れて「訂正が壊れていない」 を点呼、 (5) image stream +1 で「署名が確かに 1 枚だけ追加された」 を確認。 視覚は別途 [`pdf-visual-confirm`](#pdf-visual-confirm) で実施。
 
+### <a id="statement-row-redaction"></a>利用明細の PDF から、 出す行だけを残して他の行を消す (経費の証憑)
+
+**いつ**: カードの利用明細・口座の取引明細を、 経費の証憑として事務に出すとき (出す行は 1〜数行、 他の利用は見せない)。 明細のサイトに「行を非表示にして印刷」 の機能があればそれを先に使う (隠した行と合計を記号に置き換える公式の形)。 機能が無い画面 (確定前の速報の頁など、 実測) では、 全行のまま PDF に保存し、 残す行以外を文字ごと消す。
+
+**作り方** (PyMuPDF の `add_redact_annot` + `apply_redactions` = 黒い箱の下の文字も文字層から消える。 図形を上に描くだけでは文字が残る):
+1. 表の語を `page.get_text("words")` で取り、 左端の日付の列 (`YY/MM/DD` など) を行の目印にする。
+2. **語を、 縦の中心がいちばん近い日付の行に割り当てる**。 行の境を隣の日付との中点に置く形は、 2 段の行 (返品・現地通貨額・換算日が下の段に出る行) の上下の段を隣の行の帯に入れ、 その帯の redaction が残す行の文字を消す (実測: 残した返金の行の現地通貨額と「返品」 の字が消えた)。
+3. 消す帯 = 行ごとに、 その行の語の上下の範囲 ± 1.5pt × 表の幅。 帯が残す行の語の bbox にかからないことを assert する (`apply_redactions` は帯に少しでもかかる文字を消す = [`pdf-prefill-direct`](#pdf-prefill-direct) の redact 矩形の注意と同じ根)。
+4. 合計額のように表の外で残すと他の利用を推せる値も、 `search_for` で消す。
+5. 出す前に文字層で確かめる: 残す行の語 (店名・額・現地通貨額・換算日) が全部あり、 消した行の店名・額が 1 つも無いこと (上の [`pdf-mutation-verification-schema`](#pdf-mutation-verification-schema) の must-present / must-absent)。 画像でも 1 回見る。
+6. 黒い帯だけの頁 (2 頁目以降) は出す PDF から落とす。 本文で「関係のない行は黒塗り」 と断る。
+
+**同じ時に出すメールの証憑**: メールそのものを証憑にするとき、 本文が文字だけのメールは [`scripts/mail-to-pdf.py`](../scripts/mail-to-pdf.py) (`--redact` で予約の暗証番号などを伏せる)。 この道具は HTML の本文を組まない = 本文が HTML だけのメール (予約サイトの返金・取消のお知らせなど、 実測) は、 HTML の `<img>` を外してから (外部の画像の読み込み = 開封の計測を走らせない)、 見出し (差出人・宛先・日時・件名) の区画を `<body>` の頭に足し、 管理用の値 (予約の暗証番号) を HTML から消して、 [`scripts/html-print-pdf.py`](../scripts/html-print-pdf.py) で PDF にする。 消した値が PDF の文字層に無いことを確かめる。
+
 ### <a id="image-budget-exhaustion"></a>画像レンダリング検証の "image budget" 枯渇 → text-first 原則
 
 [`pdf-visual-confirm`](#pdf-visual-confirm) は「PDF を render して目視」 を義務化するが、 **画像を読みすぎると会話単位の hard limit に達し、 以後その会話では画像が一切読めなくなる**。
