@@ -43,8 +43,10 @@ def watch_queries(item: dict, field: str = "watch_query") -> list[tuple[str, str
     return out
 
 
-def unrecorded_threads(service, q: str, known: set, limit: int = 20) -> list[str]:
-    """検索に当たった message のうち、 messageId も threadId も known に無いものの threadId (重複除去)。"""
+def unrecorded_threads(service, q: str, known: set, limit: int = 20, message_only: bool = False) -> list[str]:
+    """検索に当たった message のうち、 messageId も threadId も known に無いものの threadId (重複除去)。
+    message_only=True = threadId が known でも、 messageId が known に無ければ拾う (記録済みの thread に後から届いた催促・返事も
+    出す = recorded_ids の読み手の述語。 既定は今までどおり thread の記録でも落とす = 既存の見張りの量を変えない)。"""
     try:
         res = service.users().messages().list(userId="me", q=q, maxResults=limit).execute()
     except Exception:
@@ -52,7 +54,7 @@ def unrecorded_threads(service, q: str, known: set, limit: int = 20) -> list[str
     out: list[str] = []
     for m in res.get("messages", []) or []:
         mid, tid = m.get("id"), m.get("threadId")
-        if not tid or mid in known or tid in known or tid in out:
+        if not tid or mid in known or (tid in known and not message_only) or tid in out:
             continue
         out.append(tid)
     return out
@@ -173,6 +175,8 @@ def selftest() -> int:
                              {"id": "m3", "threadId": "t1"}, {"id": "m4", "threadId": "tk"}]})
     expect("unrecorded_threads: 記録済み message / thread を除き重複なし", unrecorded_threads(svc, "q", {"m2", "tk"}) == ["t1"])
     expect("unrecorded_threads: API 失敗は空", unrecorded_threads(Fake(boom=True), "q", set()) == [])
+    expect("unrecorded_threads (message_only): 記録済みの thread に後から届いた message も拾う",
+           unrecorded_threads(svc, "q", {"m2", "tk"}, message_only=True) == ["t1", "tk"])
 
     items = [{"id": "done", "status": "完了", "matter_key": "00000000-aaaa-bbbb-cccc-111111111111"},
              {"id": "open", "status": "待ち", "matter_key": "22222222-dddd-eeee-ffff-333333333333"},
