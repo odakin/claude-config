@@ -538,6 +538,9 @@ sections:
     title: "PDF mutation 後の機械検証 schema (= text 不変 + keyword in/out + image stream delta)"
     related: [pdf-prefill-direct, pdf-visual-confirm, signature-image-overlay-density, pdf-cell-label-vs-data-disambiguation, label-vs-input-antipattern, scan-pdf-pixel-anchor-overlay]
     origin: "2026-06-28"
+  - id: statement-row-redaction
+    level: 3
+    title: "利用明細の PDF から、 出す行だけを残して他の行を消す (経費の証憑)"
   - id: image-budget-exhaustion
     legacy: "6-5"
     level: 3
