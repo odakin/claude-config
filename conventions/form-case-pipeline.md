@@ -335,6 +335,7 @@ repo に institution の様式が漏れる。
 | **刷る頁の推定は語の当たり** ([§4](#page-roles)) | 語を持たない説明書き頁 / 様式本体に見える控え | `submit` の頁は anchor で中身を照合する = 推定でなく宣言に寄せる |
 | **凍結は記録であって紙ではない** ([§2.3](#paper)) | 窓口で手書き訂正された紙 | `paper: differs` + `paper_diff` に書く。 書かない限り「記録 = 紙」 の主張になる |
 | **gate は Excel / Word を通す** | app が無い / 応答しない環境では build ができない | 状態の検査 (`check` / `audit`) は app なしで動く = 記録の健全性だけは常に見られる |
+| <a id="spec-change-ripple"></a>**spec の規則を変えた波及は gate が見ない** | 1 つの欄の値の形を変える (例: 日時を 1 欄に持つ形から、 日付の欄と時・分の欄に分ける形へ) と、 その欄を数式で引く別の group の欄の表示書式 (時刻を出す書式) が取り残され、 時刻が「0時00分」 と刷れる。 字は完全に出るので、 字の切れ gate・読み戻し・雛形 diff のどれにも掛からない。 後で組む group (帰着後の報告など) は変えた時点では組まれず、 次にその group を組むまで出ない (実測) | 欄の値の形を変える spec の変更では、 その欄を引く数式 (`=…!<欄>`) を workbook で引き ([`office-automation.md#cross-sheet-formula-chain`](office-automation.md#cross-sheet-formula-chain))、 引く側の欄の書式か数式を同じ変更で直す。 後で組む group も架空の案件で 1 回組んで、 その欄の字を見る |
 
 ## <a id="values-and-handover"></a>13. 値の出どころと、 当事者に渡す形
 
