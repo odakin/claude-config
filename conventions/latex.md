@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check) + 英文だけを直した候補 (今 → 案 の組を当てた写し) の PDF を確かめるとき (#prose-pass-pdf-word-diff) + TeXShop で保存した原稿の JIS の外の文字が `\UTF{…}` の形に書き換わったとき (#texshop-ptex-utf-output) + 数式の書体 (math alphabet) を替える候補を作って見せるとき (#typeface-candidate) + pdfLaTeX で組んでいた文書を LuaLaTeX に移すとき (#from-pdflatex) + 本文の幅に入らない式 (大きな行列) を横置きの頁にして送るとき・背の高い式の前の頁が白く残るとき (#landscape-display-page) + 書き下した式を TeX に写した後に照合するとき (#typeset-formula-readback)
+when: LaTeX を含むリポで作業するとき + revtex で 1 頁の文書 (正誤表など) を組むとき (#revtex-short-document) + TeXShop がどの PDF を表示しているかを script や hook で見分けるとき (#texshop-shown-pdf-lsof) + 組んだ PDF で列挙や段落が何行に収まったかを確かめるとき (#rendered-line-count) + 図を足す・大きくした原稿を組んだ後に、 頁からはみ出す図が無いかを確かめるとき (#float-too-large) + 表の caption を表の上と下のどちらに置くか決めるとき (#table-caption-position) + 選んだ見出しの番号にだけ印 (飛ばしてよい節など) を付けるとき (#mark-after-heading-number) + 原稿の型 (class)・engine を替える、 cleveref を外すときに、 本文が変わっていないかを確かめるとき (#class-conversion-body-check) + 英文だけを直した候補 (今 → 案 の組を当てた写し) の PDF を確かめるとき (#prose-pass-pdf-word-diff) + TeXShop で保存した原稿の JIS の外の文字が `\UTF{…}` の形に書き換わったとき (#texshop-ptex-utf-output) + 数式の書体 (math alphabet) を替える候補を作って見せるとき (#typeface-candidate) + pdfLaTeX で組んでいた文書を LuaLaTeX に移すとき (#from-pdflatex) + 本文の幅に入らない式 (大きな行列) を横置きの頁にして送るとき・背の高い式の前の頁が白く残るとき (#landscape-display-page) + 書き下した式を TeX に写した後に照合するとき (#typeset-formula-readback) + 刷って手で書き込む版の行間を広げるとき (#writein-double-spacing)
 category: paper
 summary: LaTeX 固有規約（物理リポで参照）
 -->
@@ -962,6 +962,14 @@ odakin の標準は **pdf 直接出力 (= pdftex 系)**。tex+dvi+dvipdfmx の 2
 - **書く**: `\documentclass[11pt,a4paper]{article}` のように、 用紙を source に書く (刷る紙の側に合わせる。 どの機械で組んでも同じ頁になる)。 jsarticle / ltjsarticle 系は既定が A4 (検査も警告を出さない)
 - **確かめる**: `python3 scripts/check-tex-papersize.py FILE.tex` (option に用紙が無い `\documentclass` を列挙、 exit 1) / `--pdf FILE.pdf` (組んだ PDF の 1 頁目の寸法を A4 / Letter で言う)。 pre-commit に `--staged-warn` を繋ぐと、 staged の .tex で用紙の無い `\documentclass` を warn する (commit は止めない)
 - pdflatex / lualatex (pdf mode) では class option だけで PDF の MediaBox まで届く。 hyperref の `setpagesize=false` が残っていても届く (実測、 LuaLaTeX)。 止まるのは dvipdfmx の経路で、 次の節 (papersize special が要る)
+
+### <a id="writein-double-spacing"></a>書き込み用に行間を広げた版は setspace で組む (class の `draft` は行間を変えない)
+
+刷って手で書き込む版 (赤入れ・読み合わせの版) の行間を広げるのに、 標準 class の `draft` option は使えない。 `article.cls` の `draft` は `\setlength\overfullrule{5pt}` の 1 行だけで、 はみ出した行の右に黒い棒を出す (graphicx は図を枠だけにする)。 行間は変わらない (実測: TeX Live の `article.cls`)。
+
+- **書く**: preamble に `\usepackage{setspace}` と `\doublespacing`。 倍率は本文の文字の大きさで決まる (10pt = 1.667、 11pt = 1.618、 12pt = 1.655 = `setspace.sty` の `\doublespacing` の定義)。 package を足さないなら `\linespread{1.6}`
+- **刷る版は用紙も書く** ([#declare-paper-size](#declare-paper-size)): 用紙の指定の無い原稿は Letter で組まれ、 A4 に刷ると縮む
+- **書き込みと照らす版を固定する**: 刷った版の commit に tag を付け、 書き込みを入れる直しの diff の起点にする (原稿が先へ進んでも、 紙の頁・行と source を対応させられる)。 行間の指定は投稿の前に外す
 
 ### <a id="dvipdfmx-papersize"></a>documentclass の用紙指定は、 papersize special が出ないと PDF の用紙に届かない (dvipdfmx)
 

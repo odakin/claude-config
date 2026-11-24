@@ -191,6 +191,9 @@ sections:
   - id: declare-paper-size
     level: 3
     title: "用紙は documentclass の option に明示する (標準 class の既定は letterpaper)"
+  - id: writein-double-spacing
+    level: 3
+    title: "書き込み用に行間を広げた版は setspace で組む (class の `draft` は行間を変えない)"
   - id: dvipdfmx-papersize
     level: 3
     title: "documentclass の用紙指定は、 papersize special が出ないと PDF の用紙に届かない (dvipdfmx)"
