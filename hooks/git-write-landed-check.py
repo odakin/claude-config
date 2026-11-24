@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """git-write-landed-check.py — Bash で打った git commit / git push が実際に入ったかを、 走った後に確かめる。
+hook-wiring: part — 呼び手 = hooks/git-state-nudge.sh (下の段落)
 
 呼び手 = hooks/git-state-nudge.sh (PostToolUse Bash)。 command に commit か push の語がある時だけ、 hook の
 stdin JSON をそのまま本 file の stdin に渡す。 本 file は窓に返す文 (1 件 1 行) を stdout に出し、 何も無ければ

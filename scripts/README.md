@@ -78,6 +78,7 @@
 - **[check-gitcrypt-readable.mutants.json](check-gitcrypt-readable.mutants.json)** — check-gitcrypt-readable.py の「commit に入った版が平文」 の判定の selftest に歯があることを、 判定の一部を外した mutant 4 本で確かめる spec (check-foil-teeth.py が読み、 run-all-checks が毎回回す)。
 - **[check-gitcrypt-readable.py](check-gitcrypt-readable.py)** — 暗号化 file が「このマシンで実際に読めるか」 と「commit に入った版が暗号文か」 を必ず可視に報告する。
 - **[check-history-growth.py](check-history-growth.py)** — 差分が効かない file (暗号化・PDF・画像) を頻繁に commit して、 版ごとに全体が git の履歴に積まれるのを早めに見つける。
+- **[check-hook-wiring.py](check-hook-wiring.py)** — hook の dir の hook のうち、 配線の台帳にも Claude Code の設定にも載っていないもの (= 一度も走らない hook) を数えて出す
 - **[check-inbound-refs.py](check-inbound-refs.py)** — safety net for restructuring claude-config (layer 1).
 - **[check-latex-crossrefs.py](check-latex-crossrefs.py)** — Find bare parenthetical cross-references and misplaced \labelcref / \eqref numbers.
 - **[check-latexdiff-math-markup.py](check-latexdiff-math-markup.py)** — Gate against latexdiff silently dropping equation changes (2026-09-08).

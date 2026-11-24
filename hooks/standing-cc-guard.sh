@@ -1,5 +1,6 @@
 #!/bin/bash
 # standing-cc-guard.sh — 定型の Cc (ある種類のメールに毎回入れる宛先) の送信前検査 (PreToolUse)
+# hook-wiring: engine — 呼び手 = 利用者の層の shim (config を渡して本 file を exec する、 下の段落)
 #
 # 一般則の正本 = conventions/gmail-sending.md#standing-cc-inactive (+ 定型 Cc の一覧を持つ運用全般)。
 # 本 file は engine。 どの話題のメールに・誰を Cc に入れるかは呼び出し側の config (YAML) が持つ:

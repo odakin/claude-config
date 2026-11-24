@@ -2,6 +2,7 @@
 # fix-snapshot-path-patch.sh — PATH スナップショット自動パッチ（REQUIRED_PATHS 方式、launchd WatchPaths から呼ばれる）
 # Claude Code のシェルスナップショットの PATH を自動パッチ
 # launchd WatchPaths から呼ばれる（設定フォルダごとの shell-snapshots を監視 = scripts/install-snapshot-path-fix.sh が plist を作る）
+# hook-wiring: part — 呼び手 = launchd (scripts/install-snapshot-path-fix.sh が作る plist の WatchPaths)
 #
 # 問題: Claude Code がスナップショット生成時に shell init を走らせるが、
 # .zprofile の brew shellenv 二重実行等で PATH が不完全になることがある。

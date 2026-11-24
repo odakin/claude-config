@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""pending-card-rollcall.py — Stop: この session が出した card のうち押されておらず本人がまだ見ていないものがあるのに、 最新の返事に点呼の 1 行 (「🃏 押されていない card N 枚」) が無ければ、 書く 1 行を添えて 1 回だけ止める
+"""pending-card-rollcall.py — Stop: この session が出した card のうち押されていないものが前の turn に出たまま残っていれば、 取り下げて一番下に出し直す手順を添えて止め、 最新の返事に点呼の 1 行 (「🃏 押されていない card N 枚」) が無ければ書かせる
 
 本体 = scripts/pending-cards.py の --stop (述語 = scripts/lib/pending_cards.py)。 この file は本体を呼ぶだけ。
 正本 = conventions/multi-session-coordination.md#pending-card-rollcall。 本体が見つからない・例外は黙る (fail-open)。

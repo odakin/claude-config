@@ -328,6 +328,10 @@ def pre_spawn(inp: dict, ext=None):
                 f"(dismiss_task が「withdrawn」 を返していない)。 本人は chip を十数秒で押すので、 取り消しの結果を読む前に作り直すと二重起動になる。 "
                 f"dismiss_task だけを出し、 その結果を読んだ**次の応答**で決める = withdrawn なら作り直す / already started なら作り直さず、 "
                 f"安全停止の記録や表示がなければ起動した session に SendMessage で訂正する。 取り消しと作り直しを同じ応答に並べない")
+        elif st == "edited":
+            reasons.append(
+                f"この session が出した同じ依頼の chip {e.get('task_id')} は本人が文を編集した (取り下げていない)。 作り直さず、 "
+                f"card の上で Start を押すか閉じるよう本人に頼む (app の返事 = 作り直しを出さない)")
         elif st == "started":
             reasons.append(
                 f"この session が出した同じ依頼の chip {e.get('task_id')} は既に起動している (dismiss が already started を返した)。 "
@@ -376,11 +380,17 @@ def post_dismiss(inp: dict) -> str:
     sid = inp.get("session_id") or ""
     tid = ti.get("task_id") or ""
     text = flatten(inp.get("tool_response"))
-    if "already started" in text:
-        st = "started"
-    elif "already dismissed" in text:
-        st = "dismissed"
-    elif "withdrawn" in text:
+    # app の取り下げの返事は 7 通り (読み分けの正本 = scripts/lib/pending_cards.py の冒頭の表、 文は app の版で変わる)。
+    # 「withdrawn」 の部分一致で読むと、 取り下げていない返事 (「… was not withdrawn」「Not withdrawn: …」) を取り下げ済みと
+    # 記録して同じ依頼の作り直しを通してしまう (2 枚目の card = 押せば 2 人目の worker)。 文の形で読む
+    if re.search(r"Task task_[0-9A-Za-z]+ (?:was already started|is no longer pending)", text) \
+            or "has just clicked Start" in text:
+        st = "started"      # 押されていた・押した瞬間・編集して押した
+    elif re.search(r"Task task_[0-9A-Za-z]+ was already dismissed", text) or "No pending task with id" in text:
+        st = "dismissed"    # 本人が閉じた・app にその card が無い
+    elif "Not withdrawn:" in text and "edited the message" in text:
+        st = "edited"       # 本人が文を編集した = 取り下げていない。 作り直さず、 card の上で押すか閉じてもらう
+    elif re.search(r"Task task_[0-9A-Za-z]+ withdrawn", text):
         st = "withdrawn"
     else:
         return ""
@@ -398,6 +408,10 @@ def post_dismiss(inp: dict) -> str:
                 f"**同じ依頼の chip を作り直さない**。 直したいこと (仕様の訂正・依頼 id など) は、 ListAgents で chip の title の session を探して "
                 f"安全停止の記録や表示がなければ SendMessage で送る。安全フィルタで止まった窓には送らず、本人に終了を確認する。 "
                 f"同じ応答で既に作り直しを出していたら、 後から起動した方にも同じ確認をして「何もせず終了」 を頼む ({RULE})")
+    if st == "edited":
+        return (f"[spawn-dedupe-guard] chip {tid} は本人が文を編集した = 取り下げていない (その card だけが本人の書いた文で起こせる)。 "
+                f"**同じ依頼の chip を作り直さない**。 card の上で Start を押すか、 要らなければ閉じるよう本人に頼む。 "
+                f"同じ応答で既に作り直しを出していたら、 それを dismiss_task で取り下げる ({RULE})")
     return ""
 
 
@@ -554,6 +568,34 @@ def selftest() -> int:
         note = post_dismiss({"session_id": me, "tool_input": {"task_id": "task_000000aa"},
                              "tool_response": "Task task_000000aa was already started by the user — it's no longer pending and can't be withdrawn."})
         check("post-dismiss already started → state started + nudge", load_ledger(me)[0]["state"] == "started" and "作り直さない" in note)
+        # 取り下げの返事 7 通り (app 本体の表の文) + 旧い文。 取り下げていない返事を取り下げ済みと記録しない
+        forms7 = [
+            ("Task task_000000aa withdrawn. The card is no longer shown to the user. Continue your current work.", "withdrawn"),
+            ("Task task_000000aa is no longer pending, so there is nothing to withdraw: the user started it as a new session.",
+             "started"),
+            ("Task task_000000aa was already started by the user — it's no longer pending and can't be withdrawn.", "started"),
+            ("The user has just clicked Start on task task_000000aa, so it is being launched and was not withdrawn; if that "
+             "launch fails, your withdrawal is applied and the card is removed. Do not re-flag it.", "started"),
+            ("Not withdrawn: the user edited the message of task_000000aa and has just clicked Start on it, so it is being "
+             "launched with what they wrote.", "started"),
+            ("Task task_000000aa was already dismissed. Nothing was changed.", "dismissed"),
+            ("No pending task with id task_000000aa. Possible causes include it never being queued in this session. "
+             "Do not re-flag it. Nothing was changed.", "dismissed"),
+            ("Not withdrawn: the user edited the message of task_000000aa, so only its card starts it, with what they wrote. "
+             "Ask them to press Start there, or to dismiss it if they no longer want it.", "edited"),
+        ]
+        for _reply, _want in forms7:
+            _e = load_ledger(me)
+            _e[0]["state"] = "pending"
+            save_ledger(me, _e)
+            _note = post_dismiss({"session_id": me, "tool_input": {"task_id": "task_000000aa"}, "tool_response": _reply})
+            check("post-dismiss 7 通り: " + _reply[:44] + " → " + _want, load_ledger(me)[0]["state"] == _want)
+        check("post-dismiss 本人が編集した → 作り直さない案内", "作り直さない" in _note and "編集" in _note)
+        rc, txt = pre_spawn(spawn_inp(), Ext)
+        check("本人が編集した card と同じ依頼の作り直し → 止める (理由に編集)", rc == 2 and "編集" in txt)
+        _e = load_ledger(me)
+        _e[0]["state"] = "started"
+        save_ledger(me, _e)
         rc, txt = pre_spawn(spawn_inp(), Ext)
         check("same title after started (live) → block, names the live session", rc == 2 and "bbbbbbbb" in txt)
         # 4. override → 注意だけ
