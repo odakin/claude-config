@@ -20,6 +20,7 @@ MCP ツールを使うリポで適用。CLAUDE.md から参照: `~/Claude/claude
 - **UUID→アカウント対応表は MCP 設定リポに保持**: 各 MCP 設定リポ (例: `gmail-mcp-config`) の CLAUDE.md または SESSION.md に UUID→アカウントの対応を記録する。memory には書かない (machine-local で cross-machine 不整合を招く。詳細: [docs/convention-design-principles.md §5](../docs/convention-design-principles.md#memory-positioning))。新規セッションで対応表が不明・古ければ、上記方法で UUID→account を照合し、差分を MCP 設定リポに追記する
 - **アカウント一覧の正本**: 各 MCP 設定リポの CLAUDE.md を参照（各プロジェクトリポの CLAUDE.md にはハードコードしない）
 - <a id="search-result-cap"></a>**検索の件数が上限 (`maxResults`) と同じなら、 結果は切れている**: Gmail の検索の結果は新しい順に並ぶ (実測) = 返った中で一番古い日付が、 見たい期間の始まりより前かを見る。 届いていなければ、 期間を割るか語を絞って引き直してから「この期間に無い」 と書く (実測: 上限ちょうどの件数が直近の数か月の無関係な便で埋まり、 見たかった前の期間が 1 件も返っていなかった)。 上の「0 件」 の扱いと同じく、 見た範囲を書く
+- <a id="to-operator-misses-bcc"></a>**検索の `to:<自分>` は、 Bcc で届いた便に当たらない**: 一斉送信で宛先 (To・Cc) に自分が居ない便は header に自分の address を持たず、 `to:` の条件から落ちる (実測)。 「自分宛ての mail」 を `to:` の検索や To の照合で定義した検出器・受付は、 人が書いた一斉便を黙って外す = Bcc の便も対象にするなら `to:` を条件から外し、 受信箱 (`in:inbox`) と差出人の側で絞る。 この形の検出の盲点の考え方 = [`../docs/convention-design-principles.md#broadcast-obligation-blind-spot`](../docs/convention-design-principles.md#broadcast-obligation-blind-spot)
 
 ## <a id="claude-mcp-project-resolution"></a>`claude mcp` の project 解決ルール (注意)
 
