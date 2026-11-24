@@ -1,7 +1,7 @@
 <!-- doc-meta
 when: 重要送信者・ML topic の見落とし防止 surface を設計するとき + 結果・通知・返事を待つ項目を台帳に立てるとき + 送り手を丸ごと雑音にする前 + 決着済み案件に自動督促が来続けるとき + 会員サービスからの情報流出のお詫びが網から落ちたとき (#vendor-breach-notice-class) + 止まっている待ちの項目を棚卸しするとき (#waiting-item-answer-elsewhere) + 当番が年ごとに替わる会の案内 (出欠のフォーム) を最初の便で拾う網を作るとき (#recurring-event-invitation)
 category: mail
-summary: 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止。 別スレッドで届く待ち結果は待ち項目の検索条件で拾う (#new-thread-expected-inbound) / 送り手一括の雑音化は class 別の件数を数えてから (#sender-noise-volume-check) / 決着済み案件への自動督促は本文の案件 ID で畳む (#settled-matter-key) / 「記録済み」 の書式は検出器間で 1 つ (#recorded-id-notation)
+summary: 重要送信者・ML トピックを Gmail filter + retroactive labeling + dashboard surface の 3 layer で見落とし防止。 別スレッドで届く待ち結果は待ち項目の検索条件で拾う (#new-thread-expected-inbound)、 人が議論の結論を新しい件名で送ることもある = 結論を答える前に差出人の後の便を引く (#decision-in-new-thread) / 送り手一括の雑音化は class 別の件数を数えてから (#sender-noise-volume-check) / 決着済み案件への自動督促は本文の案件 ID で畳む (#settled-matter-key) / 「記録済み」 の書式は検出器間で 1 つ (#recorded-id-notation)
 -->
 # Email surface pattern (= 重要送信者・ML トピックの見落とし防止)
 
@@ -158,6 +158,10 @@ opt-out list の両方 — 後者にしか痕跡が無い決着もある (= clas
   別件の新しいスレッドがこの項目の返事として出る = 結ぶ項目は本文を読んで決める (実測: 網が結んだ項目と本文の案件が違った)。
   網は記録した mail を出さないが、 項目の行に「最終更新より新しい返事」 を記録済みも含めて添える表示を持つ環境では、 項目を更新するまで添え続ける
   = 別件として記録する turn で条件を持つ項目にも結び、 現在地に「別件 (どの項目の話か)」 と書く。 続くなら条件に件名の語を足して絞る
+- <a id="decision-in-new-thread"></a>**人の送り手も、 議論の結論を新しい件名の便で送ることがある** (「打ち合わせで決めた〜は以下です」 を、 議論したスレッドへの返信でなく新しいスレッドで):
+  台帳の記録はスレッド単位なので、 議論のスレッドの記録が案の段で止まっていると、 そこから答えれば決まる前の案を結論として出す。
+  結論を問われて、 結んだスレッドの最後が案・候補・「打ち合わせで決める」 の段なら、 答える前に、 同じ差出人の、 そのスレッドの最後の記録より後の便を件名を問わず 1 query 引く
+  (`from:<人> after:<記録の最後の日>`)。 見つけた便は議論の項目に結んで記録する (実測: 議論のスレッドの最後は候補の一覧で、 決まった版は同じ差出人から別の件名で届いていた)
 - 実装 = [`scripts/lib/mail_watch.py`](../scripts/lib/mail_watch.py) の `watch_queries` / `unrecorded_threads`。
   一般則 = [`convention-design-principles.md#retrieval-key-choice`](../docs/convention-design-principles.md#retrieval-key-choice)
   (thread ID でなく送り手・件名という別の鍵で引く)、 予告された inbound の時計は
