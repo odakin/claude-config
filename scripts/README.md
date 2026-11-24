@@ -223,6 +223,7 @@
 - **[hook-liveness-audit.py](hook-liveness-audit.py)** — user hook が「そもそも走っていない」 root を検出 (disableAllHooks kill switch の settings 全 tier 走査 + transcript 上の SessionStart 発火証拠)
 - **[hook-matcher-liveness.py](hook-matcher-liveness.py)** — hook の matcher が今の tool 名に当たっているかを、 会話記録に出た tool 名で確かめる (読むだけ)
 - **[html-print-pdf.py](html-print-pdf.py)** — 「印刷用 HTML ページ」 (window.print() 前提) を保存 HTML から A4 PDF にし、 刷れる raster 版まで作る。
+- **[indico-timetable.py](indico-timetable.py)** — Indico の会議の時間割を JSON export で読み、 題か発表者の名で講演を探して、 会議の時刻と手元の時刻を並べる。
 - **[injection-reach-audit.py](injection-reach-audit.py)** — hook の注入 (SessionStart 等) に指定の語が何 session 出たか、 その session の assistant と user がそれに触れたかを transcript から数える（配達と伝達を別々に数える RCA 用。 docs/convention-design-principles.md#surface-reader-is-not-the-owner、 --selftest）
 - **[inspect-video.py](inspect-video.py)** — Inspect encoded video metadata, decode it, and extract review stills.
 - **[inspire-author-records.py](inspire-author-records.py)** — 1 人の業績が INSPIRE の複数の著者 record に割れていないか・record に別人の論文が混じっていないかを数え、 本人の業績だけを出す検索式 (API と画面の URL) を作る。

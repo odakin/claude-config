@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき
+when: Indico (CERN 等) の会議に abstract 投稿・参加登録・支払いを進めるとき、会議の実績やアカウント重複を確認するとき + 自分の講演・座長の枠の日時を時間割で確かめるとき・運営から時間割の更新の便が来たとき (#timetable-json-export)
 category: office
 summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機構と落とし穴 (= CERN SSO の login 経路選択 〔guest 登録の確認 mail が来ない / 外部 ID = Google 等で入り既存 profile に紐付ける〕 / 所属は SSO 同期を切らないと編集不可 / 別 mail で profile が二重化したら merge 依頼 / abstract form の Authors 〔= 発表者を含む著者〕 と順序は手動並べ替え 〔alphabetical は自分で〕 / 受理通知 mail に abstract ID / reminder 分単位 〔1 週間 = 10080〕 / 本文は plain text 寄り / 参加費を主催側の販売サイトで払う場合の区分既定値・手数料・決済代行だけの checkout・請求通貨で払う・未払い注文の取消 = #external-checkout / 研究費精算の費目・宛名つき領収書・購入日 TTM 換算 〔scripts/fx-ttm-jpy.py〕 = #fee-reimbursement / 発表の証明に Contribution の公開ページ・推測 URL は別 event を返す = #presentation-proof)。 jps-talk-submission.md / paper-submission.md の sibling (会議 abstract 側)
 -->
@@ -35,6 +35,10 @@ summary: Indico (indico.cern.ch 系) の abstract 投稿で実際に踏んだ機
 
 - event timetable の reminder 設定は **分単位**の数値入力 (1 週間前 = 10080、 1 日前 = 1440)。
 - 採否通知は event page の "Call for Abstracts" に書かれた日付を calendar / TODO に入れる (= Indico から自動では来ない)。
+- <a id="timetable-json-export"></a>**自分の講演・座長の枠の日時は、 時間割の JSON export で読む**: `https://<host>/export/timetable/<event id>.json` (公開の会議ならログインせずに取れる)。 道具 = [`../scripts/indico-timetable.py`](../scripts/indico-timetable.py) (`--match` = 題・発表者・session 名の正規表現、 `--tz` = 手元の時刻の tz、 `--save` = 根拠として JSON を残して sha256 を出す)。
+  - 時間割の画面がボット確認の頁で止まった回でも、 この JSON は User-Agent を付けた素の GET で取れた (実測) = 「Indico が読めない」 で予定表への登録を止めない。
+  - 時刻は会議の tz (`Europe/Geneva` など) で出る。 手元の時刻へは tz の表で変換する (夏時間の有無を固定の時差で手で足さない)。
+  - **時間割は会期の前にも動く** (講演の追加で session が延びる・講演の長さが変わる)。 運営から「時間割を更新した」 の便が来たら、 自分の講演の枠だけでなく、 座長など自分が持つ session の終わりの時刻も読み直し、 予定表の予定と照らす (実測: 講演の枠の追加で、 座長を務める session が予定表の終わりの時刻より延びていた)。 session の枠の終わり (Session の `endDate`) と最後の講演の終わりは違うことがある = 予定表には枠の終わりを入れる。
 
 ## 5. 記録の最小セット (個人層 / 案件 repo 側)
 
