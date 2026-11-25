@@ -832,6 +832,27 @@ Do not transplant that Claude mechanism into Codex. Explicit send approval
 remains primary; fingerprints check integrity and execution rules provide a
 product-controlled backstop. Neither proves human intent.
 
+### Recorded internal checks
+
+The optional [internal launch hook](hooks/delegation_visibility.py) applies when the
+selected Codex home contains `recorded-internal-checks.on`. It checks native
+`spawn_agent` before dispatch. A same-turn request made with the board's
+`--surface agent` route binds the generated handoff to the requesting thread.
+The parent sends that handoff as the tool's entire message. Work that owns a
+deliverable follows the visible worker route.
+
+In a repository without its own board, the check can use a UTF-8 file under the
+repository root. The file initially contains the full message. Its first four
+lines are `Codex same-turn project check.`, `Record: <repo-relative path>`,
+`Parent session: <native id>`, and `Reason: <same-turn purpose>`, followed by
+the instructions. The parent adds the finding after the tool returns.
+
+The hook checks the presence, parent and contents of the record. The
+[delegation rule](../conventions/multi-session-coordination.md#self-closing-delegate)
+still controls which work qualifies. Test native dispatch with the selected
+app build and with a denied and an allowed control. Hosted tool paths require
+their own coverage test. Trust for a new hook is reviewed by the user.
+
 ### Managed lifecycle subset
 
 Codex provides `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,

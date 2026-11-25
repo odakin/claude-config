@@ -804,6 +804,70 @@ for carrier in ('event_msg','response_item'):
 print('Approval sources: unknown tags excluded, latest human retained and body-free diagnostics passed')
 PY
 
+python3 -B - "$SCRIPT_DIR" "$TEMP_ROOT" <<'CHECK_INTERNAL'
+import hashlib
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from delegation_visibility import handle
+
+root = Path(sys.argv[2]) / "internal-check"
+root.mkdir()
+home = root / "codex"
+home.mkdir()
+parent = "01000000-0000-7000-8000-000000000001"
+other = "01000000-0000-7000-8000-000000000002"
+event = {"hook_event_name": "PreToolUse", "tool_name": "spawn_agent",
+         "session_id": parent, "tool_input": {"message": "Independent deliverable."}}
+assert handle(event, home) is None
+(home / "recorded-internal-checks.on").touch()
+
+def denied(call):
+    result = handle(call, home)
+    return result and result["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+assert denied(event)
+assert handle(dict(event, tool_name="Bash"), home) is None
+
+board = root / "board"
+board.mkdir()
+subprocess.run(["git", "init", "-q", str(board)], check=True)
+(board / "board.json").write_text("{}")
+outbox = board / ".git/board-outbox/root"
+outbox.mkdir(parents=True)
+request = "20260101T000000Z-codex-aabbcc"
+prompt = f"Codex same-turn board check {request}.\nBoard root: {board}\nSynthetic small read-only check."
+registered = dict(event, tool_input={"message": prompt})
+assert denied(registered)
+receipt = {"request_id": request, "surface": "agent", "requester": parent,
+           "handoff_sha256": hashlib.sha256(prompt.encode()).hexdigest()}
+path = outbox / f"{request}.launch.json"
+path.write_text(json.dumps(receipt))
+assert handle(registered, home) is None
+assert denied(dict(registered, session_id=other))
+assert denied(dict(registered, tool_input={"message": prompt + " Extra work."}))
+path.write_text(json.dumps(dict(receipt, surface="codex-app")))
+assert denied(registered)
+
+project = root / "project"
+project.mkdir()
+subprocess.run(["git", "init", "-q", str(project)], check=True)
+note = project / "check.md"
+prompt = ("Codex same-turn project check.\nRecord: check.md\n"
+          f"Parent session: {parent}\nReason: one read-only comparison for this reply\nCompare the synthetic values.")
+note.write_text(prompt)
+project_call = dict(event, cwd=str(project), tool_input={"message": prompt})
+assert handle(project_call, home) is None
+assert denied(dict(project_call, session_id=other))
+(project / "board").mkdir()
+(project / "board/board.json").write_text("{}")
+assert denied(project_call)
+print("Internal launch: exact record, parent binding, opt-in and visible fallback passed")
+CHECK_INTERNAL
+
 REAL_DENIED_AFTER="$(real_denied_lines)"
 if [ "$REAL_DENIED_AFTER" != "$REAL_DENIED_BEFORE" ]; then
   # another session's guard may write while the test runs; a test line is told by its session name
