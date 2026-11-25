@@ -5140,6 +5140,8 @@ def _posted_receipt(uses: dict, results: dict, event_id: str, target: Path, cand
         if u.get("name") != "Bash" or not u.get("main"):
             continue
         parsed = _shell_tokens(str((u.get("input") or {}).get("command") or ""))
+        if parsed is None:
+            continue
         # 記号 (改行・; && | redirect …) も展開 ($ `) も無い 1 つの単純な command だけ。 行の続き (`\` + 改行) は
         # 空白に数え (盲検の実測: 契約に載せた複数行の形を、 改行で 3 つの command に分けて断った)、 前後の改行は落とす
         # (盲検の実測: 終わりの改行 1 つで、 正しい 1 つの command を断った)
@@ -8379,6 +8381,13 @@ def reviewer_approval_selftests(check) -> None:
                                           cp.resolve())
                   and not _posted_receipt(rcpt(" >&2 | cat"), ok_m1, "20260101T000000Z-claude-x00001", tgt,
                                           cp.resolve()))
+            malformed = {"name": "Bash", "main": True, "input": {"command": "echo 'unterminated"}}
+            malformed_result = {"bad": ok_m1["m1"]}
+            check("[reviewer-receipt] 読めない呼び出しを数えず、続く正規の受け取りを照合する",
+                  not _posted_receipt({"bad": malformed}, malformed_result,
+                                      "20260101T000000Z-claude-x00001", tgt, cp.resolve())
+                  and _posted_receipt({"bad": malformed, **rcpt(" 2>&1")}, {**malformed_result, **ok_m1},
+                                      "20260101T000000Z-claude-x00001", tgt, cp.resolve()))
             # R3-4: 記録の後に作業ツリーで lock の印を足した / 実行の bit を付けた file に、 同じ記録の当て直しは通らない
             tp_n.unlink(missing_ok=True)
             eid, cp4 = approval("hooks/check.sh", hook1, mode="100755")

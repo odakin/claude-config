@@ -1314,6 +1314,7 @@ def _selftest_rewrite(td: Path):
 
 def selftest():
     import tempfile
+    from unittest.mock import patch
     ok = 0
     if _rs is not None:
         _rs.selftest()
@@ -1385,7 +1386,12 @@ def selftest():
         # 他の session が stage した file を beat の commit に吸わない (path を付けた commit)、 その file は stage に残る
         (repo / "other.txt").write_text("someone else's work\n")
         git(repo, "add", "other.txt")
-        r3 = beat(repo, "fleet", 0, RC_LABEL_PREFIX_DEFAULT, None)     # 間隔 0 = 必ず commit する
+        beat_path = repo / "fleet" / f"{hostname_short()}.json"
+        changed = json.loads(beat_path.read_text())
+        # 同じ秒に3回走っても、新しい観測値が入った beat で commit の範囲を確かめる。
+        changed["cron_jobs"] = (changed.get("cron_jobs") or 0) + 1
+        with patch.dict(beat.__globals__, {"collect": lambda *_args: changed.copy()}):
+            r3 = beat(repo, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
         assert r3.startswith("committed"), r3
         _rc, names = git(repo, "show", "--name-only", "--format=", "HEAD")
         assert names.split() == [f"fleet/{hostname_short()}.json"], names
