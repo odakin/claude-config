@@ -32,7 +32,7 @@ env:
   CLAUDE_CALENDAR_TZ         timeZone (default Asia/Tokyo)。 書く予定の timeZone と、 読む時刻の表し方の両方
 
 使い方:
-  calendar-events.py list   --from 2030-01-10 --to 2030-01-14
+  calendar-events.py list   --from 2030-01-10 --to 2030-01-14 [--ids] [--desc]
   calendar-events.py gaps   --from 2030-01-10 --to 2030-01-14 \
                             --windows 09:00-12:30,13:30-17:30
   calendar-events.py dups   --from 2030-01-10 --to 2030-01-14
@@ -396,6 +396,8 @@ def fetch(svc, cal: str, frm: str, to: str) -> list[dict]:
                 "end": e["end"].get("dateTime", e["end"].get("date", "")),
                 "summary": e.get("summary", ""),
                 "location": e.get("location") or "",
+                "description": e.get("description") or "",
+                "created": e.get("created") or "",
             })
         token = r.get("nextPageToken")
         if not token:
@@ -404,12 +406,28 @@ def fetch(svc, cal: str, frm: str, to: str) -> list[dict]:
 
 # ---------------------------------------------------------------- コマンド
 
+def desc_lines(e: dict) -> list[str]:
+    """list --desc が予定の行の下に足す行 (作られた時刻と説明欄の空でない行)。
+
+    予定の行そのもの (日時欄・場所・要約) は変えない = 他の repo の道具がその形を正規表現で読む
+    (--ids の行と同じく、 字下げした続きの行だけを足す)。 説明欄は切らずに全行を出す
+    (説明欄の接続情報・出所・前例の判断を読むための口。 実測: 口が無いと API を叩く使い捨ての code を毎回書いた)。
+    """
+    pad = f"{'':>17}  "
+    out = [f"{pad}created={e['created']}"] if e.get("created") else []
+    out += [f"{pad}| {ln}" for ln in (e.get("description") or "").splitlines() if ln.strip()]
+    return out
+
+
 def cmd_list(a) -> int:
     svc = get_service()
     for e in fetch(svc, _cfg("CLAUDE_CALENDAR_ID"), a.frm, a.to):
         print(f"{format_when(e['start'], e['end'])}  {e['location'][:22]:<22} {e['summary'][:62]}")
         if a.ids:
             print(f"{'':>17}  id={e['id']}")
+        if a.desc:
+            for ln in desc_lines(e):
+                print(ln)
     return 0
 
 
@@ -693,6 +711,12 @@ def selftest() -> int:
     check(bool(fs.calls) and fs.calls[0].get("timeZone") == "Asia/Tokyo",
           "T39: 読むときも timeZone を渡す (無いと calendar の timeZone で返り、 UTC の calendar は 9 時間ずれる)")
 
+    dl = desc_lines({"created": "2030-01-09T03:00:00.000Z", "description": "出所: 甲\n\n接続: 乙\n"})
+    check(dl == [f"{'':>17}  created=2030-01-09T03:00:00.000Z", f"{'':>17}  | 出所: 甲", f"{'':>17}  | 接続: 乙"],
+          "T40: list --desc は作られた時刻と説明欄の空でない行を、 字下げした続きの行で出す")
+    check(desc_lines({"description": "", "created": ""}) == [], "T41: 説明欄も時刻も無ければ行を足さない")
+    check(all(ln.startswith(" ") for ln in dl), "T42: --desc の行はどれも字下げで始まる (予定の行の形を読む呼び元が拾わない)")
+
     print(f"\n==== RESULT: PASS={ok} FAIL={fail} ====")
     return 1 if fail else 0
 
@@ -708,6 +732,7 @@ def main() -> int:
         q.add_argument("--to", required=True)
 
     q = sub.add_parser("list"); common(q); q.add_argument("--ids", action="store_true")
+    q.add_argument("--desc", action="store_true", help="作られた時刻と説明欄を、 予定の行の下に字下げした行で出す")
     q = sub.add_parser("gaps"); common(q)
     q.add_argument("--windows", default="09:00-12:30,13:30-17:30")
     q = sub.add_parser("dups"); common(q)
