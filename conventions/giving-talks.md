@@ -277,6 +277,13 @@ one abstract through many rounds:
 - **Keep contested vocabulary out of the opener.** If a key term is disputed between camps, open with the
   physics everyone accepts and introduce the loaded term only after the text has pinned down what it means.
   Readers from the other camp stop at a provocative first line.
+- **Use familiar words to set up the result.** Picture a listener reading only the first
+  sentence. Give them a physical effect or a concrete comparison they can picture.
+  Introduce technical terms when they help explain it. Return to that opening at
+  the end and say what the result lets the listener understand.
+- **Keep the assumption that makes the result interesting.** If the surprise depends on
+  a condition on the starting model, explain what the condition requires before naming it.
+  Match both that statement and any promise of background teaching to what the talk can cover.
 - **State the relation to known results as an operation on them.** "We extend theorem X to regime Y" tells the
   reader what is new; "X turns out to hold better than expected" does not. Check that every pronoun has one
   possible referent.
