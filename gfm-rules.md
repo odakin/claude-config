@@ -38,6 +38,12 @@ A GFM table row is exactly one line. A newline in the middle of a cell ends the 
 
 - **Fix**: keep each row on one line and use `<br>` for a line break inside a cell. When editing a long cell with a tool, check afterwards that the row is still one line (e.g. print the first characters of the surrounding lines).
 
+## A literal `|` inside a table cell is written `\|`
+
+A pipe that belongs to the text of a cell is escaped as `\|`. A script that splits rows on every `|` cuts such a row into extra cells, so a value read by column position (a status or count column) is taken from the wrong cell for that row only (measured: counting a ledger table by splitting on every `|` misread one row whose text contained `\|`, and the reported total was off by one).
+
+- **Fix**: split only on unescaped pipes (`(?<!\\)\|` with Python's `re`), and before reporting a count, check that every row has as many cells as the header row.
+
 ## A bracketed index followed by `(x)` renders as a link
 
 Plain-text math such as `T_[μν](x)` or `Γ^ρ_[νμ](x)` contains `[…](…)`, which GFM reads as a link with label `μν` and target `x`: the brackets disappear and the label becomes a broken link (measured, in a record that quoted printed equations).
@@ -85,6 +91,12 @@ GFM の autolinker は裸の URL を貪欲に伸ばす。`**https://example.com*
 GFM の表の 1 行は、ファイルの 1 行そのもの。セルの途中で改行すると行はそこで終わり、続きの行は切れた表の後ろの普通の段落になる（実測: 長いセルに字下げした続きの段落を書き足して、表が壊れた）。
 
 - **対処**: 1 行は 1 行のまま書き、セルの中の改行は `<br>`。長いセルを道具で書き換えたら、その行がまだ 1 行かを確かめる（前後の行の頭を数文字出すなど）
+
+## 表のセルの中の縦棒は `\|`（数えるときは前に `\` の無い `|` だけで割る）
+
+セルの文の中の縦棒は `\|` と書く。行を `|` で全部割る script は、その行だけ欄を多く切り、欄の位置で取る値（扱い・状態・数の欄）を別の欄から読む（実測: 台帳の表を `|` で全部割って数え、文の中に `\|` を持つ 1 行を読み違えて、合計が 1 つずれた）。
+
+- **対処**: 前に `\` の無い `|` だけで割る（Python の `re` なら `(?<!\\)\|`）。数を人に伝える前に、欄の数が見出しの行と合わない行が 0 かを確かめる
 
 ## 添字の角括弧の直後に `(x)` が続くと link になる
 
