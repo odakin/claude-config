@@ -70,6 +70,15 @@
   math_macros = 定義を自動で拾えない数式の wrapper macro の名前。 include と extra_include の同居と知らない欄 (綴りの
   誤り) は config-invalid。
 
+Bash の git add / commit の行き先 (commit_targets): cd・env -C・git -C を順に辿る。 同じ command の中で literal の値を
+  代入した変数 (`NAME=…` だけの segment と export / readonly / declare / typeset / local) は `$NAME` / `${NAME}` として
+  展開する (HOME は `~` と同じく環境から)。 値の決まらない変数 (`$(…)`・外から来る変数・for / read / unset の後) は展開
+  せず語のまま繋ぐ (子の shell には export した変数だけを渡す)。 同じ command の `git init <dir>` で新しく repo の top に
+  なる dir (検査の時点で無い・囲む repo の下・repo の外) の中の add / commit は、 検査の時点で中身が無いので数えない
+  (その dir の下に検査の時点で在る別の repo は数える。 re-init は数える)。 add / commit の path を数える基準の dir が
+  検査の時点で無いときは pathspec-dir-missing。 限界: tokenizer は括弧の入れ子を持たないので、 subshell の中の代入も
+  外に効くと読む。
+
 使い方:
   manuscript-claim-guard.py hook claude|codex      PreToolUse の event を stdin で受け deny JSON を出す
   manuscript-claim-guard.py git-precommit          repo (cwd) の staged 差分を検査 (agent session のみ、 違反 exit 1)
@@ -874,6 +883,10 @@ INSPECTION_REASONS: dict[str, tuple[str, str, str]] = {
                        "git -C <repo の絶対 path> の形で打ち直す", _AGENT),
     "pathspec-required": ("対話型 (-p / -i) や --pathspec-from-file の add / commit は対象の path が決まらない",
                           "path を明示した git add <path> / git commit -- <path> で打ち直す", _AGENT),
+    "pathspec-dir-missing": ("git add / commit の path を数える基準の dir が、 検査の時点で無い (同じ command の中で作る dir、"
+                             " または値の決まらない shell の変数 〔$(…)・外から来る変数〕 の行き先)",
+                             "dir を作る command を先に別の呼び出しで打つか、 変数を literal の path に直して打ち直す"
+                             " (同じ command の中の NAME=<literal> の代入と git init <dir> は辿る)", _AGENT),
     "hook-event-invalid": ("hook に渡った event を読めない",
                            "hook の配線 (settings) を確かめる (設定は lock の下 = 本人の裁定で)", _OWNER),
 }
@@ -3435,6 +3448,10 @@ def expand_commit_pathspec(repo: Path, selection: GitPathspec | str) -> list[str
     if isinstance(selection, str):
         selection = GitPathspec(repo, (selection,))
     cwd, patterns = selection.cwd, selection.patterns
+    if not cwd.is_dir():
+        # 検査の時点で無い dir (同じ command で作る dir / 値の決まらない変数の行き先) からの pathspec は git に
+        # 数えさせられない。 git の故障 (git-unreadable) と分けて、 直し方の言える理由で止める
+        raise InspectionError("pathspec-dir-missing", str(cwd))
     if has_head(repo):
         tracked = checked_git(cwd, "diff", "HEAD", "--no-relative", "--name-only", "-z",
                               "--no-renames", "--diff-filter=ACMRDT", "--", *patterns)
@@ -3455,51 +3472,214 @@ def expand_commit_pathspec(repo: Path, selection: GitPathspec | str) -> list[str
     return sorted(names)
 
 
+_SHELL_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*$")
+_SHELL_VAR_REF_RE = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z_0-9]*)\}|([A-Za-z_][A-Za-z_0-9]*))")
+_SHELL_DECLARERS = ("export", "readonly", "declare", "typeset", "local")
+
+
+def expand_shell_word(word: str, known: dict[str, str | None]) -> tuple[str, bool]:
+    """`$NAME` / `${NAME}` を、 同じ command の中で literal の値を代入した変数だけ展開する ((展開した語, 決まったか))。
+
+    決まらない形 (代入の無い変数・値の決まらない代入・`$(…)`・`` `…` ``・`${NAME:-…}` などの展開) は残して False を返す =
+    呼び手は今までどおり語のまま扱う (推測で埋めない)。 HOME だけは `~` と同じく process の環境から読む。
+    tokenizer は引用を外した後の語を渡すので、 '…' の中の literal の `$` も変数と読む (その名の代入が無ければ残るだけ)。
+    """
+    if "$" not in word and "`" not in word:
+        return word, True
+
+    def sub(m: re.Match) -> str:
+        name = m.group(1) or m.group(2)
+        if name in known:
+            value = known[name]
+            return m.group(0) if value is None else value
+        if name == "HOME":
+            return os.environ.get("HOME") or str(Path.home())
+        return m.group(0)
+
+    out = _SHELL_VAR_REF_RE.sub(sub, word)
+    return out, "$" not in out and "`" not in out
+
+
+_SHELL_ASSIGN_RE = re.compile(r"^([A-Za-z_][A-Za-z_0-9]*)(\+?)=(.*)$", re.S)
+
+
+def _assignment(word: str) -> tuple[str, str] | None:
+    """`NAME=値` / `NAME+=値` の (名前, 展開前の値)。 `+=` は `NAME=${NAME}値` と同じ (bash の追記)。"""
+    m = _SHELL_ASSIGN_RE.match(word)
+    if not m:
+        return None
+    name, plus, raw = m.groups()
+    return name, ("${" + name + "}" + raw) if plus else raw
+
+
+def shell_assignments(segment: list[str]) -> list[tuple[str, str | None, bool]] | None:
+    """代入だけの segment (`A=1 B=2` / `export A=1` / `export A`) の [(名前, 値 or None, export か)]。 それ以外は None。
+
+    command の前に付いた代入 (`A=1 git …`) は、 その command の環境だけに効き後に残らないので数えない (None)。
+    """
+    if not segment:
+        return None
+    pairs = [_assignment(w) for w in segment]
+    if all(pairs):
+        return [(name, raw, False) for name, raw in pairs]
+    if segment[0] not in _SHELL_DECLARERS:
+        return None
+    exported = segment[0] == "export"
+    out: list[tuple[str, str | None, bool]] = []
+    for w in segment[1:]:
+        if w.startswith("-"):
+            exported = exported or ("x" in w[1:] and not w.startswith("--"))
+            continue
+        pair = _assignment(w)
+        if pair is None and not _SHELL_NAME_RE.match(w):
+            return None  # 宣言の形でない語 (計算した名前など) = 代入として読まない
+        out.append((pair[0], pair[1], exported) if pair else (w, None, exported))
+    return out
+
+
+def git_init_directory(args: list[str]) -> str | None:
+    """`git init [opts] [dir]` の dir (書いていなければ None = 今の dir)。"""
+    rest = list(args)
+    while rest:
+        a = rest.pop(0)
+        if a == "--":
+            return rest[0] if rest else None
+        if a in ("-b", "--initial-branch", "--template", "--separate-git-dir", "--object-format", "--ref-format"):
+            rest = rest[1:]
+            continue
+        if a.startswith("-"):
+            continue
+        return a
+    return None
+
+
+def fresh_init_dir(d: Path) -> bool:
+    """`git init d` を打つ前の d が repo の top でない (無い・囲む repo の下・repo の外) = その後は新しい repo の top。
+
+    file (dir でない) の d は git init が失敗するので数えない。 既に repo の top なら re-init = 中身はそのまま (False)。
+    """
+    if d.exists() and not d.is_dir():
+        return False
+    try:
+        root = repo_root(d)
+    except InspectionError:
+        return False
+    return root is None or root != d.resolve()
+
+
 def commit_targets(command: str, cwd: Path,
                    require_explicit_cwd: bool = False) -> list[tuple[Path, str, list[GitPathspec | GitNames]]]:
-    """Collect actual commit invocations using the shared quote-aware tokenizer."""
+    """Collect actual commit invocations using the shared quote-aware tokenizer.
+
+    cd / env -C / git -C の行き先は、 同じ command の中で literal の値を代入した shell の変数を展開して辿る
+    (expand_shell_word)。 同じ command の git init <dir> で新しく repo になる dir (検査の時点で repo の top でないもの)
+    の中の add / commit は、 検査の時点で中身が無いので数えない (repo の外の dir と同じ扱い。 その dir の下に検査の
+    時点で在る別の repo は数える)。
+    """
     out: dict[str, tuple[Path, str, list[GitPathspec | GitNames]]] = {}
     added: dict[str, list[GitPathspec]] = {}
+    fresh: list[Path] = []  # 同じ command の git init で新しい repo の top になる dir (resolve 済み)
 
-    def walk(script: str, current: Path, depth: int = 0) -> None:
+    def in_fresh_repo(repo_dir: Path, root: Path | None) -> bool:
+        here = repo_dir.resolve()
+        for d in fresh:
+            if here != d and d not in here.parents:
+                continue
+            if root is not None and d in root.parents:
+                continue  # 検査の時点で d の下に在る別の repo = その repo に commit する
+            return True
+        return False
+
+    def walk(script: str, current: Path, depth: int = 0, current_resolved: bool = True,
+             inherited: dict[str, str | None] | None = None) -> None:
         if depth > 4:
             raise InspectionError("shell-too-deep")
-        cur = current
+        cur, cur_resolved = current, current_resolved
+        known: dict[str, str | None] = dict(inherited or {})  # 子の shell は export された変数だけを受け取る
+        exported: set[str] = set(known)
+
+        def follow(base: Path, base_resolved: bool, word: str) -> tuple[Path, bool, bool]:
+            """(行き先, 決まったか, 絶対 path か)。 決まらない語は今までどおり語のまま繋ぐ。"""
+            text, ok = expand_shell_word(word, known)
+            nxt = Path(os.path.expanduser(text))
+            if nxt.is_absolute():
+                return nxt, ok, True
+            return base / nxt, base_resolved and ok, False
+
+        def arg_word(word: str) -> str:
+            """git の引数の語 (pathspec など): 全部決まり、 展開で空白を含まない時だけ置き換える (tokenizer は引用を外した
+            後の語を渡すので、 未 quote の展開の語の分かれ方を知らない = 分かれうる値は字のまま残す)。"""
+            text, ok = expand_shell_word(word, known)
+            return text if ok and not (text != word and re.search(r"\s", text)) else word
+
         for segment in split_segments(script):
+            assigned = shell_assignments(segment)
+            if assigned is not None:
+                for name, raw, export in assigned:
+                    if raw is not None:
+                        # 空の値は決まらない側に数える: tokenizer は括弧で切るので配列の代入 `P=(a b)` が `P=` に見え、
+                        # 空に展開すると git に空の pathspec を渡して git を読めないにする (実測)
+                        value, ok = expand_shell_word(raw, known)
+                        known[name] = value if ok and value else None
+                    if export:
+                        exported.add(name)
+                continue
             seg, local_dirs = _rule_guard.executable_argv(segment)
             if not seg:
                 continue
-            call_dir = cur
+            if seg[0] in ("unset", "read", "mapfile", "readarray", "getopts"):
+                for name in seg[1:]:  # 値を消す・実行時に読む = 後の展開に古い値を使わない
+                    if _SHELL_NAME_RE.match(name):
+                        known[name] = None
+                continue
+            if seg[0] in ("for", "select") and len(seg) > 1 and _SHELL_NAME_RE.match(seg[1]):
+                known[seg[1]] = None  # loop の変数 = 値は実行時に決まる
+                continue
+            call_dir, call_resolved = cur, cur_resolved
             for directory in local_dirs:
-                nxt = Path(os.path.expanduser(directory))
-                call_dir = nxt if nxt.is_absolute() else call_dir / nxt
+                call_dir, call_resolved, _ = follow(call_dir, call_resolved, directory)
             if seg[0] == "cd" and len(seg) > 1:
-                nxt = Path(os.path.expanduser(seg[1]))
-                cur = nxt if nxt.is_absolute() else cur / nxt
+                cur, cur_resolved, _ = follow(cur, cur_resolved, seg[1])
                 continue
             inner = _rule_guard.shell_script(seg)
             if inner is not None:
-                walk(inner, call_dir, depth + 1)
+                walk(inner, call_dir, depth + 1, call_resolved,
+                     {k: v for k, v in known.items() if k in exported})
                 continue  # child-shell cd never changes the parent's cwd
             if Path(seg[0]).name != "git":
                 continue
-            rest = list(seg[1:])
-            repo_dir = call_dir
+            rest = [arg_word(w) for w in seg[1:]]
+            raw_rest = list(seg[1:])
+            repo_dir, repo_resolved = call_dir, call_resolved
             git_cwd_bound = not require_explicit_cwd
             unsupported = False
             while rest and rest[0].startswith("-"):
                 opt = rest.pop(0)
+                raw_rest.pop(0)
                 if opt in ("-C", "-c", "--config-env") and rest:
-                    value = rest.pop(0)
+                    rest.pop(0)
+                    value = raw_rest.pop(0)
                     if opt == "-C":
-                        d = Path(os.path.expanduser(value))
-                        repo_dir = d if d.is_absolute() else repo_dir / d
-                        git_cwd_bound = git_cwd_bound or d.is_absolute()
+                        repo_dir, repo_resolved, absolute = follow(repo_dir, repo_resolved, value)
+                        git_cwd_bound = git_cwd_bound or absolute
                 elif opt in ("--git-dir", "--work-tree", "--namespace"):
                     unsupported = True
                     rest = rest[1:]
+                    raw_rest = raw_rest[1:]
                 elif opt.startswith(("--git-dir=", "--work-tree=", "--namespace=")):
                     unsupported = True
+            if rest and rest[0] == "init":
+                # 新しい repo を作る (re-init は数えない)。 Codex で実作業ディレクトリが分からない時は、 絶対 path の
+                # 行き先だけを数える (推測した cwd の下の dir を新しい repo と読まない)
+                target = git_init_directory(raw_rest[1:])
+                if target is None:
+                    d, d_resolved, d_bound = repo_dir, repo_resolved, git_cwd_bound
+                else:
+                    d, d_resolved, absolute = follow(repo_dir, repo_resolved, target)
+                    d_bound = git_cwd_bound or absolute
+                if d_resolved and d_bound and fresh_init_dir(d):
+                    fresh.append(d.resolve())
+                continue
             if not rest or rest[0] not in ("add", "commit"):
                 continue
             operation_flags, _ = _rule_guard.git_operation_options(rest[0], rest[1:])
@@ -3510,6 +3690,8 @@ def commit_targets(command: str, cwd: Path,
             if unsupported:
                 raise InspectionError("git-dir-option")
             root = repo_root(repo_dir)
+            if repo_resolved and in_fresh_repo(repo_dir, root):
+                continue  # 同じ command の git init で作る repo = 検査の時点で中身が無い
             if root is None:
                 continue
             if str(root) not in added and str(root) not in out:
@@ -10469,6 +10651,81 @@ def selftest() -> int:
         check("Bash: commit 前に未承認の式の変更を止める", any(c["region"] == "eq:ab" for c in left))
         check("Bash: git add && git commit の add の path も見る",
               commit_targets(f"cd {repo} && git add src/main.tex && git commit -m x", repo)[0][1] in ("index+paths", "paths"))
+        # 同じ command で代入した変数の git -C と、 同じ command の git init で作る repo (実測: どちらも検査の時点で
+        # 無い dir から git を呼んで git-unreadable で止めていた = 前者は「$G」 を今の dir の下の dir と読み、 後者は
+        # 新しい dir を囲む repo の一部と読んだ)。 止まり続けるべき形 (本当に git を読めない・行き先が決まらない) も並べる
+        cwd_repo = tdp / "cwd-repo"
+        subprocess.run(["git", "init", "-q", str(cwd_repo)], env=genv, capture_output=True, check=False)
+        check("前提: 変数の試験の cwd は repo (無い dir を囲む repo が在る形)", repo_root(cwd_repo) == cwd_repo.resolve())
+
+        def commit_left(command: str, where: Path, **kw) -> list[str]:
+            """commit_targets → changes_for_repo の未承認の領域 (検査不能はそのコードを 1 つ)。"""
+            try:
+                return [c["region"] for rp, mode, paths in commit_targets(command, where, **kw)
+                        for c in unapproved(changes_for_repo(rp, mode, paths), rp, ("claude", "sess-1"))]
+            except WorkingDirectoryUnavailable:
+                return ["inspection:working-directory"]
+            except InspectionError as exc:
+                return ["inspection:" + exc.code]
+
+        def target_roots(command: str, where: Path, **kw) -> list:
+            """commit_targets が検査する repo (検査不能はそのコードを 1 つ = 退行が selftest を落とさず NG になる)。"""
+            try:
+                return [t[0] for t in commit_targets(command, where, **kw)]
+            except WorkingDirectoryUnavailable:
+                return ["inspection:working-directory"]
+            except InspectionError as exc:
+                return ["inspection:" + exc.code]
+
+        for i, var_cmd in enumerate((
+                f"cd {cwd_repo} && G={repo} && git -C $G add src/main.tex && git -C $G commit -m x",
+                f"G={repo}; git -C \"${{G}}\" add src/main.tex && git -C \"${{G}}\" commit -m x",
+                f"export G={repo} && git -C $G/src add main.tex && git -C $G commit -m x",
+                f"G={tdp}; G+=/{repo.name}; git -C $G add src/main.tex && git -C $G commit -m x"), 1):
+            check(f"Bash: 同じ command で代入した変数の git -C は、 その repo の変更として見る ({i})",
+                  "eq:ab" in commit_left(var_cmd, cwd_repo))
+        check("Bash: 値の決まらない代入 (G=$(pwd)) の後は前の値で展開しない",
+              target_roots(f"G={repo} && G=$(pwd) && git -C $G commit -m x", cwd_repo) == [cwd_repo.resolve()])
+        check("Bash: for の変数は前の代入の値で展開しない",
+              target_roots(f"G={repo}; for G in a b; do :; done; git -C $G commit -m x", cwd_repo) == [cwd_repo.resolve()])
+        check("Bash: 配列の代入 (P=(…)) を空の値と読まず、 空の pathspec で git を読めないにしない",
+              not any(x.startswith("inspection:")
+                      for x in commit_left(f"P=(src/main.tex) && git -C {repo} commit -m x -- $P", cwd_repo)))
+        check("Bash: export した変数は子の shell でも展開し、 export しない変数は子の shell に渡さない",
+              target_roots(f"export G={repo}; bash -c 'git -C $G add src/main.tex && git -C $G commit -m x'", cwd_repo)
+              == [repo.resolve()]
+              and target_roots(f"H={repo}; bash -c 'git -C $H commit -m x'", cwd_repo) == [cwd_repo.resolve()])
+        check("Codex: 同じ command で絶対 path を代入した変数の git -C は、 実作業ディレクトリの指定として読む",
+              target_roots(f"G={repo} && git -C $G add -A && git -C $G commit -m x", tdp, require_explicit_cwd=True)
+              == [repo.resolve()])
+        check("Codex: 相対 path を代入した変数の git -C は推測しない",
+              target_roots("G=relative && git -C $G commit -m x", tdp, require_explicit_cwd=True)
+              == ["inspection:working-directory"])
+        for i, fresh_cmd in enumerate((
+                f"git init -q {repo}/fresh && cd {repo}/fresh && printf x > a.txt && git add a.txt && git commit -qm init",
+                f"N={repo}/fresh2 && git init -q \"$N\" && cd \"$N\" && git add . && git commit -qm init",
+                f"cd {repo} && git init -q -b main sub/fresh3 && git -C sub/fresh3 add -A && git -C sub/fresh3 commit -qm init"), 1):
+            check(f"Bash: 同じ command の git init で作る repo の add / commit は数えない ({i})",
+                  target_roots(fresh_cmd, repo) == [])
+        check("Bash: 既に repo の top の dir への git init (re-init) は数える",
+              "eq:ab" in commit_left(f"git init -q {repo} && git -C {repo} add src/main.tex && git -C {repo} commit -m x", tdp))
+        check("Bash: git init した dir の下に検査の時点で在る別の repo は数える",
+              "eq:ab" in commit_left(f"git init -q {tdp} && git -C {repo} add src/main.tex && git -C {repo} commit -m x", tdp))
+        check("Bash: 値の決まらない行き先への git init は新しい repo と読まない (基準の dir が無いとして止める)",
+              commit_left(f"cd {repo} && cd \"$NOPE_DIR\" && git init -q && git add src/main.tex && git commit -m x", repo)
+              == ["inspection:pathspec-dir-missing"])
+        check("Bash: git init の無い新しい dir からの add は、 基準の dir が無いとして止める",
+              commit_left(f"mkdir -p {repo}/newdir && cd {repo}/newdir && git add f && git commit -m x", repo)
+              == ["inspection:pathspec-dir-missing"])
+        check("Codex: 実作業ディレクトリが分からない時、 相対 path の git init は新しい repo と読まない",
+              target_roots(f"git init -q fresh4 && git -C {repo}/fresh4 add -A && git -C {repo}/fresh4 commit -qm x",
+                           repo, require_explicit_cwd=True) == [repo.resolve()])
+        broken = tdp / "broken-index"
+        subprocess.run(["git", "init", "-q", str(broken)], env=genv, capture_output=True, check=False)
+        (broken / ".git" / "index").write_text("not an index\n", encoding="utf-8")
+        (broken / "a.txt").write_text("x\n", encoding="utf-8")
+        check("Bash: index の壊れた repo は今までどおり git を読めないで止める",
+              commit_left(f"git -C {broken} add a.txt && git -C {broken} commit -m x", tdp) == ["inspection:git-unreadable"])
         # Codex の apply_patch
         g("checkout", "-q", "--", "src/main.tex")
         g("reset", "-q")
