@@ -893,6 +893,20 @@ def send_wrap(tid: str, cwd: str, writer: str, model: str = "", effort: str = ""
                   + (f" (指定 = model {model or '指定なし'}・effort {effort or '指定なし'})" if model or effort else ""))
 
 
+FAMILY_WORD_RE = re.compile(r"^[a-z]+$")
+
+
+def wrap_model(model: str) -> tuple[str, str]:
+    """(id, '') for the wrap turn's model: a family word ('sol') = the newest listed version on this machine (the
+    launcher's best-model), so the rule that names the wrap model names no version that goes stale; ('', why) when that
+    is unknown (no guess). An id stays as it is."""
+    m = (model or "").strip()
+    if not m or not FAMILY_WORD_RE.match(m.lower()):
+        return m, ""
+    best, why = _launch_module().best_model(m.lower())
+    return (best, "") if best else ("", why)
+
+
 def cmd_wrap(a) -> int:
     tid = resolve(a.thread)
     res = evaluate(tid, board_roots(a.board_root), a.evidence)
@@ -900,14 +914,18 @@ def cmd_wrap(a) -> int:
         print(render(res))
         print("⛔ wrap を頼むのは残す理由が「wrap の記録が無い」 だけのとき = 頼まない", file=sys.stderr)
         return 1
-    ok, msg = send_wrap(tid, res["cwd"], a.writer, a.model or "", a.effort or "")
+    model, why = wrap_model(a.model or "")
+    if why:
+        print(f"⛔ wrap の model {a.model} の最新の版が分からない ({why}) = 頼まない。 版つきの id を --model に渡す", file=sys.stderr)
+        return 2
+    ok, msg = send_wrap(tid, res["cwd"], a.writer, model, a.effort or "")
     if not ok:
         print(f"⛔ wrap を頼めない: {msg}", file=sys.stderr)
         return 2
     ledger_append({"event": "wrap_asked", "thread": tid, "title": res["title"], "writer": a.writer, "how": msg,
-                   "model_asked": a.model or "", "effort_asked": a.effort or "",
+                   "model_asked": model, "effort_asked": a.effort or "",
                    "evidence": a.evidence, "asked_ts": now_ts()})
-    if not (a.model or a.effort):
+    if not (model or a.effort):
         print("  (model・effort の指定なし = thread の今の model で走る。 規則が wrap の model を決めていれば --model / --effort で渡す)")
     print(f"→ {tid[:8]} に wrap を頼んだ ({msg})")
     print(f"→ 同じ turn に Bash の run_in_background で: python3 {__file__} wait {tid}"
@@ -1445,6 +1463,18 @@ def _selftest() -> int:
         def reveal_url(tid):
             return "codex://" + tid
 
+    _home = os.environ.get("CODEX_HOME")
+    with tempfile.TemporaryDirectory() as _ch:
+        Path(_ch, "models_cache.json").write_text(json.dumps({"models": [
+            {"slug": "gpt-6.1-sol", "visibility": "list"}, {"slug": "gpt-6.2-sol", "visibility": "list"}]}), encoding="utf-8")
+        os.environ["CODEX_HOME"] = _ch
+        check("wrap_model: 系統の語はこの機械の一覧の最新の版、 id はそのまま、 無い系統は分からない",
+              wrap_model("sol") == ("gpt-6.2-sol", "") and wrap_model("gpt-6.1-sol") == ("gpt-6.1-sol", "")
+              and wrap_model("") == ("", "") and wrap_model("luna")[0] == "" and wrap_model("luna")[1])
+    if _home is None:
+        os.environ.pop("CODEX_HOME", None)
+    else:
+        os.environ["CODEX_HOME"] = _home
     g = globals()
     saved_launch, saved_skill = g["_launch_module"], g["wrap_skill_path"]
     g["_launch_module"], g["wrap_skill_path"] = (lambda: FakeLaunch), (lambda cwd: "/s/wrap/SKILL.md")
@@ -1494,7 +1524,8 @@ def main(argv=None) -> int:
             p.add_argument("--all", action="store_true", help="畳める thread の根拠も出す")
         if name == "wrap":
             p.add_argument("--writer", choices=("daemon", "app"), default="daemon")
-            p.add_argument("--model", help="wrap の turn の model (turn/start の model。 規則が wrap の model を決めていれば渡す)")
+            p.add_argument("--model", help="wrap の turn の model (turn/start の model。 規則が wrap の model を決めていれば渡す。"
+                           " 系統の語 (sol) なら、 この機械の Codex の一覧の最新の版)")
             p.add_argument("--effort", help="wrap の turn の effort (turn/start の effort)")
         if name == "wait":
             p.add_argument("--timeout", type=int, default=2400)

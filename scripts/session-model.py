@@ -417,11 +417,12 @@ def selftest() -> int:
                                                      "claude-fable-5-1": {}, "claude-sonnet-5-5": {}}}, fh)
         with open(os.path.join(hd, ".claude-alt", ".claude.json"), "w", encoding="utf-8") as fh:
             json.dump({"additionalModelOptionsCache": [{"value": "claude-fable-5-2[1m]", "label": "Fable"}]}, fh)
-        env4 = {k: v for k, v in env.items() if k != "CLAUDE_CONFIG_DIR"}
+        env4 = {k: v for k, v in env.items() if k not in ("CLAUDE_CONFIG_DIR", "CLAUDE_MODEL_LIST_FILES")}
         env4["CLAUDE_CONFIG_DIRS_HOME"] = hd
-        saved = {k: os.environ.get(k) for k in ("CLAUDE_CONFIG_DIRS_HOME", "CLAUDE_CONFIG_DIR")}
+        saved = {k: os.environ.get(k) for k in ("CLAUDE_CONFIG_DIRS_HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_MODEL_LIST_FILES")}
         os.environ["CLAUDE_CONFIG_DIRS_HOME"] = hd
         os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        os.environ.pop("CLAUDE_MODEL_LIST_FILES", None)
         check("best_model: the highest version of the tier over every config dir's list (cost keys and options, suffix dropped)",
               mv.best_model("opus") == ("claude-opus-5-5", "") and mv.best_model("fable") == ("claude-fable-5-2", "")
               and mv.best_model("mythos")[0] == "claude-fable-5-2")

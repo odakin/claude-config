@@ -782,7 +782,9 @@ def check_self(a) -> int:
     print(f"{'✅' if ok else '⛔'} この thread の記録 = model {model} / effort {effort} (頼まれた値 = {a.model}"
           + (f" / {a.effort}" if a.effort else "") + ")")
     if line:
-        print(("  " if ok else "  ⛔ ") + line)
+        if m_ok and not ok:   # a newer version alone goes on; here the effort stops it (the next line), so no "go on"
+            line = line.split(" = ")[0]
+        print(("  " if m_ok else "  ⛔ ") + line)
     if m_ok and a.effort and effort != a.effort:
         print(f"  ⛔ effort が違う (頼まれた = {a.effort}、 記録 = {effort})")
     return 0 if ok else 1
@@ -1137,7 +1139,8 @@ def _selftest() -> int:
             with contextlib.redirect_stdout(buf):
                 rc = check_self(argparse.Namespace(model=ask_m, effort=ask_e))
             checks.append((f"check-self: 記録 {rec_m}/{rec_e}・頼み {ask_m}/{ask_e} → exit {want_rc}",
-                           rc == want_rc and want_txt in buf.getvalue()))
+                           rc == want_rc and want_txt in buf.getvalue()
+                           and (rc == 0 or "続ける" not in buf.getvalue())))   # a stop never says "go on"
         ct.thread_rows = _rows
         if _tid is None:
             os.environ.pop("CODEX_THREAD_ID")

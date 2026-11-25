@@ -13,7 +13,9 @@ the home directory, another config dir's inside it) with `additionalModelCostsCa
 `additionalModelOptionsCache` (`value` = a model id, maybe with a context suffix such as `[1m]`). Read-only; never
 raises on a broken file. Tier words and their mapping come from session_model.py (one table).
 
-Env (tests): CLAUDE_CONFIG_DIRS_HOME / CLAUDE_CONFIG_DIR (through claude_config_dirs.py).
+Env (tests): CLAUDE_MODEL_LIST_FILES = the list files to read instead (os.pathsep-separated; set and empty = none), so
+a test's expected id does not move when this machine's list gains a newer version; CLAUDE_CONFIG_DIRS_HOME /
+CLAUDE_CONFIG_DIR (through claude_config_dirs.py).
 """
 from __future__ import annotations
 
@@ -61,7 +63,10 @@ def version_of(model: str):
 
 
 def model_list_files() -> list[str]:
-    """Every `.claude.json` of this machine's Claude CLI configs (default first)."""
+    """Every `.claude.json` of this machine's Claude CLI configs (default first); CLAUDE_MODEL_LIST_FILES replaces them."""
+    override = os.environ.get("CLAUDE_MODEL_LIST_FILES")
+    if override is not None:
+        return [p for p in override.split(os.pathsep) if p]
     home = _ccd._home() if _ccd is not None else os.path.expanduser("~")
     out = [os.path.join(home, ".claude.json")]
     dirs = _ccd.config_dirs() if _ccd is not None else []
@@ -142,13 +147,19 @@ def _selftest() -> int:
         home = os.path.join(td, "home")
         os.makedirs(os.path.join(home, ".claude"))
         os.makedirs(os.path.join(home, ".claude-alt", "projects"))
-        saved = {k: os.environ.get(k) for k in ("CLAUDE_CONFIG_DIRS_HOME", "CLAUDE_CONFIG_DIR")}
+        saved = {k: os.environ.get(k) for k in ("CLAUDE_CONFIG_DIRS_HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_MODEL_LIST_FILES")}
         os.environ["CLAUDE_CONFIG_DIRS_HOME"] = home
         os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        os.environ.pop("CLAUDE_MODEL_LIST_FILES", None)
         try:
             files = model_list_files()
             check("model_list_files: the home's .claude.json first, then each other config dir's",
                   files[0] == os.path.join(home, ".claude.json") and os.path.join(home, ".claude-alt", ".claude.json") in files)
+            os.environ["CLAUDE_MODEL_LIST_FILES"] = a + os.pathsep + b
+            check("CLAUDE_MODEL_LIST_FILES replaces the files (a test's floor does not move with this machine's list)",
+                  model_list_files() == [a, b] and best_model("fable") == ("claude-fable-5-2", ""))
+            os.environ["CLAUDE_MODEL_LIST_FILES"] = ""
+            check("CLAUDE_MODEL_LIST_FILES set and empty = no list (unknown)", best_model("opus")[0] == "")
         finally:
             for k, v in saved.items():
                 if v is None:
