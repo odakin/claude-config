@@ -78,6 +78,16 @@ daemon が読み込んでいる thread = `codex-app-launch.py rpc thread/loaded/
 原因 (実測): Codex の sandbox は書き込み可の dir の中の `.git` を読み取り専用にする。 git の dir そのもの (`git rev-parse --path-format=absolute --git-common-dir`) を書き込み可の dir に名指すと書けた
 (`config.sandbox_workspace_write.writable_roots`、 起動の道具なら `--writable-root`)。 承認を出さない無人の thread (approval `never`) では、 起動の時点で名指す。
 
+作業先が linked worktree なら、作業先で `git rev-parse --path-format=absolute --git-dir --git-common-dir` を回す。2つが異なる場合は両方を照合する。実行 turn で作業先の Git メタデータが read なら、`fetch` の `FETCH_HEAD` や `add` の `index.lock` で止まる。起動直後の設定と実行 turn の権限は、別々に確認する。
+
+Git の通信とメタデータの書き込みは別々に検査する。たとえば `git ls-remote …` と `git -C <絶対パス> ls-remote …` は argv が異なる。読み取りの到達を確認できた場合も、実際に使う argv を有効な規則に対して `codex execpolicy check` で照合し、同じ実行経路の結果を見る。掲示板の `show --sync`・`claim` と、`retry`・`accept` も別の許可範囲を持つ。投稿は `posted` と同期後の状態で照合する。 [通常 Git の規則](../codex/PARITY.md#normal-git-push-rule)・[掲示板の起動契約](../../ai-collaboration/board/CONTRACT.md#codex-worker-launch)
+
+## <a id="managed-worktree-git-crypt"></a>管理 worktree の Git フィルタと片付け
+
+管理 worktree で対象パスだけを指定した `git status` が通っても、`git add` が index の更新中に別の追跡ファイルを検査し、`git-crypt: Error: Unable to open key file` で止まることがある。git-dir と common git-dir を確かめ、既存の [git-crypt 対応の worktree 手順](multi-session-coordination.md#foreign-wip-scratch-worktree) に従って worktree の Git メタデータから既存フィルタの参照を確立する。対象パスと staged 差分を検査してから commit する。
+
+archive 操作が `The task's primary checkout cannot be removed` を返したときは、その worktree はまだチャットの主作業先に付いている。配送済みのコミットとリモート側を照合し、残った worktree の所在を引き継ぐ。
+
 ## <a id="writable-root-relaunch"></a>承認を出さない worker が作業場所の外に書けずに止まった
 
 承認を出さない thread (approval `never`) は、 走っている途中で書き込み可の dir を足せない (足してほしいと申し出る経路が無い)。 仕事が作業 dir の外 (盲検の sandbox・別の作業場所) に書く段に来ると、 そこで止まる (実測: 掲示板の worker が blocker を出して止まった)。
