@@ -3,15 +3,14 @@
 #
 # event ごとに engine の subcommand を呼ぶ (hook の JSON は stdin のまま渡し、 engine の出力をそのまま返す):
 #   UserPromptSubmit → hook-prompt (本人の答えを問いに結び、 結び方を Claude に渡す)
-#   PreToolUse       → hook-pretool (結び先の決まらない答えのあいだ、 送信・決定の記録・別 session への message・畳む操作を止める)
+#   PreToolUse       → hook-pretool (結び先が決まるまで効く操作を止める。まとめ確認の答えは次の本人入力まで別の承認に使えない)
 #   Stop             → hook-stop (印の無い問いを 1 回差し戻す・返事に出した印を記録する)
 #   PreCompact       → hook-precompact (要約に問いと答えを残す指示 = 本体が要約の指示に足す)
 #   SessionStart     → hook-sessionstart (この session の開いた問いと答えの出た問いを出す)
 # 設定: 個人層の board-asks.json ({"root": "<作業ルートからの掲示板の dir>", "prefix": {"<hostname -s>": "<英大文字 1 字>"}})。
 #   個人層 = 作業ルートの CLAUDE.md の symlink の先の dir (setup.sh の個人層の仕組み)。 BOARD_ASKS_CONFIG で上書き。
 #   設定・engine が無ければ何もしない (exit 0)。 試験用の上書き = BOARD_ASKS_ENGINE / BOARD_ASKS_VALIDATOR。
-# 速さ: PreToolUse は、 その session の「結び先の決まらない答え」 の印の file (<state dir>/<session>.guess) が無ければ
-#   python を起こさない (jq と file の有無だけ)。
+# 速さ: PreToolUse はその session の .guess と .group-answer の両方が無ければ python を起こさない。
 # 失敗は止めない側に倒す (jq・python・engine が無い・engine の例外 = 何も出さず exit 0)。 engine の例外と 0 でない終了は
 #   <state dir>/hook-errors.log に 1 件ずつ書く (黙って死なない。 256 KB を超えたら 1 世代だけ残して回す)。
 # 印の字: board-asks.json の prefix を BOARD_ASKS_PREFIX で渡す。 engine はそれを台帳の隣に残し、 手で打つ ask も同じ字を使う。
@@ -24,7 +23,10 @@ session="$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)"
 state_dir="${BOARD_ASKS_STATE_DIR:-$HOME/.claude/state/board-asks}"
 if [ "$event" = "PreToolUse" ]; then
   safe="$(printf '%s' "$session" | LC_ALL=C tr -c 'A-Za-z0-9_-' '_' | cut -c1-80)"
-  [ -n "$safe" ] && [ -f "$state_dir/$safe.guess" ] || exit 0
+  [ -n "$safe" ] || exit 0
+  if [ ! -f "$state_dir/$safe.guess" ] && [ ! -f "$state_dir/$safe.group-answer" ]; then
+    exit 0
+  fi
 fi
 case "$event" in
   UserPromptSubmit) sub=hook-prompt ;;
