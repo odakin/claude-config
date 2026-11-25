@@ -150,6 +150,7 @@ sys.path.insert(0, os.path.join(HERE, "lib"))
 import desktop_sessions as ds  # noqa: E402
 import session_background_tasks as sbt  # noqa: E402
 import session_model as sm  # noqa: E402
+import model_versions as mv  # noqa: E402
 try:
     import owner_turn as _ot  # noqa: E402  (the person's prompts in the parent's window)
 except Exception:  # pragma: no cover - an older checkout without the module: the parent's window is not read
@@ -256,7 +257,9 @@ WRAP_ASK_TEXT = ("wrap skill で仕上げてください (Skill tool の skill=w
 
 
 def parse_wrap_model(spec: str) -> dict:
-    """'fable=claude-opus-5-5:xhigh[,<tier>=<model>:<effort>]' → {'fable': ('claude-opus-5-5', 'xhigh')}. Bad parts are skipped."""
+    """'fable=opus:xhigh[,<tier>=<model>:<effort>]' → {'fable': ('opus', 'xhigh')}. Bad parts are skipped. The model may be
+    a tier word (= the newest version of that tier on this machine, resolved when the step is printed = wrap_target) or
+    a versioned id."""
     out = {}
     for part in (spec or "").split(","):
         tier, _, target = part.strip().partition("=")
@@ -272,6 +275,31 @@ def parse_wrap_model(spec: str) -> dict:
 # conventions/multi-session-coordination.md#model-fit-before-sending), and set_session_model / set_session_effort act
 # from the next turn = a switch after the send is too late for the wrap turn.
 WRAP_MODEL = parse_wrap_model(os.environ.get("CHILD_WRAP_MODEL", ""))
+TIER_WORDS = ("fable", "opus", "sonnet", "haiku", "mythos")
+
+
+def wrap_target(model: str) -> str:
+    """The rule's wrap model as the id set_session_model gets: a tier word becomes the newest version of that tier this
+    machine's Claude CLIs list (lib/model_versions.py best_model), so the rule names no version that goes stale (the
+    newest version of the chosen family); the word itself when none is listed."""
+    if (model or "").strip().lower() in TIER_WORDS:
+        try:
+            best, _ = mv.best_model(model)
+        except Exception:
+            best = ""
+        return best or model
+    return model
+
+
+def already_on(model: str, target: str) -> bool:
+    """The child runs on the target already: the same id, or (for a versioned target) the same tier at that version or a
+    newer one, or (for a tier word left unresolved) any version of that tier."""
+    if model == target:
+        return True
+    if (target or "").strip().lower() in TIER_WORDS:
+        return sm.tier(model) == sm.tier(target)
+    vm, vt = mv.version_of(model), mv.version_of(target)
+    return bool(vm and vt and vm[0] == vt[0] and vm[1] >= vt[1])
 
 
 def model_step(local: str) -> str:
@@ -286,9 +314,11 @@ def model_step(local: str) -> str:
     look = f"`python3 ~/Claude/claude-config/scripts/session-model.py {local or '<子の local_…>'}`"
     if WRAP_MODEL and model:
         want = WRAP_MODEL.get(sm.tier(model))
-        if not want or (want[0] == model and want[1] in ("", effort)):
+        if not want:
             return ""
-        m, e = want
+        m, e = wrap_target(want[0]), want[1]
+        if already_on(model, m) and e in ("", effort):
+            return ""
         return (f"先に子の model を切り替える (子の app の記録 = {model}・{effort or '?'}): `set_session_model` ({m})"
                 + (f" → `set_session_effort` ({e})" if e else "")
                 + f" → {look} で app の記録が {m}{'・' + e if e else ''} になったのを見てから送る"
@@ -3119,6 +3149,21 @@ def selftest() -> int:
         ok("render: the missing wrap first → the switch before the SendMessage",
            rf.splitlines()[1].strip().startswith("→ 次の一手 = 先に wrap skill を頼む")
            and rf.index("set_session_model") < rf.index(WRAP_ASK_TEXT))
+        # a tier word in the rule = the newest version of that tier on this machine (no version in the rule goes stale)
+        _best = mv.best_model
+        mv.best_model = lambda fam, files=None: ("claude-opus-6", "") if sm.tier(fam) == "opus" else ("", "none")
+        WRAP_MODEL.clear()
+        WRAP_MODEL.update(parse_wrap_model("fable=opus:xhigh"))
+        sw6 = model_step(fl)
+        ok("model step, tier word in the rule → set_session_model gets the newest listed id of that tier",
+           "set_session_model` (claude-opus-6)" in sw6 and "set_session_effort` (xhigh)" in sw6)
+        ok("wrap_target: a tier word with nothing listed stays the word; an id stays itself",
+           wrap_target("fable") == "fable" and wrap_target("claude-opus-5-5") == "claude-opus-5-5")
+        ok("already_on: the same tier at the target version or newer; not older, not another tier",
+           already_on("claude-opus-6", "claude-opus-5-5") and already_on("claude-opus-5-5[1m]", "claude-opus-5-5")
+           and not already_on("claude-opus-5", "claude-opus-5-5") and not already_on("claude-fable-5-2", "claude-opus-5-5")
+           and already_on("claude-opus-5", "opus"))
+        mv.best_model = _best
         WRAP_MODEL.clear()
         WRAP_MODEL.update(saved_wm)
         # ---- the requester's question to the person, tied to the child's request in the board's question ledger ----

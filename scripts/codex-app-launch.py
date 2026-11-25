@@ -52,7 +52,15 @@ subcommand:
       = いま daemon が読み込んでいる thread。 実測 = 誰も見ていない idle の thread は turn の終わりから 40〜60 秒で外れ、
       `thread/unsubscribe` では外れなかった)。 型の一覧 = `codex app-server generate-json-schema --out <dir>`。
   check-self --model M [--effort E]
-      worker の 0 段目: 自分の thread ($CODEX_THREAD_ID) の model と effort を状態 DB で読み、 違えば exit 1。
+      worker の 0 段目: 自分の thread ($CODEX_THREAD_ID) の model と effort を状態 DB で読む。 model は同じ系統で頼んだ版と
+      同じか新しければ通す (新しい版なら ✅ に「頼まれた X より新しい Y」 の 1 行 = worker は掲示板の note に 1 回書いて続ける)。
+      系統が違う (Astra と Sol の取り違え)・古い版・記録が読めない・effort が違う、 のときは exit 1。 M が系統の語だけ
+      (`astra`) なら、 その系統のどの版でも通す。 版つきの id の形 (`gpt-<版>-<系統>`) でない model は完全一致だけ。
+      判断 = 同じ系統の新しい版は止めずに使う (実測: 起動の後にアプリの既定が新しい版に上がり、 後の turn で完全一致の検査が止めた)。
+  best-model --family F [--json]
+      この機械の Codex の model の一覧 ($CODEX_HOME/models_cache.json、 アプリが更新する) で一覧に出るもの
+      (visibility = list) から、 系統 F (`astra` / `sol` / …) の版が最大の id を出す (掲示板が系統の語の依頼を起こす時に引く)。
+      一覧が読めない・その系統が無ければ「分からない」 と言って exit 1 (古い id を推測で返さない)。
   compose-link --cwd DIR --prompt-file FILE
       本人が押す形の deep link だけを出す (daemon を使わない)。
   --selftest
@@ -68,6 +76,7 @@ import base64
 import datetime as _dt
 import json
 import os
+import re
 import socket
 import struct
 import subprocess
@@ -701,6 +710,65 @@ def rpc(a) -> int:
     return 0
 
 
+MODEL_SLUG = re.compile(r"^gpt-(\d+(?:\.\d+)*)-([a-z]+)$")
+FAMILY_WORD = re.compile(r"^[a-z]+$")
+
+
+def model_family(slug: str):
+    """'gpt-6.2-astra' → ('astra', (6, 2)); None for an id of another shape ('gpt-reserve', 'codex-auto-review')."""
+    m = MODEL_SLUG.match((slug or "").strip().lower())
+    return (m.group(2), tuple(int(x) for x in m.group(1).split("."))) if m else None
+
+
+def models_cache_path() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")) / "models_cache.json"
+
+
+def best_model(family: str, path=None) -> tuple[str, str]:
+    """(id, '') = the listed model (visibility = list) of this family with the highest version in this machine's Codex
+    model list; ('', why) when the list cannot be read or has no model of the family (no guess: an old id would start
+    the worker one version behind, the stop this tool replaced)."""
+    p = Path(path) if path else models_cache_path()
+    fam = (family or "").strip().lower()
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        return "", f"Codex の model の一覧 ({p}) が読めない ({e.__class__.__name__})"
+    best = None
+    for m in (data.get("models") if isinstance(data, dict) else data) or []:
+        if not isinstance(m, dict) or m.get("visibility") != "list":
+            continue
+        fv = model_family(str(m.get("slug") or ""))
+        if fv and fv[0] == fam and (best is None or fv[1] > best[1]):
+            best = (str(m["slug"]), fv[1])
+    if not best:
+        return "", f"Codex の model の一覧 ({p}) に系統 {fam or '?'} の model が無い"
+    return best[0], ""
+
+
+def model_verdict(asked: str, got: str) -> tuple[bool, str]:
+    """(ok, line) of a worker's step 0 on the model: the same family at the asked version or a newer one passes (a newer
+    one with a line the worker posts once as a board note, and goes on); another family, an older version or an
+    unreadable record stops. A bare family word ('astra') passes any version of it; an id of another shape only itself.
+    Why (measured): a worker asked for an older version ran its later turns on a newer one after the app's default moved,
+    and the exact-match check stopped it, while the newer version was the one to use."""
+    a, g = (asked or "").strip().lower(), (got or "").strip().lower()
+    if a and a == g:
+        return True, ""
+    fa, fg = model_family(a), model_family(g)
+    if fa is None and FAMILY_WORD.match(a):
+        if fg is not None and fg[0] == a:
+            return True, ""
+        return False, f"系統が違う (頼まれた系統 = {asked}、 動いている = {got})"
+    if fa is None or fg is None:
+        return False, f"model が違う (頼まれた = {asked}、 動いている = {got})"
+    if fa[0] != fg[0]:
+        return False, f"系統が違う (頼まれた = {asked}、 動いている = {got})"
+    if fg[1] > fa[1]:
+        return True, f"頼まれた {asked} より新しい {got} で動いている = 掲示板の note に 1 回書いて続ける"
+    return False, f"頼まれた {asked} より古い {got} で動いている"
+
+
 def check_self(a) -> int:
     tid = os.environ.get("CODEX_THREAD_ID", "")
     rows = ct.thread_rows(ids=[tid]) if (ct is not None and tid) else []
@@ -709,10 +777,28 @@ def check_self(a) -> int:
               " 依頼元に 1 行言って止まる")
         return 1
     model, effort = rows[0].get("model") or "?", rows[0].get("reasoning_effort") or "?"
-    ok = model == a.model and (not a.effort or effort == a.effort)
+    m_ok, line = model_verdict(a.model, model)
+    ok = m_ok and (not a.effort or effort == a.effort)
     print(f"{'✅' if ok else '⛔'} この thread の記録 = model {model} / effort {effort} (頼まれた値 = {a.model}"
           + (f" / {a.effort}" if a.effort else "") + ")")
+    if line:
+        print(("  " if ok else "  ⛔ ") + line)
+    if m_ok and a.effort and effort != a.effort:
+        print(f"  ⛔ effort が違う (頼まれた = {a.effort}、 記録 = {effort})")
     return 0 if ok else 1
+
+
+def best_model_cmd(a) -> int:
+    model, why = best_model(a.family)
+    if a.json:
+        print(json.dumps({"family": a.family, "model": model, "source": str(models_cache_path()),
+                          **({"unknown": why} if why else {})}, ensure_ascii=False))
+    elif model:
+        print(model)
+    if why:
+        print(f"分からない: {why}", file=sys.stderr)
+        return 1
+    return 0
 
 
 # ---------------------------------------------------------------- selftest
@@ -1002,6 +1088,61 @@ def _selftest() -> int:
         with contextlib.redirect_stdout(buf):
             rc = launch(args(json=False, writer="app"))
         checks.append(("CLI 無し (書き手 = app) → 本人が押す deep link (exit 4)", rc == 4 and "codex://threads/new?" in buf.getvalue()))
+    # the model check of step 0 and the newest-of-a-family lookup (a newer version of the family goes on)
+    checks.append(("model_verdict: 同じ版は通す", model_verdict("gpt-6.2-astra", "gpt-6.2-astra") == (True, "")))
+    ok_n, ln_n = model_verdict("gpt-6-astra", "gpt-6.2-astra")
+    checks.append(("model_verdict: 同じ系統の新しい版は通し、 note に書く 1 行を返す (今回の 6 → 6.2)",
+                   ok_n and "より新しい gpt-6.2-astra" in ln_n and "note" in ln_n))
+    checks.append(("model_verdict: 古い版・系統違い・形の違う id は止める",
+                   not model_verdict("gpt-6.2-astra", "gpt-6.1-astra")[0] and not model_verdict("gpt-6.2-sol", "gpt-6.2-astra")[0]
+                   and "系統が違う" in model_verdict("gpt-6.2-sol", "gpt-6.2-astra")[1]
+                   and not model_verdict("gpt-6.2-astra", "gpt-reserve")[0] and not model_verdict("gpt-6.2-astra", "?")[0]))
+    checks.append(("model_verdict: 系統の語は同じ系統のどの版も通し、 別の系統は止める",
+                   model_verdict("astra", "gpt-6-astra")[0] and model_verdict("Astra", "gpt-6.2-astra")[0]
+                   and not model_verdict("sol", "gpt-6.2-astra")[0]))
+    checks.append(("model_verdict: 版の比べ方は数 (6.10 > 6.9、 6.1 > 6)", model_verdict("gpt-6.9-sol", "gpt-6.10-sol")[0]
+                   and model_verdict("gpt-6-sol", "gpt-6.1-sol")[0] and not model_verdict("gpt-6.1-sol", "gpt-6-sol")[0]))
+    mc = os.path.join(tmp, "models_cache.json")
+    Path(mc).write_text(json.dumps({"models": [
+        {"slug": "gpt-6.2-sol", "visibility": "list"}, {"slug": "gpt-6.2-astra", "visibility": "list"},
+        {"slug": "gpt-6.3-astra", "visibility": "hide"}, {"slug": "gpt-6-astra", "visibility": "list"},
+        {"slug": "gpt-6.1-sol", "visibility": "list"}, {"slug": "gpt-reserve", "visibility": "list"}]}), encoding="utf-8")
+    checks.append(("best_model: 一覧に出る系統の最新 (hide は数えない)", best_model("astra", mc) == ("gpt-6.2-astra", "")
+                   and best_model("SOL", mc) == ("gpt-6.2-sol", "")))
+    checks.append(("best_model: 系統が無い・一覧が読めない = 分からない (推測しない)", best_model("luna", mc)[0] == ""
+                   and "luna" in best_model("luna", mc)[1] and best_model("astra", os.path.join(tmp, "none.json"))[0] == ""))
+    _home = os.environ.get("CODEX_HOME")
+    os.environ["CODEX_HOME"] = tmp
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = main(["best-model", "--family", "astra"])
+    checks.append(("best-model の CLI: 1 行の id と exit 0", rc == 0 and buf.getvalue().strip() == "gpt-6.2-astra"))
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        rc = main(["best-model", "--family", "luna"])
+    checks.append(("best-model の CLI: 分からなければ exit 1", rc == 1))
+    if _home is None:
+        os.environ.pop("CODEX_HOME")
+    else:
+        os.environ["CODEX_HOME"] = _home
+    if ct is not None:
+        _rows, _tid = ct.thread_rows, os.environ.get("CODEX_THREAD_ID")
+        os.environ["CODEX_THREAD_ID"] = "t-self"
+        for rec_m, rec_e, ask_m, ask_e, want_rc, want_txt in (
+                ("gpt-6.2-astra", "xhigh", "gpt-6-astra", "xhigh", 0, "より新しい"),
+                ("gpt-6.2-astra", "xhigh", "gpt-6.2-sol", "xhigh", 1, "系統が違う"),
+                ("gpt-6-astra", "xhigh", "gpt-6.2-astra", "xhigh", 1, "より古い"),
+                ("gpt-6.2-astra", "high", "gpt-6-astra", "xhigh", 1, "effort が違う")):
+            ct.thread_rows = lambda ids=None, _m=rec_m, _e=rec_e: [{"model": _m, "reasoning_effort": _e}]
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check_self(argparse.Namespace(model=ask_m, effort=ask_e))
+            checks.append((f"check-self: 記録 {rec_m}/{rec_e}・頼み {ask_m}/{ask_e} → exit {want_rc}",
+                           rc == want_rc and want_txt in buf.getvalue()))
+        ct.thread_rows = _rows
+        if _tid is None:
+            os.environ.pop("CODEX_THREAD_ID")
+        else:
+            os.environ["CODEX_THREAD_ID"] = _tid
     srv.close()
     for name, ok in checks:
         print(("PASS " if ok else "FAIL ") + name)
@@ -1050,6 +1191,9 @@ def main(argv=None) -> int:
     c = sub.add_parser("check-self")
     c.add_argument("--model", required=True)
     c.add_argument("--effort", choices=EFFORTS)
+    bm = sub.add_parser("best-model")
+    bm.add_argument("--family", required=True, help="系統の語 (astra / sol / …)")
+    bm.add_argument("--json", action="store_true")
     k = sub.add_parser("compose-link")
     k.add_argument("--cwd", required=True)
     k.add_argument("--prompt-file", required=True)
@@ -1062,6 +1206,8 @@ def main(argv=None) -> int:
         return rpc(a)
     if a.cmd == "check-self":
         return check_self(a)
+    if a.cmd == "best-model":
+        return best_model_cmd(a)
     print(compose_url(os.path.realpath(os.path.expanduser(a.cwd)), Path(a.prompt_file).read_text(encoding="utf-8")))
     return 0
 

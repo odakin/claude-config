@@ -19,7 +19,16 @@ Usage:
                                        what the hand-off asked for. ✅ = go on / ⏸ = stop, and before stopping send
                                        the printed line to the session that started this one (the app's record names
                                        it, for a card the owner clicked too). The line says when it was written: it
-                                       can be held and arrive after the `go`
+                                       can be held and arrive after the `go`.
+                                       M = a tier word (opus / fable) passes any version of that tier; M = a versioned
+                                       id (claude-opus-5-5) passes the same tier at that version or a newer one (a newer
+                                       one with a line the worker posts once as a board note, and goes on), and stops on
+                                       another tier or an older version (the same rule as codex-app-launch.py
+                                       check-self: the newest version of the chosen family)
+  session-model.py best-model --family F [--json]
+                                       the id of tier F (opus / fable) with the highest version among the ids this
+                                       machine's Claude CLIs list (lib/model_versions.py best_model = the board's floor
+                                       for step 0); exit 1 with "分からない" when no list can be read or none has F
   session-model.py --live              every live session on this machine with its model
   session-model.py <target> --json     machine-readable rows
   session-model.py --selftest
@@ -46,6 +55,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import session_model as sm  # noqa: E402
+import model_versions as mv  # noqa: E402
 
 
 def fmt(row: dict) -> str:
@@ -66,14 +76,29 @@ def fmt(row: dict) -> str:
     return f"{sid}  {model}  tier={row['tier'] or '?'}{when}{app}{status}{name}{cfg}{to}"
 
 
-def matches(want: str, got: str) -> bool:
-    """A tier word (opus / fable / …) matches any model of that tier; a full model id matches itself."""
-    w = (want or "").strip().lower()
+TIER_WORDS = ("fable", "opus", "sonnet", "haiku", "mythos")
+
+
+def model_verdict(want: str, got: str) -> tuple[bool, str]:
+    """(ok, line). A tier word (opus / fable / …) matches any model of that tier. A versioned id matches the same tier at
+    that version or a newer one: a newer one returns the line the worker posts once as a board note before going on
+    (the board writes the newest version known at launch as this floor and starts the worker with the tier word, which
+    resolves to the newest = a later release goes on, an older start stops). Another shape matches itself only."""
+    w, g = (want or "").strip().lower(), bare_model(got or "").lower()
     if not w:
-        return True
-    if w in ("fable", "opus", "sonnet", "haiku", "mythos"):
-        return sm.tier(got or "") == ("fable" if w == "mythos" else w)
-    return w == (got or "").strip().lower()
+        return True, ""
+    if w in TIER_WORDS:
+        return sm.tier(g) == ("fable" if w == "mythos" else w), ""
+    if w == g:
+        return True, ""
+    vw, vg = mv.version_of(w), mv.version_of(g)
+    if vw and vg and vw[0] == vg[0] and vg[1] > vw[1]:
+        return True, f"頼まれた {want} より新しい {bare_model(got)} で動いている = 掲示板の note に 1 回書いて続ける"
+    return False, ""
+
+
+def matches(want: str, got: str) -> bool:
+    return model_verdict(want, got)[0]
 
 
 def with_starter(row: dict) -> dict:
@@ -161,7 +186,9 @@ def expect_report(row: dict, want_model: str, want_effort: str) -> tuple[int, st
         turn_diffs.append(f"effort {turn_e}")
     now_txt = (f"、 この turn に API へ送った値 ({turn_m or '?'} / effort {turn_e})" if turn_e else "")
     if not diffs and not turn_diffs:
-        return 0, f"✅ app の記録 ({got_m} / effort {got_e}){now_txt} は頼まれた {asked} と合う = 手順 1 へ進む"
+        newer = model_verdict(want_model, got_m)[1] or (model_verdict(want_model, turn_m)[1] if turn_m else "")
+        return 0, (f"✅ app の記録 ({got_m} / effort {got_e}){now_txt} は頼まれた {asked} と合う = 手順 1 へ進む"
+                   + (f"\n  {newer}" if newer else ""))
     me = row.get("app_local") or row.get("host") or str(row.get("sessionId", ""))[:8]
     parent = row.get("app_parent") or ""
     stamp = time.strftime("%H:%M")
@@ -361,6 +388,56 @@ def selftest() -> int:
         check("CLI self --expect-effort max on an xhigh record and turn → exit 4 with the line to the starter",
               r.returncode == 4 and "SendMessage(to=local_starter" in r.stdout)
         os.environ.pop("CLAUDE_DESKTOP_SESSIONS_DIR", None)
+        # a versioned id is a floor: the same tier at that version or newer goes on
+        check("verdict: a tier word passes any version of it, not another tier",
+              model_verdict("opus", "claude-opus-5")[0] and model_verdict("fable", "claude-mythos-5-1")[0]
+              and not model_verdict("fable", "claude-opus-5-5")[0])
+        ok_n, ln_n = model_verdict("claude-opus-5-5", "claude-opus-6[1m]")
+        check("verdict: a newer version of the floor's tier passes with the line for a board note",
+              ok_n and "より新しい claude-opus-6" in ln_n and "note" in ln_n)
+        check("verdict: the same id (context suffix aside) passes with no line",
+              model_verdict("claude-opus-5-5", "claude-opus-5-5[1m]") == (True, ""))
+        check("verdict: an older version, another tier and an unversioned id stop",
+              not model_verdict("claude-opus-5-5", "claude-opus-5")[0] and not model_verdict("claude-fable-5-2", "claude-opus-6")[0]
+              and not model_verdict("claude-opus-5-5", "opus-preview")[0])
+        check("verdict: versions compare as numbers (5-10 > 5-9; a date part is no version)",
+              model_verdict("claude-opus-5-9", "claude-opus-5-10")[0]
+              and mv.version_of("claude-opus-4-5-20251101") == ("opus", (4, 5)))
+        rc, out = expect_report({**base, "app_model": "claude-opus-6", "app_effort": "xhigh", "turn_model": "claude-opus-6",
+                                 "turn_effort": "xhigh"}, "claude-opus-5-5", "xhigh")
+        check("expect: a newer Opus than the floor → ✅ with the line to post as a note", rc == 0 and out.startswith("✅")
+              and "より新しい claude-opus-6" in out)
+        rc, out = expect_report({**base, "app_model": "claude-opus-5", "app_effort": "xhigh"}, "claude-opus-5-5", "xhigh")
+        check("expect: an older Opus than the floor → ⏸ naming the model", rc == 4 and "model claude-opus-5" in out)
+        hd = os.path.join(td, "home2")
+        os.makedirs(os.path.join(hd, ".claude"))
+        os.makedirs(os.path.join(hd, ".claude-alt", "projects"))
+        with open(os.path.join(hd, ".claude.json"), "w", encoding="utf-8") as fh:
+            json.dump({"additionalModelCostsCache": {"claude-opus-5": {}, "claude-opus-5-5": {}, "claude-opus-4-5-20251101": {},
+                                                     "claude-fable-5-1": {}, "claude-sonnet-5-5": {}}}, fh)
+        with open(os.path.join(hd, ".claude-alt", ".claude.json"), "w", encoding="utf-8") as fh:
+            json.dump({"additionalModelOptionsCache": [{"value": "claude-fable-5-2[1m]", "label": "Fable"}]}, fh)
+        env4 = {k: v for k, v in env.items() if k != "CLAUDE_CONFIG_DIR"}
+        env4["CLAUDE_CONFIG_DIRS_HOME"] = hd
+        saved = {k: os.environ.get(k) for k in ("CLAUDE_CONFIG_DIRS_HOME", "CLAUDE_CONFIG_DIR")}
+        os.environ["CLAUDE_CONFIG_DIRS_HOME"] = hd
+        os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        check("best_model: the highest version of the tier over every config dir's list (cost keys and options, suffix dropped)",
+              mv.best_model("opus") == ("claude-opus-5-5", "") and mv.best_model("fable") == ("claude-fable-5-2", "")
+              and mv.best_model("mythos")[0] == "claude-fable-5-2")
+        check("best_model: no model of the tier / no readable list / not a tier word → '' with the reason",
+              mv.best_model("haiku")[0] == "" and "haiku" in mv.best_model("haiku")[1]
+              and mv.best_model("opus", [os.path.join(td, "none.json")]) == ("", "この機械の Claude CLI の model の一覧 (.claude.json) が読めない")
+              and mv.best_model("gpt")[0] == "")
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        r = subprocess.run([sys.executable, me, "best-model", "--family", "opus"], env=env4, capture_output=True, text=True)
+        check("CLI best-model: one id and exit 0", r.returncode == 0 and r.stdout.strip() == "claude-opus-5-5")
+        r = subprocess.run([sys.executable, me, "best-model", "--family", "haiku"], env=env4, capture_output=True, text=True)
+        check("CLI best-model: unknown → exit 1 saying so", r.returncode == 1 and "分からない" in r.stderr)
     print("session-model selftest: " + ("ALL PASS" if not fails else f"FAILED {len(fails)}"))
     return 1 if fails else 0
 
@@ -373,9 +450,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--expect-model", default="", help="a worker's step 0: the model the hand-off asked for")
     ap.add_argument("--expect-effort", default="", help="a worker's step 0: the effort the hand-off asked for")
+    ap.add_argument("--family", default="", help="best-model: the tier word (opus / fable)")
     a = ap.parse_args(argv)
     if a.selftest:
         return selftest()
+    if a.target == "best-model":
+        model, why = mv.best_model(a.family)
+        if a.json:
+            print(json.dumps({"family": a.family, "model": model, "sources": mv.model_list_files(),
+                              **({"unknown": why} if why else {})}, ensure_ascii=False))
+        elif model:
+            print(model)
+        if why:
+            print(f"分からない: {why}", file=sys.stderr)
+            return 1
+        return 0
     if a.live:
         rows = [sm.describe(s) for s in sm.live_sessions()]
     elif a.target:
