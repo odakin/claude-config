@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner) + Calendar の予定を読んで日付・時刻を出す・日ごとに数える道具を書くとき (#calendar-read-timezone-and-span)
+when: Google API を Python から直接叩く setup をするとき + ML (Google Groups) 宛に送る前に、 購読者一覧を読めない ML に入っていない人を見分けるとき (#group-membership-without-owner) + Calendar の予定を読んで日付・時刻を出す・日ごとに数える道具を書くとき (#calendar-read-timezone-and-span) + Drive の file・folder の「リンクを知っている全員」 の共有を引っ込める・消えたかを確かめるとき (#drive-unshare)
 category: infra
 summary: Google API を Python から直接アクセスする setup pattern (= GCP project の 3 layer 構造、 API enable + propagate、 OAuth scope 設計、 mimeType 判別 Sheets vs xlsx、 Drive の検索 query に入れる値のエスケープ 〔' と \ を逃がさないと 400 → 同名なし扱いで重複を作る、 #drive-query-escaping〕、 Drive folder 一括 download 〔list pagination + native-export map + 再帰 + manifest、 #drive-folder-bulk-download〕、 他人から共有された folder を読み続ける 〔宛先 account の token (別 account では 404) + 台帳 + id/modifiedTime の差分 + 共有通知メールの照合、 #shared-folder-watch〕、 Gmail 一括掃除 〔batchModify TRASH 30日undo + レビュー済み ID list 駆動 + 送信者別集計 + 本文入り通知の salvage、 判断基準 = 唯一の機械検索可能な記録か、 #gmail-bulk-cleanup〕、 storage quota 監視 〔Drive about.get storageQuota = Gmail+フォト+Drive 合算容量の唯一の API 監視点、 最小 scope drive.metadata.readonly、 反映ラグ + ゴミ箱 usage 込みの解釈 gotcha、 #storage-quota-monitoring〕、 Cloud Identity Groups API は group OWNER level で memberships CRUD 可能で Admin SDK の Workspace admin 制約を回避、 loopback OAuth consent フローの CSRF/横取り対策 〔state nonce + PKCE S256 + request-loop + 手動貼付の state 検証 + 補償制御 hard-fail + 識別子 charset 検証、 #oauth-loopback-hardening〕) + #drive-xlsx-inplace-update (= 他人 owner の共有 xlsx に書く: full drive 別 token / revisions.get_media が truth / openpyxl round-trip の損失 / files.update 同 ID / 再 download literal verify)
 -->
@@ -170,6 +170,16 @@ q = f"name = '{_q(name)}' and trashed = false"
 6. **再 download (revision) して指定 cell を literal 比較**、 不一致は exit 1。 「upload が 200 だった」 は verify ではない
 
 他人の file を書き換える操作なので、 実行は user 明示 OK 経由 (= 対外 side effect と同格)。 実装例 = 個人層の `drive-xlsx-set-cells.py` (download → snapshot → set → update → verify を 1 コマンド化、 `--inspect` / `--dry-run` 付き)。 native Sheets なら同じ位置づけの経路は Sheets API `values.update` で、 こちらは round-trip の損失が無い。
+
+## <a id="drive-unshare"></a>Drive の file・folder の共有を引っ込める (リンクを知っている全員 → 持ち主だけ)
+
+公開していた原本 (スライドなど) を引っ込めるときの手順。 file は消さないので、 同じ共有を付け直せば元に戻る。
+
+1. **共有は permission の一覧で読む** — `permissions().list(fileId=…, fields="permissions(id,type,role)")`。 「リンクを知っている全員」 は `type: anyone` (id は `anyoneWithLink`)、 組織全体への共有は `type: domain`。 引っ込めるのは `permissions().delete(fileId=…, permissionId=…)`
+2. **folder に付けた共有は中の file にも出る** — file の permission の一覧に、 folder と同じ id の permission が継いだ形で並ぶ。 My Drive では folder の permission を delete すると file の分も一緒に消える (実測)。 file ごとに delete する前に親の folder を見る。 folder の permission を delete する前に中身 (`q="'<folder id>' in parents"`) を list して、 同じ folder に共有を残したい file が無いかを確かめる
+3. **`drive.file` scope の token で変えられるのは、 その app (GCP project) が作った file・folder の共有だけ** — 自分で上げた file の共有は、 上げたときの token で変えられる。 他の経路で置いた file には、 より広い scope の token が要る
+4. **共有が消えたかの確かめは 2 つ** — (a) API で読み戻し、 `type` が `user` (owner) だけになったこと (b) ログインしない立場 (cookie なしの curl) から、 `drive.google.com/file/d/<id>/view` が 401、 download (`drive.google.com/uc?export=download&id=<id>`) がログイン画面への転送になること。 ⚠️ Slides で開けないほど大きな Office file は、 共有を消した後もログインなしの `docs.google.com/presentation/d/<id>/edit` が HTTP 200 の「ファイルを開けませんでした」 の頁を返すことがある (file 名も中身も含まない。 実測) = 状態の code だけで「まだ開ける」 と読まず、 頁の文と他の口で決める。 比べる相手に、 存在しない id (404) と同じ folder の小さな file (401) を並べると読み分けやすい
+5. **サイトから link を消す作業と組にする** — 頁から link を消しても、 link を知っている人 (前に開いた人・検索の cache) は Drive で開けるまま。 逆に Drive の共有だけを消すと、 サイトに開けない link が残る
 
 ## <a id="drive-folder-bulk-download"></a>Drive folder の一括 download (= list + native-export map + 再帰)
 
