@@ -101,7 +101,7 @@ runtime の構成監査は [audit-codex-hook-runtime.py](../scripts/audit-codex-
 
 一般の自然言語の義務、本人発言の許可の意味、未知の shell 表現、任意のプログラムからの実行、OS による権限分離はこの検証の対象外である。[保証の境界](../conventions/agent-rule-ownership.md#limits) を参照する。操作ごとの gate は引き続きその操作の直前で働く必要がある。
 
-観測した誤停止 (fail-closed 側、2026-09-22): Bash の `cd $VAR` (変数) は展開されずに path として辿られ、存在しない path から親へ上がって cwd の repo に当たるため、一時 dir での `cd $T && git commit` が cwd の repo の未 commit 変更で deny された。直すなら変数を含む cd は検査不能 (`WorkingDirectoryUnavailable`) に倒す。未修正。
+観測した誤停止 (fail-closed 側、2026-09-22): Bash の `cd $VAR` (変数) は展開されずに path として辿られ、存在しない path から親へ上がって cwd の repo に当たるため、一時 dir での `cd $T && git commit` が cwd の repo の未 commit 変更で deny された (このときの `$T` は `$(mktemp -d)` の値)。`0ec17b3d` から、同じ command で literal の値を代入した変数と、同じ command の `git init <dir>` で作る repo は辿る ([保証の境界](../conventions/agent-rule-ownership.md#limits))。この観測の形 (値の決まらない変数) は未修正。直すなら値の決まらない変数を含む行き先は検査不能 (`WorkingDirectoryUnavailable`) に倒す。
 
 ## 後続 reviewer の検収と未解決点
 
