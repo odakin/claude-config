@@ -44,6 +44,8 @@ ChatGPT app は CLI を app の中に同梱するだけで PATH に置かない 
 
 Codex の rollout では、 Stop hook の差し戻し文 (`<hook_prompt …>`) や環境の注入 (`<environment_context>`、 `<turn_aborted>` ほか) が **user role の message として**入る。 本人の発言を読む側 (承認 CLI の `--latest` / `--quote`) は、 先頭が tag 形の message を生成文とみなして除き、 本人の形だけを通す (実装 = `scripts/manuscript-claim-guard.py` の `human_text_segments`、 集計 = `scripts/approval-source-census.py` = 本文を出さず先頭の tag 名だけ数える)。 「本人の発言が無い」 と言われたら、 診断行の tag 名を見る (本文は出ない)。 規則の正本 = [`agent-rule-ownership.md`](agent-rule-ownership.md) の引用元の定義。
 
+<a id="turn-origin"></a>**発言の文が合っても、 その turn を誰が起こしたかは別に読む** — 検収で「本人の発言」 として引かれた文を rollout で確かめるときは、 文を探すだけでなく、 その turn の初めの `event_msg` (`type: task_started`) の `turn_attribution.turn_trigger` を見る。 `composer` = その thread の入力欄から打った turn、 `app_tool_send_message` = 別の thread・session が送った文で始まった turn (本人の発言に数えない)。 質問の画面への答えは、 user role の message の中の `<send_user_message_question_reply>` として入る (その turn の `turn_trigger` は `send_user_message_async_question` のことも、 前の turn の続きのこともある = 実測)。 archive した thread の rollout は `~/.codex/archived_sessions/` に移る = `~/.codex/sessions/` に無いことを「記録が無い」 と読まない。
+
 ## <a id="result-before-completion-gate"></a>結果の要約が見当たらず、 最後の message が完了 gate への返事
 
 症状 = task は終わっているのに、 画面の最後の message が「push してから終える」 型の差し戻しへの返事 (push できない理由の説明) で、 結果の要約が見当たらない。 表示が「作業中」 のまま残ることもある (実測。 表示の残りの原因が gate かは未確認)。
