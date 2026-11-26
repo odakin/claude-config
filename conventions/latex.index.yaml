@@ -103,6 +103,9 @@ sections:
   - id: lua-ul-highlight-emph
     level: 2
     title: "`\\emph` を色の帯 (蛍光ペン) にする — lua-ul の罠と文献表"
+  - id: bst-misc-without-year
+    level: 2
+    title: "JHEP.bst の `@misc` は、 年を外すと題を引用符とピリオドで閉じる — 未発表のノートで年が 2 回出るときの直し方"
   - id: figure-table-shared-counter
     level: 2
     title: "図と表を 1 本の通し番号にする (jsclasses・ltjsbook)"
