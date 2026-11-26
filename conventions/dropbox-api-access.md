@@ -1,7 +1,7 @@
 <!-- doc-meta
-when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload) + 共同編集者から「Dropbox の容量がいっぱい」 と言われ、 自分の共有フォルダが相手の容量をどれだけ使っているかを量るとき + 共有フォルダに大きいデータを足す前 (#shared-folder-quota) + 共有フォルダの重い中身を自分だけのフォルダへ移すとき・容量のいっぱいな相手から大きい file を受け取るとき (#split-shared-folder-keep-paths)
+when: Dropbox をプログラムから操作したいとき (共有リンク発行・metadata・upload) + 共同編集者から「Dropbox の容量がいっぱい」 と言われ、 自分の共有フォルダが相手の容量をどれだけ使っているかを量るとき + 共有フォルダに大きいデータを足す前 (#shared-folder-quota) + 共有フォルダの重い中身を自分だけのフォルダへ移すとき・容量のいっぱいな相手から大きい file を受け取るとき (#split-shared-folder-keep-paths) + フォルダ・file に共有リンクが付いていないかを確かめるとき (#list-links-check)
 category: infra
-summary: Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 共有状態の read recipe = list_folders は cursor 完走まで不在断定しない + get_metadata の sharing_info 直行 + list_folder_members で共同編集者の own-account 検証 + search_v2 は upload 失敗 file に痕跡ゼロ #sharing-read-recipes、 共有フォルダは入っている全員の容量に数えられる・online-only では減らない・大きさは list_folder recursive の size の和・誰が入れたかは sharing_info.modified_by・外す前に他の仕組みが読む file を確かめる #shared-folder-quota、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
+summary: Dropbox HTTP API 直叩きの setup pattern — 公式 MCP / CLI 不在ゆえ API 直が機械経路 (= scoped app 最小 permission + 「authorize 時点の permission が token に焼き込まれる」順序罠 #scoped-app-setup、 PKCE public client = app secret 無し #pkce-no-secret、 共有リンクの冪等取得 = create 409 → list fallback #share-link-idempotent、 path 変換と online-only placeholder でもリンク可 #path-semantics、 共有状態の read recipe = list_folders は cursor 完走まで不在断定しない + get_metadata の sharing_info 直行 + list_folder_members で共同編集者の own-account 検証 + search_v2 は upload 失敗 file に痕跡ゼロ #sharing-read-recipes、 共有リンクの有無は list_shared_links を path 指定 (直接 + 上のフォルダ) と path 無し (中) の 2 回で読むだけで数える・参加者の一覧はリンクを見ない #list-links-check、 共有フォルダは入っている全員の容量に数えられる・online-only では減らない・大きさは list_folder recursive の size の和・誰が入れたかは sharing_info.modified_by・外す前に他の仕組みが読む file を確かめる #shared-folder-quota、 sharing.write token の blast radius = 全 file への公開リンク発行が可能 #blast-radius)
 -->
 # Dropbox API 直アクセス (共有リンク・metadata)
 
@@ -55,7 +55,13 @@ file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/�
 
 - **共有フォルダ列挙**: `POST /2/sharing/list_folders` `{"limit": 100}` → ⚠️ **cursor を完走するまで不在断定しない** — 続きは `/2/sharing/list_folders/continue` `{"cursor": …}`。実測: 196 folder の account で目的 folder が 2 ページ目にあり、1 ページ目だけ見て「共有されていない」と誤結論しかけた (= 単一ページ null を absence に変換する trap の API 版)
 - **path から直接**: folder 名で列挙を探すより `POST /2/files/get_metadata` `{"path": "/<相対 path>"}` が速い — `sharing_info.shared_folder_id` が返れば共有フォルダ (無ければ非共有)
-- **メンバー確認**: `POST /2/sharing/list_folder_members` `{"shared_folder_id": …}` → `users[].user.email` + `access_type` (owner/editor/viewer)、`invitees[]` は招待未承諾
+- **メンバー確認**: `POST /2/sharing/list_folder_members` `{"shared_folder_id": …}` → `users[].user.email` + `access_type` (owner/editor/viewer)、`invitees[]` は招待未承諾。 ⚠️ フォルダに付いた共有リンクは見ない = 「誰にも見せていない」 の確かめには次の項が要る
+- <a id="list-links-check"></a>**共有リンクの有無 (読むだけ)**: `POST /2/sharing/list_shared_links` を 2 回呼ぶ。 (1) `{"path": …}` (`direct_only` を付けない) = その path に直接付いたリンクと、 上のフォルダに付いたリンク (中身も開ける) が返る。 (2) path 無し = 自分の全リンクが返る → `path_lower` の前方一致で中の file・フォルダのリンクを拾う。 どちらも `has_more` が false になるまで `cursor` を渡して読む
+  - 照合は NFC にそろえて小文字にしてから (macOS の file 名は NFD のことがあり、 前方一致が黙って外れる)。 前方一致は `/` までを含める (`/a/b` と `/a/b-x` を分ける)
+  - 1 本ごとの読み方 = 公開範囲は `link_permissions.effective_audience`、 閲覧/編集は `link_access_level`、 期限は `expires` (無ければ期限なし)、 パスワードは `require_password`
+  - ⚠️ 確かめは読むだけの口で行い、 書く口の dry-run を使わない (書く口の操作として自動の判定に止められる = 実測)
+  - ⚠️ 共有フォルダの他の参加者が作ったリンクが (1)・(2) に返るかは未確認。 他の参加者が書けるフォルダでは「自分の作ったリンクが無い」 までしか言えない
+  - 確かめるだけなら URL を出さない (知る全員が開けるリンクを会話の記録に残さない)
 - **雲内検索**: `POST /2/files/search_v2` `{"query": …, "options": {"file_status": "active"}}` (`"deleted"` で削除済みも)。⚠️ **同期エラーで upload に失敗した file は雲に痕跡ゼロ** — search でも list でも出ない。「雲に無い」は「どのマシンにも無い」を意味しない (実体は作成元マシンのローカルにだけある)
   - **本文も引ける**: 既定で file の中身も検索し、 結果の `match_type` が `filename`・`file_content`・`filename_and_content` のどれかで返る (実測)。 online-only の file を落とさずに中身で探せるので、 file 名が題名と違う論文の PDF はこれで見つかる。 file 名だけなら `"filename_only": true`
   - **範囲は `options.path` で絞る**: 付けないと全 file が対象になり、 機密のフォルダの file 名まで手元に返る。 探す先のフォルダを指定する
@@ -98,7 +104,7 @@ file でも folder でも同じ。 返る URL は `https://www.dropbox.com/scl/�
 
 - 共有していない新しいフォルダを作って重い下のフォルダを移す → 共有フォルダの名前を**自分の側だけ**変える (共有フォルダの名前の変更は、 変えた人の側だけに効く = [rename-move-shared-folder](https://help.dropbox.com/organize/rename-move-shared-folder)) → 新しいフォルダに元の名前を付ける。 手元の道具・symlink・文書が指す path は元のまま持ち主だけの中身を指し、 相手の側の共有フォルダの名前も元のまま
 - 1 段ごとにサーバーに届いたのを確かめてから次へ (名前を入れ替える途中で同じ名前が 2 つになると衝突する)。 確かめ方 = 新しい path の `files/get_metadata` (届く前は 409 が返る = 実測)、 共有リンクの `path_lower` が新しい path に変わったか
-- 共有リンクは file と一緒に動く = 移した後も開け、 新しい path を指す (実測: 移す前に一覧にしたリンクが全部開けた)。 共有フォルダの頂に付けたリンクは共有フォルダに残る。 ⚠️ 移した先にも「リンクを知る誰でも開ける」 リンクがそのまま付いている = 移す前に `sharing/list_shared_links` で一覧にして、 公開範囲を確かめる
+- 共有リンクは file と一緒に動く = 移した後も開け、 新しい path を指す (実測: 移す前に一覧にしたリンクが全部開けた)。 共有フォルダの頂に付けたリンクは共有フォルダに残る。 ⚠️ 移した先にも「リンクを知る誰でも開ける」 リンクがそのまま付いている = 移す前に `sharing/list_shared_links` で一覧にして ([#list-links-check](#list-links-check))、 公開範囲を確かめる
 - **容量のいっぱいな相手から大きい file を受け取る口 = ファイルリクエスト**: 置かれた file は依頼した側の容量に数えられ ([storage-space](https://help.dropbox.com/storage-space/storage-space))、 置く人は Dropbox のアカウントが無くても置ける。 相手が共有フォルダに置くと相手の容量にも数えられる = 容量のいっぱいな相手には共有フォルダに置かせない。 ⚠️ 作るには `file_requests.write` の scope が要る (共有リンクの最小 scope には無い) = その scope を足すか、 持ち主が web の画面で 1 回作る。 リンクの頁からは届け先のフォルダが見えない = 最初の 1 通が届いた場所で確かめる。 届いた物は相手が書いた物として検査してから使う ([`downloaded-file-scan.md`](downloaded-file-scan.md))
 - **容量のいっぱいな相手に見せる口 = 持ち主だけのフォルダに付けたフォルダの共有リンク**: リンクで開いて聞く・見る分は相手の容量に数えられない (相手がリンクの頁で自分の Dropbox に保存すると、 その分は数えられる)。
   フォルダのリンクは後から増えた中身も同じリンクで見せる。 既定のリンクはリンクを知る全員がログインなしで開ける = 渡す相手を絞り、 公開してまずい中身 (編集前の録音など) が入るフォルダなら、 漏れたときに見える範囲を持ち主に伝えてから付ける。
