@@ -45,6 +45,14 @@ surface 機構の noise filter に落ちて人間に届かなかった)。
 - **認識した同 turn で hard-deadline つき task 化**: 期限 = 依頼文の応答期限、 明記
   なければ受信 +3 日を仮置き (仮置きであることを task に明記)。 受諾/辞退の判断は
   人間、 期限管理は機械。
+- <a id="answer-via-invitation-link"></a>**返答を依頼 mail の link の頁で返す出版社がある**: Springer Nature の招待の link
+  (`reviewer-feedback.springernature.com/review-invitation/<招待の id>`) はログインなしで開け、
+  「No, decline」 を押した時点で辞退が記録される (頁に「You’ve declined …」 と出る)。 続く頁は理由を尋ねるが、
+  理由の選択・自由記述・代わりの査読者の推薦はどれも空のまま送信できる。 受付の確かめは最後の頁の
+  「Thank you. We have received your response.」 の文で取る (確認のメールはすぐには来ない = 実測)。
+  agent が代わりに押すときは、 頁の同意の帯が button を覆って click が空振りすることがある
+  ([`web-form-automation.md#consent-banner-covers-click`](web-form-automation.md#consent-banner-covers-click))。
+  招待の頁と mail には題と要旨しか出ない = 原稿の本文を開かずに返答できる。
 - **mail surface 機構の noise blocklist に査読 platform の domain を入れない**:
   出版勧誘 spam と査読依頼が**同一 domain** から来る publisher が多く (bucket 混在)、
   domain 単位の suppress は義務 mail を silent drop する。 spam を抑制したい場合は
