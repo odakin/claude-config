@@ -1152,6 +1152,19 @@ def beat(repo: Path, subdir: str, min_interval_h: float, rc_prefix: str, cron_pr
 def _selftest_rewrite(td: Path):
     """書き換えられた remote への beat: (A) 古い履歴 + 自分の beat の上の Mac は揃えてから載せる (旧 sha は remote に戻らない)
     (B) 手元にしか無い commit を持つ Mac は beat を止める (C) 古い履歴を merge してしまった Mac の push は guard が止める。"""
+    from itertools import count
+    from unittest.mock import patch
+
+    observation_seconds = count(946684800)
+
+    def test_beat(repo):
+        # 各計測に別の時刻を与え、速い CI でも直前に push された報告と同じ内容にならないようにする。
+        epoch = next(observation_seconds)
+        observation = {"host": hostname_short(), "servers": [], "epoch": epoch,
+                       "ts": datetime.fromtimestamp(epoch, timezone.utc).isoformat()}
+        with patch.dict(beat.__globals__, {"collect": lambda *_args: observation.copy()}):
+            return beat(repo, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+
     rf_env = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "GIT_AUTHOR_NAME": "t",
               "GIT_AUTHOR_EMAIL": "t@" + "example.invalid", "GIT_COMMITTER_NAME": "t",
               "GIT_COMMITTER_EMAIL": "t@" + "example.invalid",
@@ -1190,7 +1203,7 @@ def _selftest_rewrite(td: Path):
         for m in (mac, mac_local, mac_merge):
             subprocess.run(["git", "clone", "-q", str(rem), str(m)], check=True)
         wc(mac_local, {"z.txt": "mine\n"}, "local work")     # 書き換えの前から手元だけの commit
-        r = beat(mac, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac)
         assert r == "committed+pushed", r
         b1 = g1(mac, "rev-parse", "HEAD")
         beat_json = (mac / "fleet" / f"{hostname_short()}.json").read_bytes()
@@ -1212,7 +1225,7 @@ def _selftest_rewrite(td: Path):
         g1(new, "push", "-q", "--force", str(rem), "main:main")
         assert g1(rem, "rev-parse", "main") == n5, "fixture: remote main is the rewritten tip"
         # (A)
-        r = beat(mac, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac)
         rem_shas = set(g1(rem, "rev-list", "main").split())
         diag = (f"beat={r!r} remote={g1(rem, 'log', '--oneline', 'main')!r} mac={g1(mac, 'log', '--oneline', '-3')!r} "
                 f"rf={json.loads((mac / 'fleet' / f'{hostname_short()}.json').read_text()).get('rewrite_follow')!r} "
@@ -1229,7 +1242,7 @@ def _selftest_rewrite(td: Path):
         n += 1
         # (B)
         head_before = g1(mac_local, "rev-parse", "HEAD")
-        r = beat(mac_local, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac_local)
         assert r.startswith("deferred (rewrite follow stopped"), r
         assert g1(mac_local, "rev-parse", "HEAD") == head_before, "止めた Mac の HEAD が動いた"
         assert "local work" not in g1(rem, "log", "main", "--format=%s"), "止めた Mac の commit が remote に出た"
@@ -1238,7 +1251,7 @@ def _selftest_rewrite(td: Path):
         git(mac_merge, "fetch", "-q", "origin")
         rc_m, _ = git(mac_merge, "merge", "-q", "--no-edit", "--allow-unrelated-histories", "origin/main")
         assert rc_m == 0, "fixture: merge"
-        r = beat(mac_merge, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac_merge)
         assert "push refused by the rewrite guard" in r, r
         assert not ({o1, o2, o3} & set(g1(rem, "rev-list", "main").split())), "merge した Mac の push で旧 sha が戻った"
         n += 1
@@ -1251,7 +1264,7 @@ def _selftest_rewrite(td: Path):
         g1(other, "push", "-q", "origin", "main")
         (mac_ut / "added.md").write_text("same\n")
         head_before = g1(mac_ut, "rev-parse", "HEAD")
-        r = beat(mac_ut, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac_ut)
         assert r.startswith("deferred (rebase onto upstream failed") and "untracked" in r and "added.md" in r \
             and "beat commit undone" in r, r
         assert g1(mac_ut, "rev-parse", "HEAD") == head_before, "rebase できなかった beat の commit が手元に残った"
@@ -1259,7 +1272,7 @@ def _selftest_rewrite(td: Path):
         assert f"M fleet/{hostname_short()}.json" in [s.strip() for s in st] and "?? added.md" in st, st
         assert not g1(mac_ut, "diff", "--cached", "--name-only"), "外した beat の file が stage に残った"
         (mac_ut / "added.md").unlink()
-        r = beat(mac_ut, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac_ut)
         assert r == "committed+pushed", r
         assert g1(mac_ut, "rev-parse", "HEAD~1") == added and g1(rem, "rev-parse", "main") == g1(mac_ut, "rev-parse", "HEAD")
         n += 1
@@ -1273,7 +1286,7 @@ def _selftest_rewrite(td: Path):
         (mac_e / "a.txt").write_text("their work in progress\n")
         (mac_e / "c.txt").write_text("staged by them\n")
         g1(mac_e, "add", "c.txt")
-        r = beat(mac_e, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac_e)
         assert r == "committed+pushed", r
         assert g1(mac_e, "rev-parse", "HEAD~1") == up_e and g1(rem, "rev-parse", "main") == g1(mac_e, "rev-parse", "HEAD"), \
             g1(mac_e, "log", "--oneline", "-3")
@@ -1291,7 +1304,7 @@ def _selftest_rewrite(td: Path):
         g1(other_f, "push", "-q", "origin", "main")
         (mac_f / "a.txt").write_text("their edit of a\n")
         head_before = g1(mac_f, "rev-parse", "HEAD")
-        r = beat(mac_f, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac_f)
         assert r.startswith("deferred (other sessions' uncommitted changes in the tree: a.txt") \
             and "fast-forward refused" in r and "beat commit undone" in r, r
         assert g1(mac_f, "rev-parse", "HEAD") == head_before, "載せ直せなかった beat の commit が手元に残った"
@@ -1299,7 +1312,7 @@ def _selftest_rewrite(td: Path):
         assert sorted(s.strip() for s in g1(mac_f, "status", "--porcelain").splitlines()) == \
             sorted(["M a.txt", f"M fleet/{hostname_short()}.json"])
         g1(mac_f, "checkout", "--", "a.txt")
-        r = beat(mac_f, "fleet", 4, RC_LABEL_PREFIX_DEFAULT, None)
+        r = test_beat(mac_f)
         assert r == "committed+pushed", r
         assert g1(mac_f, "rev-parse", "HEAD~1") == up_f and g1(rem, "rev-parse", "main") == g1(mac_f, "rev-parse", "HEAD")
         n += 1
