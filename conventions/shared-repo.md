@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + branch が default に入ったかを判定する・依頼書や記録に「未 merge」 と書く前 (#rebased-branch-not-ancestor) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ) + 共著者が主筆の file の既存部分 (計算・文・記号) を直すとき (#primary-author-consent) + 利用者が user 単位でも入れている hook を共有リポの project の hook に写して配るとき (#project-copy-of-user-hook)
+when: 共同編集者がいるリポで作業するとき + 所有者だけの repo を共有リポに切り替えるとき (#convert-owner-repo-to-shared) + 招待した相手の手元の準備 (個人の token・道具・最初に読む節) を repo に点検させるとき (#collaborator-check) + 共有リポが別の repo (道具の engine など) を隣に clone してある前提で使うとき (#sibling-repo-auto-clone) + branch が default に入ったかを判定する・依頼書や記録に「未 merge」 と書く前 (#rebased-branch-not-ancestor) + 共有リポで計算・検算を Python で回すとき (版・venv・入口 tools/py の正本 = python-env.md、 本 file は招待した相手の手元の点検 #collaborator-check-python だけ) + 共著者が主筆の file の既存部分 (計算・文・記号) を直すとき (#primary-author-consent) + 利用者が user 単位でも入れている hook を共有リポの project の hook に写して配るとき (#project-copy-of-user-hook) + 共有リポの記録に本人の言葉を逐語で写すとき・成果物の file 名を付けるとき (#owner-quote-withheld-reason)
 category: infra
 summary: 共有リポ固有規約
 -->
@@ -191,6 +191,8 @@ collaborator 本人の連絡先（メールアドレス等）や PII を layer 2
 **判断基準にしないもの 2 つ**: (a) **collaborator への信頼度** — 基準 1–3 は collaborator を完全に信頼していても成立する（機能ゼロ・履歴永続・本人期待は信頼と独立）。信頼度を論拠にすると「信頼できるから書く」の per-case 例外が増殖する。(b) **「private だから安全」** — private は現在の visibility 状態であって履歴の性質（基準 2）を変えない。
 
 運用は**一律ルール**にする: repo の CLAUDE.md に「連絡先・PII は書かない」を例外なしで書き、基準 1 の機能テストを pass するデータが現れた時にだけ明示的に緩める（per-case の例外判断は erode する）。所有者側の連絡先 SoT（個人層）には出典・取得日を残す。
+
+<a id="owner-quote-withheld-reason"></a>**決定の記録に本人の言葉を逐語で写すときも、 その repo が書かないと決めた中身 (理由・本人や第三者の事情) が言葉に入っていないかを当てる** — 決定は発言のまま記録するのが既定 ([`actor-attribution.md#decision-state-at-record-time`](actor-attribution.md#decision-state-at-record-time)) だが、 念押しの一言には、 その repo で伏せている理由がそのまま入っていることがある。 入っていれば、 共有リポにはその部分を外した言葉 (「…」 で略す・中身を言わない言い換え) を書き、 全文は所有者の非公開の記録に置いてそこを指す。 commit message も同じ (共同編集者に見え、 後から消すには履歴の書き換えが要る)。 成果物・置き場所の file 名にも理由の語を入れない = 記録がその名前を写す (実測: 念押しの一言を逐語で写し、 file 名にもその語を入れて、 その repo では書かないと決めていた理由が、 共同編集者に見える本文と commit message に入った。 本文と file 名は次の commit で直したが、 commit message は履歴に残った)。
 
 ## <a id="primary-author-consent"></a>共著者が主筆の file の既存部分を直すときは、 主筆の了解を先に取る
 

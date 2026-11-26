@@ -12,6 +12,9 @@
     3. 書いた file の長さが「残す区間の和 − crossfade × (継ぎ目の数)」 と 0.02 秒以内で合うかを確かめる
     4. --json に残す区間と時刻の写像を書く。 --to-in / --to-out で出来上がりの秒 ⇄ 元の秒を直す
        (出来上がりを聞いて決めた次の切る所を元の時刻の表に足すとき = 元の時刻で表を持てば、 作り直しても表は変わらない)
+    5. --window a-b = 元の時刻の窓 a〜b だけを、 表の切る所を当ててつないで書く (持ち主に切った形を前後つきで聞いてもらう試聴用。
+       --as-is を付けると何も切らない = 録音のまま)。 継ぎ目が聞く音の何秒にあるかも出す。 出力の形式は --out の拡張子で決まる
+       (.m4a = AAC / .wav / それ以外 = FLAC)。 試聴の手順の正本 = conventions/podcast-audio-finishing.md#listen-cut-in-context
 
 使い方:
     python3 audio-apply-cuts.py <in> --cuts '0:00:00-0:00:15, 0:21:10.5-0:23:40' --out <out.flac> [--json <map.json>]
@@ -19,6 +22,8 @@
     python3 audio-apply-cuts.py <in> --cuts '…' --dry-run                        # 残す区間と出来上がりの長さだけ
     python3 audio-apply-cuts.py <in> --cuts '…' --to-in 1200.5 1500           # 出来上がりの秒 → 元の秒
     python3 audio-apply-cuts.py <in> --cuts '…' --to-out 1800                  # 元の秒 → 出来上がりの秒
+    python3 audio-apply-cuts.py <in> --cuts '…' --window 0:25:40-0:26:50 --out try.m4a   # 窓だけ、 切ってつないだ形
+    python3 audio-apply-cuts.py <in> --as-is --window 0:25:40-0:26:50 --out raw.m4a       # 窓だけ、 録音のまま
     python3 audio-apply-cuts.py --selftest
 
 限界: 抜いた所の前後の声は crossfade で 0.1 秒重なる = 切る所は音の谷 (語と語の間の静かな所) に置く
@@ -114,6 +119,41 @@ def to_in(x: float, keeps: list[tuple[float, float]], xfade: float = XFADE) -> f
     return round(keeps[-1][1], 3) if keeps else x
 
 
+def window_keeps(keeps: list[tuple[float, float]], a: float, b: float,
+                 xfade: float = XFADE) -> tuple[list[tuple[float, float]], int]:
+    """残す区間を元の時刻の窓 a〜b に切り詰める。 crossfade に足りない (2 × xfade より短い) 切れ端は落とし、 その数を返す。"""
+    out, dropped = [], 0
+    for ka, kb in keeps:
+        lo, hi = max(ka, a), min(kb, b)
+        if hi <= lo:
+            continue
+        if hi - lo < 2 * xfade:
+            dropped += 1
+            continue
+        out.append((lo, hi))
+    return out, dropped
+
+
+def seams(keeps: list[tuple[float, float]], xfade: float = XFADE) -> list[tuple[float, float, float]]:
+    """継ぎ目ごとに (出来上がりの秒 = crossfade の真ん中, 飛ぶ前の元の秒, 飛んだ先の元の秒)。"""
+    res, acc = [], 0.0
+    for k, (a, b) in enumerate(keeps):
+        if k > 0:
+            res.append((round(acc - xfade / 2, 3), keeps[k - 1][1], a))
+            acc -= xfade
+        acc += b - a
+    return res
+
+
+def codec_args(out: Path) -> list[str]:
+    ext = out.suffix.lower()
+    if ext in (".m4a", ".aac", ".mp4"):
+        return ["-c:a", "aac", "-b:a", "128k"]
+    if ext == ".wav":
+        return ["-c:a", "pcm_s16le"]
+    return ["-c:a", "flac"]
+
+
 def probe_duration(path: Path) -> float:
     out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
                          capture_output=True, text=True, check=True).stdout.strip()
@@ -133,7 +173,7 @@ def render(src: Path, keeps: list[tuple[float, float]], out: Path, xfade: float 
         script = f.name
     try:
         subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
-                        "-filter_complex_script", script, "-map", f"[{prev}]", "-c:a", "flac", str(out)], check=True)
+                        "-filter_complex_script", script, "-map", f"[{prev}]", *codec_args(out), str(out)], check=True)
     finally:
         Path(script).unlink(missing_ok=True)
 
@@ -153,6 +193,12 @@ def selftest() -> int:
     for t in (5.0, 25.0, 40.0, 61.0, 99.0):                            # 残す区間の中は往復で戻る
         assert abs(to_in(to_out(t, keeps), keeps) - t) < 1e-3, t
     assert keeps_from_cuts([(0.0, 5.0)], 10.0) == [(5.0, 10.0)]        # 頭を切る
+    w, d = window_keeps(keeps, 5.0, 40.0)                              # 窓 = 試聴
+    assert w == [(5.0, 10.0), (20.0, 30.0), (35.0, 40.0)] and d == 0, (w, d)
+    assert window_keeps(keeps, 25.0, 28.0) == ([(25.0, 28.0)], 0)
+    assert window_keeps(keeps, 9.95, 25.0) == ([(20.0, 25.0)], 1)       # crossfade に足りない切れ端は落として数える
+    assert seams(w) == [(4.95, 10.0, 20.0), (14.85, 30.0, 35.0)], seams(w)
+    assert codec_args(Path("x.m4a"))[1] == "aac" and codec_args(Path("x.flac"))[1] == "flac"
     for bad in ("5-3", "1-4, 3-6", "abc"):
         try:
             parse_cuts(bad)
@@ -160,7 +206,7 @@ def selftest() -> int:
             pass
         else:
             raise AssertionError(bad)
-    msg = "✅ selftest: 区間の読み・残す区間・長さ・時刻の写像 (往復)"
+    msg = "✅ selftest: 区間の読み・残す区間・長さ・時刻の写像 (往復)・窓と継ぎ目"
     try:                                                               # ffmpeg があれば実際に作って長さを確かめる
         with tempfile.TemporaryDirectory() as d:
             src, out = Path(d) / "tone.flac", Path(d) / "cut.flac"
@@ -169,6 +215,9 @@ def selftest() -> int:
             k = keeps_from_cuts(parse_cuts("1-2, 3.5-4"), probe_duration(src))
             render(src, k, out)
             assert abs(probe_duration(out) - out_length(k)) < 0.02, (probe_duration(out), out_length(k))
+            kw, _ = window_keeps(k, 0.5, 5.0)                          # 窓だけを切ってつなぐ
+            render(src, kw, out)
+            assert abs(probe_duration(out) - out_length(kw)) < 0.02, (probe_duration(out), out_length(kw))
         msg += " + ffmpeg で作った長さ"
     except FileNotFoundError:
         msg += " (ffmpeg が無いので作る試験は飛ばした)"
@@ -187,21 +236,44 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--to-in", nargs="+", type=float, metavar="出来上がりの秒")
     ap.add_argument("--to-out", nargs="+", type=float, metavar="元の秒")
+    ap.add_argument("--window", metavar="a-b", help="元の時刻の窓 a〜b だけを書く (試聴用)")
+    ap.add_argument("--as-is", action="store_true", help="--window で、 何も切らずに書く (録音のまま)")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
-    if not a.src or not (a.cuts or a.cuts_file):
+    if a.as_is and not a.window:
+        ap.error("--as-is は --window と使う")
+    if not a.src or not (a.cuts or a.cuts_file or a.as_is):
         ap.error("入力と --cuts (か --cuts-file) が要る")
-    text = a.cuts if a.cuts else Path(a.cuts_file).read_text(encoding="utf-8")
+    text = a.cuts if a.cuts else (Path(a.cuts_file).read_text(encoding="utf-8") if a.cuts_file else "")
     try:
-        cuts = parse_cuts(text)
+        cuts = [] if a.as_is else parse_cuts(text)
+        win = parse_cuts(a.window)[0] if a.window else None
     except ValueError as e:
         print(f"❌ {e}", file=sys.stderr)
         return 2
     src = Path(a.src)
     dur = probe_duration(src)
     keeps = keeps_from_cuts(cuts, dur)
+    if win:
+        if not a.out:
+            ap.error("--window には --out が要る")
+        kw, dropped = window_keeps(keeps, win[0], min(win[1], dur), a.xfade)
+        if not kw:
+            print(f"❌ 窓 {hms(win[0])}-{hms(win[1])} に残す音が無い (全部が切る所の中)", file=sys.stderr)
+            return 2
+        out = Path(a.out)
+        render(src, kw, out, a.xfade)
+        got, want_w = probe_duration(out), out_length(kw, a.xfade)
+        ok = abs(got - want_w) < 0.02
+        print(f"{'✅' if ok else '❌'} {out}: 元 {hms(win[0])}-{hms(win[1])} {'(録音のまま)' if a.as_is else '(切ってつないだ形)'} "
+              f"= 聞く音 {hms(got)} (期待 {hms(want_w)})")
+        for x, fr, to in seams(kw, a.xfade):
+            print(f"  継ぎ目 = 聞く音の {hms(x)} (元 {hms(fr)} → {hms(to)} へ飛ぶ)")
+        if dropped:
+            print(f"  ⚠️ crossfade に足りない短い切れ端 {dropped} 個を落とした (窓の端か、 切る所の間の 0.2 秒未満)")
+        return 0 if ok else 1
     want = out_length(keeps, a.xfade)
     if a.to_in or a.to_out:
         for x in a.to_in or []:
