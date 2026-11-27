@@ -518,6 +518,7 @@
 - **[lib/compressed_jsonl.py](lib/compressed_jsonl.py)** — 会話記録の .jsonl と、 zstd で圧縮した .jsonl.zst を、 同じ形で 1 行ずつ読む。
 - **[lib/config_dir_auth.py](lib/config_dir_auth.py)** — Claude Code の設定フォルダ (CLAUDE_CONFIG_DIR) の認証が切れているかを、 `claude` を呼ばずに読む共有判定。
 - **[lib/desktop_sessions.py](lib/desktop_sessions.py)** — the Claude desktop app's own record of a Code session: the model and effort it will run the next turn on, its title and the session that started it.
+- **[lib/dialogue_record.py](lib/dialogue_record.py)** — 研究の対話係の提出を受けた後、 研究の現在地が project の記録に写ったかを掲示板の event と git から判定する部品。
 - **[lib/docx_paragraphs.py](lib/docx_paragraphs.py)** — docx の XML (word/document.xml ほか) を段落に切る共有の部品。 自己終了の空段落 `<w:p .../>` を 1 段落として数え、 textbox の中の段落を外の段落と重ねない。
 - **[lib/find-personal-layer.sh](lib/find-personal-layer.sh)** — `.claude-personal-layer` marker 検出 (setup.sh Step 5a と sync、 foreign user は空を返す)
 - **[lib/git_blob.py](lib/git_blob.py)** — git の blob を worktree に出したときの中身で読む helper (git-crypt で暗号化される path も平文で)。

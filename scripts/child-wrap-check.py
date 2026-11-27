@@ -123,7 +123,10 @@ Usage:
   child-wrap-check.py --hook-accept --board-root … [--rule …]   PostToolUse(Bash) の hook 用: `board.py accept` で自分の子の
         依頼を受け取った直後に、 子の状態に合わせた 1 行を返す。 締めを渡した依頼 (scripts/wrap-delegate-spec.py の骨の印が
         依頼書・提出・その turn に読んだ file にある) の受け取りなら、 accept_lines の行 (依頼元の --check の 1 行と、 提出の
-        「見ていない」 の行) も足す
+        「見ていない」 の行) も足す。 研究の対話係の提出が project の repo の外にあり、 提出の後に project の SESSION の現在地の
+        行が変わっていない依頼の受け取りなら (受け取ったのが誰でも)、 現在地を project の記録に写す 1 行も足す
+        (判定 = lib/dialogue_record.py、 project の repo を探す dir = env CHILD_WRAP_WORKSPACE か claude-config の親。
+        規則 = conventions/closing-sweep.md#dialogue-list-intake)
   child-wrap-check.py --hook-stop --board-root … [--rule …] [--stop-mode off|observe|block]   Stop の hook 用: due / wrapped の
         子を残したまま turn を終えると、 子ごとに 1 回だけ止める (observe = 記録だけ。 既定 = env CHILD_FINISHED_STOP か observe)
   --no-wrap-needed (wrap の記録を判定に入れない) / --json / --selftest
@@ -1979,7 +1982,28 @@ def hook_accept(inp: dict, roots: list[str], rule: str, extra: str = "") -> str:
         lines += wd.accept_lines(rid, events, wd.read_paths_since(str(inp.get("transcript_path") or ""), wd.submit_time(rid, events)))
     except Exception:
         pass
+    # A research-dialogue submission whose list sits outside the project repo = the conductor's turn to copy the research's
+    # current state (the person's words, the stopping point) into the project's SESSION and ruling ledger
+    # (conventions/closing-sweep.md#dialogue-list-intake; predicate = lib/dialogue_record.py). Who accepts does not matter:
+    # a reviewer's accept is a receipt of the object, not of the record.
+    try:
+        dr = _dialogue_record()
+        lines += [dr.gap_line(g) for g in dr.gaps(events, dialogue_workspace(roots), request_ids={rid})]
+    except Exception:
+        pass
     return "\n".join(lines)
+
+
+def _dialogue_record():
+    spec = _ilu.spec_from_file_location("dialogue_record", os.path.join(HERE, "lib", "dialogue_record.py"))
+    m = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def dialogue_workspace(roots: list[str]) -> str:
+    """The dir that holds the project repos: env CHILD_WRAP_WORKSPACE, else the parent of claude-config."""
+    return os.environ.get("CHILD_WRAP_WORKSPACE") or os.path.dirname(os.path.dirname(HERE))
 
 
 def _wrap_delegate():
@@ -3029,6 +3053,30 @@ def selftest() -> int:
         ok("hook-accept: someone else's child → silent", hook_accept(acc, [board], "") == "")
         acc["session_id"] = bp_c
         ok("hook-accept: --extra text rides on the 'fold' line", "聞かない" in hook_accept(acc, [board], "", "畳む前に聞かない"))
+        # a research-dialogue submission kept outside the project repo → the 'copy into the project's record' line
+        ws = os.path.join(td, "ws")
+        os.makedirs(os.path.join(ws, "proj"))
+        subprocess.run(["git", "init", "-q", os.path.join(ws, "proj")], capture_output=True)
+        with open(os.path.join(ws, "proj", "SESSION.md"), "w", encoding="utf-8") as fh:
+            fh.write("- 📌 停止点: 2 節\n")
+        genv = dict(os.environ, GIT_AUTHOR_DATE="2026-01-01T00:00:00Z", GIT_COMMITTER_DATE="2026-01-01T00:00:00Z")
+        subprocess.run(["git", "-C", os.path.join(ws, "proj"), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                        "add", "SESSION.md"], capture_output=True, env=genv)
+        subprocess.run(["git", "-C", os.path.join(ws, "proj"), "-c", "user.name=t", "-c", "user.email=t@example.invalid",
+                        "commit", "-q", "-m", "s"], capture_output=True, env=genv)
+        rd = "20260102T020000Z-claude-d1a10"
+        event("request", rd, "2026-01-02T02:00:00", task="parent", sid=bp_c, project={"key": "proj"},
+              assignee={"agent": "codex", "session_id": "role-proj-dialogue"})
+        event("submit", rd, "2026-01-02T03:00:00", sid="role-proj-dialogue", deliverables=["prefs/plans/x-dialogue.md"])
+        event("accept", rd, "2026-01-02T03:10:00", sid="role-proj-reviewer")
+        os.environ["CHILD_WRAP_WORKSPACE"] = ws
+        acc["tool_input"]["command"] = f"python3 board.py accept --request {rd}"
+        dl = hook_accept(acc, [board], "")
+        ok("hook-accept: a dialogue submission outside the project → the 'copy into proj/SESSION.md' line",
+           "研究の対話係の提出" in dl and "proj/SESSION.md" in dl and "dialogue-record: skip" in dl)
+        event("note", rd, "2026-01-02T03:20:00", sid=bp_c, summary="dialogue-record: skip 停止点は前のまま正しい")
+        ok("hook-accept: a 'dialogue-record: skip <reason>' note → silent", "研究の対話係の提出" not in hook_accept(acc, [board], ""))
+        del os.environ["CHILD_WRAP_WORKSPACE"]
         ANSWERED_GRACE_MIN = DEFAULT_ANSWERED_GRACE_MIN
         ok("grace 10 (the default): answered 10.5 minutes ago → due",
            {r["local"]: r for r in finished(bp_l, [board], as_of="2026-01-02T01:10:30")}[cases["said"][0]]["state"] == "due")
