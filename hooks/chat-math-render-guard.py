@@ -26,6 +26,9 @@
   - `\\[…\\]` は本体が数式にしない (常に生表示)。 表の行 (`|` で始まる行) の数式の中の `|` はセルの区切りに取られる。
   - 返事全体の gate (`ri`): `\\(`+`\\)` が無く、 `$…$` も `ti` の形 (記号を含む等) で 1 つも無い返事では KaTeX 自体を
     読まないので、 その返事の `$…$` は全部生表示。
+  本体に無い検査 (`CODE_SPAN`): inline code (backtick) の中身が丸ごと 1 つの `\\(…\\)` で、 code の外に書けば描かれる式
+    (中身が `…` だけの書き方の言及は除く) なら報告する。 本体は code の中を見ないので、 式は生の TeX のまま出る
+    (実測: 規則の例の ` \\( … \\)` を backtick ごと写した返事)。 `$…$` の code は見ない (TeX の source の引用が多い)。
   写していないもの: 1 行の `$$…$$` と複数行の `$$` block は見ない (block 側の判定 `an`/`Yt`/`Zt` は読み切れておらず、
   実測では `\\\\0` を含む 1 行の pmatrix も描かれた = 止めると誤検出になる)。 数式を含む行の Markdown の
   構造 (見出し・箇条書き・引用) は本体も inline parser に同じ文字列を渡すので区別しない。 guard に落ちた `$` の閉じが
@@ -378,6 +381,7 @@ HINT = {
     "DL_NOSYM": "記号が無い (`$P_D$` `$E_I$` `$[0,1]$` `$xy$`): 添字は `{}` を付ける (`$E_{I}$`)、 数・区間は地の文 (`\\(…\\)` にしても記号が無ければ同じく落ちる)",
     "DL_PROSE": "`{}` の外に英字 4 連続・CJK・`%` がある: `\\(…\\)` にするか `\\mathrm{…}` で包む",
     "TABLE_PIPE": "表のセルの中の数式に `|` がある (セルの区切りに取られる): `\\mid` / `\\vert` にするか表の外へ",
+    "CODE_SPAN": "式が backtick (inline code) の中にある = code の中は描かれず生の TeX のまま出る: backtick を外し、 `\\(` の直前に半角空白を置いて書く (TeX の書き方そのものを code で示したのなら、 追記はその旨の 1 行でよい)",
     "MSG_NO_KATEX": "返事に `\\(…\\)` が無く、 `$…$` も記号を含む形が 1 つも無い: この返事の `$…$` は全部生表示になる",
 }
 
@@ -428,6 +432,20 @@ def _has_display(text: str) -> bool:
     return len(re.findall(r"^ {0,3}\$\$+\s*$", text, re.M)) >= 2
 
 
+def code_span_math(content: str):
+    """inline code の中身が、 code の外に書けば描かれる 1 つの `\\(…\\)` か。 返り値 = (式, 中身が空白で始まるか) か None。
+    中身が `…` だけの `\\(…\\)` (書き方の言及) と、 外に書いても guard に落ちる式 (`\\(K\\)`) は None。"""
+    core = content.strip()
+    if not (core.startswith("\\(") and core.endswith("\\)")) or core.count("\\(") != 1 or core.count("\\)") != 1:
+        return None
+    body = core[2:-2]
+    if not body.strip() or body.strip() in ELLIPSIS_BODY:
+        return None
+    if backslash_guard(" " + core, 1, body) is not None:
+        return None
+    return core, content[:1] == " "
+
+
 def _scan_inline(text: str, lo: int, hi: int, lineno: int, table: bool, findings: list[dict]) -> None:
     u = lo
     skip_bs_until = -1          # 本体 `p`: この行で閉じの無い `\(` を見た後は `\(` を見ない
@@ -446,6 +464,11 @@ def _scan_inline(text: str, lo: int, hi: int, lineno: int, table: bool, findings
                 while j < hi and text[j] == "`":
                     j += 1
                 close = text.find(run, j, hi)
+            if close != -1:
+                m = code_span_math(text[k:close])
+                if m:
+                    findings.append({"line": lineno, "at": u, "code": "CODE_SPAN", "span": text[u:close + len(run)],
+                                     "lead": m[1]})
             u = close + len(run) if close != -1 else k
             continue
         if ch == "$":
@@ -602,7 +625,7 @@ def _non_math_dollar(text: str, u: int, hi: int, close=None) -> bool:
 NUMBER_ONLY = re.compile(r"-?\d+(?:[.,]\d+)*")
 SCRIPT_ONE = re.compile(r"(?<!\\)([_^])([A-Za-z0-9])")
 FIXABLE = {"DL_LONG", "DL_NOSYM", "DL_SPACE", "DL_OPEN", "DL_NEXT", "DL_PROSE", "DL_PAREN", "DL_BRACE", "DL_TAIL",
-           "DL_UNBAL", "BS_PREV", "BS_NOSYM", "BS_FLAG", "BRACKET", "TABLE_PIPE"}
+           "DL_UNBAL", "BS_PREV", "BS_NOSYM", "BS_FLAG", "BRACKET", "TABLE_PIPE", "CODE_SPAN"}
 MATHY = re.compile(r"[\\^_]")
 
 
@@ -619,6 +642,15 @@ def _line_findings(line: str) -> list[dict]:
 def _fix_candidates(line: str, f: dict):
     """(開始, 終了, [置き換えの候補]) か None。"""
     code, at, span = f["code"], f.get("at", -1), f["span"]
+    if code == "CODE_SPAN":
+        # backtick を外すのは、 中身が空白で始まる形 (規則の例 ` \( … \)` を写した形) だけ。 他の code は書き手の意図が読めない
+        if at < 0 or not f.get("lead") or line[at:at + len(span)] != span:
+            return None
+        m = code_span_math(span.strip("`"))
+        if not m:
+            return None
+        sp = "" if at == 0 or line[at - 1] in HT_BEFORE_BS else " "
+        return at, at + len(span), [sp + m[0]]
     if at < 0 or line[at:at + 1] not in ("$", "\\"):
         return None
 
@@ -889,7 +921,7 @@ def build_reason(findings: list[dict], suggestions: dict | None = None) -> str:
             p = f.get("prev")
             prev = " (直前の文字 = %s)" % ("文頭" if p is None else repr(p))
         fixed = suggestions.get(f["span"])
-        tail = " → 直した形 `%s`" % fixed.strip() if fixed else ""
+        tail = " → 直した形 (backtick に入れずにそのまま書く): %s" % fixed.strip() if fixed else ""
         lines.append("  - L%d %s: %s%s%s" % (f["line"], f["code"], span, prev, tail))
         by_code[f["code"]] = by_code.get(f["code"], 0) + 1
     if len(findings) > 40:

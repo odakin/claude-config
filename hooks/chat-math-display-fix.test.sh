@@ -53,6 +53,9 @@ disp "A8 code block の中は触らない" $D $'例:\n```\n$E_I$ と \\(K\\)\n``
 disp "A9 金額は触らない" $D 'Opus は $4/$20、 Fable は $10/$50 で、 半額以下です。' ''
 disp "A10 描ける式だけの返事は何も出さない" $D '時刻 $t$ と \( x_{0}\in U \) を取る。' ''
 disp "A11 CLI の session は見ない" cli '定義を残す: $E_I$ の件。' ''
+disp "A18 空白で始まる code の式は backtick を外す" $D '分散は ` \( \sigma^{2}=\langle x^{2}\rangle-\langle x\rangle^{2} \)` です。' '分散は \( \sigma^{2}=\langle x^{2}\rangle-\langle x\rangle^{2} \) です。'
+disp "A19 空白で始まらない code の式は触らない (Stop が止める)" $D '値は `\( x^{2} \)` です。' ''
+disp "A20 書き方の言及の code は触らない" $D '式は ` \( … \)` で書く。' ''
 out="$(jq -n '{session_id:"s", index:0, final:true, delta:"定義: $E_I$"}' | env -u CLAUDE_CODE_ENTRYPOINT CHAT_MATH_DISPLAY_FIX_ANY=1 python3 "$DISP" 2>&1)"
 grep -qF 'E_{I}' <<< "$out" && ok "A12 CHAT_MATH_DISPLAY_FIX_ANY は entrypoint を問わない" || ng "A12" "$out"
 # 行のまとまりをまたぐ code block (対話の端末)
@@ -92,7 +95,7 @@ stop() {
 
 t="$TMP/b1.jsonl"; mkt "$t" '定義を残す: $E_I$ の件。'
 stop "B1 追記を求め、 全文は出し直させない" 1 "$t" false "返事の全文は出し直さない"
-stop "B2 直した形を添える" 1 "$t" false '直した形 `$E_{I}$`'
+stop "B2 直した形を添える (backtick に入れずに)" 1 "$t" false '直した形 (backtick に入れずにそのまま書く): $E_{I}$'
 for case in "B3 金額|Opus は \$4/\$20、 Fable は \$10/\$50 で、 半額以下です。" \
             "B4 shell の変数|消した 1: 「bmps=(\$CACHE/*.bmp(N)) # zsh (N) = nullglob」→「bmps=(\$CACHE/*.png(N))」" \
             "B5 題に入った \$\$|session「Close \$\$ and \\\$ gaps in guard」 を読んだ。" \
