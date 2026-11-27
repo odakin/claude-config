@@ -39,6 +39,14 @@
   session-reply-knowledge-report.py abcd1234 --check dispositions.txt --summary   # 結果の行だけ (別の窓 = 検収係で照らすとき、 本人の発言を出さない)
   session-reply-knowledge-report.py abcd1234 --delegated [--check …]  # 締めを渡された worker が回す (P も並べる・照合する)
   session-reply-knowledge-report.py abcd1234 --json
+  session-reply-knowledge-report.py --codex <Codex の session の id か rollout の path> [--check …]   # Codex の会話記録を読む
+        (response_item の user / assistant の message と compacted の要約。 app が user 役で差し込む文 〔AGENTS.md の指示・
+        環境の文脈・開いた頁・hook の prompt〕 は turn にしない。 探す dir = $CODEX_HOME か ~/.codex の sessions と
+        archived_sessions、 --codex-dir で替える。 圧縮した .jsonl.zst は lib/compressed_jsonl.py で展開する。
+        実測: Codex の締めでこの道具が回らず、 手でまとめた一覧で本人の問いの逐語と答えの表が落ちた = closing-sweep.md#codex-reply-knowledge)
+  session-reply-knowledge-report.py <id> --owner-verbatim --check FILE   # 研究の対話係の締め: 問いでない発言も候補に並べ
+        (--delegated と同じ)、 本人の発言の候補の「記録済み」「足した」 は根拠の file (commit なら差分) に発言が逐語で在ることも
+        求める (空白は無視、 長い発言は頭の 300 字。 closing-sweep.md#dialogue-window-sweep)
   session-reply-knowledge-report.py --hook-stop < <Stop hook の JSON>   # 締め (/wrap) の turn で照合が通っていなければ 1 回差し戻す
   session-reply-knowledge-report.py --selftest
 一覧の 1 行は 200 字以内 (cut で切って読んでも id と問いが残る)。
@@ -211,6 +219,121 @@ def load(path):
         if isinstance(o, dict):
             out.append(o)
     return out
+
+
+# ---- Codex の会話記録 (rollout) の読み口 (closing-sweep.md#codex-reply-knowledge)
+# app が本人の発言の前後に user 役で差し込む文 (本人の発言ではない = turn の頭にしない。 実測の rollout の頭の形)
+CODEX_NOT_HEADS = ("# AGENTS.md instructions", "<environment_context", "<external_codex_apps_open_page", "<hook_prompt",
+                   "<user_instructions", "<skill", "<turn_aborted", "<subagent_notification", "<INSTRUCTIONS>")
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
+def codex_entries(lines):
+    """Codex の rollout の行を、 scan() が読む Claude の記録の形に写す (本人の発言・返事の文・圧縮の印だけ)。
+    response_item の message (role = user / assistant) と compacted (圧縮の要約) を読み、 道具の呼び出し・思考・developer 役は読まない。"""
+    out = []
+    for line in lines:
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(o, dict):
+            continue
+        ts, p = o.get("timestamp", ""), o.get("payload") if isinstance(o.get("payload"), dict) else {}
+        if o.get("type") == "compacted":
+            out.append({"type": "system", "subtype": "compact_boundary", "timestamp": ts})
+            out.append({"type": "user", "isCompactSummary": True, "timestamp": ts,
+                        "message": {"content": str(p.get("message") or "")}})
+            continue
+        if o.get("type") != "response_item" or p.get("type") != "message":
+            continue
+        text = "\n".join(x["text"] for x in p.get("content") or []
+                         if isinstance(x, dict) and isinstance(x.get("text"), str)).strip()
+        if not text:
+            continue
+        if p.get("role") == "user":
+            human = not text.startswith(CODEX_NOT_HEADS)
+            out.append({"type": "user", "timestamp": ts, "message": {"content": text},
+                        "origin": {"kind": "human" if human else "harness"}})
+        elif p.get("role") == "assistant":
+            out.append({"type": "assistant", "timestamp": ts, "message": {"content": [{"type": "text", "text": text}]}})
+    return out
+
+
+def codex_dirs():
+    home = Path(os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex"))
+    return [home / "sessions", home / "archived_sessions"]
+
+
+def codex_paths(ident, dirs=None):
+    """記録の file (path を渡せばそれ) か、 session の id (完全か先頭の数文字) に当たる rollout の file。
+    同じ session の平文 (.jsonl) と圧縮 (.jsonl.zst) は両方返す (読むときに同じ行を 1 回にする)。"""
+    p = Path(ident).expanduser()
+    if p.is_file():
+        return [p]
+    found = []
+    for d in dirs or codex_dirs():
+        d = Path(d)
+        if not d.is_dir():
+            continue
+        for f in sorted(d.rglob("*.jsonl*")):
+            m = UUID.search(f.name)
+            if (f.name.endswith(".jsonl") or f.name.endswith(".jsonl.zst")) and m and m.group(0).startswith(ident.lower()):
+                found.append(f)
+    ids = {UUID.search(f.name).group(0) for f in found}
+    if len(ids) > 1:
+        raise ValueError("id の頭 %s に当たる Codex の session が %d 個ある (完全な id を渡す): %s" % (ident, len(ids), ", ".join(sorted(ids))))
+    return found
+
+
+def codex_load(paths):
+    """rollout の file 群を読む (圧縮 → 平文の順、 両方にある同じ行は 1 回だけ)。 圧縮を読めない機械では ValueError。"""
+    import compressed_jsonl as cj  # lib/ (sys.path に入れてある)
+    lines, seen = [], set()
+    tally = __import__("collections").Counter()
+    for f in sorted(paths, key=lambda q: not q.name.endswith(".zst")):
+        with cj.open_lines(f, errors="replace", tally=tally) as fh:
+            for line in fh:
+                key = line.rstrip("\r\n")
+                if len(paths) > 1:
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                lines.append(key)
+    msg = cj.report(tally)
+    if msg:
+        raise ValueError(msg)
+    return codex_entries(lines)
+
+
+# ---- 研究者の発言が根拠の file に逐語で在るか (--owner-verbatim。 研究の対話係の締め = closing-sweep.md#dialogue-window-sweep)
+OWNER_WORDS_MAX = 300  # 長い発言は頭のこの字数 (空白を除いて) を照らす
+
+
+def _squash(s):
+    return re.sub(r"\s+", "", s or "")
+
+
+def evidence_text(ev, base):
+    """根拠 (path:行 / path:行@commit / path#anchor / <repo の dir>@<commit>) が指す file の全文 (commit なら差分) か ''。"""
+    base = Path(base)
+    m = re.match(r"^(.+?)@([0-9a-f]{7,40})$", ev)
+    if m and (base / m.group(1)).is_dir():
+        return _git_out(["show", "--format=%B", m.group(2)], base / m.group(1)) or ""
+    m2 = re.match(r"^(.+?):\d+(?:-\d+)?@([0-9a-f]{7,40})$", ev)
+    if m2:
+        return version_text(base / m2.group(1), m2.group(2))[1] or ""
+    f = base / re.split(r"#|:(?=\d)", ev, maxsplit=1)[0]
+    try:
+        return f.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def owner_words_missing(head, ev, base):
+    """head (本人の発言。 続けて打った発言は ' / ' でつないである) のうち、 根拠の file に逐語で無いものの list。"""
+    text = _squash(evidence_text(ev, base))
+    return [part for part in head.split(" / ") if _squash(part) and _squash(part)[:OWNER_WORDS_MAX] not in text]
 
 
 def tail_entries(path, max_bytes=4_000_000):
@@ -494,9 +617,11 @@ def filtered_line_moved(f, n, since):
     return MOVED % "暗号化などの filter のある file = 処分の時の版の同じ行と文が違う"
 
 
-def check(cands, disp, base, since=None):
+def check(cands, disp, base, since=None, owner_verbatim=False):
     """rows = [(候補, 処分, 通ったか, 見せる文, 読み直す印)]。 印 = True (「記録済み」 の根拠の行そのものが未決の書き方) か、
-    根拠の行が後で変わった知らせの文 (since = 処分の file の最後の commit の時刻。 None = 見ない)。"""
+    根拠の行が後で変わった知らせの文 (since = 処分の file の最後の commit の時刻。 None = 見ない)。
+    owner_verbatim = 本人の発言の候補 (Q・R・P) の「記録済み」「足した」 は、 根拠の file (commit なら差分) に発言が逐語で
+    在ることも求める (空白は無視。 研究の対話係の締め = 発言を要約で残さない)。"""
     rows, bad = [], 0
     for c in cands:
         status, ev = disp.get(c["id"], (None, ""))
@@ -506,6 +631,10 @@ def check(cands, disp, base, since=None):
             ok, shown = len(ev) >= 4, ("理由: " + ev) if len(ev) >= 4 else "記録しない理由が無い"
         else:
             ok, shown = resolve_evidence(ev, base) if ev else (False, "根拠が無い")
+            if ok and owner_verbatim and c["kind"] != "S":
+                missing = owner_words_missing(c["head"], ev, base)
+                if missing:
+                    ok, shown = False, "研究者の発言が根拠に逐語で無い: 「%s」 (根拠 = %s)" % (_one_line(missing[0], 60), ev)
         warn = bool(ok and status == "recorded" and shown.startswith("行: ") and PENDING_EVIDENCE.search(shown))
         if ok and not warn and status in ("recorded", "added"):
             warn = moved_since(ev, base, since) or False
@@ -516,18 +645,30 @@ def check(cands, disp, base, since=None):
 
 
 def report(session, pdirs, args):
-    paths = []
-    for p in ssr.find_main_transcripts(pdirs, session):
-        if os.path.realpath(p) not in [os.path.realpath(x) for x in paths]:
-            paths.append(p)
-    if not paths:
-        print("記録が見つからない: session=%s (見た dir: %s)" % (session, ", ".join(map(str, pdirs))))
-        return 2
-    cands, n_comp = [], 0
-    for p in paths:
-        c, n = scan(load(p), delegated=args.delegated)
-        cands += c
-        n_comp += n
+    owner_verbatim = getattr(args, "owner_verbatim", False)
+    delegated = args.delegated or owner_verbatim  # 対話係の締め = 問いでない発言も候補に並べる
+    paths, cands, n_comp = [], [], 0
+    if getattr(args, "codex", None):
+        try:
+            paths = codex_paths(args.codex, [Path(d) for d in args.codex_dir] if args.codex_dir else None)
+            if not paths:
+                print("Codex の記録が見つからない: %s (見た dir: %s)" % (args.codex, ", ".join(map(str, args.codex_dir or codex_dirs()))))
+                return 2
+            cands, n_comp = scan(codex_load(paths), delegated=delegated)
+        except ValueError as e:
+            print("Codex の記録を読めない: %s" % e)
+            return 2
+    else:
+        for p in ssr.find_main_transcripts(pdirs, session):
+            if os.path.realpath(p) not in [os.path.realpath(x) for x in paths]:
+                paths.append(p)
+        if not paths:
+            print("記録が見つからない: session=%s (見た dir: %s)" % (session, ", ".join(map(str, pdirs))))
+            return 2
+        for p in paths:
+            c, n = scan(load(p), delegated=delegated)
+            cands += c
+            n_comp += n
     if args.show:
         hit = [c for c in cands if c["id"] == args.show]
         if not hit:
@@ -542,7 +683,7 @@ def report(session, pdirs, args):
     if args.check and getattr(args, "summary", False):
         # the result lines only: run in another window (a reviewer's), the full listing put the person's words there (measured)
         rows, bad, unknown = check(cands, read_dispositions(args.check), Path(args.base).expanduser(),
-                                   since=last_commit_time(args.check))
+                                   since=last_commit_time(args.check), owner_verbatim=owner_verbatim)
         marks = ["❌" if not ok else ("⚠️" if warn else "✅") for _c, _s, ok, _sh, warn in rows]
         print("処分の照合: 候補 %d 件、 欠け・根拠の無いもの %d 件、 根拠の行が未決の書き方か後で変わった %d 件 (⚠️ = 読み直す)"
               % (len(cands), bad, marks.count("⚠️")))
@@ -555,7 +696,7 @@ def report(session, pdirs, args):
     print("文脈圧縮: %d 回。 ⏪ = 圧縮より前 (今の context に無い、 全文 = --show <id>)" % n_comp)
     if args.check:
         rows, bad, unknown = check(cands, read_dispositions(args.check), Path(args.base).expanduser(),
-                                   since=last_commit_time(args.check))
+                                   since=last_commit_time(args.check), owner_verbatim=owner_verbatim)
         n_warn = sum(1 for r in rows if r[4])
         print("処分の照合: 候補 %d 件、 欠け・根拠の無いもの %d 件、 根拠の行が未決の書き方か後で変わった %d 件 (⚠️ = 読み直す)"
               % (len(cands), bad, n_warn))
@@ -570,7 +711,7 @@ def report(session, pdirs, args):
     kinds = [("S", "圧縮の要約が「未決」 と書いた項目 (締めの入力。 要約の文で済ませず、 1 件ずつ今の記録と照らす)"),
              ("Q", "本人の問いと、 その turn の返事"),
              ("R", "圧縮より前の、 問いでない依頼への返事")]
-    if args.delegated:
+    if delegated:
         kinds.append(("P", "最後の圧縮の後の、 問いでない依頼への返事 (--delegated = 締めを渡された worker の context に無い)"))
     for kind, title in kinds:
         cs = [c for c in cands if c["kind"] == kind]
@@ -795,6 +936,58 @@ def selftest():
         expect("--summary: 本人の発言と返事の文を出さない", any(w in out for w in ("簡潔", "符号", "no-such.md")), False)
         expect("--summary: Stop hook が読む件数の形は同じ", "欠け・根拠の無いもの" in out, True)
 
+    # Codex の rollout の読み口 (--codex) と研究者の発言の逐語の照合 (--owner-verbatim)。 中身は合成
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        sid = "0000aaaa-1111-7222-8333-444455556666"
+        day = base / "sessions" / "2099" / "01" / "02"
+        day.mkdir(parents=True)
+
+        def rec(t, role=None, text="", kind="message"):
+            if t == "compacted":
+                return {"timestamp": "2099-01-02T00:05:00Z", "type": "compacted", "payload": {"message": text}}
+            return {"timestamp": "2099-01-02T00:01:00Z", "type": "response_item",
+                    "payload": {"type": kind, "role": role, "content": [{"type": "input_text" if role == "user" else "output_text",
+                                                                          "text": text}]}}
+        rows = [rec("r", "user", "# AGENTS.md instructions for /x\n<INSTRUCTIONS>…"),
+                rec("r", "user", "<external_codex_apps_open_page>{\"page_id\":null}</external_codex_apps_open_page>"),
+                rec("r", "user", "この表の行は、 それぞれどこで止まるの？"),
+                rec("r", "assistant", "1 行目は入力の点検で止まる。 2 行目は全体のばらつきで止まる。"),
+                rec("r", "developer", "<permissions instructions>"),
+                rec("r", "user", "そもそも用語 X は相応しくない気がする。"),
+                rec("r", "assistant", "では X を、 何を調べるかの語に置き換えます。"),
+                rec("compacted", text="## 未決\n- 主結果の一文は決まっていない。"),
+                rec("r", "user", "自明な気もする"),
+                rec("r", "assistant", "理屈の部分はその通りです。")]
+        rollout = day / ("rollout-2099-01-02T00-00-00-%s.jsonl" % sid)
+        rollout.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+        expect("codex: id の頭で rollout を引く", codex_paths("0000aaaa", [base / "sessions"]), [rollout])
+        ents = codex_entries(rollout.read_text(encoding="utf-8").splitlines())
+        cands, n = scan(ents, delegated=True)
+        expect("codex: app が差し込んだ user 役の文と developer 役は turn にしない、 圧縮の要約の未決は S",
+               ([c["kind"] for c in cands], n), (["S", "Q", "R", "P"], 1))
+        expect("codex: 問いでない発言は既定 (delegated でない) では圧縮の後の分を並べない",
+               [c["kind"] for c in scan(ents)[0]], ["S", "Q", "R"])
+        note = base / "note.md"
+        note.write_text("## 著者の判断\n- 研究者「そもそも用語 X は相応しくない気がする。」\n- 表の行の問いに答えた (要約)。\n", encoding="utf-8")
+        disp = {"S1": ("skip", "次の版で決める (台帳に未決として在る)"), "Q1": ("recorded", "note.md:3"),
+                "R1": ("recorded", "note.md:2"), "P1": ("skip", "相づち = 研究の判断を含まない")}
+        rows_v, bad_v, _u = check(cands, disp, base, owner_verbatim=True)
+        expect("owner-verbatim: 発言が逐語で在る根拠は通り、 要約だけの根拠は ❌",
+               [(r[0]["id"], r[2]) for r in rows_v], [("S1", True), ("Q1", False), ("R1", True), ("P1", True)])
+        expect("owner-verbatim: ❌ の文は発言の頭を見せる", "表の行は" in rows_v[1][3], True)
+        rows_n, bad_n, _u = check(cands, disp, base)
+        expect("owner-verbatim なし: 根拠が実在すれば通る (従来どおり)", bad_n, 0)
+        ns = argparse.Namespace(show=None, json=False, check=None, base=td, delegated=False, strict=False, summary=False,
+                                codex=sid, codex_dir=[str(base / "sessions")], owner_verbatim=True)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = report("", [], ns)
+        expect("codex: report が rollout を読み P まで並べる", (rc, "P1" in buf.getvalue(), "記録: " in buf.getvalue()), (0, True, True))
+        ns.codex = "ffffffff"
+        with contextlib.redirect_stdout(io.StringIO()):
+            expect("codex: 見つからなければ終了値 2", report("", [], ns), 2)
+
     print("selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 
@@ -813,6 +1006,12 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--delegated", action="store_true",
                     help="最後の圧縮の後の、 問いでない依頼への返事も P として並べる (締めを渡された worker が回す)")
+    ap.add_argument("--codex", metavar="ID|PATH",
+                    help="Codex の会話記録 (rollout) を読む: session の id (完全か先頭の数文字) か記録の file の path (session の位置引数は使わない)")
+    ap.add_argument("--codex-dir", action="append", help="rollout を探す dir (既定 = $CODEX_HOME か ~/.codex の sessions と archived_sessions。 繰り返し可)")
+    ap.add_argument("--owner-verbatim", action="store_true",
+                    help="研究の対話係の締め: 問いでない発言も候補に並べ (--delegated と同じ)、 --check で「記録済み」「足した」 の根拠の file に"
+                         " 研究者の発言が逐語で在るかも照らす")
     ap.add_argument("--strict", action="store_true", help="候補が 1 件でもあれば exit 1")
     ap.add_argument("--hook-stop", action="store_true", help="Stop hook として stdin の JSON を読む (締めの turn で照合が通っていなければ 1 回差し戻す)")
     ap.add_argument("--selftest", action="store_true")
@@ -821,8 +1020,8 @@ def main(argv=None):
         return selftest()
     if a.hook_stop:
         return hook_stop_main()
-    if not a.session:
-        ap.error("session id を渡す (または CLAUDE_CODE_SESSION_ID)")
+    if not a.session and not a.codex:
+        ap.error("session id を渡す (または CLAUDE_CODE_SESSION_ID / Codex なら --codex <id>)")
     if a.summary and not a.check:
         ap.error("--summary は --check と使う")
     return report(a.session, ssr.projects_dirs(a.projects_dir), a)
