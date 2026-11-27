@@ -218,7 +218,7 @@ def _selftest():
             return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *a], cwd=str(repo),
                                   capture_output=True, env=e, text=True)
         git("init", "-q")
-        (repo / SESSION_FILE).write_text("# S\n- 📌 停止点: 第 2 節の冷読\n- 番号変更: 済み\n", encoding="utf-8")
+        (repo / SESSION_FILE).write_text("# S\n- 📌 停止点: 節 A\n- 図: 済み\n", encoding="utf-8")
         git("add", SESSION_FILE)
         git("commit", "-q", "-m", "s", date="2099-01-01T00:00:00Z")
         req = {"kind": "request", "event_id": "R1", "request_id": "R1", "project": {"key": "proj"},
@@ -243,16 +243,16 @@ def _selftest():
                (len(gaps([req, dict(sub, deliverables=["prefs@1234567:plans/x.md"]), acc], ws)),
                 gaps([req, dict(sub, deliverables=["proj@1234567:notes/x.md"]), acc], ws)), (1, []))
         # 現在地でない行だけ変えた commit は数えない
-        (repo / SESSION_FILE).write_text("# S\n- 📌 停止点: 第 2 節の冷読\n- 番号変更: 済み (検収も)\n", encoding="utf-8")
+        (repo / SESSION_FILE).write_text("# S\n- 📌 停止点: 節 A\n- 図: 済み (検収も)\n", encoding="utf-8")
         git("commit", "-q", "-am", "other", date="2099-01-03T00:00:00Z")
         expect("現在地でない行の変更では写したと数えない", len(gaps(evs, ws)), 1)
         # 現在地の行を変えた commit (提出の後) で消える
-        (repo / SESSION_FILE).write_text("# S\n- 📌 停止点: 主結果の一文が未決\n- 番号変更: 済み (検収も)\n", encoding="utf-8")
+        (repo / SESSION_FILE).write_text("# S\n- 📌 停止点: 節 B\n- 図: 済み (検収も)\n", encoding="utf-8")
         git("commit", "-q", "-am", "state", date="2099-01-04T00:00:00Z")
         expect("提出の後に停止点の行を変えた = 写した", gaps(evs, ws), [])
         expect("提出より前の変更は数えない", len(state_changes_since(repo, "2099-01-05T00:00:00Z")), 0)
         # 作業 tree の未 commit の変更も数える
-        (repo / SESSION_FILE).write_text("# S\n- 📌 停止点: 第 3 節\n- 番号変更: 済み (検収も)\n", encoding="utf-8")
+        (repo / SESSION_FILE).write_text("# S\n- 📌 停止点: 節 C\n- 図: 済み (検収も)\n", encoding="utf-8")
         expect("未 commit の現在地の変更も数える", state_changes_since(repo, "2099-01-05T00:00:00Z"), ["worktree"])
         git("checkout", "-q", "--", SESSION_FILE)
         late = dict(sub, created_at="2099-01-05T00:00:00Z")

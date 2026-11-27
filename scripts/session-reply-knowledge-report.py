@@ -951,12 +951,12 @@ def selftest():
                                                                           "text": text}]}}
         rows = [rec("r", "user", "# AGENTS.md instructions for /x\n<INSTRUCTIONS>…"),
                 rec("r", "user", "<external_codex_apps_open_page>{\"page_id\":null}</external_codex_apps_open_page>"),
-                rec("r", "user", "この表の行は、 それぞれどこで止まるの？"),
-                rec("r", "assistant", "1 行目は入力の点検で止まる。 2 行目は全体のばらつきで止まる。"),
+                rec("r", "user", "この表の列は、 それぞれ何を表すの？"),
+                rec("r", "assistant", "1 列目は手順 A の出力、 2 列目は手順 B の出力です。"),
                 rec("r", "developer", "<permissions instructions>"),
-                rec("r", "user", "そもそも用語 X は相応しくない気がする。"),
-                rec("r", "assistant", "では X を、 何を調べるかの語に置き換えます。"),
-                rec("compacted", text="## 未決\n- 主結果の一文は決まっていない。"),
+                rec("r", "user", "そもそも記号 Y は分かりにくい気がする。"),
+                rec("r", "assistant", "では Y を、 意味の分かる名前に置き換えます。"),
+                rec("compacted", text="## 未決\n- 節 C の結びは決まっていない。"),
                 rec("r", "user", "自明な気もする"),
                 rec("r", "assistant", "理屈の部分はその通りです。")]
         rollout = day / ("rollout-2099-01-02T00-00-00-%s.jsonl" % sid)
@@ -969,13 +969,13 @@ def selftest():
         expect("codex: 問いでない発言は既定 (delegated でない) では圧縮の後の分を並べない",
                [c["kind"] for c in scan(ents)[0]], ["S", "Q", "R"])
         note = base / "note.md"
-        note.write_text("## 著者の判断\n- 研究者「そもそも用語 X は相応しくない気がする。」\n- 表の行の問いに答えた (要約)。\n", encoding="utf-8")
+        note.write_text("## 著者の判断\n- 研究者「そもそも記号 Y は分かりにくい気がする。」\n- 表の列の問いに答えた (要約)。\n", encoding="utf-8")
         disp = {"S1": ("skip", "次の版で決める (台帳に未決として在る)"), "Q1": ("recorded", "note.md:3"),
                 "R1": ("recorded", "note.md:2"), "P1": ("skip", "相づち = 研究の判断を含まない")}
         rows_v, bad_v, _u = check(cands, disp, base, owner_verbatim=True)
         expect("owner-verbatim: 発言が逐語で在る根拠は通り、 要約だけの根拠は ❌",
                [(r[0]["id"], r[2]) for r in rows_v], [("S1", True), ("Q1", False), ("R1", True), ("P1", True)])
-        expect("owner-verbatim: ❌ の文は発言の頭を見せる", "表の行は" in rows_v[1][3], True)
+        expect("owner-verbatim: ❌ の文は発言の頭を見せる", "表の列は" in rows_v[1][3], True)
         rows_n, bad_n, _u = check(cands, disp, base)
         expect("owner-verbatim なし: 根拠が実在すれば通る (従来どおり)", bad_n, 0)
         ns = argparse.Namespace(show=None, json=False, check=None, base=td, delegated=False, strict=False, summary=False,
