@@ -19,6 +19,9 @@
      本文は turn の返事を全部つなぐ (Q・R は turn の中の一番長い返事)
      この返事を worker が並べられず、 会話記録を手で抜き出して読んだ (実測)
   ⏪ = 圧縮より前 (今の context に無い。 全文 = --show <id>)
+  本人の発言 = type=user の行と、 turn の途中に打った発言 (type=attachment の queued_command、 origin=human)。 途中の発言の後の
+  返事はその発言の候補に入る。 起動文・別 session の message・app の知らせ・API の誤りの後の再試行は数えない。 読み方の正本 =
+  lib/owner_turn.py (conventions/hook-authoring.md#owner-turn-reader。 実測: 途中に打った問いを読まず Q が 0 件と出た)
 
 処分の file (--check FILE) — 1 行 1 候補、 空白区切り、 # から行末は注記:
   <id> 記録済み|recorded <根拠>      既に記録にある。 根拠 = path:行 / path:行@commit (行を commit に固定 = 後で同じ file を
@@ -76,6 +79,9 @@ ssr = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ssr)
 sys.path.insert(0, str(HERE / "lib"))
 from git_blob import read_blob  # noqa: E402  (版を作業 tree の形で読む共通の道具 = conventions/hook-authoring.md#blob-read-git-crypt)
+# 本人の発言の読み手の正本 (turn の途中に打った発言 = queued_command の attachment、 起動文・別 session の message・app の知らせ・
+# API の誤りの後の再試行を外す) = conventions/hook-authoring.md#owner-turn-reader。 同じ repo の lib/ から読む (#owner-turn-lookup)
+import owner_turn  # noqa: E402
 
 QUESTION = re.compile(r"[？?]|なぜ|なんで|何で|どうして|って(何|なに|なん)|だっけ|とは\s*$|\bwhy\b|\bwhat\b|\bhow come\b", re.I)
 OPEN_HEAD = re.compile(r"未記録|未決|未解決|未確認|未検証|未検算|未導出|残る|残り|やり残し|保留|pending|remaining|open (items|questions)|\btodo\b", re.I)
@@ -138,6 +144,33 @@ def _turn_head(entry):
     return text
 
 
+def _owner_head(entry, after_api_error=False):
+    """候補の頭になる本人の発言 (slash command は名前) か None。 _turn_head (turn の入口) に、 turn の途中に打った発言
+    (`queued_command` の attachment) を足し、 本人の発言かの判定を lib/owner_turn.py の owner_text に揃える = 起動文
+    (「Background (from the session that started this one)」)・`<cross-session-message` で始まる行・app の知らせ・API の誤りの
+    直後の「Try again」 を外す (conventions/hook-authoring.md#transcript-human-vs-peer-message)。
+    実測: 途中に打った本人の問い 2 つが type=user の行でなく attachment の行で入り、 Q が 0 件と出て締めの照合から落ちた。"""
+    if entry.get("type") == "attachment":
+        return owner_turn.owner_text(entry, after_api_error=after_api_error) or None
+    head = _turn_head(entry)
+    if head is None or head.startswith("/"):
+        return head   # slash command の turn は候補にしないが、 前の turn の返事の区切りにはする
+    return owner_turn.owner_text(entry, after_api_error=after_api_error) or None
+
+
+def _owner_heads(entries):
+    """[(行の位置, 本人の発言)] (時刻順でなく file の順 = 途中に打った発言は、 agent に渡った位置に並ぶ)。"""
+    out, api_error = [], False
+    for i, e in enumerate(entries):
+        if e.get("type") == "assistant":
+            api_error = bool(e.get("isApiErrorMessage"))
+            continue
+        head = _owner_head(e, after_api_error=api_error)
+        if head is not None:
+            out.append((i, head))
+    return out
+
+
 def summary_items(text):
     """要約の文から「未決」 の項目を [(見出し, 項目の文)] で返す。"""
     items, section_open, skip, label_stack = [], False, False, []
@@ -185,7 +218,7 @@ def scan(entries, delegated=False):
             s_n += 1
             cands.append({"id": "S%d" % s_n, "kind": "S", "ts": ts, "pre": False,
                           "head": "圧縮 %d の要約" % (n + 1), "text": (parent + " › " if parent else "") + body})
-    heads = [(i, h) for i, h in ((i, _turn_head(e)) for i, e in enumerate(entries)) if h is not None]
+    heads = _owner_heads(entries)   # turn の途中に打った発言も頭 = その後の返事がその発言への答え
     carried = ""  # 返事の前に続けて打った本人の発言は、 次の発言と 1 つの問いにまとめる
     for k, (i, head) in enumerate(heads):
         end = heads[k + 1][0] if k + 1 < len(heads) else len(entries)
@@ -793,6 +826,39 @@ def selftest():
     expect("origin の無い発言の頭の段は外さない (別 session の依頼を turn にしない)",
            any("Background" in c["head"] for c in c2), False)
 
+    # turn の途中に打った本人の発言 (queued_command の attachment) と、 本人の発言でない行 (lib/owner_turn.py に揃える)
+    expect("前提: 本人の発言の読み手 = 同じ repo の lib/owner_turn.py", Path(owner_turn.__file__).resolve().parent, HERE / "lib")
+
+    def queued(text, kind="human", ts="q"):
+        return {"type": "attachment", "timestamp": ts, "attachment": {"type": "queued_command", "commandMode": "prompt",
+                                                                     "origin": {"kind": kind}, "prompt": text}}
+    tool_only = {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b", "name": "Bash", "input": {}}]}}
+    api_err = {"type": "assistant", "isApiErrorMessage": True, "message": {"content": [{"type": "text", "text": "API Error"}]}}
+    c3, _ = scan([human("表を作って", "a"), tool_only, said("列を決めたので書きます。"),
+                  queued([{"type": "text", "text": rem + "この列の符号はなぜ正？"}], ts="b"), tool_only,
+                  queued("係数 2 は何から来るの？", ts="c"), tool_only,
+                  said("符号は両辺の対称性から正、 係数 2 は往復の 2 本の経路から来る。"), said("作った。"),
+                  queued("別の窓の報告: 何か要る？", kind="peer", ts="d"), said("受け取った"),
+                  queued("<task-notification>done</task-notification>", ts="e"), said("見た")])
+    expect("途中に打った問い (list の形・頭の通知の段・文字列の形) は Q、 返事の前に続けて打った 2 つは 1 つの問い",
+           [(c["id"], c["head"], c["ts"]) for c in c3],
+           [("Q1", "この列の符号はなぜ正？ / 係数 2 は何から来るの？", "c")])
+    expect("途中の問いの返事 = その発言の後の一番長い返事", c3[0]["text"], "符号は両辺の対称性から正、 係数 2 は往復の 2 本の経路から来る。")
+    cd3, _ = scan([human("進めて", "a"), said("進めた"), queued("ついでに表も直して", ts="b"), said("表も直した")], delegated=True)
+    expect("--delegated: 途中に打った問いでない依頼は P (前の turn の返事と分ける)",
+           [(c["id"], c["head"], c["text"]) for c in cd3], [("P1", "進めて", "進めた"), ("P2", "ついでに表も直して", "表も直した")])
+    not_owner = [human("<cross-session-message from=\"local_x\">これは何？</cross-session-message>", "f"),
+                 {"type": "user", "timestamp": "g", "turnOrigin": "peer", "message": {"content": "別の窓: 何か要る？"}},
+                 {"type": "user", "timestamp": "h", "turnOrigin": "host_synthetic", "promptSource": "sdk",
+                  "message": {"content": "Background (from the session that started this one): what is done?"}},
+                 queued("別の窓: 何か要る？", kind="peer", ts="i")]
+    rows_n = [human("始めて", "0"), said("始めた")] + sum(([e, said("返した")] for e in not_owner), [])
+    rows_n += [api_err, {"type": "user", "timestamp": "j", "message": {"content": "Try again"}}, said("再試行した")]
+    got = scan(rows_n, delegated=True)[0]
+    expect("別 session の message (本文の印・turnOrigin・queued)・起動文・API の誤りの後の再試行は本人の発言にしない (--delegated でも)",
+           [c["head"] for c in got], ["始めて"])
+    expect("API の誤りが無ければ「Try again」 は本人の発言", [c["head"] for c in scan([human("Try again?"), said("x")])[0]], ["Try again?"])
+
     with tempfile.TemporaryDirectory() as td:
         base = Path(td)
         (base / "note.md").write_text("一行目\n- 補題の一般化は扱わない。\n", encoding="utf-8")
@@ -888,6 +954,11 @@ def selftest():
     expect("自分の差し戻しは 1 回だけ", stop_check([wrap, said("締めた"), own_fb, said("書き足した")]), None)
     expect("Skill tool で起こした締め", stop_check([human("仕上げて"), {"type": "assistant", "message": {"content": [
         {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "wrap"}}]}}, said("締めた")]) is not None, True)
+    # 締めの turn の途中に本人が打った発言は turn の入口にしない (入口を動かすと /wrap の印と照合の run が span の外に出る)
+    mid = queued("ついでに表も見て？")
+    expect("締めの途中に打った発言の後も締めの turn として差し戻す", stop_check([wrap, skill, mid, said("締めた")]) is not None, True)
+    expect("締めの途中に打った発言の前に照合が通っていれば通す",
+           stop_check([wrap, skill, bash(cmd, "t1"), result("t1", "欠け・根拠の無いもの 0 件"), mid, said("締めた")]), None)
     # 締めを渡した依頼を受け取った turn (受け取りの直後の hook が印を出す = wrap-delegate-spec.py の accept_lines)
     acc = bash("python3 board.py accept --request 20260101T000000Z-claude-000001", "a1")
     mark = {"type": "attachment", "attachment": {"type": "hook_additional_context",
