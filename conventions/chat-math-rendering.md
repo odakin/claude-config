@@ -58,7 +58,11 @@ python3 scripts/claude-app-bundle.py --app /Applications/ChatGPT.app grep 'rende
 
 <a id="code-tab-default-form"></a>**既定の書き方 (3 行)** — 書くときはこの形を使う。 下の関門のどれにも当たらない形で、 描かれ方は標準の LaTeX と同じ:
 
-1. `\` を含む式は、 直前に半角空白を置いた ` \( … \)` で書く (`$…$` の 60 文字の制限が無い。 中身 200 文字まで、 1 行に収める)。
+1. `\` を含む式は `\(` と `\)` で囲み、 開きの `\(` の直前に半角空白を 1 つ置く (`$…$` の 60 文字の制限が無い。 中身 200 文字まで、 1 行に収める)。 式は backtick で囲まない (backtick の中は code として生の TeX のまま出る)。 返事の 1 行はこう書く:
+
+   ```text
+   分散は \( \sigma^{2}=\langle x^{2}\rangle-\langle x\rangle^{2} \) で与えられる。
+   ```
 2. 添字と上付きは必ず `{}` で包む (`E_{I}`、 `m_{I}^{2}`)。 1 文字の添字 `E_I` は、 `$…$` でも `\(…\)` でも記号の無い式と見なされて落ちる。
 3. `\` を含まない式は `$…$` で短く (英字 1 文字・`$E_{I}$`・`$x-y$`)。 数・金額・区間 (`30`・`0.35`・`[0,1]`) は数式にせず地の文で書く。 文字の並んだ積は `x\,y`・`\mathrm{d}x` と書いて 1. の形にする。
 
@@ -110,4 +114,4 @@ Stop の検査は返事が画面に出た後に走るので、 崩れた版は�
 
 ## <a id="where-to-put-the-rule"></a>規則をどこに置くか
 
-規則の本文 (区切り・gate・使えるコマンド) は本 doc だけに置く (同じ本文を複数の file に写すと、片方だけ直る)。CLAUDE.md と template には、読む契機と、[画面ごとの既定](#by-surface) の要点 (どの画面で読む返事を LaTeX で組み、どの画面で Unicode にするか) と、Code タブの [既定の書き方の 3 行](#code-tab-default-form) と、本 doc への参照を書く (関門の細目は書かない)。要点が無いと、本 doc を開かない session は既定を知らないまま書く。入口だけを持つ file (repo の薄い AGENTS.md、Codex の kernel [`codex/HOME-AGENTS.md`](../codex/HOME-AGENTS.md)) には、読む契機と本 doc への参照を書く。個人層が [画面別の既定](#by-surface) と違う書き方を決めるときは、違える理由と範囲を個人層の規則に書き、どの画面が何を描くかの事実は本 doc に合わせる。
+規則の本文 (区切り・gate・使えるコマンド) は本 doc だけに置く (同じ本文を複数の file に写すと、片方だけ直る)。CLAUDE.md と template には、読む契機と、[画面ごとの既定](#by-surface) の要点 (どの画面で読む返事を LaTeX で組み、どの画面で Unicode にするか) と、Code タブの [既定の書き方の 3 行](#code-tab-default-form) と、本 doc への参照を書く (関門の細目は書かない)。 書き方の要点に、 式全体を backtick に入れた見本 (区切りと中身を 1 つの code にした形) を置かない = 返事を書く Claude が backtick ごと写し、 code の中の式は描かれない (実測)。 区切りは `\(` と `\)` を別々に示し、 式の見本が要るなら fenced block の中の 1 行で示す。要点が無いと、本 doc を開かない session は既定を知らないまま書く。入口だけを持つ file (repo の薄い AGENTS.md、Codex の kernel [`codex/HOME-AGENTS.md`](../codex/HOME-AGENTS.md)) には、読む契機と本 doc への参照を書く。個人層が [画面別の既定](#by-surface) と違う書き方を決めるときは、違える理由と範囲を個人層の規則に書き、どの画面が何を描くかの事実は本 doc に合わせる。
