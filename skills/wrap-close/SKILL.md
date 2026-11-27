@@ -18,7 +18,7 @@ description: 締めてから窓を閉じる (wrap して閉じる)。 user が `
 | 1 の Codex の thread | `scripts/codex-thread-close.py` (手順 = `conventions/multi-session-coordination.md#codex-thread-close`) |
 | 2 | 誰でも使える `/wrap` の表 ([`../wrap/SKILL.md`](../wrap/SKILL.md)) の値をそのまま当てる |
 | 3 の見張り | `python3 scripts/lib/session_background_tasks.py self` (止め方 = closing-sweep.md#stop-own-watches) |
-| 3 の閉じる口 | 最後の `wrap_up` の `archive` の action。 使えなければ本人の「閉じて」 の後の turn に `archive_session` の `"self"` (closing-sweep.md#wrap-close-button) |
+| 3 の閉じる口 | 最後の `wrap_up` に `ask` (例「この窓を閉じますか？」) と `archive` の action を一緒に (`ask` が無いと箱もボタンも出ない)。 使えなければ本人の「閉じて」 の後の turn に `archive_session` の `"self"` (closing-sweep.md#wrap-close-button) |
 | 個人の値 | 個人層に同名の skill (`/wrap-close`) があればそちらが起動する。 その skill は本 file と節を手順の正本として指し、 その人の窓の登録の畳み方と値だけを持つ ([closing-sweep.md#personal-skill](../../conventions/closing-sweep.md#personal-skill)) |
 
 Codex で起動したら: 段 2 は `$wrap` と同じ締め (closing-sweep.md §0.95)、 段 1 は Codex の thread の道具の行だけ、 段 3 の閉じる口は無い (閉じるのは本人)。
