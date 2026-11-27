@@ -5,6 +5,7 @@
 > 📌 **このファイル = 案件ごとの現在地 + Open items**。 entry は案件 (状態が進む単位) ごとに 1 つ、 進んだら置き換える。 経緯・commit・実測は正本 (DESIGN.md / conventions / docs) が持ち、 過去の索引は [`SESSION-archive.md`](SESSION-archive.md) (grep 専用)。 契約 = [CONVENTIONS.md#session-no-durable-record](CONVENTIONS.md#session-no-durable-record)、 止められたら [memory-file-slimming.md#session-shape-gate](conventions/memory-file-slimming.md#session-shape-gate)。
 
 ## 現在地
+- **研究の対話係の記録を共有 repo に写す網** — 規則 ([`multi-session-coordination.md#dialogue-record-split`](conventions/multi-session-coordination.md#dialogue-record-split)・[`closing-sweep.md#dialogue-list-intake`](conventions/closing-sweep.md#dialogue-list-intake))・判定の部品 [`scripts/lib/dialogue_record.py`](scripts/lib/dialogue_record.py)・受け取りの直後の 1 行 (`child-wrap-check.py --hook-accept`)・返事の知見の照合の Codex の読み口 (`session-reply-knowledge-report.py --codex` / `--owner-verbatim`) が入った段階。 残り = 途中で記録したかの網は当てていない (誤検出の数え上げの後、 採否は利用者の判断待ち)。
 - **PDFプレビューの日本語欠落** — 表示面を分ける切り分けと、原本を保った図形化コピーの手順を通常利用へ移す段階。次は [PDFのフォント描画互換性](conventions/office-automation.md#pdf-preview-font-compatibility) から、正常な描画元と対象ビューアの表示を照合する。
 - **本番でない機械の、 関門つきの定期実行だけが使う設定フォルダの切れ** — 🔴 から外し、 本番を切り替える道具が切り替える前に確かめる形を入れた (検収済み・閉)。 残り = 他の機械が新しい書き手で beat を打った後に、 その機械の分の 🔴 が消えるかの観測 (古い beat には使い手の数が無いので今どおり出る)。 正本 = [scheduled-tasks.md#standby-only-config-dir](conventions/scheduled-tasks.md#standby-only-config-dir)。
 - **公開ベンチマークのモデル比較** — 比較方法を整理し、参照段階へ移る。再開時は [推論設定・課題費用・測定範囲](conventions/web-tools.md#model-benchmark-comparisons) を入口に、対象の評価表で条件を確認する。
