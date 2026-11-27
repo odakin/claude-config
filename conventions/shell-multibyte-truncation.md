@@ -83,6 +83,7 @@ Dropbox や macOS から来た file 名は、 「ピ」 を「ヒ + 半濁点」
 
 `str.splitlines()` は `\n` のほかに `\r`・`\v`・`\f` (改頁)・`\x1c`〜`\x1e`・`\x85`・`U+2028`・`U+2029` でも行を割る。 file にこれらが 1 つでもあると、 それより後ろの行番号が grep・git・editor の数え方より大きくなり、 error は出ない (実測: 改頁の文字を含む台帳について報告した `file:行` がずれ、 別の session の照合で見つかった)。
 人や他の道具に渡す行番号は `text.split('\n')` で数える (file を `for i, line in enumerate(f, 1)` で読むのも `\n` で割る)。 食い違う文字があるかの確かめ = `len(s.split('\n')) != len(s.splitlines()) + s.endswith('\n')`。
+行を list にしてから `enumerate` で数えた添字は 0 から = 行番号として書くときは `enumerate(..., 1)` で数える。 空行を飛ばして作った list の添字は、 飛ばした行の数だけ行番号とずれる (実測: 会話記録 (jsonl) を list にした 0 から数えた添字を行番号として記録に書き、 書いた番号が全部 1 ずつずれていた)。
 
 ## <a id="pdf-text-micro-sign"></a>PDF から起こした文字列では μ が micro 記号 µ (U+00B5) になることがある — ギリシャ文字の語で探すときは両方を入れる
 
