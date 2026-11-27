@@ -1,0 +1,30 @@
+{
+  "_comment": "decision-question-jargon.py の「中身の後ろに添えた印は作業側の語に数えない」 直し (2026-11-27) の selftest が、 直した箇所を 1 つずつ外した版でそれぞれ落ちるか",
+  "target": "decision-question-jargon.py",
+  "run": "python3 {} --selftest",
+  "fail_marker": "  ❌ ",
+  "pass_marker": "  ✅ ",
+  "mutants": [
+    {
+      "name": "中身の後ろに添えた印も作業側の語に数える (直す前)",
+      "pairs": [["                if GLOSS_AFTER.match(unit[m.end():m.end() + 2]) or appended_tag(unit, m.start(), m.end()):", "                if GLOSS_AFTER.match(unit[m.end():m.end() + 2]):"]],
+      "expect_fail": ["中身の直後に括弧で添えた印は通す", "半角の括弧で添えた印も通す", "問いの段の行末の〔問 …〕 は通す"],
+      "expect_pass": ["括弧の前に中身が無い印は鳴る"]
+    },
+    {
+      "name": "〔問 …〕 が文の途中にあっても通す",
+      "pairs": [["        return bool(TAG_BLOCK_AFTER.match(unit[end:]))", "        return True"]],
+      "expect_fail": ["文の途中で台帳を指す〔問 …〕 は鳴る"]
+    },
+    {
+      "name": "括弧の前に中身が無くても通す",
+      "pairs": [["TAG_PAREN_BEFORE = re.compile(r\"(?:[^\\W_]{2}|[」』])\\s?[(（]$\")", "TAG_PAREN_BEFORE = re.compile(r\"[(（]$\")"]],
+      "expect_fail": ["括弧の前に中身が無い印は鳴る", "中身が 1 字だけの後ろの印は鳴る"]
+    },
+    {
+      "name": "閉じ括弧が直後に無くても通す (括弧の中に印が並ぶ形)",
+      "pairs": [["    return after in (\")\", \"）\") and bool(TAG_PAREN_BEFORE.search(before))", "    return bool(TAG_PAREN_BEFORE.search(before))"]],
+      "expect_fail": ["中身の後ろでも、 括弧の中に印が並ぶ形は鳴る"]
+    }
+  ]
+}

@@ -1060,7 +1060,7 @@ def answered_outbound(path: Path | None) -> list[dict]:
                 continue
             if r.get("type") == "ask" and r.get("ground") == "outbound":
                 asks[r.get("label")] = r
-            elif r.get("type") == "answer" and r.get("binding") in ("label", "order", "confirmed") and not r.get("defer"):
+            elif r.get("type") == "answer" and r.get("binding") in ("label", "order", "content", "confirmed") and not r.get("defer"):
                 try:
                     ts = datetime.fromisoformat(str(r.get("created_at", "")).replace("Z", "+00:00")).timestamp()
                 except ValueError:

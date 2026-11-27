@@ -1626,7 +1626,7 @@ def tied_asks(ledgers: list[list[dict]], rids: list[str], as_of: str = "") -> li
     want, out = set(rids), []
     if not eng or not want:
         return out
-    settled_kinds = tuple(getattr(eng, "SETTLED", ("label", "order", "confirmed")))
+    settled_kinds = tuple(getattr(eng, "SETTLED", ("label", "order", "content", "confirmed")))
     for recs in ledgers:
         rs = [r for r in recs if not (as_of and str(r.get("created_at") or "")[:19] > as_of[:19])]
         try:
@@ -2267,7 +2267,7 @@ def main(argv: list[str]) -> int:
 # reading of asks, settled answers (not defer), and withdraws as ai-collaboration board/board_asks.py.
 STUB_ASKS_ENGINE = '''import json
 from pathlib import Path
-SETTLED = ('label', 'order', 'confirmed')
+SETTLED = ('label', 'order', 'content', 'confirmed')
 
 
 def ledger_path(root):

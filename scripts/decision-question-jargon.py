@@ -55,6 +55,8 @@
 
 除外 (= 符号は「添えるだけ」 なら通す、 conventions/concise-output.md#decision-questions):
   - 語の直後に `=` / `(` / `（` / `:` が続く = 普通の語の説明が添えてある (「Q14 = 赤字の確認を外すか」)
+  - 語が中身の後ろに括弧で添えてある = 「〈問いの中身〉 (H12)」 (括弧の直前に中身の 2 字) と問いの段の行末の「〔問 H12〕」。 規約と
+    問いの台帳の道具 (ai-collaboration board/board_asks.py の確かめの 1 行) が求める形 (実測: その 1 行を差し戻し、 追記が続いた)
   - 語が 「」 / 『』 の中に丸ごと収まる = 例として引いただけ (hook 自身を説明する文で鳴らない)
 
 出力 (hook-authoring.md#text-pattern-stop-hook / #stop-hook-addendum-not-reemission):
@@ -107,6 +109,21 @@ Q_RE = re.compile(
     r"|ご判断|判断を(?:お願い|仰|求)",
     re.M)
 GLOSS_AFTER = re.compile(r"^\s?[=＝(（:：]")   # 語の直後に説明が続く形
+# 印を問いの中身の後ろに添えた形 = 「〈問いの中身〉 (H12)」 と、 掲示板の問いの段の「〔問 H12〕」。 規約 (#decision-questions の
+# 「印は後ろに添える」) と問いの台帳の道具 (board_asks.py の確かめの 1 行) が求める形なので通す (実測: 道具が求めた確かめの 1 行
+# 「…入れるか（H12）への答えと読みました。よいですか」 を語の検査が差し戻し、 追記が turn ごとに続いた)。 括弧の前に中身が
+# 無い印 (「（H12）を進めますか」) と、 括弧の中に印が並ぶ形 (「(W-3・X-7)」) は通さない。
+TAG_PAREN_BEFORE = re.compile(r"(?:[^\W_]{2}|[」』])\s?[(（]$")   # 中身の 2 字 (か「」) の直後に開き括弧
+TAG_BLOCK_BEFORE = re.compile(r"(?:[^\W_]{2}|[」』？?])\s?〔問\s?$")   # 問いの段 = 中身の後ろの「〔問 H12〕」
+TAG_BLOCK_AFTER = re.compile(r"^\s?〕[\s*]*(?:\n|$)")                  # 段の印は行の終わり (文の途中で台帳を指す形は通さない)
+
+
+def appended_tag(unit: str, start: int, end: int) -> bool:
+    """unit[start:end] の語が、 中身の後ろに添えた括弧の印 (「…か (H12)」) か問いの段の行末の「〔問 H12〕」 か。"""
+    before, after = unit[max(0, start - 8):start], unit[end:end + 2].lstrip()[:1]
+    if TAG_BLOCK_BEFORE.search(before):
+        return bool(TAG_BLOCK_AFTER.match(unit[end:]))
+    return after in (")", "）") and bool(TAG_PAREN_BEFORE.search(before))
 # 「」 / 『』 で引いた問い = 別の窓に残っている問いや人の問いを報告しているだけで、 この返事の問いではない
 # (実測: 別の窓に残った「要旨を…差し替えてよいですか？」 を取り次いだだけの行が問いの行と読まれ、 変える文の検査が差し戻した)
 QUOTED = re.compile(r"「[^「」\n]*」|『[^『』\n]*』")
@@ -194,7 +211,7 @@ def find_jargon(text: str, terms, as_question: bool = False) -> list:
             for m in pat.finditer(unit):
                 if _inside_quote(unit, m.start()) and _inside_quote(unit, m.end()):
                     continue
-                if GLOSS_AFTER.match(unit[m.end():m.end() + 2]):
+                if GLOSS_AFTER.match(unit[m.end():m.end() + 2]) or appended_tag(unit, m.start(), m.end()):
                     continue
                 word = m.group(0)
                 if word not in found:
@@ -758,6 +775,18 @@ def selftest() -> int:
     check(find_jargon("報告書 Q19 の追記 4–8 を確認しますか", terms) == ["Q19", "追記 4"], "台帳の符号と追記 N")
     check(find_jargon("どれにしますか。 推す = そのまま", terms) == ["推す ="], "個人の一覧の語")
     check(find_jargon("呼び名A の報告を読みますか", terms) == ["呼び名A"], "literal の語")
+    # 印を中身の後ろに添えた形 (問いの台帳の道具が求める確かめの 1 行・問いの段) は通す
+    check(find_jargon("「全部」 は、 表の罫線の直しを 3 つとも入れるか（Q12）への答えだと読みました。これでよいですか。", terms) == [],
+          "中身の直後に括弧で添えた印は通す (確かめの 1 行)")
+    check(find_jargon("罫線の直しを 3 つとも入れますか (Q19) への答えと読みました。よいですか", terms) == [],
+          "半角の括弧で添えた印も通す")
+    check(find_jargon("罫線の直しを 3 つとも入れますか？ 〔問 Q12〕", terms) == [], "問いの段の行末の〔問 …〕 は通す")
+    check(find_jargon("おすすめは「当てる」 です。 答えてください (この問いは台帳の〔問 Q12〕に記録してあります)。", terms) == ["Q12"],
+          "文の途中で台帳を指す〔問 …〕 は鳴る (問いの中身が無い)")
+    check(find_jargon("（Q19）を進めますか", terms) == ["Q19"], "括弧の前に中身が無い印は鳴る")
+    check(find_jargon("例外 2 つ (W-3・X-7) を直しますか", terms) == ["W-3", "X-7"], "括弧の中に印が並ぶ形は鳴る")
+    check(find_jargon("直しの例外 (W-3・X-7) を当てますか", terms) == ["W-3", "X-7"], "中身の後ろでも、 括弧の中に印が並ぶ形は鳴る")
+    check(find_jargon("案 (C1) にしますか", terms) == ["C1"], "中身が 1 字だけの後ろの印は鳴る")
     # 通す
     check(find_jargon("commit W-3 を push しました。", terms) == [], "問いでない行は見ない")
     check(find_jargon("Q14 = 赤字の確認を外してよいか", terms) == [], "直後に = が続く符号は説明つき")
