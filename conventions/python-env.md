@@ -130,7 +130,8 @@ collaborator-check の conf に `python tools/py -- <用途>` の 1 行を置く
 
 ## <a id="python-env-machine-side"></a>機械の側 — どの Python を入れるか
 
-- **`python3` の向き先を変えない入れ方を選ぶ** — uv が取ってくる Python (uv の dir に入る)、 package manager の版つきの Python (例: Homebrew の `python@3.X` は `python3.X` だけを PATH に置く)。 他の自動化 (hook・定期ジョブ) が今の `python3` と、 そこに入れた package に頼っていることがある ([`shell-env.md#job-python-by-capability`](shell-env.md#job-python-by-capability))。 Homebrew の版の無い `python` (や、 それに依存する formula) は `python3` を Homebrew の版に替え、 PATH で Homebrew が先なら全部の `python3` が替わる
+- **`python3` の向き先を変えない入れ方を選ぶ** — uv が取ってくる Python (uv の dir に入る)、 package manager の古い版の Python (例: Homebrew の古い `python@3.X` は `python3.X` だけを PATH に置く)。 他の自動化 (hook・定期ジョブ) が今の `python3` と、 そこに入れた package に頼っていることがある ([`shell-env.md#job-python-by-capability`](shell-env.md#job-python-by-capability))。 Homebrew の版の無い `python` と、 その時の既定の版の `python@3.X` (や、 それらに依存する formula) は、 `python3`・`pip3` を Homebrew の版に替え、 PATH で Homebrew が先なら全部の `python3` が替わる (実測: Python と関係の無い道具を `brew install` した依存で、 その時の既定の版の `python@3.X` が入り、 素の `python3` が package の無い版に替わった)
+  - <a id="brew-dependency-relinks-python3"></a>**`brew install` の後に `which python3` を見る** — 依存の一覧に `python@3.X` が出たら、 終わった後に `which -a python3` で向き先を確かめる。 替わっていたら `brew unlink python@3.X` で link だけを外す (本体 〔keg〕 は残り、 依存した formula は動く = 依存は `opt` の path で本体を引く)。 外した後も `brew upgrade` で link が戻らないかは、 upgrade の後に同じく確かめる
 - **venv は機械と OS ごとのもの** — 同期フォルダ (Dropbox など) や、 2 つの OS (Windows と WSL) で開く checkout に、 共有の venv を置かない。 置くなら片方の側で `REPO_PY_VENV` を別の dir に向ける (壊れ方 8)
 - 無人ジョブの `python3` 選び ([`shell-env.md#job-python-by-capability`](shell-env.md#job-python-by-capability)) と本 doc は別の問題: ジョブは「依存を import できる既存の interpreter」 を選び、 repo の計算は「宣言の版で作った venv」 を使う
 - どの機械に何の Python があるか・入れるか (uv / Homebrew) は機械ごとの事実なので、 公開層に書かず、 個人層の機械別の表に置く ([`docs/personal-layer.md`](../docs/personal-layer.md))
