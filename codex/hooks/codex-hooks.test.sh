@@ -28,6 +28,12 @@ import json
 import sys
 
 hooks = json.load(open(sys.argv[1], encoding="utf-8"))["hooks"]
+visibility_events = [
+    event for event, groups in hooks.items()
+    for group in groups for hook in group["hooks"]
+    if "delegation_visibility.py" in hook.get("command", "")
+]
+assert visibility_events == ["PreToolUse"], visibility_events
 assert any(
     hook.get("command", "").endswith('session_touch.py" acknowledge')
     for group in hooks["UserPromptSubmit"] for hook in group.get("hooks", [])

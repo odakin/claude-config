@@ -116,6 +116,17 @@
             "statusMessage": "Passing the worker record contract"
           }
         ]
+      },
+      {
+        "matcher": "^(Agent|spawn_agent|collaboration[.]spawn_agent|collaboration__spawn_agent)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/delegation_visibility.py\"",
+            "timeout": 6,
+            "statusMessage": "Checking the recorded scope of an internal worker"
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -126,17 +137,6 @@
             "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/session_touch.py\" track",
             "timeout": 3
-          }
-        ]
-      },
-      {
-        "matcher": "^(Agent|spawn_agent|collaboration[.]spawn_agent|collaboration__spawn_agent)$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$HOME/.codex/claude-config-hooks/delegation_visibility.py\"",
-            "timeout": 6,
-            "statusMessage": "Checking the recorded scope of an internal worker"
           }
         ]
       }
