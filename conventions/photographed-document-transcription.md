@@ -170,7 +170,7 @@ macOS の Vision (`VNRecognizeTextRequest`) は手元で動き、 Swift の小�
 
 **中身を渡さない形**:
 - 読みと照合は手元の script が回し、 読んだ文字・表・氏名は手元の file にだけ書く。 端末には件数と合わない ID だけを出す。
-- AI の session が「実物で動くか」 を確かめるときは、 数だけを出す口 (`--counts-only` のような) を作り、 その出力も ID の形の文字列を伏せる filter に通してから受け取る。 Python のエラーの全文 (traceback) にも値が混じるので、 数だけの口ではエラーの全文を file に書き、 端末にはエラーの型の名だけを出す。
+- AI の session が「実物で動くか」 を確かめるときは、 数だけを出す口 (`--counts-only` のような) を作り、 その出力も ID の形の文字列を伏せる filter に通してから受け取る。 Python のエラーの全文 (traceback) にも値が混じるので、 数だけの口ではエラーの全文を file に書き、 端末にはエラーの型の名だけを出す。 写真を読まずに表だけを集計する道具の一般形 (群の端の値を出さない・出力をデータ自身の ID と氏名で照らして止める) = [`confidential-repo-boundary.md#counts-only-analysis`](confidential-repo-boundary.md#counts-only-analysis)。
 - 開発の試験は合成データ (架空の ID・氏名・手書き風の字の画像) で行う。 架空の ID は実在しえない形 (まだ無い入学年など) にする = 実在の人の ID と偶然一致しない。
 
 <a id="independent-of-reference"></a>**写真の読みは照らす相手から独立に作る** (読みを相手の値に寄せると検算にならない):

@@ -1,5 +1,5 @@
 <!-- doc-meta
-when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 人 (学生・応募者など) を指す path・台帳の id・commit message を付けるとき (#role-words-in-names) / 履歴から個人情報を消すとき (#history-scrub-identity-from-all-versions) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / 暗号化した台帳の文や、 台帳から作った一覧の行を平文に写す commit を止める門を作る・較正するとき (#ledger-and-listing-copy-gate) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 較正・再現で読んだ非公開の値を公開 repo の例・selftest に書くとき (#session-carryover-gate) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate)
+when: 機密を持つ repo と remote を持つ repo の境界を機械で守るとき — 暗号化を入れる前 (#2) / file 名に識別子が出ていると気づいたとき (#1) / 人 (学生・応募者など) を指す path・台帳の id・commit message を付けるとき (#role-words-in-names) / 履歴から個人情報を消すとき (#history-scrub-identity-from-all-versions) / 別 process への通知に要約を書こうとしたとき (#3) / 流出検査を設計するとき (#4) / 暗号化した台帳の文や、 台帳から作った一覧の行を平文に写す commit を止める門を作る・較正するとき (#ledger-and-listing-copy-gate) / fail-open な gate を足したとき (#5) / 公開 repo に未公開文書の文が入らない gate を設計・調整するとき (#unpublished-text-public-gate) / 公開 repo の tree 棚卸しの finding を決着させるとき (#tree-finding-resolution) / 公開 repo の gate の検出語や判定を変えたとき (#gate-change-replays-unattended-writers) / 較正・再現で読んだ非公開の値を公開 repo の例・selftest に書くとき (#session-carryover-gate) / 触れない dir の中身を機械で処理する必要が出たとき (#work-on-a-copy-not-by-lowering-the-gate) / AI に値を見せずに名簿・成績などの実データを手元の script で集計する道具を書くとき (#counts-only-analysis)
 category: infra
 summary: 暗号化は中身しか守らない (file 名・commit message・path は平文) ので識別子入り dir は暗号化 tar に畳む (連番+対応表は対応表が単一障害点で不可)、 保存しない > 暗号化する (入室の暗証番号は暗号化 repo にも入れず所在だけ記録 #physical-access-codes、 通知に payload を載せず schema で縛る、 死んだ複製は削除)、 逐語の指紋照合は写しを捕まえるが言い換えは原理的に不可なので経路ごとに制御を変える (閾値は全件集計で決める = 誤検知 6800→24→0 の実測)、 fail-open な gate は必ずカナリアで実効性を毎回確かめ ARMED/NOT ARMED/対象外 の 3 状態を出す (沈黙を作らない)、 是正は go-forward にしか効かず履歴は別問題として人間の判断に委ねる、 公開 repo には未公開文書の逐語 gate を別に置く (漏れる例示は引用符に入った短い断片なので quoted span が主、 全履歴 replay で誤検出 0 を確かめて採用)、 gate が target の pre-commit で実際に走っているかは target ごとに確かめる、 触れない dir の中身を機械で処理する必要が出ても deny を外して戻す形にしない (外れている間は dir 全体が無関係な call にも開く) = user が 1 file だけ許可 scope に複製 → 作業 → 複製と中間生成物を消す、 複製は元の SoT から分岐し記録には file 名も中身も書かない
 -->
@@ -98,6 +98,20 @@ staged 差分を読む pre-commit の warn が「見本」 として行を表示
 - **暗号化した値の平文の写しは commit で止める** — 値の file を暗号化しても、 値を写した TODO・script・記録は平文のまま。 [`scripts/check-value-index.py`](../scripts/check-value-index.py) = 暗号化 file の 1 節に置いた索引 (`- digits|date|text: \`値\``) を源に、 平文の追加行と commit message を照合し、 file と行番号だけを出す。 ⚠️ 他の家・機関と同じになる値 (郵便番号など) は索引に入れない = 公開データに偶然一致する (実測)。 全 repo の棚卸し = `--scan-root <作業ルート> --explain` (当たった索引の行の説明だけを出す)
 - 漏れた先は repo ではなく会話の記録 = 書き換えで消えない。 起きたら本人に 1 行で伝え、 個人層の漏洩の記録に件数と種類を残す。
   気づく機械 = [`hooks/value-index-output-nudge.py`](../hooks/value-index-output-nudge.py) (tool の出力を個人層の値の索引と照らし、 当たった索引の行の説明だけを知らせる。 索引に無い値 〔銀行名・氏名〕 は見ない)
+
+### <a id="counts-only-analysis"></a>実データを AI に見せずに集計する道具は、 出すものを集計だけにし、 出す前にデータ自身の識別子で照らす
+
+外に出せない名簿 (人の ID・氏名と順位・点数) を、 AI の session が中身を見ずに手元の script で集計し、 集計だけを受け取るときの作り方
+(写真を手元で読む道具の同じ形 = [`photographed-document-transcription.md#local-vision-ocr`](photographed-document-transcription.md#local-vision-ocr))。
+
+- **出すのは人数・組の数・平均・帯ごとの数だけ** — 群の端の値 (「外れた人のうちいちばん上の順位」「最後に入った人の順位」「最高点」) は、 集計の形をしていても 1 人の値なので出さない = 帯 (順位 1〜20 など) ごとの人数に替える。
+  一人ずつの比べ (2 つの計算でどちらが良くなるか) も、 帯ごとの人数と合計に畳んで出す。 個人の行を出す option は作らない (確かめのための口は、 作れば残る)。
+- **出す前に、 出力の全文をデータ自身の識別子で照らす** — 読み込んだ ID と氏名 (空白を除いた形も) の集合と、 ID の形の正規表現の両方で当て、 1 つでも当たれば何も出さずに止める。
+  ID の形だけの filter は氏名を素通りさせる。 自己試験で、 出力に氏名と ID の形を 1 つずつ混ぜて止まるのを確かめる。
+- **止まったときも値を出さない** — Python のエラーの文には欄の値 (読めなかった選択・数字でない順位) が入るので、 端末にはエラーの種類と script の行番号だけを出す。
+- **データの形の確かめも形だけで** — 出すのは見出しの行 (列の名前)・行の数・列の数・欄が全部数字か、 だけにする。 値の行は開かない。
+  別に持つ結果の表との照合も、 一致したかの真偽だけを出す。
+- 開発と試験は合成データで (作り方 = 上の写真の道具の節と同じ)。 手で答えを出せる小さな例 (3 人・3 枠など) を 1 つ足すと、 合成データの不変量 (人数の計・既知の性質) では見えない数え違いが見える。
 
 ---
 
