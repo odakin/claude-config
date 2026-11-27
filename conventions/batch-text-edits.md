@@ -30,7 +30,7 @@ open(path, "w", encoding="utf-8").write(txt)
 | 1-2 箇所 | Edit tool | 差分がそのまま可視になり人間 review が効く |
 | 3 箇所以上 / 長い string / 系統的 sweep | 本 pattern | 手数と転記ミスが線形に増えるのを止める |
 
-## <a id="batch-text-failure-modes"></a>13 の失敗モード
+## <a id="batch-text-failure-modes"></a>14 の失敗モード
 
 ### <a id="assert-does-not-gate-downstream"></a>1. assert の verdict は下流に伝わらない
 
@@ -159,6 +159,14 @@ open(path, "w", encoding="utf-8").write(txt)
 **なぜ契約が守ってくれないか**: 契約が数えるのは TARGET の中の old の出現で、 pair 列を組み立てる段 (new の中の目印を埋める replace) は契約の外にある。 目印の名前は人が付ける識別子なので、 片方が他方を含んでいても見た目では気づきにくい。
 
 **対処**: (1) 目印を区切りの印で囲む (`@@T@@` と `@@K@@`) = 囲んだ目印はどれも他の目印の部分文字列にならない。 (2) 囲めないなら長い目印から先に埋める。 (3) 埋めた後に目印の残りと、 埋めた式の出現の数を数える。 (4) `--dry-run` の差分を当てる前に読む (今回はこれで止まった)。
+
+### <a id="global-replace-expected-count"></a>14. 何か所も当てる置き換えの期待の数を `grep -c` で数えると、 行の数になる
+
+**症状** (実測): file の名を付け替える一括置換 (1 つの old を全 file の全部の出現に当てる形) で、 old ごとの期待の数を `grep -c` の和で決めた。 script が数える `str.count` (出現の数) と 4 種で合わず、 止まった (書く前の assert なので、 file は無傷)。 原因は 2 つ = 1 行に同じ名が 2 回出る行 (path と file 名が並ぶ行)、 と、 先に当てた長い名 (`prefix-<名>`) がその後に当てる短い名 (`<名>`) の出現を減らす順の効果。
+
+**なぜ契約が守ってくれないか**: 契約 (各 old は正確に 1 回) は 1 か所の直しのためのもので、 全部の出現に当てる置き換えには期待の数を別に持たせる。 その数を人が別の道具で数えると、 数え方 (行か出現か、 当てる前の text か、 前の置き換えを当てた後の text か) が script と違う。
+
+**対処**: (1) 期待の数は script 自身に数えさせる = 当てる順に、 その時点の text の `str.count` を dry-run で出し、 当たる行を一覧して読んでから期待の数に書く (変えてはいけない語 〔データの file の名など〕 が混じっていないかもここで見る)。 (2) 長い名から先に当てる (短い名から当てると、 長い名の中も書き換わる = [#placeholder-substring-names](#placeholder-substring-names) と同じ形)。 (3) 何回かに分けて直すときは、 回ごとの script を当て済みの組を飛ばす形にし (置換型の pair は old が無く new があれば当て済み = [#zero-count-is-ambiguous](#zero-count-is-ambiguous))、 最初の版から全部を順に当て直した結果が今の版と 1 字も違わない (`diff -r` が空) ことを確かめる = 回ごとの手直しが script の外に漏れていないことの確かめになる。
 
 ## <a id="batch-text-verification"></a>適用後の検証
 
