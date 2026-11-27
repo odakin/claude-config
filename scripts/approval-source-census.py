@@ -3,7 +3,13 @@
 
 Only explicitly supplied transcript roots are scanned. Codex's two carriers
 are counted separately, not added into an estimate of distinct human turns.
-Claude's human-origin sample requires type=user and turnOrigin=human. Missing
+Claude's human-origin sample requires type=user and turnOrigin=human. A prompt
+the owner typed while a turn ran is not a type=user row: it is an attachment
+(attachment.type=queued_command, commandMode=prompt, origin.kind=human, the
+shape lib/owner_turn.py reads = conventions/hook-authoring.md#transcript-human-vs-peer-message)
+and is counted as its own carrier, claude_queued_human (the raw prompt: a
+string, or the text blocks of a list joined; another session's queued message,
+origin.kind=peer, is not counted). Missing
 or unreadable input is reported as an inspection failure, never as zero data.
 Compressed Codex rollouts (`.jsonl.zst`) are decompressed through
 lib/compressed_jsonl.py. A plain and a compressed copy of one record count each
@@ -50,6 +56,18 @@ def user_texts(row):
             content = "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
         if isinstance(content, str):
             yield "claude_human", content
+    if row.get("type") == "attachment":
+        if row.get("isMeta") or row.get("isSidechain"):
+            return
+        att = row.get("attachment")
+        if (isinstance(att, dict) and att.get("type") == "queued_command" and att.get("commandMode") == "prompt"
+                and isinstance(att.get("origin"), dict) and att["origin"].get("kind") == "human"):
+            prompt = att.get("prompt")
+            if isinstance(prompt, list):
+                prompt = "".join(b.get("text", "") for b in prompt if isinstance(b, dict) and b.get("type") == "text")
+            if isinstance(prompt, str):
+                yield "claude_queued_human", prompt
+        return
     payload = row.get("payload")
     if not isinstance(payload, dict):
         return
@@ -65,7 +83,7 @@ def user_texts(row):
 def census(roots, tag_re, strip_patterns=()):
     samples = {k: {"messages": 0, "empty": 0, "non_tag": 0, "agents_prefix": 0,
                    "tags": Counter(), "tags_after_known_blocks": Counter()}
-               for k in ("codex_event_msg", "codex_response_item", "claude_human")}
+               for k in ("codex_event_msg", "codex_response_item", "claude_human", "claude_queued_human")}
     errors, seen, read, tally = Counter(), set(), 0, Counter()
     def files_in(root):
         if root.is_file():
@@ -151,12 +169,18 @@ def selftest():
             {"type": "user", "turnOrigin": "peer", "message": {"content": "<peer>PRIVATE_BODY</peer>"}},
             {"type": "event_msg", "payload": {"type": "user_message", "message": "a < b"}},
             {"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "<turn_aborted>PRIVATE_BODY"}]}},
+            # a prompt the owner typed while a turn ran (string and list forms), and another session's queued message
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt", "origin": {"kind": "human"}, "prompt": "<baz>PRIVATE_BODY"}},
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt", "origin": {"kind": "human"}, "prompt": [{"type": "text", "text": "<qux>PRIVATE_BODY"}]}},
+            {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt", "origin": {"kind": "peer"}, "prompt": "<peerq>PRIVATE_BODY"}},
         ]
         p = root / "private-session-id.jsonl"
         p.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
         result = census([root, p], tag_re)
         assert result["files_read"] == 1 and not result["inspection_errors"]
         assert result["samples"]["claude_human"]["tags"] == {"foo": 1}
+        assert result["samples"]["claude_queued_human"]["tags"] == {"baz": 1, "qux": 1}
+        assert result["samples"]["claude_queued_human"]["messages"] == 2
         assert result["samples"]["codex_response_item"]["tags"] == {"turn_aborted": 1}
         assert result["samples"]["codex_event_msg"]["non_tag"] == 1
         rendered = json.dumps(result)
