@@ -15,6 +15,9 @@
     文頭。 (2) 中身 200 文字以内。 (3) 中身に `$`・backtick・`\\(`・`\\` + `| . + * ? 数字` が無い。
     (4) 中身が `-x` / `--x` (空白か文頭の直後) で始まる語を持つなら `\\英字` か `^` も要る (CLI の flag と区別)。
     (5) 中身に `\\ ^ { } = < > | ! +` のどれか、 または `x_1` 形 (英字 `_` 数字、 前後が英数字でない) の添字が要る。
+        ただし判定の前に `\\` + ASCII 記号 (`\\,` `\\;` `\\!` `\\{` `\\}` …) を空白に置き換える (本体 `s`、 desktop 6.28899.2 の
+        描画 chunk `ce044ea01-BHlvFvH9.js` で確認 = 2026-11-21) → `\\(c\\,G\\)` `\\((l,\\,i)\\)` は記号無しで落ちる。
+        `$…$` の guard はこの置換をしない (`$c\\,G$` は描かれる)。
   - `$…$` の guard (同 chunk の `cn`): 中身 60 文字以内・前後に空白なし・(3)(4) と同じ・末尾が演算子や開き括弧でない・
     code らしい並び (`=~` `&&` `@` `#` `"` `\\\\` 空白の後の `'` 末尾の `!`) でない・`**` `__` `~~` `](` HTML tag でない・
     括弧と `{}` が釣り合う・`|` が偶数個か末尾でない。 その上で「英字 1 文字」 か「数と四則の式 (先頭が数字でない)」 か
@@ -30,7 +33,9 @@
   実測では `\\\\0` を含む 1 行の pmatrix も描かれた = 止めると誤検出になる)。 数式を含む行の Markdown の
   構造 (見出し・箇条書き・引用) は本体も inline parser に同じ文字列を渡すので区別しない。 guard に落ちた `$` の閉じが
   次の式の開きになって落ちる連鎖は、 本体と同じに走査するが報告はしない (直すのは元の 1 箇所)。 app の式は版で変わる
-  = 読んだ版は上に書いた。
+  = 読んだ版は上に書いた。 2026-11-21 に desktop 6.28899.2 (Windows) の描画 chunk (本体に無く assets-proxy から読む remote の
+  bundle。 読み方 = conventions/claude-app-bundle-reading.md#code-tab-remote-renderer) を読み直した差 = 上の (5) の置換 (写した) と、
+  `$…$` の前後の文字に非 ASCII (日本語) も許す判定 (写していない = hook は旧い判定のまま、 描ける式を落とす向きには働かない)。
 
 fire = session の entrypoint が claude-desktop / claude-desktop-3p (右パネルの Code タブ = KaTeX で描く画面)
      ∧ 今の turn の最終発話 (fenced code block の外) に上の guard に落ちる式が 1 つ以上ある。
@@ -70,6 +75,7 @@ L_DISPLAY = re.compile(r"[\\^{}=<>+*/()|!]")
 UT_FLAG = re.compile(r"(^|\s)-{1,2}[A-Za-z]")
 WT_TEX = re.compile(r"\\[a-zA-Z]|\^")
 LN_BAD_ESC = re.compile(r"\\[|.+*?0-9]")
+OT_PUNCT_ESC = re.compile(r"\\[!-/:-@\[-`{-~]")  # 本体 `o`: `\\` + ASCII 記号 (`\\,` `\\;` `\\{` …)
 QT_TAIL = re.compile(r"(?:(?<![_^])[-+*]|[=<>/^_({\[,:;\\])$")
 DOLLAR_T_CODE = re.compile(r"""[=!]~|&&|[@#"]|\\\\|(?:^|[\s(=,])'|[\s'"(/\[=,;]\^(?!\{)|(?:^|[\s({|&])!$""")
 EN_MD = re.compile(r"\*\*|__|~~|\]\(|</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>|<[!?]")
@@ -203,6 +209,12 @@ def has_bad_escape(body: str) -> bool:
     return "$" in body or "`" in body or "\\(" in body or bool(LN_BAD_ESC.search(body))
 
 
+def strip_punct_escapes(body: str) -> str:
+    """本体 `s`: `\\` + ASCII 記号 (`\\,` `\\;` `\\!` `\\{` `\\}` …) を空白に置き換える。 `\\(…\\)` の記号の判定はこの後に当てる
+    (= `\\,` のような空白の command は記号に数えない)。"""
+    return OT_PUNCT_ESC.sub(" ", body) if "\\" in body else body
+
+
 def flag_like(body: str) -> bool:
     """本体 `dn` の後半: `-x` の語があって `\\英字` も `^` も無い (CLI の flag と見なす)。"""
     return bool(UT_FLAG.search(body)) and not WT_TEX.search(body)
@@ -231,7 +243,8 @@ def backslash_guard(text: str, open_at: int, body: str) -> str | None:
         return "BS_BAD_ESC"
     if flag_like(body):
         return "BS_FLAG"
-    if not (MT.search(body) or FT.search(body)):
+    stripped = strip_punct_escapes(body)
+    if not (MT.search(stripped) or FT.search(stripped)):
         return "BS_NOSYM"
     return None
 
@@ -354,7 +367,8 @@ DISPLAY_FENCE = re.compile(r"^ {0,3}\$\$\s*$")
 
 HINT = {
     "BS_PREV": "`\\(` の直前に半角空白を 1 つ入れる (読点・句点・括弧・日本語の直後は不可)",
-    "BS_NOSYM": "中身に記号が無い: 添字は `{}` を付ける (`\\(E_{I}\\)`)、 1 文字は `$x$`、 `K(t)` 形・数は地の文の文字",
+    "BS_NOSYM": "中身に記号が無い (`\\,` `\\;` `\\{` のような `\\`+記号は数えない): 添字は `{}` を付ける (`\\(E_{I}\\)`)、 1 文字は `$x$`、 "
+                "`\\(c\\,G\\)` は `$c\\,G$` か `\\({c\\,G}\\)`、 `K(t)` 形・数は地の文の文字",
     "BS_FLAG": "空白の後の `-x` は CLI の flag と見なされる: `{-}x` と書くか `\\英字` を中に入れる",
     "BS_BAD_ESC": "中身に `$`・backtick・`\\(`・`\\|` `\\.` `\\+` `\\*` `\\?` `\\数字` を入れない (ノルムは `\\lVert v\\rVert`)",
     "BS_LONG": "中身が 200 文字超: 分けるか `$$…$$` に出す",
@@ -595,7 +609,7 @@ def _non_math_dollar(text: str, u: int, hi: int, close=None) -> bool:
 
 
 # ---- 表示で直す書き換え (MessageDisplay の chat-math-display-fix.py と、 Stop の「直した形」 の案内が使う) ------
-# 意味を変えない書き換えだけ: 区切りの付け替え (`$…$` → 直前に空白の `\(…\)`)・1 文字の添字と上付きに `{}`・
+# 意味を変えない書き換えだけ: 区切りの付け替え (`$…$` → 直前に空白の `\(…\)`)・1 文字の添字と上付きに `{}`・中身全体を `{}` で包む・
 # `\(` の前の空白・表のセルの `|` を `\vert`・`\[…\]` を `$$…$$`・数だけの式を地の文へ。 直した行を同じ判定式に通し、
 # 落ちる式の数が減るときだけ採る。 直せない式と数式でない `$` は触らない。
 
@@ -637,7 +651,8 @@ def _fix_candidates(line: str, f: dict):
         cands = []
         if NUMBER_ONLY.fullmatch(core):
             cands.append(core)
-        cands += [sp + "\\(" + b2 + "\\)", sp + "\\(" + body + "\\)", "$" + brace_scripts(core) + "$"]
+        cands += [sp + "\\(" + b2 + "\\)", sp + "\\(" + body + "\\)", "$" + brace_scripts(core) + "$",
+                  sp + "\\({" + core + "}\\)"]
         return at, at + len(span), cands
     if code == "BRACKET":
         if not span.endswith("\\]"):

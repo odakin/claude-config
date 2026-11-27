@@ -67,6 +67,8 @@ out="$(printf '{not json' | CLAUDE_CODE_ENTRYPOINT=$D python3 "$DISP" 2>&1; echo
 mkdir -p "$TMP/copy" && cp "$DISP" "$GUARD" "$TMP/copy/"
 out="$(jq -n '{session_id:"s", index:0, final:true, delta:"定義: $E_I$"}' | CLAUDE_CODE_ENTRYPOINT=$D python3 "$TMP/copy/chat-math-display-fix.py" 2>&1)"
 grep -qF 'E_{I}' <<< "$out" && ok "A17 copy の配線でも隣の部品を読む" || ng "A17" "$out"
+disp "A18 \\(c\\,G\\) (記号が \\, だけ) は \$c\\,G\$ へ" $D '積 \(c\,G\) を見る。' '$c\,G$'
+disp "A19 \\((l,\\,i)\\) は \$ にできないので {} で包む" $D '組 \((l,\,i)\) ごとに。' '\({(l,\,i)}\)'
 
 # ---- §B Stop の hook ---------------------------------------------------------------------------------
 # mkt path final_text [feedback_line second_text]
@@ -129,7 +131,7 @@ stop "B13 表示の印がある session で全部直るなら止めない" 0 "$t
 # 校正 = 画面に出た全ての版 (差し戻された版も) を数える
 mkdir -p "$TMP/home/.claude-x/projects/p" "$TMP/home/.claude/projects/q"
 mkt "$TMP/home/.claude-x/projects/p/s1.jsonl" '定義: $E_I$' "$own" '定義: $E_{I}$'
-out="$(HOME="$TMP/home" python3 "$GUARD" --calibrate 1 0 2>&1)"
+out="$(HOME="$TMP/home" USERPROFILE="$TMP/home" python3 "$GUARD" --calibrate 1 0 2>&1)"  # USERPROFILE = Windows の Python は HOME を見ない
 grep -qE 'roots=2 displayed=2 fired=1 .*own_blocked=1' <<< "$out" && ok "B14 校正は全ての設定フォルダの、 差し戻された版も数える" || ng "B14" "$out"
 
 for r in "${results[@]}"; do echo "$r"; done
