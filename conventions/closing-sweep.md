@@ -20,7 +20,8 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
   当たるなら、 **公開層に上げる文のうち事実を含みうるもの**を絞り、 残りは plan か TODO に積んで次の session に回す。
   これは漏洩の対策であって作業量の上限ではない = 技術の仕組み (道具・hook・検査) や手順の一般形を作ることは、 この条件でも絞らない。
   同じ時間帯に走っている他の締めとは、 1.5 の宣言で書く file を分ける。
-- <a id="dialogue-window-sweep"></a>**研究の対話係の窓で締めを頼まれたら、 締めは一覧を作って指揮所に渡すところまで** ([multi-session-coordination.md#research-dialogue-and-conductor](multi-session-coordination.md#research-dialogue-and-conductor) の対話係の窓 = 研究と作文だけをする窓): 0.3 の集め方で、 決まったこと・未決の論点・残したい知見と手順の一覧を作り、 1 から 4 の段 (正本・参照・SESSION・TODO への書き込み、 commit + push) は指揮所に渡す。 一覧は指揮所への 1 通にし、 長ければ共有のメモの置き場か作業用の一時 dir の 1 file にして path を渡す。 指揮所が一覧を正本に移し、 対話係の窓は指揮所が返した結果の path を提出に使う (実測: 対話係の窓が締めで規則の文書に追記して commit し、 分担の外れになった)。
+- <a id="dialogue-window-sweep"></a>**研究の対話係の窓で締めを頼まれたら、 締めは一覧を作って指揮所に渡すところまで** ([multi-session-coordination.md#research-dialogue-and-conductor](multi-session-coordination.md#research-dialogue-and-conductor) の対話係の窓 = 研究と作文だけをする窓): 0.3 の集め方で、 決まったこと・未決の論点・残したい知見と手順の一覧を作り、 1 から 4 の段 (正本・参照・SESSION・TODO への書き込み、 commit + push) は指揮所に渡す。 project が共同研究者と共有の repo なら、 一覧を 2 部に分ける = 「共有 repo に写すもの」 (研究者の論文についての発言と裁定・研究の停止点・未決の一覧) と「個人の層に残すもの」 (agent の未採用の案・評価・計算のメモで共有の承認の無いもの)。 前の部には写す先の SESSION と裁定の台帳を repo の path で名指す。 個人の層に残すものの共有範囲の札を一覧全体に付けない ([multi-session-coordination.md#dialogue-record-split](multi-session-coordination.md#dialogue-record-split))。 研究者の発言は研究に関わるものを全部逐語で並べ、 答えの中の表・対応・例文・一文の試みは要約せず file にして path を渡す (要約の表を一覧の代わりにしない。 実測: 対話係が手で十数項目にまとめた一覧では、 研究者の問いの逐語と答えの表・言い換えの対応・例文が 1〜2 行に縮み、 記録に残らなかった)。 一覧は指揮所への 1 通にし、 長ければ共有のメモの置き場か作業用の一時 dir の 1 file にして path を渡す。 指揮所が一覧を正本に移し、 対話係の窓は指揮所が返した結果の path を提出に使う (実測: 対話係の窓が締めで規則の文書に追記して commit し、 分担の外れになった)。
+- <a id="dialogue-list-intake"></a>**指揮所の側: 対話係の一覧を受けた締めは、 共有 repo に写すまでが締め**: 一覧の「共有 repo に写すもの」 の部を、 その project の SESSION の現在地と裁定の台帳に写してから閉じる (写す前に、 現在地の行を読む = 下の [#session-todo](#session-todo))。 研究者の発言は逐語で、 決まったか検討中かの状態と、 発言した人を主語にして書く。 一覧や依頼書に付いた共有範囲の札 (「研究者だけ」 など) は、 [#placement](#placement) の「研究の中身」 の行 (著者の判断は project の note に発言のまま) を上書きしない = 札が掛かるのは個人の層に残す部だけ。 一覧が 2 部に分かれていなければ、 自分で分けるか研究者に 1 問で聞く。 検収係の受け取りは引き継ぎの物の受け取りで、 project の記録に写したかは見ない = 写すのは指揮所の番 (実測: 検収係が引き継ぎ書を byte 一致で受け取って閉じ、 共有 repo の停止点は古いまま残った)。
 - <a id="delegated-sweep"></a>**ある session の締めを別の worker に渡す** (元の session が止まった・context が大きい・別 vendor に任せる) ときは、 渡す先は自分で締めを回せる session にし (subagent に渡すと、 その締めで得た知見がまた依頼元の締めに積もる = [multi-session-coordination.md#self-closing-delegate](multi-session-coordination.md#self-closing-delegate))、 依頼の spec に 3 つ書く:
   (1) 対象の session の完全な id と記録の種類 (Claude Code か Codex)。 worker にとって上の「この session」 は対象の session で、 その種類の道具で読む = Claude の session なら 0.3・0.5 の道具を対象の id で回し、 0.95 の inventory (Codex の session 用) は使わない
   (2) 既に済んだ拾い出し (考え方・研究の中身の回収など) の結果の file。 それを入力にして拾い直させない
@@ -105,6 +106,7 @@ skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md
 | 口 | Codexで行うこと |
 |---|---|
 | 0.3の会話・道具・変更file | SessionStartで渡された**完全なsession ID**を使い、`python3 scripts/codex-wrap-inventory.py <full-id> --section messages --max-chars 0` と `--section commands` を読む。長い1件は `--call-id <id> --max-chars 0`。利用者向けに公開された `reasoning.summary` も回収し、要約が提供されない場合を明示する。非公開の内部思考・raw content・暗号化された思考本文は回収しない。userMessageという搬送上のラベルを本人の承認とは扱わない |
+| <a id="codex-reply-knowledge"></a>0.3の返事の知見 (研究の中身・考え方) | `python3 scripts/session-reply-knowledge-report.py --codex <full-id>` で候補 (本人の問いとその turn の返事・圧縮の要約の未決の項目) を並べ、1件ずつの処分をfileに書いて `--codex <full-id> --check <file>` を通す ([#reply-knowledge](#reply-knowledge) と同じ処分の形)。研究の対話係の締めは `--owner-verbatim` を足す = 問いでない発言も候補に並べ、「記録済み」「足した」の根拠のfileに研究者の発言が逐語で在るかも照らす。照合が回らないときは、回らないと書いて終えず、会話記録のuserの行を全部引いて一覧と突き合わせ、答えの中の表・例文・本文も照らす (実測: Codexの対話係がClaude用の照合を回せず、手でまとめた一覧で研究者の問いの逐語と答えの表が落ちた) |
 | 0.5のnative/hosted subagent、headless worker | 同じ道具の `--section workers --max-chars 0`。再開した回の報告も全件。APIで結び付くnative子と、worker側hookの観測したturn・Claudeログ範囲を読む。型の不明・履歴の不在・ephemeral・環境が消された起動はUNAVAILABLEを確認し、元のcommand出力と明示された成果物も読む。0件と同一視しない |
 | hostedのcollaboration tool | 利用可能なら `collaboration.list_agents` でこの親のtreeを照合する。native hookの発火を仮定せず、委ねるpromptに最初から記録条項を入れる。報告が現在のcontextに無ければ、inventoryのagentThreadIdでnative readerへ、または記録したtool input/resultを確認する。回収不能は理由を残す |
 | 掲示板 | `--agent codex --session <native-id>` に加え、inventoryのboard routeが示すこのsessionで使ったrole aliasもinbox/showで同期する。閉じた依頼を未処理へ戻さず、提出・検収を別々に確かめる |
@@ -200,7 +202,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
 
 ## <a id="session-todo"></a>3. SESSION・TODO
 
-- SESSION.md は案件ごとの現在地を**置き換える** (日付つきの節・commit hash・経緯を足さない。 中身の置き場所 = 2 の「正本を README・SESSION に置かない」)。
+- SESSION.md は案件ごとの現在地を**置き換える** (日付つきの節・commit hash・経緯を足さない。 中身の置き場所 = 2 の「正本を README・SESSION に置かない」)。 <a id="read-current-state-before-replacing"></a>置き換える前に、 その案件の現在地の行 (停止点・📌・「次」 の行) を読む。 自分の持つ項目の語で SESSION を検索して当たった行だけを直さない = 自分の項目でない現在地の行が古いまま残る (実測: 締めで自分の項目の語だけを検索して SESSION を直し、 研究の停止点の行は前の版のまま残った)。 長い SESSION を他の file と一緒に出力の上限つきで読むと途中が省かれるので、 その file だけを末尾まで読む。
 - 動いた TODO は現在地の欄を上書きし、 期限と status を実態に合わせる (自分の番が残るなら「待ち」 にしない)。
 - 掲示板の依頼の状態 (誰の番か・閉じたか) を SESSION・入口の一覧・TODO に書く前も、 5 の報告と同じく `show --request <id> --sync` で読み直す (実測: 提出の後に相手が受け取って閉じていたのに、 手元の記憶から「相手の番」 と書いて commit し、 書き直しの commit が要った)。
 - メールを送った・受けたなら記録の道具で記録する。
