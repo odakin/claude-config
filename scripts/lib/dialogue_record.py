@@ -246,11 +246,11 @@ def quote_in_repo(repo, quote, since_iso, max_files=400, max_bytes=2_000_000):
         return True
     want = squash(quote)
     base = _base_commit(repo, since_iso)
-    names = (_git(["diff", "--name-only", base], repo) if base else _git(["ls-files"], repo)) or ""
-    names += "\n" + (_git(["ls-files", "--others", "--exclude-standard"], repo) or "")
+    # -z = 日本語の file 名を git が引用符と 8 進で包まない形で受ける (shell-multibyte-truncation.md#git-quoted-paths)
+    names = (_git(["diff", "--name-only", "-z", base], repo) if base else _git(["ls-files", "-z"], repo)) or ""
+    names += "\0" + (_git(["ls-files", "-z", "--others", "--exclude-standard"], repo) or "")
     seen = set()
-    for n in names.splitlines():
-        n = n.strip()
+    for n in names.split("\0"):
         if not n or n in seen:
             continue
         seen.add(n)
@@ -394,6 +394,14 @@ def _selftest():
         (repo / "notes.md").write_text("- 記録: 別のこと\n", encoding="utf-8")
         git("commit", "-q", "-am", "n2", date="2099-01-07T00:00:00Z")
         expect("写しを消した後は False", quote_in_repo(repo, q, "2099-01-05T00:00:00Z"), False)
+        (repo / "メモ.md").write_text("棚の上の箱は、 左から順に大きさで\n並べ直しておいて\n", encoding="utf-8")
+        expect("日本語の名の未追跡の file の写しも数える", quote_in_repo(repo, q, "2099-01-05T00:00:00Z"), True)
+        git("add", "メモ.md")
+        git("commit", "-q", "-m", "m", date="2099-01-07T06:00:00Z")
+        expect("日本語の名の file を commit した後も数える (git の引用符で包んだ名を読まない)",
+               quote_in_repo(repo, q, "2099-01-05T00:00:00Z"), True)
+        git("rm", "-q", "メモ.md")
+        git("commit", "-q", "-m", "m2", date="2099-01-07T07:00:00Z")
         (repo / "one.md").write_text("棚の上の箱は、左から順に大きさで並べ直しておいて\n", encoding="utf-8")
         git("add", "one.md")
         git("commit", "-q", "-m", "o", date="2099-01-01T12:00:00Z")
