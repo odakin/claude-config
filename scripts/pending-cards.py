@@ -109,8 +109,8 @@ def reason_for(active: list[dict], due: list[dict], second: list[dict], need_lin
             "   - 「withdrawn」 が返った依頼は、 元と同じ入力で start_session を 1 枚ずつ出し直す (initiation = own_initiative。 "
             "title・prompt・background・context・model・effort・name・use_worktree を変えない。 元の呼び出しが context に無ければ写しを Read する): "
             f"{_card_list(latest, copies)}\n"
-            "   - 押されていた・押した瞬間の返事 (「is no longer pending」「has just clicked Start」、 旧い app では「already started」) が返った依頼は出し直さない (本人が押した = worker が起きている)。\n"
-            "   - 「already dismissed」 (本人が閉じた)・「No pending task」 (app に card が無い) が返った依頼も出し直さない。\n"
+            "   - 押されていた・起動の途中の返事 (「is no longer pending」「is being started right now」、 旧い app では「already started」「has just clicked Start」) が返った依頼は出し直さない (本人が押した = worker が起きている)。\n"
+            "   - 「had already left the queue」 (本人が閉じた・新しい card に押し出された、 旧い app では「already dismissed」)・「No pending task」 (app に card が無い)・「already expired」 (app で期限切れ) が返った依頼も出し直さない。\n"
             "   - 「Not withdrawn: … edited …」 (本人が文を編集した) が返った依頼は出し直さず、 card の上で押すか閉じるよう本人に頼む。\n"
             "   取り下げと出し直しを同じ応答に並べない (結果を読む前に出し直すと、 本人がその間に押した card と 2 人目の worker になる)。")
     if second:
@@ -481,6 +481,16 @@ def selftest() -> int:
         rs = _reason(_run_stop(tb.write(d)))
         check("押された後に出た同じ依頼の card → 取り下げさせ、 出し直させない",
               "2 人目" in rs and "task_sss2" in rs and pc.REISSUE_HEAD not in rs)
+        # その 2 枚目を取り下げたら「had already left the queue」 (本人が閉じていた) → もう押せないので取り下げを求め続けない
+        tb.feedback(rs)
+        tb.tool("mcp__ccd_session__dismiss_task", {"task_id": "task_sss2"},
+                "Task task_sss2 had already left the queue (dismissed earlier, or displaced by newer suggestions); "
+                "any copy kept for later is being withdrawn too. Do not re-flag it.")
+        tb.say("閉じられていました。")
+        tb.event()
+        tb.say("次の turn。")
+        check("2 人目になる card が閉じられていた返事 → 次の turn で取り下げを求めない",
+              _run_stop(tb.write(d)) == "")
 
         # 今の app の文で押されていたと返る (「is no longer pending」) → 押された card として出し直さない
         tn2 = _T(now - 3600)
@@ -496,8 +506,14 @@ def selftest() -> int:
         check("取り下げが今の文の「is no longer pending」 → 押された (取り下げたままの知らせも出ない)",
               _run_stop(pn2, active=True) == "" and pc.chains(pc.load_entries(pn2))[0]["status"] == "started")
 
-        # dismiss_task の返事 7 通り (app 本体の表の文) と、 旧い文 1 通り。 期待 = 鎖の状態 / 次の turn で出し直しを求めるか
+        # dismiss_task の返事 (app 本体の表の文、 今の版と旧い版)。 期待 = 鎖の状態 / 次の turn で出し直しを求めるか
         forms = [
+            ("already_dismissed (今の文)", "Task {t} had already left the queue (dismissed earlier, or displaced by newer "
+             "suggestions); any copy kept for later is being withdrawn too. Do not re-flag it.", "closed"),
+            ("expired", "Task {t} already expired unstarted, so it is no longer shown; any copy kept for later is being "
+             "withdrawn too. Do not re-propose it.", "expired"),
+            ("spawn_in_flight", "Task {t} is being started right now — it can't be withdrawn while the spawn is in "
+             "flight. Nothing was changed.", "started"),
             ("withdrawn", "Task {t} withdrawn. The card is no longer shown to the user. Continue your current work.",
              "withdrawn"),
             ("already_started", "Task {t} is no longer pending, so there is nothing to withdraw: the user started it as a new "

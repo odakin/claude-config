@@ -14,12 +14,13 @@
   - 押された = (1) app の記録で `spawnedFrom.taskId` がその id の session が在る (押した瞬間にできる、 実測)
     (2) 会話記録の「The user started your proposal task_…」 (起こした側の次の turn に遅れて届く、 実測)、 届く前は
     起こした側の app の記録に積まれた同じ文 (起きた session が消されると (1) が消える = こちらでしか分からない、 実測)
-    (3) この session が `start_session` に `proposal_id` を渡して起こした (4) `dismiss_task` が押されていた・押した瞬間・
-    編集して押した返事を返した (7 通りの返事の読み分け = 下の WITHDRAWN の上の注)。
-  - 取り下げ = `dismiss_task` の結果の「Task task_… withdrawn」。 本人が閉じた・app に card が無い = 返事が
-    「already dismissed」「No pending task」 (出し直さず点呼にも載せない)。 本人が文を編集した = 返事が
-    「Not withdrawn: … edited …」 (取り下げも出し直しもせず、 点呼に残して card の上で押すか閉じるよう頼む)。
-    期限切れ = 出してから 7 日 (app の期限)。
+    (3) この session が `start_session` に `proposal_id` を渡して起こした (4) `dismiss_task` が押されていた・起動の途中・
+    編集して押した返事を返した (返事の読み分け = 下の WITHDRAWN の上の注)。
+  - 取り下げ = `dismiss_task` の結果の「Task task_… withdrawn」。 本人が閉じた・新しい card に押し出された・app に
+    card が無い = 返事が「had already left the queue」 (旧い文「already dismissed」)「No pending task」 (出し直さず
+    点呼にも載せない)。 本人が文を編集した = 返事が「Not withdrawn: … edited …」 (取り下げも出し直しもせず、 点呼に
+    残して card の上で押すか閉じるよう頼む)。 期限切れ = 出してから 7 日 (app の期限)、 または返事が
+    「already expired unstarted」。
   - 掲示板で引き受け済み = card の hand-off 文が名指す request に、 誰かの claim・submit・accept・abandoned・done が
     在る (最後が release なら戻る)。 掲示板は `<base>/*/events` と `<base>/*/board/events` (`<base>` = この repo の親)
     か env PENDING_CARDS_BOARD_ROOTS (`:` 区切り)。
@@ -47,23 +48,29 @@ import time
 
 PROPOSED = re.compile(r'Proposed "(?P<title>.*?)" \(task_id: (?P<tid>task_[0-9a-zA-Z]+)\)')
 STARTED = re.compile(r"The user started your proposal (task_[0-9a-zA-Z]+)")
-# dismiss_task の返事は 7 通り (app 本体の表 = 画面の bundle の `{dismissed:…, already_started:…, …}`、 版 5.1231)。
-# 文は app の版で変わる (旧い文も読む。 実測)。 読み分け:
+# dismiss_task の返事 (app 本体の表 = main process の bundle の `{dismissed:…, already_started:…, …}[outcome]`、
+# 探し方 = conventions/claude-app-bundle-reading.md)。 文と通りの数は app の版で変わる (旧い文も読む。 実測)。 読み分け:
 #   取り下げた (dismissed)              「Task <id> withdrawn …」
 #   押されていた (already_started)      「Task <id> is no longer pending …」 / 旧い文「Task <id> was already started …」
-#   押した瞬間 (starting)              「The user has just clicked Start on task <id> …」
-#   編集して押した (edited_start)        「Not withdrawn: the user edited the message of <id> and has just clicked Start …」
-#   本人が閉じた (already_dismissed)    「Task <id> was already dismissed …」 → 出し直さず点呼にも載せない
+#   起動の途中 (spawn_in_flight)        「Task <id> is being started right now …」
+#                                      / 旧い文 (starting)「The user has just clicked Start on task <id> …」
+#   編集して押した (旧い edited_start)    「Not withdrawn: the user edited the message of <id> and has just clicked Start …」
+#   本人が閉じた・新しい card に押し出された (already_dismissed)
+#                                      「Task <id> had already left the queue …」 / 旧い文「Task <id> was already dismissed …」
+#                                      → 出し直さず点呼にも載せない
 #   card が無い (not_found)            「No pending task with id <id> … Do not re-flag it …」 → 同じ
+#   app で期限が切れた (expired)         「Task <id> already expired unstarted …」 → 期限切れ (出し直さず点呼にも載せない)
 #   本人が文を編集した (edited)          「Not withdrawn: the user edited the message of <id>, so only its card starts it …」
 #                                      → 取り下げも出し直しもしない。 点呼に残し、 card の上で押すか閉じるよう頼む
+#   session が無い (session_not_found)  「Session not found — cannot look up task <id>.」 → 何も変えない
 WITHDRAWN = re.compile(r"Task (task_[0-9a-zA-Z]+) withdrawn")
 ALREADY_STARTED = re.compile(
-    r"Task (task_[0-9a-zA-Z]+) (?:was already started|is no longer pending)"
+    r"Task (task_[0-9a-zA-Z]+) (?:was already started|is no longer pending|is being started right now)"
     r"|has just clicked Start on task (task_[0-9a-zA-Z]+)"
     r"|edited the message of (task_[0-9a-zA-Z]+) and has just clicked Start")
-ALREADY_DISMISSED = re.compile(r"Task (task_[0-9a-zA-Z]+) was already dismissed")
+ALREADY_DISMISSED = re.compile(r"Task (task_[0-9a-zA-Z]+) (?:was already dismissed|had already left the queue)")
 NOT_FOUND = re.compile(r"No pending task with id (task_[0-9a-zA-Z]+)")
+APP_EXPIRED = re.compile(r"Task (task_[0-9a-zA-Z]+) already expired unstarted")
 EDITED = re.compile(r"edited the message of (task_[0-9a-zA-Z]+), so only its card starts it")
 
 
@@ -294,6 +301,7 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
     started: set[str] = set()
     withdrawn: dict[str, int] = {}
     closed: set[str] = set()
+    app_expired: set[str] = set()
     edited: set[str] = set()
     for i, e in enumerate(entries):
         if e.get("type") == "assistant":
@@ -326,11 +334,13 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
                     withdrawn.setdefault(m.group(1), i)
                 started.update(_ids(ALREADY_STARTED, text))
                 closed.update(_ids(ALREADY_DISMISSED, text) + _ids(NOT_FOUND, text))
+                app_expired.update(_ids(APP_EXPIRED, text))
                 edited.update(_ids(EDITED, text))
         for m in STARTED.finditer(_text_of(e)):
             started.add(m.group(1))
     if use_app_records:
-        open_ids = {t for t in found if t not in started and t not in withdrawn and t not in closed}
+        open_ids = {t for t in found
+                    if t not in started and t not in withdrawn and t not in closed and t not in app_expired}
         if open_ids:
             since = min(found[t]["ts"] for t in open_ids) or 0.0
             started |= _app_started_ids(open_ids, since, app_until)
@@ -351,7 +361,7 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
             c["status"] = "withdrawn"
         elif tid in closed:
             c["status"] = "closed"
-        elif c["ts"] and now - c["ts"] > EXPIRE_SECONDS:
+        elif tid in app_expired or (c["ts"] and now - c["ts"] > EXPIRE_SECONDS):
             c["status"] = "expired"
         elif tid in edited:
             c["status"] = "edited"
@@ -430,6 +440,8 @@ def second_worker_cards(chs: list[dict], now: float | None = None) -> list[dict]
         for c in ch["cards"]:
             if c.get("pressed") or c.get("withdrawn_row") is not None or c["row"] < min(pressed_rows):
                 continue
+            if c.get("status") in ("closed", "expired"):
+                continue    # 本人が閉じた・app に無い・期限切れ = もう押せない (取り下げを求め続けない)
             inp = c.get("input") or {}
             if OVERRIDE in (c["title"] or "") or OVERRIDE in str(inp.get("prompt") or ""):
                 continue
