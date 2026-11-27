@@ -28,7 +28,10 @@ WHAT IT DOES
 - `arxiv <query>`      arXiv API (`search_query`、 例 `ti:"geoscience revisited"`、 `au:Deluca AND au:Corral`)。
                        `--newest` = 提出日の新しい順 (既定は関連度順 = 最近の測定を探すときは付ける)
 - `arxiv-abstract <id>…` arXiv の要旨 (id は vN なしで可、 応答の id に版が付く)
-- `inspire <query>`    INSPIRE の検索 (`t …`、 `abstracts.value:"…"`、 `date > 2026-01-01` など)、 新しい順
+- `inspire <query>`    INSPIRE の検索 (`t …`、 `abstracts.value:"…"`、 `date > 2026-01-01` など)、 新しい順。
+                       `refersto:arxiv:<id>` / `refersto:eprint:<id>` は INSPIRE で被引用として効かず数万件を返す
+                       (実測) ので、 その id の recid を引いて `refersto:recid:<recid>` に書き換えてから引く
+                       (書き換えた式を stderr に出す。 INSPIRE に record が無ければ止めて `cites` / `citing` を案内)
 - 各行 = 年 | DOI か id | 題 | 誌名 | 被引用数。 先頭行に API の総数 (OpenAlex の `meta.count` 等)
 - `--log <file>` に 1 リクエスト 1 行 (時刻・HTTP status・URL) を追記 = 検索ログの再現の根拠
 - `--cache-dir <dir>` で応答を保存 (同じ URL は引き直さない)。 **誤り応答 (4xx/5xx) は保存しない**
@@ -243,6 +246,31 @@ def inspire_url(query, n, page=1, abstract=False):
     return f"{INSPIRE}?sort=mostrecent&size={n}&page={page}&fields={fields}&q={urllib.parse.quote(query)}"
 
 
+REFERSTO_ARXIV = re.compile(
+    r"refersto:\s*(?:arxiv|eprint):\s*(\d{4}\.\d{4,5}|[a-z\-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?", re.I)
+
+
+def rewrite_refersto(query, recids):
+    """`refersto:arxiv:<id>` (and the eprint: spelling) -> `refersto:recid:<recid>` using recids {id: recid}."""
+    return REFERSTO_ARXIV.sub(lambda m: f"refersto:recid:{recids[m.group(1)]}", query)
+
+
+def resolve_refersto_arxiv(get, query):
+    """Rewrite the citing forms INSPIRE does not honour; returns the query unchanged when there are none."""
+    ids = list(dict.fromkeys(REFERSTO_ARXIV.findall(query)))
+    if not ids:
+        return query
+    recids = {}
+    for i in ids:
+        hits = get(f"{INSPIRE}?size=1&fields=control_number&q={urllib.parse.quote('arxiv:' + i)}")["hits"]["hits"]
+        if not hits:
+            sys.exit(f"INSPIRE に arXiv:{i} の record が無い — 被引用は `cites` (OpenAlex) か `citing` (OpenCitations) で引く")
+        recids[i] = hits[0]["metadata"]["control_number"]
+    new = rewrite_refersto(query, recids)
+    print(f"# refersto:arxiv:<id> は INSPIRE で被引用として効かないので recid に書き換えた: {new}", file=sys.stderr)
+    return new
+
+
 def inspire_row(hit, abstract=False):
     m = hit["metadata"]
     pub = (m.get("publication_info") or [{}])[0]
@@ -368,6 +396,7 @@ def run(a):
                 for r in rows:
                     print(f"### {r['id']} | {r['date']} | {r['title']}\n{r['abstract']}\n")
         elif a.cmd == "inspire":
+            a.query = resolve_refersto_arxiv(c.get, a.query)
             if a.all:
                 total, rows = inspire_all(c.get, a.query, a.abstract)
             else:
@@ -403,6 +432,14 @@ def selftest():
                                   "publication_info": [{"journal_title": "J.Test", "journal_volume": "9"}]}})
     assert r == {"year": "2026-01-02", "id": "2601.00001", "title": "A title", "venue": "J.Test 9", "cited": 4}, r
     assert inspire_row({"metadata": {}})["id"] is None, "欠けた欄で落ちる"
+    assert rewrite_refersto("refersto:arxiv:2606.23418 and t x", {"2606.23418": 7}) == "refersto:recid:7 and t x"
+    assert rewrite_refersto("refersto:eprint:2606.23418v1", {"2606.23418": 7}) == "refersto:recid:7", "版つき・eprint の形"
+    assert rewrite_refersto("refersto: arxiv:hep-th/0507253", {"hep-th/0507253": 9}) == "refersto:recid:9", "旧形式の id"
+    assert REFERSTO_ARXIV.findall("refersto:recid:123 and arxiv:2606.23418") == [], "recid の形と被引用でない arxiv: を書き換える"
+    seen = []
+    fake_get = lambda url: (seen.append(url), {"hits": {"hits": [{"metadata": {"control_number": 42}}]}})[1]
+    assert resolve_refersto_arxiv(fake_get, "refersto:arxiv:2606.23418") == "refersto:recid:42" and len(seen) == 1
+    assert resolve_refersto_arxiv(fake_get, "t torsion") == "t torsion" and len(seen) == 1, "書き換えの要らない式で引いた"
     assert "abstracts" in inspire_url("x", 3, abstract=True) and "abstracts" not in inspire_url("x", 3)
     assert inspire_row({"metadata": {"abstracts": [{"value": "a"}, {"value": "b"}]}}, True)["abstract"] == "a b"
     pages = {1: [{"metadata": {}}, {"metadata": {}}], 2: [{"metadata": {}}]}
