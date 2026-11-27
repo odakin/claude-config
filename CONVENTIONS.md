@@ -162,6 +162,13 @@ nested directory に `AGENTS.md` / `AGENTS.override.md` を足すのは、その
 - **DESIGN.md との境界判別:** 迷ったら DESIGN.md に書く。EXPLORING.md は「完全に option space を広げている段階」専用。70% 決まっていて 30% 迷っている状態は DESIGN.md に「暫定決定（再検討トリガー: X）」として書く
 - **根拠:** 決定（安定・長寿命）と探索（不安定・短寿命）を同じファイルに同居させると DESIGN.md の役割契約（「なぜそうしたか」）が弱まり、reader の signal-to-noise が下がる。詳細は [`docs/convention-design-principles.md` §6](docs/convention-design-principles.md#design-exploring-separation)
 
+<a id="sot-map"></a>**`SOT.md`** — 正本の地図 (どの事柄の正本がどの file か)
+
+- **作る基準:** 「本節が正本」 の宣言が CLAUDE.md・note・報告書のあちこちに散り、 どの事柄をどの file で直すかを引けない repo (原稿・判断の台帳・検算・報告書が並ぶ研究の共有 repo で起きやすい)。 小さい repo では作らず、 CLAUDE.md の構造の節に置く
+- **書くもの:** 事柄 → 正本の file → 備考 の表 (pointer だけ、 中身は写さない) と、 2 か所以上に書かれていて片方が古くなりやすい事柄の一覧 (どちらに寄せるかは持ち主の判断として書く)
+- **書かないもの:** 正本の中身・現在地 (SESSION.md)・判断の理由 (DESIGN.md)
+- **入口:** CLAUDE.md の構造の木と SESSION.md の冒頭から 1 行で指す。 file を足した・正本を移したら、 同じ commit で表の行を直す
+
 ### <a id="record-location-decision"></a>記録先の判別
 
 | 情報の性質 | 書き先 |
