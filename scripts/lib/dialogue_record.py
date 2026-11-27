@@ -285,18 +285,22 @@ def midway_cover(events, request_id, workspace=None):
     return best
 
 
-def midway_line(items, window_min, rule="multi-session-coordination.md#dialogue-record-split"):
-    """知らせの 1 行。 items = [dict(request, project, quote)] (古い順)。 頭の 1 件の逐語の頭と件数を言う。"""
+def midway_line(items, window_min, rule="multi-session-coordination.md#dialogue-record-split", heads_max=3):
+    """知らせの 1 行。 items = [dict(request, project, quote)] (古い順)。 頭の heads_max 件の逐語の頭と残りの件数を言う
+    (まとめた知らせで、 作業の指示の後ろに研究の判断が隠れないように 1 件だけにしない)。"""
     if not items:
         return ""
     first = items[0]
-    head = _SPACE.sub(" ", first["quote"]).strip()
-    head = head if len(head) <= 18 else head[:18] + "…"
-    more = "" if len(items) == 1 else " (ほか %d 件)" % (len(items) - 1)
-    return ("📝 研究の対話係の便 (依頼 %s) にある研究者の発言の逐語「%s」%s が、 %d 分たっても %s の repo に入っていない"
+    heads = []
+    for it in items[:heads_max]:
+        h = _SPACE.sub(" ", it["quote"]).strip()
+        heads.append("「%s」" % (h if len(h) <= 18 else h[:18] + "…"))
+    more = "" if len(items) <= heads_max else " (ほか %d 件)" % (len(items) - heads_max)
+    reqs = sorted({it["request"] for it in items})
+    return ("📝 研究の対話係の便 (依頼 %s) にある研究者の発言の逐語 %s%s が、 %d 分たっても %s の repo に入っていない"
             " = 研究の判断 (用語・主結果・構成・方針) なら共有の記録 (SESSION の現在地か裁定の台帳) に逐語で写す、"
             " 書き方・作業の指示なら写さずに続けてよい (写さない理由を残すなら、 その依頼に note `%s<理由>`)。 規則 = %s"
-            % (first["request"], head, more, window_min, first["project"], MIDWAY_PREFIX, rule))
+            % (", ".join(reqs), " ".join(heads), more, window_min, first["project"], MIDWAY_PREFIX, rule))
 
 
 def _selftest():
@@ -401,10 +405,12 @@ def _selftest():
         expect("dialogue-record: skip の note も数え、 新しい方を返す",
                midway_cover([req, mnote, skip], "R1"), "2099-01-05T03:00:00Z")
         expect("ほかの依頼の note は数えない", midway_cover([dict(mnote, request_id="R9")], "R1"), "")
-        line = midway_line([dict(request="R1", project="proj", quote=q), dict(request="R1", project="proj", quote="x")], 30)
-        expect("知らせの 1 行 = 逐語の頭・件数・分・project・逃げ道の note を言う",
-               all(w in line for w in ("「棚の上の箱は、左から順に大きさで並", "ほか 1 件", "30 分", "proj の repo", MIDWAY_PREFIX))
-               and "\n" not in line, True)
+        many = [dict(request="R1", project="proj", quote=q)] + [dict(request="R1", project="proj", quote="短い%d" % i) for i in range(3)]
+        line = midway_line(many, 30)
+        expect("知らせの 1 行 = 逐語の頭 3 件・残りの件数・分・project・逃げ道の note を言う",
+               all(w in line for w in ("「棚の上の箱は、左から順に大きさで並", "「短い1」", "ほか 1 件", "30 分", "proj の repo",
+                                       MIDWAY_PREFIX)) and "短い2" not in line and "\n" not in line, True)
+        expect("3 件以下なら「ほか」 を言わない", "ほか" in midway_line(many[:3], 30), False)
         expect("項目が無ければ空", midway_line([], 30), "")
     print("dialogue_record selftest:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
