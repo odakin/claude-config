@@ -320,7 +320,9 @@ def codex_paths(ident, dirs=None):
 
 
 def codex_load(paths):
-    """rollout の file 群を読む (圧縮 → 平文の順、 両方にある同じ行は 1 回だけ)。 圧縮を読めない機械では ValueError。"""
+    """rollout の file 群を読む (圧縮 → 平文の順、 両方にある同じ行は 1 回だけ)。 圧縮を読めない機械では ValueError。
+    返すのは行でなく codex_entries の形 (本人の発言・返事の文・圧縮の印の dict の list = 道具の呼び出しの行は落ちる)。
+    生の行 (send_message_to_thread などの道具の呼び出しも) が要るなら lib/compressed_jsonl.py の open_lines で読む (実測)。"""
     import compressed_jsonl as cj  # lib/ (sys.path に入れてある)
     lines, seen = [], set()
     tally = __import__("collections").Counter()
