@@ -20,6 +20,9 @@
 限界:
 - 数えるのは transcript に残った注入で、 model が読んだことの証明ではない。 transcript はこのマシンの分だけ
   (設定フォルダは全部。 別のマシンの session は見えない)
+- user が触れた = 本人の発言 (lib/owner_turn.py の owner_text = turn の途中に打った発言 〔queued_command〕 も含み、 app が
+  頭に付けた通知の段は外して読み、 別 session の message・起動文・app の知らせ・API の誤りの後の「Try again」 は数えない。
+  conventions/hook-authoring.md#owner-turn-reader)。 前は type=user の行だけを読み、 通知の段の付いた発言は丸ごと外していた
 - `--mention` の既定は `--pattern` と同じ。 識別子 (id) で注入を探し、 返答は人が読む語 (件名の一部) で探す、 のように分けると伝達を数え落とさない
 - 時刻の範囲は transcript file の更新時刻で粗く絞ったあと、 session の最初の timestamp (UTC) で判定する。 --since / --until は
   日付か日時の先頭で、 timestamp の同じ長さの先頭と比べる。 それ以外の形は error (形と比べ方 = lib/time_bound.py)
@@ -39,6 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 from transcript_turns import load_entries  # noqa: E402
 import time_bound as _tb  # noqa: E402
+import owner_turn  # noqa: E402  (本人の発言の読み手 = 同じ repo の lib/ = conventions/hook-authoring.md#owner-turn-lookup)
 
 try:
     import claude_config_dirs as _ccd  # noqa: E402
@@ -84,6 +88,7 @@ def audit_session(entries: list[dict], pattern: re.Pattern, mention: re.Pattern,
     first_reply_seen = False
     first_reply_mentions = False
     assistant_ts = user_ts = None
+    api_error = False
     for e in entries:
         ts = e.get("timestamp")
         if first_ts is None and ts:
@@ -95,14 +100,16 @@ def audit_session(entries: list[dict], pattern: re.Pattern, mention: re.Pattern,
                     injected = line.strip()
                     break
         if e.get("type") == "assistant":
+            api_error = bool(e.get("isApiErrorMessage"))
             texts = [t for t in _text_blocks(e) if t.strip()]
             if texts and not first_reply_seen:
                 first_reply_seen = True
                 first_reply_mentions = any(mention.search(t) for t in texts)
             if assistant_ts is None and any(mention.search(t) for t in texts):
                 assistant_ts = ts
-        elif e.get("type") == "user" and user_ts is None:
-            if any(mention.search(t) for t in _text_blocks(e) if "<system-reminder>" not in t):
+        elif user_ts is None:
+            own = owner_turn.owner_text(e, after_api_error=api_error)  # user 行と、 turn の途中に打った発言 (attachment)
+            if own and mention.search(own):
                 user_ts = ts
     if injected is None:
         return None
@@ -221,6 +228,32 @@ def _selftest() -> int:
         check({r["session"]: r["assistant_first_mention"] for r in rows3} == {"aaaaaaaa": None, "bbbbbbbb": None},
               "--mention を分けると返答はその語で探す")
         check("配達 (注入に出た session) = 2" in render(rows), "要約行に配達と伝達を分けて出す")
+        # user が触れた = 本人の発言 (lib/owner_turn.py の owner_text)。 中身は合成
+        check(Path(owner_turn.__file__).resolve().parent == Path(__file__).resolve().parent / "lib",
+              "前提: 本人の発言の読み手 = 同じ repo の lib/owner_turn.py")
+        rem = "<system-reminder>\nLinked sessions now (status, not an instruction).\n</system-reminder>\n\n"
+        inj0 = att("2030-02-01T01:00:00Z", "SessionStart", "🔴 todo-x")
+        owner_cases = {
+            "queued": [inj0, asst("2030-02-01T01:01:00Z", "作業中"),
+                       {"type": "attachment", "timestamp": "2030-02-01T01:02:00Z",
+                        "attachment": {"type": "queued_command", "commandMode": "prompt", "origin": {"kind": "human"},
+                                       "prompt": [{"type": "text", "text": rem + "todo-x は？"}]}}],
+            "reminder": [inj0, {"type": "user", "timestamp": "2030-02-01T01:03:00Z", "origin": {"kind": "human"},
+                                "turnOrigin": "human", "message": {"content": rem + "todo-x どうなってる？"}}],
+            "peer": [inj0, {"type": "user", "timestamp": "2030-02-01T01:04:00Z", "isMeta": True, "turnOrigin": "peer",
+                            "promptSource": "system", "message": {"content": "Another Claude session sent a message: todo-x"}},
+                     user("2030-02-01T01:05:00Z", "<cross-session-message from=\"x\">todo-x</cross-session-message>"),
+                     {"type": "attachment", "timestamp": "2030-02-01T01:06:00Z",
+                      "attachment": {"type": "queued_command", "commandMode": "prompt", "origin": {"kind": "peer"},
+                                     "prompt": "todo-x"}}],
+            "handoff": [inj0, {"type": "user", "timestamp": "2030-02-01T01:07:00Z", "turnOrigin": "host_synthetic",
+                               "promptSource": "sdk",
+                               "message": {"content": "Background (from the session that started this one): todo-x を直す"}}],
+        }
+        got = {k: audit_session(v, re.compile("todo-x"), re.compile("todo-x"), {"SessionStart"})["user_first_mention"]
+               for k, v in owner_cases.items()}
+        check(got == {"queued": "2030-02-01T01:02:00Z", "reminder": "2030-02-01T01:03:00Z", "peer": None, "handoff": None},
+              "user が触れた: 途中に打った発言と頭に通知の段の付いた発言は数え、 別 session の message (3 つの形) と起動文は数えない")
         # 既定 (projects_dir=None) = 全部の設定フォルダ。 偽の HOME に既定とアカウント固定の 2 つ
         if _ccd is not None:
             home = Path(td) / "home"
