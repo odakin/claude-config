@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""child-wrap-check.py — 起こした子の session を畳んで (archive して) よいかを照合する。 `--wait` は子の turn が終わるまで待ってから照合する。 `--finished` は掲示板の依頼が全部受け取られたのに畳まれていない子を数える (desktop app の親 session 用、 読むだけ)。
+"""child-wrap-check.py — 起こした子の session を畳んで (archive して) よいかを照合する。 `--wait` は子の turn が終わるまで待ってから照合する。 `--finished` は掲示板の依頼が全部受け取られたのに畳まれていない子を数える (desktop app の親 session 用、 読むだけ)。 `--close-plan` は窓が自分を閉じる前の一覧 (子を次の一手ごとに分け、 この窓が出して受け取っていない依頼と、 この窓の背景の作業・push していない commit を並べ、 閉じてよいかを言う = wrap-close の段 1 と 3)。
 
 Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-child-turn-ends):
   - 止めて待つ向き: desktop app は、 子の turn の終わりの知らせで親を起こすのを「親が起こした子が 1 つも動いていない時」 に
@@ -16,7 +16,8 @@ Why (実測、 正本 = conventions/multi-session-coordination.md#tidy-after-chi
 照合 (子ごと):
   - 動き: live の registry の status (busy = まだ動いている / waiting = turn の途中で許可・入力の確認が出たまま止まっている。
     どちらも turn の途中 = 畳まない。 waiting を turn の終わりと読むと、 子が wrap の途中で許可を待っているのに「畳んでよい」 と出た (実測))
-  - wrap: 子の記録の wrap skill の起動 (Skill tool の skill=wrap か、 skill の本文の差し込み)。 最後の wrap の turn が終わった
+  - wrap: 子の記録の wrap skill の起動 (Skill tool の skill=wrap か、 skill の本文の差し込み。 wrap-close も数える =
+    wrap の手順を全部回してから閉じる skill で、 子が残って閉じなかった窓も締めは済んでいる = WRAP_SKILLS)。 最後の wrap の turn が終わった
     後に子が file を書いた・commit した (Edit・Write・MultiEdit・NotebookEdit・`git commit|push`) なら、 その分は wrap されて
     いない = 記録が無いと数える (実測: wrap の後に親が仕事を 1 つ足し、 前の wrap が数えられて、 足した分は wrap なしで畳まれた。
     「wrap の後の親の message」 で数える形は、 過去の archive に当てると受け取りの知らせ・礼の後の畳みを止めた = 実測)。 wrap の記録の無いことだけが残す理由なら、 出力の頭に「次の一手 = 先に wrap skill を頼む」 と送る文
@@ -101,8 +102,18 @@ Usage:
         照合と、 残りの子を続けて見張る 1 行を出す (親が Bash の run_in_background で回す = 終わると親が起こされる。
         全部を待つと先に終えた子が残る = 実測。 時間切れ = exit 3)
   child-wrap-check.py <id> --as-of 2026-01-01T00:00:00 照合をその時点までの記録で (RCA の再現。 動きと commit は今の状態)
-  child-wrap-check.py --finished [--parent <local_…|transcript id>] --board-root <dir> [...] [--as-of …]
-        掲示板の依頼が受け取られたのに畳まれていない子を数える (--parent 無し = この機械の全部の親。 exit 1 = due / wrapped がある)
+  child-wrap-check.py --finished [--parent <local_…|transcript id|self>] --board-root <dir> [...] [--as-of …]
+        掲示板の依頼が受け取られたのに畳まれていない子を数える (--parent 無し = この機械の全部の親、 self = この窓。 exit 1 = due / wrapped がある)
+  child-wrap-check.py --close-plan [--parent <local_…|transcript id|self>] [--board-root …] [--json]
+        窓が自分を閉じる前の一覧 (既定 = この窓 = env CLAUDE_CODE_SESSION_ID。 正本 = conventions/closing-sweep.md#wrap-close):
+        (1) 子 (畳んでいない・切り離していない) を次の一手ごとに分ける = 畳む (素の照合が通った) / wrap を頼む (送る文と
+        --wait の 1 行つき) / 親の番 (判断の問い・本人の答えを送る・go) / 開いている依頼 / 待つ / 閉じない (本人待ち・本人と
+        話している途中・確認が出たまま) / 残す。 掲示板の状態 (finished_state) を先に、 素の照合 (check_child) を後に読む
+        (2) この窓が出して、 受け取りも取り下げもされていない依頼 (担当 = 子・Codex・別の機械・まだ誰も) と状態
+        (3) この窓の背景の作業・push していない commit・手放していない touch。
+        子が 1 つでも残る・受け取っていない依頼がある・背景の作業か未 push がある = 閉じない (exit 1)、 無ければ exit 0、
+        窓が見つからない = exit 2。 子を残したまま閉じない理由 = app は親の archive で動いていない子も一緒に畳む
+        (archive_session の tool の説明) = 本人を待つ子が wrap なしで畳まれる。 掲示板の root が分からなければ (2) と touch は見ない
   child-wrap-check.py --wait-due <local_…> [...] --board-root … [--max-minutes N]
         子のどれかが親の番 (due / wrapped / judge / relay。 ANSWERED_GRACE_MIN が none なら答え終えて ASK_AFTER_MIN 分も。
         asked も返る = 本人の答えは依頼元の窓に来るので、 見張っても早くならない) になるまで待って
@@ -223,6 +234,10 @@ THIRD_DATIVE = re.compile(r"(?<!あなた)(?<!貴方)(?<!そちら)(?<!君)(?<!�
 # started the skill; the check said only "no wrap record", the same as for a child that did not close at all)
 CLOSE_TOOL_RUN = re.compile(r"(?:session-(?:reply-knowledge|scripts|claims|open-questions|fetched-docs)-report"
                             r"|subagent-reports|headless-worker-reports)\.py")
+# the skills whose run counts as a wrap: wrap-close runs the whole wrap procedure before it closes the window
+# (conventions/closing-sweep.md#wrap-close) = a window that ran it and stayed open (children were left) has wrapped
+WRAP_SKILLS = ("wrap", "wrap-close")
+WRAP_SKILL_BASE = re.compile(r"/skills/wrap(?:-close)?\s")
 
 
 def wrap_kind(text: str) -> str:
@@ -591,7 +606,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
                     name, inp = str(b.get("name") or ""), b.get("input") or {}
                     if name.endswith("wrap_up") and (inp.get("ask") or inp.get("blocked") is True):
                         out["asks"].append((ts, str(inp.get("ask") or "(blocked)")))
-                    elif name == "Skill" and str(inp.get("skill") or "").split(":")[-1] == "wrap":
+                    elif name == "Skill" and str(inp.get("skill") or "").split(":")[-1] in WRAP_SKILLS:
                         out["wraps"].append(ts)
                     elif name in WRITE_TOOLS:
                         out["writes"].append(ts)
@@ -608,7 +623,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
                             out["close_runs"].append((ts, run.group(0)))
                 elif kind == "user" and e.get("isMeta") and b.get("type") == "text":
                     t = b.get("text", "")
-                    if t.startswith("Base directory for this skill:") and re.search(r"/skills/wrap\s", t[:300]):
+                    if t.startswith("Base directory for this skill:") and WRAP_SKILL_BASE.search(t[:300]):
                         out["wraps"].append(ts)
     return out
 
@@ -1177,7 +1192,8 @@ def check_child(target: str, as_of: str = "", need_wrap: bool = True, wrap_since
     return {"target": target, "found": True, "ok": not reasons, "reasons": reasons, "local": c["local"], "title": c["title"],
             "status": c["status"], "archived": c["archived"], "last_wrap": max(ev["wraps"], default=""),
             "last_turn_end": max(ev["stops"], default=""), "commits": commits, "open_ask": ask, "go_wait": gw,
-            "background": bg, "unanswered_send": pend, "as_of": as_of, "judge": jd, "close_consent": consent}
+            "background": bg, "unanswered_send": pend, "as_of": as_of, "judge": jd, "close_consent": consent,
+            "talking": bool(talking and not consent)}
 
 
 WRAP_MISSING = "wrap の記録が無い"
@@ -1886,6 +1902,190 @@ def render_finished(rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# --close-plan: what a window has to settle before it closes itself (the wrap-close command, conventions/closing-sweep.md
+# #wrap-close). The app archives a parent's idle side sessions with it (the archive_session tool's description) = a child
+# kept for the person would be folded without its wrap; the requests this window posted and nobody accepted would lose
+# their reviewer. So the plan lists every child sorted by its next step, the requests, and this window's own leftovers.
+CLOSE_BUCKETS = (
+    ("fold", "🧺 畳む = 照合が通った (archive_session で畳む)"),
+    ("ask", "📨 wrap を頼む = 仕事は終えた (頼んで --wait で待ち、 照合が通ったら畳む)"),
+    ("parent", "↩ 親の番 = 子の判断の問いに答える・本人の答えを子に送る・go を出す (片づいたら照らし直す)"),
+    ("open", "📋 開いている依頼がある = 提出なら検収し、 常駐の依頼なら子に submit を頼み、 作業中なら待つ"),
+    ("wait", "⏳ 待つ = 動いている・wrap の途中・送った message が届く前 (終わるのを見張る)"),
+    ("owner", "🙋 閉じない = 本人を待っている・本人がその窓で話している・確認が出たまま (何を待っているかを本人に 1 行)"),
+    ("keep", "⏸ 残す = 下の理由が片づくまで"),
+)
+
+
+def self_id(target: str = "") -> str:
+    """'' / 'self' = the session running this command (Claude Code puts its transcript id in the Bash env)."""
+    t = (target or "").strip()
+    return (os.environ.get("CLAUDE_CODE_SESSION_ID") or "") if t in ("", "self") else t
+
+
+def close_bucket(board: dict | None, chk: dict) -> str:
+    """One child's next step for the close plan: the board's state (board = the finished_state row, None without a board
+    root) first, then the plain check (the same reasons the archive guard reads)."""
+    st = (board or {}).get("state", "")
+    if st in ("owner", "answered", "asked"):
+        return "owner"
+    if st in ("judge", "relay"):
+        return "parent"
+    if st == "open":
+        return "open"
+    if st in ("busy", "wrapping"):
+        return "wait"
+    if chk.get("status") == "waiting":
+        return "owner"
+    ask = chk.get("open_ask") or {}
+    if chk.get("talking") or ask.get("owner_only"):
+        return "owner"
+    if ask or chk.get("go_wait"):
+        return "parent"  # a question of judgment (rule: the requester answers) / the hand-off's step 0 waiting for go
+    if chk.get("ok"):
+        return "fold"
+    if chk.get("status") == "busy" or chk.get("unanswered_send"):
+        return "wait"
+    if wrap_first(chk):
+        return "ask"
+    return "keep"
+
+
+def own_open_requests(cli: str, events: list[dict], instance: str, kid_clis: set[str] | None = None) -> list[dict]:
+    """The requests this window posted (on this machine) that nobody accepted or withdrew: who holds each now (a child of
+    this window, a Codex thread, a session on another machine, nobody) and whether it waits for this window's review."""
+    by_req: dict[str, list[dict]] = collections.defaultdict(list)
+    for e in events:
+        if e.get("request_id"):
+            by_req[e["request_id"]].append(e)
+    out, kid8 = [], {k[:8] for k in (kid_clis or set()) if k}
+    for rid, es in by_req.items():
+        req = next((e for e in es if e.get("kind") == "request"), None)
+        if not req:
+            continue
+        a = _actor(req)
+        m = ID8.match(str(a.get("task") or ""))
+        if a.get("instance") != instance or not (str(a.get("session_id") or "") == cli or (m and m.group(1) == cli[:8])):
+            continue
+        if any(e.get("kind") in ("accept", "abandoned") for e in es):
+            continue
+        holder, state = "", "requested"
+        for e in sorted(es, key=lambda x: str(x.get("created_at") or "")):
+            k, ea = e.get("kind"), _actor(e)
+            if k == "claim":
+                hm = ID8.match(str(ea.get("task") or ""))
+                who = hm.group(1) if hm else str(ea.get("task") or ea.get("session_id") or "?")
+                where = ("" if ea.get("instance") == instance else f" @ {ea.get('instance') or '別の機械'}")
+                holder = ("子 " if hm and hm.group(1) in kid8 and not where else "") + f"{ea.get('agent') or '?'} {who}{where}"
+                state = "working"
+            elif k == "release" or (k == "handover" and e.get("handover_role") == "assignee"):
+                holder, state = "", "requested"
+            elif k == "submit":
+                state = "submitted"
+            elif k == "revise":
+                state = "working"
+        out.append({"request": rid, "thread": str(req.get("thread_id") or ""), "project": str(((req.get("project") or {})
+                    .get("key")) or ""), "summary": str(req.get("summary") or "")[:80], "holder": holder, "state": state,
+                    "to": str((req.get("assignee") or {}).get("session_id") or "")})
+    return sorted(out, key=lambda r: r["request"])
+
+
+CLOSE_REQ_WORDS = {"requested": "まだ誰も引き受けていない", "working": "作業中", "submitted": "提出済み = この窓の検収待ち"}
+
+
+def close_plan(target: str = "", roots: list[str] | None = None) -> dict:
+    """--close-plan: the children sorted by their next step, the open requests this window posted, this window's own
+    leftovers (live background work, commits not pushed, files it declared on the board and did not let go of), and
+    whether the window may be closed now (no child left unarchived, no open request, no leftover)."""
+    roots = roots if roots is not None else CHECK_ROOTS
+    sid = self_id(target)
+    prec = ds.find(sid) if sid else None
+    if not prec:
+        return {"found": False, "target": sid}
+    kids = [c for c in children_of(prec["local_id"]) if not c["detached"] and not c["archived"] and c["cli"]]
+    since = _iso(min(c["created_ms"] for c in kids) / 1000 - 86400) if kids and all(c["created_ms"] for c in kids) else ""
+    events = load_board(roots, since) if roots else []
+    ppath = sm.transcript_path(prec["cli_id"]) or ""
+    asks = lazy_asks(roots) if roots else None
+    instance = instance_name()
+    rows = []
+    for c in kids:
+        b = finished_state(c, prec["local_id"], ppath, events, instance, "", asks) if roots else None
+        chk = check_child(c["local"])
+        rows.append({"local": c["local"], "title": c["title"], "bucket": close_bucket(b, chk),
+                     "board": (b or {}).get("state", ""), "reasons": list(chk.get("reasons") or [])
+                     + [x for x in ((b or {}).get("reasons") or []) if x not in (chk.get("reasons") or [])],
+                     "open": (b or {}).get("open") or [], "model_step": model_step(c["local"]) if not chk.get("ok") else ""})
+    first = scan_child(ppath)["first"][:19] if ppath else ""
+    # the window's own requests and touches: from a day before its first entry (the board's file names start with the time)
+    own_ev = load_board(roots, _iso(_epoch(first) - 86400) if first else "") if roots else []
+    reqs = own_open_requests(prec["cli_id"], own_ev, instance, {c["cli"] for c in kids})
+    try:
+        bg = [t for t in BG_TASKS(prec["cli_id"])]
+    except Exception:
+        bg = None
+    commits = [x for x in child_commits(prec["cli_id"], first) if not x["pushed"] and not x.get("landed")]
+    held = child_touches(prec["cli_id"], own_ev, instance) if roots else []
+    blockers = []
+    if rows:
+        blockers.append(f"畳んでいない子 {len(rows)} 件 (この窓の archive は動いていない子も一緒に畳む = 先に wrap と照合を済ませる)")
+    if reqs:
+        blockers.append(f"受け取っていない依頼 {len(reqs)} 件 (閉じると検収する窓が無くなる)")
+    if bg is None:
+        blockers.append("背景の作業を数えられなかった (`python3 ~/Claude/claude-config/scripts/lib/session_background_tasks.py self` で数え直す)")
+    elif bg:
+        blockers.append("背景の作業が生きている (app は archive を断る): " + " / ".join(sbt.describe(t) for t in bg))
+    if commits:
+        blockers.append("push されていない commit: " + ", ".join(f"{os.path.basename(x['repo'])} {x['sha']}" for x in commits))
+    if held:
+        blockers.append(f"掲示板で宣言した file (touch) を手放していない: {', '.join(held[:4])}{' ほか' if len(held) > 4 else ''}")
+    return {"found": True, "local": prec["local_id"], "cli": prec["cli_id"], "title": prec.get("title") or "",
+            "children": rows, "requests": reqs, "background": bg, "unpushed": commits, "touches": held,
+            "blockers": blockers, "closable": not blockers, "board_read": bool(roots)}
+
+
+def render_close_plan(p: dict) -> str:
+    if not p.get("found"):
+        return f"この窓が見つからない ({p.get('target') or 'CLAUDE_CODE_SESSION_ID が無い'}) = --parent <local_…|transcript id> を渡す"
+    lines = [f"🪟 閉じる前の一覧: {p['title'] or p['local']} ({p['local']})"]
+    if not p["board_read"]:
+        lines.append("  (掲示板の root が分からない = 掲示板の依頼と宣言は見ていない。 --board-root か個人層の child-wrap-check.json)")
+    lines.append(f"■ 子 (畳んでいない・切り離していない) {len(p['children'])} 件")
+    for key, words in CLOSE_BUCKETS:
+        group = [r for r in p["children"] if r["bucket"] == key]
+        if not group:
+            continue
+        lines.append(f"  {words}")
+        for r in group:
+            lines.append(f"    - {r['title'] or r['local']} ({r['local']})" + (f"  掲示板={r['board']}" if r["board"] else ""))
+            if key == "ask":
+                lines.append(f"      → {_then(r['model_step'])}子へ SendMessage で「{WRAP_ASK_TEXT}」 と送り、 同じ turn に Bash の"
+                             f" run_in_background で `python3 ~/Claude/claude-config/scripts/child-wrap-check.py --wait {r['local']}`")
+            elif key == "fold":
+                lines.append(f"      → archive_session で畳む (session_id = {r['local']})")
+            for why in r["reasons"]:
+                lines.append("      → " + why)
+            if r["open"]:
+                lines.append("      → 開いている依頼: " + ", ".join(r["open"]))
+    lines.append(f"■ この窓が出して、 受け取っていない依頼 {len(p['requests'])} 件")
+    for q in p["requests"]:
+        lines.append(f"    - [{CLOSE_REQ_WORDS.get(q['state'], q['state'])}] {q['project']}/{q['thread']} ({q['request']})"
+                     f" → {q['to']}" + (f"  担当 = {q['holder']}" if q["holder"] else "") + f"  {q['summary']}")
+    lines.append("■ この窓")
+    lines.append("    背景の作業: " + ("数えられなかった" if p["background"] is None else
+                                     (" / ".join(sbt.describe(t) for t in p["background"]) if p["background"] else "無い")))
+    lines.append("    push されていない commit: " + (", ".join(f"{os.path.basename(x['repo'])} {x['sha']}" for x in p["unpushed"])
+                                                    if p["unpushed"] else "無い"))
+    if p["board_read"]:
+        lines.append("    手放していない宣言 (touch): " + (", ".join(p["touches"]) if p["touches"] else "無い"))
+    if p["closable"]:
+        lines.append("✅ この窓を閉じてよい (残した子・受け取っていない依頼・背景の作業・push していない commit が無い)")
+    else:
+        lines.append("⏸ まだ閉じない:")
+        lines.extend("    → " + b for b in p["blockers"])
+    return "\n".join(lines)
+
+
 def _hold_words() -> str:
     return f"{ASKED_HOLD_H:g} 時間" if ASKED_HOLD_H is not None else "数時間"
 
@@ -2188,6 +2388,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--hook-presend", action="store_true")
     ap.add_argument("--stop-mode", choices=("off", "observe", "block"))
     ap.add_argument("--finished", action="store_true")
+    ap.add_argument("--close-plan", action="store_true")
     ap.add_argument("--parent", default="")
     ap.add_argument("--board-root", action="append", default=[])
     ap.add_argument("--rule", default="")
@@ -2236,11 +2437,16 @@ def main(argv: list[str]) -> int:
         if ctx:
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": ctx}}, ensure_ascii=False))
         return 0
+    if a.close_plan:
+        p = close_plan(a.parent, roots_all)
+        print(json.dumps(p, ensure_ascii=False, indent=1, default=str) if a.json else render_close_plan(p))
+        return 2 if not p.get("found") else (0 if p["closable"] else 1)
     if a.finished:
         roots = roots_all
         if not roots:
             ap.error("--finished には --board-root (か env CHILD_WRAP_BOARD_ROOTS か個人層の child-wrap-check.json) が要る")
-        rows = [r for p in ([a.parent] if a.parent else all_parents()) for r in finished(p, roots, a.as_of)]
+        parents = [self_id(a.parent)] if a.parent else all_parents()
+        rows = [r for p in parents for r in finished(p, roots, a.as_of)]
         print(json.dumps(rows, ensure_ascii=False, indent=1) if a.json else (render_finished(rows) or "(該当する子なし)"))
         return 1 if any(r["state"] in ("due", "wrapped", "relay") for r in rows) else 0
     if not a.targets:
@@ -2439,6 +2645,78 @@ def selftest() -> int:
         r = check_child(ids("nowrap")[0])
         ok("no wrap run → kept", (not r["ok"]) and r["reasons"] == ["wrap の記録が無い"])
         ok("--no-wrap-needed drops that reason", check_child(ids("nowrap")[0], need_wrap=False)["ok"])
+        # --close-plan (the wrap-close command): every child sorted by its next step, and the window is not closable
+        # while any child is left unarchived (the app folds idle side sessions with their parent = without their wrap)
+        cp = close_plan(parent_c, [])
+        buckets = {r["local"]: r["bucket"] for r in cp["children"]}
+        ok("--close-plan: the person talking in the child's window → owner (not closed)", buckets.get(ids("answered")[0]) == "owner")
+        ok("--close-plan: a child that only another session answered → kept for its question (owner / parent's turn)",
+           buckets.get(ids("overridden")[0]) in ("owner", "parent"))
+        ok("--close-plan: a busy child → wait", buckets.get(ids("busy")[0]) == "wait")
+        ok("--close-plan: a stopped child with no wrap → ask (with the wrap text and the --wait line)",
+           buckets.get(ids("nowrap")[0]) == "ask" and WRAP_ASK_TEXT in render_close_plan(cp)
+           and f"--wait {ids('nowrap')[0]}" in render_close_plan(cp))
+        ok("--close-plan: children left → not closable, the blocker names them", (not cp["closable"])
+           and any("畳んでいない子 4 件" in b for b in cp["blockers"]))
+        ok("--close-plan: 'self' reads the window from CLAUDE_CODE_SESSION_ID", self_id("self") == (os.environ.get(
+            "CLAUDE_CODE_SESSION_ID") or "") and self_id("x") == "x")
+        lone_l, lone_c = "local_5e5e5e5e-0000-4000-8000-000000000000", "5e5e5e5e-aaaa-4000-8000-000000000000"
+        record(lone_l, lone_c)
+        transcript(lone_c, [u("2026-01-01T00:00:00Z", "依頼", origin={"kind": "human"}), reply("2026-01-01T00:01:00Z")])
+        cp = close_plan(lone_l, [])
+        ok("--close-plan: no child, no request, no background work, no commit → closable", cp["found"] and cp["closable"]
+           and "この窓を閉じてよい" in render_close_plan(cp))
+        ok("--close-plan: an unknown window → not found (exit 2)", not close_plan("nobody-0000", [])["found"])
+        BG_TASKS = (lambda cli: [{"id": "b1", "kind": "bash", "what": "watch", "watch": True, "persistent": True, "expires_in": None}] if cli == lone_c else [])
+        try:
+            cp = close_plan(lone_l, [])
+            ok("--close-plan: the window's own live background work → not closable", not cp["closable"]
+               and any("背景の作業が生きている" in b for b in cp["blockers"]))
+        except Exception as exc:  # sbt.describe may want more fields: the blocker must still be there
+            ok(f"--close-plan: the window's own live background work → not closable ({exc})", False)
+        BG_TASKS = (lambda cli: [])
+        # the requests this window posted: open ones are listed with their holder and state; accepted / withdrawn /
+        # another machine's / another window's are not
+        inst = "claude@cp-host"
+
+        def bev(kind: str, rid: str, at: str, **kw) -> dict:
+            return {"kind": kind, "request_id": rid, "created_at": at, "thread_id": "t-" + rid,
+                    "project": {"key": "p"}, **kw}
+        me_a = {"agent": "claude", "task": "workflow", "instance": inst, "session_id": lone_c}
+        kid_a = {"agent": "claude", "task": "abcdef12 (opus)", "instance": inst, "session_id": "role-p-x"}
+        evs = [bev("request", "r1", "2026-01-01T00:00:00Z", actor=me_a, assignee={"session_id": "role-p-x"}),
+               bev("claim", "r1", "2026-01-01T00:01:00Z", actor=kid_a),
+               bev("submit", "r1", "2026-01-01T00:02:00Z", actor=kid_a),
+               bev("request", "r2", "2026-01-01T00:00:00Z", actor=me_a, assignee={"session_id": "role-p-y"}),
+               bev("claim", "r2", "2026-01-01T00:01:00Z", actor=dict(kid_a, agent="codex", instance="codex@other")),
+               bev("request", "r3", "2026-01-01T00:00:00Z", actor=me_a, assignee={"session_id": "role-p-z"}),
+               bev("accept", "r3", "2026-01-01T00:03:00Z", actor=me_a),
+               bev("request", "r4", "2026-01-01T00:00:00Z", actor=me_a, assignee={"session_id": "role-p-w"}),
+               bev("abandoned", "r4", "2026-01-01T00:03:00Z", actor=me_a),
+               bev("request", "r5", "2026-01-01T00:00:00Z", actor=dict(me_a, instance="claude@elsewhere"),
+                   assignee={"session_id": "role-p-v"}),
+               bev("request", "r6", "2026-01-01T00:00:00Z", actor=dict(me_a, session_id="ffffffff-other"),
+                   assignee={"session_id": "role-p-u"}),
+               bev("request", "r7", "2026-01-01T00:00:00Z", actor=me_a, assignee={"session_id": "role-p-t"})]
+        reqs = {q["request"]: q for q in own_open_requests(lone_c, evs, inst, {"abcdef12-0000"})}
+        ok("own requests: accepted / withdrawn / another machine's / another window's are not listed",
+           set(reqs) == {"r1", "r2", "r7"})
+        ok("own requests: a child's submit → submitted (this window's review), held by the child",
+           reqs["r1"]["state"] == "submitted" and reqs["r1"]["holder"].startswith("子 claude abcdef12"))
+        ok("own requests: a Codex thread on another machine holds it → named with its instance",
+           reqs["r2"]["state"] == "working" and "codex" in reqs["r2"]["holder"] and "codex@other" in reqs["r2"]["holder"])
+        ok("own requests: nobody claimed it → requested", reqs["r7"]["state"] == "requested" and not reqs["r7"]["holder"])
+        # the wrap-close skill counts as a wrap run (it runs the whole wrap procedure before closing the window)
+        wc_c = "6c6c6c6c-aaaa-4000-8000-000000000000"
+        transcript(wc_c, [{"type": "assistant", "timestamp": "2026-01-01T01:05:00Z", "message": {"content": [
+            {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "wrap-close"}}]}},
+            {"type": "user", "isMeta": True, "timestamp": "2026-01-01T01:05:01Z", "message": {"content": [
+                {"type": "text", "text": "Base directory for this skill: /h/.claude/skills/wrap-close\n\n# wrap-close"}]}},
+            {"type": "assistant", "timestamp": "2026-01-01T01:06:00Z", "message": {"content": [
+                {"type": "tool_use", "id": "t", "name": "Skill", "input": {"skill": "wrapup-notes"}}]}}])
+        wc = scan_child(os.path.join(pdir, "-w", wc_c + ".jsonl"))["wraps"]
+        ok("the wrap-close skill (tool call and skill body) counts as a wrap run; wrapup-notes does not",
+           wc == ["2026-01-01T01:05:00Z", "2026-01-01T01:05:01Z"])
         # the child's live background work, and the parent's message after the child's last turn end: the app refuses
         # the archive on both while this check said "fold" (measured)
         ANSWERED_GRACE_MIN = DEFAULT_ANSWERED_GRACE_MIN

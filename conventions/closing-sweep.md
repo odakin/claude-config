@@ -1,13 +1,13 @@
 <!-- doc-meta
 when: session の終わりに、 その session (と委ねた agent・子 session・別 session) で得た知見・手順・使い捨ての script を正本へ上げ、 正本と参照・SESSION・TODO を整えて commit するとき (= 締めの sweep・仕上げ) + 締めの sweep を個人層の skill や定型の指示にするとき
 category: harness-core
-summary: 締めの sweep (仕上げ) の手順の正本 — 集める (会話記録・委ねた先の 5 つの口) → 層を決める (1 件を分けて置く・2 回目は仕組みに・公開層の境界) → 並列の締めと分担 → 正本と参照 → SESSION・TODO → commit → 横断と報告 (「残り」 に入れる前に会話で決まっていないかを確かめる)。 誰でも使える `/wrap` = skills/wrap (この doc を順に読ませる)、 個人層の同名の skill はそれを正本として指し、 道具の path と本人の決めごとだけを持つ (#personal-skill)。 層1 に置くものは claude-config に PR で出す (#upstream-pr)
+summary: 締めの sweep (仕上げ) の手順の正本 — 集める (会話記録・委ねた先の 5 つの口) → 層を決める (1 件を分けて置く・2 回目は仕組みに・公開層の境界) → 並列の締めと分担 → 正本と参照 → SESSION・TODO → commit → 横断と報告 (「残り」 に入れる前に会話で決まっていないかを確かめる)。 誰でも使える `/wrap` = skills/wrap (この doc を順に読ませる)、 個人層の同名の skill はそれを正本として指し、 道具の path と本人の決めごとだけを持つ (#personal-skill)。 窓を閉じるつもりの締めは `/wrap-close` = skills/wrap-close (子を締める → 自分を締める → 残りが無いのを道具で確かめて閉じる口を出す、 #wrap-close)。 層1 に置くものは claude-config に PR で出す (#upstream-pr)
 -->
 # 締めの sweep (仕上げ) — 知見を正本へ上げて整える手順
 
 session の終わりに「全ての知見・手順・script をなるべく上の層に上げ、 session・正本・参照を整える」 作業の手順の正本。
 各段の規則の本文はそれぞれの正本にあり、 ここは順番と入口だけを持つ (= 規則を複製しない)。
-skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md`](../skills/wrap/SKILL.md))、 個人の値の持ち方 = [#personal-skill](#personal-skill)。 層1 に置くものの出し方 = [#upstream-pr](#upstream-pr)。
+skill としての入口 = 誰でも使える `/wrap` ([`../skills/wrap/SKILL.md`](../skills/wrap/SKILL.md))、 締めてから窓を閉じる `/wrap-close` ([#wrap-close](#wrap-close))、 個人の値の持ち方 = [#personal-skill](#personal-skill)。 層1 に置くものの出し方 = [#upstream-pr](#upstream-pr)。
 
 以下の `<id8>` = その session の id の先頭 8 文字 (Claude Code の記録 file 名の uuid)、 道具の path は本 repo からの相対。
 
@@ -263,6 +263,38 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   4. **会話に出ていない** → 残りに入れる。 「残りを全部やって」 がかかるのはこの群だけ。
   - 予防 = 勧めた turn で、 その件の記録に推奨を書いておく (後の一覧を記録から組める)。 決定の書き方の一般則 = [`actor-attribution.md#decision-state-at-record-time`](actor-attribution.md#decision-state-at-record-time)。
 
+## <a id="wrap-close"></a>締めて閉じる (`/wrap-close`) — 子を締め、 自分を締め、 窓を閉じる
+
+`/wrap` は窓を閉じずに続ける途中の仕上げにも使う。 窓を閉じるつもりの締めは別の skill `/wrap-close` ([`../skills/wrap-close/SKILL.md`](../skills/wrap-close/SKILL.md)) で頼む = 閉じる意図は、 その skill を起動したことで示す (`/wrap` の中で毎回「閉じますか」 と聞かない)。
+desktop app の窓 (子 session を起こし、 archive できる窓) の手順。 段の順は変えない = 子が正本に上げた知見を、 自分の締めの 0.5 で拾うため。
+
+1. <a id="wrap-close-children"></a>**子を締める**
+   - 一覧は道具で出す (記憶で子を数えない): `python3 scripts/child-wrap-check.py --close-plan` (既定 = この窓)。
+     子 (畳んでいない・切り離していない) を次の一手ごとに分け (畳む / wrap を頼む / 親の番 / 開いている依頼 / 待つ / 閉じない / 残す)、
+     この窓が出して受け取っていない依頼と、 この窓の背景の作業・push していない commit・手放していない宣言を並べる。
+   - **wrap を頼む** 子: 頼む前に子の model を読み、 wrap の model・effort を規則が決めていれば切り替える
+     ([`multi-session-coordination.md#wrap-model-before-ask`](multi-session-coordination.md#wrap-model-before-ask)。 道具の行が値つきの手を出す)。
+     道具が出す文で wrap skill を頼み、 同じ turn に `--wait` の見張りを出す。 見張りが終わった turn に照らし、 通った子を `archive_session` で畳む
+     (頼み方・待ち方・断られたときの動き方の正本 = [`multi-session-coordination.md#tidy-after-child-turn-ends`](multi-session-coordination.md#tidy-after-child-turn-ends))。
+   - **開いている依頼** の子: 提出なら検収する (受け取ると「wrap を頼む」 に移る)。 常駐の依頼 (窓を閉じるまで務める係) は、 子に務めの submit を頼んで受け取る。 作業中なら待つ。
+   - **閉じない・親の番・待つ・残す** の子は閉じない。 何を待っているかを道具の語のまま 1 行ずつ本人に伝える (「終えた」 の線は子の締めの規則のまま = 本人を待つ子・本人と話している途中の子は残す)。 親の番の子には答えを送ってから照らし直す。
+   - この窓が起こした Codex の thread は、 同じ線を Codex の道具で引く ([`multi-session-coordination.md#codex-thread-close`](multi-session-coordination.md#codex-thread-close))。
+   - <a id="wrap-close-unreachable-child"></a>子が別の機械に居る・`SendMessage` が届かない: 閉じずに、 何をしている子かを 1 行で本人に伝える (一覧の「受け取っていない依頼」 に担当と機械が出る)。
+2. <a id="wrap-close-self"></a>**自分を締める** — 子の締めが済んでから、 この doc の 0〜5 をそのまま回す (`/wrap` と同じ手順)。 段 1 で残した子があっても締めは回す (締めの記録が残り、 閉じるかは段 3 が決める)。
+3. <a id="wrap-close-close"></a>**自分を閉じる**
+   - 5 の [#stop-own-watches](#stop-own-watches) を「締めの後に畳まれる session」 の側で回して見張りを止め、 もう一度 `--close-plan` を回す。 ✅ (残した子・受け取っていない依頼・背景の作業・push していない commit が無い) のときだけ閉じる。
+   - **子を残したまま閉じない**: app はこの窓の archive で、 同じ作業木を共有する子と動いていない子を一緒に畳む (`archive_session` の tool の説明) = 本人を待つ子が wrap なしで畳まれる。 本人が子を残して窓を閉じると決めたら、 その子を `detach_session` で切り離してから閉じる (切り離した子は一緒に畳まれない)。
+   - **受け取っていない依頼が残るなら閉じない** (閉じると検収する窓が無くなる)。
+   - 窓の登録 (指揮所・係の登録を持つ環境) の畳み方は、 個人層の同名の skill が持つ。
+   - <a id="wrap-close-button"></a>**閉じる口**: この turn の最後の `wrap_up` に app の `archive` の action を出す (押すのは本人)。
+     `wrap_up` の結果がその action を落とした (この窓では使えない) と言ったら、 返事に「閉じるなら、 この窓で『閉じて』 と一言」 と書いて turn を終え、
+     本人がそう言った次の turn に、 その turn の最後の呼び出しとして `archive_session` に `"self"` を渡す (会話はその結果で終わる = 報告は前の turn に書いておく)。
+     どちらの口も本人の操作か本人の言葉を経る (auto mode では `archive_session` が確認を出さずに通ることがある = 本人の言葉の前に打たない)。
+     この 2 つの口の振る舞いは tool の説明から書いた (未実測) = 初めて回した窓は、 どちらの口で閉じたかと結果を報告に書き、 この段を直す。
+   - 閉じない理由が残ったら閉じる口を出さない。 理由を道具の語のまま本人に書く。
+
+Codex の thread には app の子の記録と archive が無い = 段 1 は上の Codex の道具の行だけ、 段 3 の閉じる口は無い (閉じるのは本人)。
+
 ## <a id="personal-skill"></a>`/wrap` skill — 誰でも使える版と、 個人の値
 
 - claude-config は誰でも使える `/wrap` を [`../skills/wrap/SKILL.md`](../skills/wrap/SKILL.md) に持つ (本文 = 「この doc を 0 から 5 まで順に」 + 誰にでも同じ値 + [#upstream-pr](#upstream-pr))。
@@ -272,6 +304,7 @@ commit 前に `git diff --cached` を 1 回読み、 `scripts/check-activity-fac
   その skill の本文は「手順の正本 = 誰でも使える版 (`skills/wrap/SKILL.md`) → この doc」 を指す 1 行と、 その人に固有の値だけを持つ:
   個人層の道具の path と引数 (どの掲示板・どの thread で宣言するか、 file 受け渡しの道具、 生成索引の生成器、 正本の登録簿)、 本人の決めごとのうち一般形を持たないもの (言葉のまま、 日付つき)。
   個人層の置き場所の一覧は持たない (= 1 の冒頭どおり入口から辿る)。
+- `/wrap-close` ([`../skills/wrap-close/SKILL.md`](../skills/wrap-close/SKILL.md)) も同じ分け方 (誰でも使える版 = [#wrap-close](#wrap-close) を順に、 個人層の同名の skill = その人の窓の登録の畳み方と値だけ)。
 - 手順そのものを skill に写さない (2 か所が食い違う)。 手順を直すときはこの doc を直す。 個人の決めごとが誰にでも効く一般形を持つなら、 一般形をこの doc に置いて skill からは消す
   (本人が skill に置くよう言った言葉は残す)。 OS ごとの罠・Codex の入口と読み替え・合成 file の作り直しも 0.9 / 0.95 が持つ = skill に書かない。
 

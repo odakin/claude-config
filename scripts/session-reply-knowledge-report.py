@@ -394,16 +394,22 @@ def tail_entries(path, max_bytes=4_000_000):
     return out
 
 
+# the skills whose turn is a closing turn: wrap-close runs the whole wrap procedure before it closes the window
+# (conventions/closing-sweep.md#wrap-close) = the same check is due in its turn
+WRAP_SKILLS = ("wrap", "wrap-close")
+
+
 def _is_wrap_turn(span):
-    if _turn_head(span[0]) == "/wrap":
+    if _turn_head(span[0]) in tuple("/" + n for n in WRAP_SKILLS):
         return True
     for e in span:
         t = _text(e) if e.get("type") == "user" else ""
-        if t.startswith("Base directory for this skill:") and t.splitlines()[0].rstrip("/ ").endswith(("/skills/wrap", "\\skills\\wrap")):
+        if t.startswith("Base directory for this skill:") and t.splitlines()[0].rstrip("/ ").endswith(
+                tuple(sep + "skills" + sep + n for n in WRAP_SKILLS for sep in ("/", "\\"))):
             return True
         for b in (e.get("message") or {}).get("content") or [] if e.get("type") == "assistant" else []:
             if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Skill" \
-                    and str((b.get("input") or {}).get("skill", "")).split(":")[-1] == "wrap":
+                    and str((b.get("input") or {}).get("skill", "")).split(":")[-1] in WRAP_SKILLS:
                 return True
     return False
 
@@ -956,6 +962,14 @@ def selftest():
     expect("自分の差し戻しは 1 回だけ", stop_check([wrap, said("締めた"), own_fb, said("書き足した")]), None)
     expect("Skill tool で起こした締め", stop_check([human("仕上げて"), {"type": "assistant", "message": {"content": [
         {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "wrap"}}]}}, said("締めた")]) is not None, True)
+    # wrap-close (締めてから窓を閉じる) の turn も締めの turn = 同じ照合を求める。 別の名の skill (wrapup-notes) は締めでない
+    wrap_close = human("<command-message>wrap-close</command-message>\n<command-name>/wrap-close</command-name>")
+    expect("/wrap-close の照合の無い締めは差し戻す", stop_check([wrap_close, said("締めた")]) is not None, True)
+    expect("wrap-close の skill の本文の締めも差し戻す", stop_check([human("wrap して閉じて"), {"type": "user", "isMeta": True,
+        "message": {"content": "Base directory for this skill: /h/.claude/skills/wrap-close\n\n# wrap-close"}}, said("締めた")])
+           is not None, True)
+    expect("別の名の skill (wrapup-notes) は締めでない", stop_check([human("メモして"), {"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "id": "s", "name": "Skill", "input": {"skill": "wrapup-notes"}}]}}, said("書いた")]), None)
     # 締めの turn の途中に本人が打った発言は turn の入口にしない (入口を動かすと /wrap の印と照合の run が span の外に出る)
     mid = queued("ついでに表も見て？")
     expect("締めの途中に打った発言の後も締めの turn として差し戻す", stop_check([wrap, skill, mid, said("締めた")]) is not None, True)
