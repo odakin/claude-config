@@ -89,7 +89,10 @@ RULE = "conventions/multi-session-coordination.md#codex-thread-close"
 INTERACTIVE = {"vscode", "cli", "appServer"}
 DEFAULT_GRACE_MIN = 10.0  # the same owner ruling as child-wrap-check.py DEFAULT_ANSWERED_GRACE_MIN (2026-11-04)
 WRAP_TEXT = ("$wrap — wrap skill で仕上げてください (この thread で得た知見・手順・script を上の層の正本へ移し、 正本・参照・SESSION を"
-             " 整え、 repo ごとに commit + push して、 移した先を報告)。 依頼元 = 指揮役 (codex-thread-close.py)。")
+             " 整え、 repo ごとに commit + push して、 移した先を報告)。 依頼元 = 指揮役 (codex-thread-close.py)。"
+             " 起動時のモデル指定は依頼作業に適用します。このターンは締めの依頼です。"
+             " 掲示板で引き受けた作業は受領と残る担当を照合してください。"
+             " 締めに適用されるモデルと effort を、このターンの実行記録で確かめてから進めてください。")
 WRAP_RX = re.compile(r"(?:^|\s)[$/]wrap\b|wrap\s*skill|skill\s*=\s*wrap", re.I)
 GIT_WRITE_RX = re.compile(r"\bgit\b[^\n|;&]*\b(?:commit|push|merge|rebase|cherry-pick|reset|revert)\b")
 QUESTION_TAIL = re.compile(r"[?？]\s*$|(?:ますか|でしょうか|ませんか|どうしますか|いかがですか|よいですか|いいですか)[。．]?\s*$"
@@ -1484,6 +1487,9 @@ def _selftest() -> int:
         check("wrap: --model / --effort は turn/start に入る (skill の型つきの入力と一緒に)",
               ok_ and ts and ts[-1].get("model") == "gpt-6.1-sol" and ts[-1].get("effort") == "xhigh"
               and any(i.get("type") == "skill" for i in ts[-1]["input"]) and "gpt-6.1-sol" in msg)
+        check("wrap: 既存の作業窓にも、締めのターンで照合する条件を渡す",
+              ts and any("起動時のモデル指定は依頼作業に適用" in i.get("text", "")
+                         and "このターンの実行記録" in i.get("text", "") for i in ts[-1]["input"]))
         calls.clear()
         send_wrap(T, str(work), "daemon")
         ts = [p for mth, p in calls if mth == "turn/start"]
