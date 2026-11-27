@@ -18,6 +18,11 @@
   この宛先なら設定フォルダとアカウントを跨いで届く (実測。 規約 = multi-account-machine-surface.md#peer-discovery-across-config-dirs)。
   desktop app の `send_message` (ccd) の `local_<uuid>` は扱わない。
 
+  各行には刻印の題 (app の一覧に出る session の名前 = 刻印の `name`) と、 本人が最後に打った発言を出す。 会話記録の
+  user の行には、 本人の発言のほかに harness が書いた文 (`<task-notification>`・別 session の message・hook の差し戻し・
+  起動文) も入る = それを発言と数えると、 題を見れば役が分かる session がその文の行で出て、 探しても見つからない (実測)。
+  発言の読み方は lib/owner_turn.py の owner_text に揃える (conventions/hook-authoring.md#owner-turn-reader)。
+
   同じ機械の Codex の thread も出す (lib/codex_threads.py: thread の書き込み lock を process が開いている = 生きている)。
   Codex には SendMessage が無いので、 宛先の代わりに `codex queue --thread <id> --message …` の 1 行を出す
   (生きている thread には今の turn の後の新しい turn として届く = 実測。 規約 = multi-account-machine-surface.md#codex-peers)。
@@ -81,6 +86,13 @@ except Exception:  # pragma: no cover - 古い配置
     _sm = None
 
 
+# 本人の発言の読み手 (lib/owner_turn.py)。 読めない配置 (古い checkout) では下の _fallback_text で動き続ける。
+try:
+    import owner_turn as _ot
+except Exception:  # pragma: no cover - 古い配置
+    _ot = None
+
+
 def _model_of(session_id: str, cwd: str) -> str:
     if _sm is None:
         return ""
@@ -131,8 +143,31 @@ def _encode_cwd(cwd: str) -> str:
     return cwd.replace("/", "-")
 
 
+def _fallback_text(obj: dict) -> str:
+    """lib/owner_turn.py が読めない配置での読み方 (旧来: user の行の文から system-reminder を剥がすだけ)。"""
+    if obj.get("type") != "user":
+        return ""
+    content = (obj.get("message") or {}).get("content")
+    text = ""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text += part.get("text", "")
+            elif isinstance(part, str):
+                text += part
+    if "<system-reminder>" in text or "tool_use_id" in text:
+        text = text.split("</system-reminder>")[-1].strip()
+    return text
+
+
 def _intent_snippet(session_id: str, cwd: str, max_len: int = 70) -> str:
-    """対応 jsonl から直近の人間 user 発話を best-effort 抽出 (= その session が今 何の話か)。"""
+    """対応 jsonl から本人が最後に打った発言を best-effort 抽出 (= その session が今 何の話か)。
+
+    harness が user の行に書く文 (`<task-notification>`・別 session の message・hook の差し戻し・起動文) と、
+    turn の途中に打った発言 (queued_command の attachment) の扱いは lib/owner_turn.py の owner_text に揃える。
+    本人が 1 度も打っていない session (別 session が起こした worker など) は空 = 題で見分ける。"""
     path = ""
     for root in _projects_dirs():
         p = os.path.join(root, _encode_cwd(cwd), f"{session_id}.jsonl")
@@ -142,43 +177,44 @@ def _intent_snippet(session_id: str, cwd: str, max_len: int = 70) -> str:
     if not path:
         return ""
     last = ""
+    api_error = False  # 直前の応答が API の誤り = その直後の「Try again」 は app の再試行 (owner_turn と同じ)
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
-                line = line.strip()
-                if not line or '"type":"user"' not in line:
+                # 速さのため JSON を解くのは user の行と途中の発言の行だけ (応答の行は誤りの印だけを文字で見る)
+                if '"type":"user"' not in line and '"queued_command"' not in line:
+                    if '"type":"assistant"' in line:
+                        api_error = '"isApiErrorMessage":true' in line
                     continue
                 try:
                     obj = json.loads(line)
                 except Exception:
                     continue
-                if obj.get("type") != "user":
+                if not isinstance(obj, dict):
                     continue
-                content = (obj.get("message") or {}).get("content")
-                text = ""
-                if isinstance(content, str):
-                    text = content
-                elif isinstance(content, list):
-                    for part in content:
-                        if isinstance(part, dict) and part.get("type") == "text":
-                            text += part.get("text", "")
-                        elif isinstance(part, str):
-                            text += part
-                if not text:
+                if obj.get("type") == "assistant":  # 応答の文に "type":"user" の字面が入っていた行
+                    api_error = bool(obj.get("isApiErrorMessage"))
                     continue
-                # 注入 (system-reminder / tool_result) 混じりや巨大初回ターンを除外
-                if "<system-reminder>" in text or "tool_use_id" in text:
-                    # 注入を剥がして残る人間文があれば拾う
-                    tail = text.split("</system-reminder>")[-1].strip()
-                    text = tail if tail else ""
-                text = " ".join(text.split())
-                if 0 < len(text) <= 4000:
+                text = _ot.owner_text(obj, after_api_error=api_error) if _ot is not None else _fallback_text(obj)
+                text = " ".join((text or "").split())
+                if 0 < len(text) <= 4000:  # 巨大な初回の turn (貼り付けた文書など) は話題にしない
                     last = text  # より新しい発話で上書き → 直近 = 現在の話題
     except Exception:
         return ""
     if len(last) > max_len:
         last = last[: max_len - 1] + "…"
     return last
+
+
+def _title_of(stamp: dict, max_len: int = 80) -> str:
+    """刻印の題 (`name` = app の一覧に出る session の名前)。 無ければ空。"""
+    name = stamp.get("name")
+    if not isinstance(name, str):
+        return ""
+    name = " ".join(name.split())
+    if len(name) > max_len:
+        name = name[: max_len - 1] + "…"
+    return name
 
 
 def collect(self_uuid: str | None = None, cwd_filter: str | None = None) -> list[dict]:
@@ -220,6 +256,7 @@ def collect(self_uuid: str | None = None, cwd_filter: str | None = None) -> list
             "age_min": age_min,
             "entrypoint": d.get("entrypoint", ""),
             "is_self": bool(self_uuid) and sid == self_uuid,
+            "title": _title_of(d),
             "intent": _intent_snippet(sid, cwd),
             "model": _model_of(sid, cwd),
             "config": label,
@@ -250,11 +287,12 @@ def render(rows: list[dict], self_uuid: str | None, codex_rows: list[dict] | Non
         for r in group:
             tag = " 👈自分" if r["is_self"] else ""
             sid = r["sessionId"][:8]
-            intent = f"  「{r['intent']}」" if r["intent"] else ""
+            title = f"  題「{r['title']}」" if r.get("title") else ""
+            intent = f"  本人の最後の発言「{r['intent']}」" if r["intent"] else ""
             model = f" / {r['model']}" if r.get("model") else " / model ?"
             cfg = f" / 設定フォルダ {r['config']}" if r.get("config") not in (None, "", "default") else ""
             to = f"\n       SendMessage の to = {r['address']}" if r.get("address") and not r["is_self"] else ""
-            lines.append(f"   • pid {r['pid']} / {sid} / {_fmt_age(r['age_min'])}前起動{model}{cfg}{tag}{intent}{to}")
+            lines.append(f"   • pid {r['pid']} / {sid} / {_fmt_age(r['age_min'])}前起動{model}{cfg}{tag}{title}{intent}{to}")
     if codex_rows:
         lines.append(f"🤖 Codex の生きている thread — {len(codex_rows)} 個")
         lines += _codex_lines(codex_rows)
@@ -297,9 +335,11 @@ def surface(self_uuid: str | None, cwd_filter: str | None) -> str:
     head = f"🔀 同じ作業ディレクトリで {len(siblings)} 個の別 session が生きています (並列上書き race 注意 → 編集前に git fetch + 突き合わせ):"
     body = []
     for r in siblings:
-        intent = f" — 「{r['intent']}」" if r["intent"] else ""
+        parts = ([f"題「{r['title']}」"] if r.get("title") else []) + (
+            [f"本人の最後の発言「{r['intent']}」"] if r["intent"] else [])
+        said = (" — " + " / ".join(parts)) if parts else ""
         model = f", {r['model']}" if r.get("model") else ""
-        body.append(f"   • {r['sessionId'][:8]} ({_fmt_age(r['age_min'])}前起動{model}){intent}{_other_dir_note(r, self_config)}")
+        body.append(f"   • {r['sessionId'][:8]} ({_fmt_age(r['age_min'])}前起動{model}){said}{_other_dir_note(r, self_config)}")
     if any(_other_dir_note(r, self_config) for r in siblings):
         body.append(OTHER_DIR_FOOTER)
     if codex_rows:
@@ -395,6 +435,81 @@ def _selftest() -> int:
                         print(f"FAIL codex: live thread in the same cwd must be surfaced with its queue line: {s!r}"); ok = False
                     if surface(None, "/w/other") != "":
                         print("FAIL codex: a thread in another cwd must stay out of the surface"); ok = False
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+    # 本人の発言と題: harness が user の行に書いた文は発言と数えない / 途中に打った発言は数える / 題は刻印の name
+    # (前提 = 読み手 lib/owner_turn.py が読めること。 読めないと旧来の読み方に戻り、 戻っても通る試験は黙って通る)
+    if _ot is None:
+        print("FAIL owner_turn (lib/owner_turn.py) が読めない = 本人の発言の読み方を確かめられない"); ok = False
+    else:
+        import tempfile
+        saved = {k: os.environ.get(k) for k in ("CLAUDE_SESSIONS_DIR", "CLAUDE_PROJECTS_DIR", "CLAUDE_CONFIG_DIRS_HOME", "CLAUDE_CONFIG_DIR")}
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                for k in saved:
+                    os.environ.pop(k, None)
+                sess, proj = os.path.join(td, "sessions"), os.path.join(td, "projects")
+                os.environ["CLAUDE_SESSIONS_DIR"], os.environ["CLAUDE_PROJECTS_DIR"] = sess, proj
+                os.makedirs(sess)
+                os.makedirs(os.path.join(proj, _encode_cwd("/w/t")))
+                me = "eeeeeeee-0000-0000-0000-000000000000"
+                handoff = "Background (from the session that started this one):\nTask: 例の依頼"
+                lines_by_sid = {
+                    # 本人の発言の後に、 知らせ・hook の差し戻し・別 session の message・tool の結果・app の再試行が続く
+                    "cccccccc-0000-0000-0000-000000000003": [
+                        {"type": "user", "message": {"content": handoff}},
+                        {"type": "user", "origin": {"kind": "human"}, "message": {"content": "本人の問い X"}},
+                        {"type": "user", "message": {"content": "<task-notification> <task-id>b1</task-id> done"}},
+                        {"type": "user", "isMeta": True, "message": {"content": "Stop hook feedback: 返事に足す"}},
+                        {"type": "user", "message": {"content": "<system-reminder>Linked sessions now</system-reminder>"
+                                                     "Another Claude session sent a message: <cross-session-message from=\"uds:/x\">"}},
+                        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": "out"}]}},
+                        {"type": "assistant", "isApiErrorMessage": True, "message": {"content": [{"type": "text", "text": "error"}]}},
+                        {"type": "user", "message": {"content": "Try again"}},
+                    ],
+                    # turn の途中に打った発言 (queued_command の attachment) は本人の発言
+                    "dddddddd-0000-0000-0000-000000000004": [
+                        {"type": "user", "message": {"content": "最初の問い"}},
+                        {"type": "attachment", "attachment": {"type": "queued_command", "commandMode": "prompt",
+                                                              "origin": {"kind": "human"}, "prompt": "途中の一言 Y"}},
+                    ],
+                    # 別 session が起こした worker = 起動文しか無い → 発言は空 (題で見分ける)
+                    "ffffffff-0000-0000-0000-000000000006": [{"type": "user", "message": {"content": handoff}}],
+                }
+                names = {"cccccccc-0000-0000-0000-000000000003": "[local推奨] [model: opus xhigh] 例の窓 (1/1)",
+                         "dddddddd-0000-0000-0000-000000000004": "長い題 " + "あ" * 100}
+                for n, sid in enumerate([me] + list(lines_by_sid)):
+                    stamp = {"pid": os.getpid(), "sessionId": sid, "cwd": "/w/t", "startedAt": 0}
+                    if sid in names:
+                        stamp["name"] = names[sid]
+                    with open(os.path.join(sess, f"{n}.json"), "w", encoding="utf-8") as fh:
+                        json.dump(stamp, fh)
+                    with open(os.path.join(proj, _encode_cwd("/w/t"), sid + ".jsonl"), "w", encoding="utf-8") as fh:
+                        for e in lines_by_sid.get(sid, []):
+                            fh.write(json.dumps(e, ensure_ascii=False, separators=(",", ":")) + "\n")
+                rows = {r["sessionId"][:8]: r for r in collect(self_uuid=me)}
+                if rows.get("cccccccc", {}).get("intent") != "本人の問い X":
+                    print(f"FAIL intent: harness の文 (知らせ・差し戻し・別 session の message・再試行) を発言と数えた: "
+                          f"{rows.get('cccccccc', {}).get('intent')!r}"); ok = False
+                if rows.get("dddddddd", {}).get("intent") != "途中の一言 Y":
+                    print(f"FAIL intent: 途中に打った発言を落とした: {rows.get('dddddddd', {}).get('intent')!r}"); ok = False
+                if rows.get("ffffffff", {}).get("intent") != "":
+                    print(f"FAIL intent: 起動文を本人の発言と数えた: {rows.get('ffffffff', {}).get('intent')!r}"); ok = False
+                t_long = rows.get("dddddddd", {}).get("title", "")
+                if rows.get("cccccccc", {}).get("title") != names["cccccccc-0000-0000-0000-000000000003"] \
+                        or not (t_long.endswith("…") and len(t_long) == 80) or rows.get("ffffffff", {}).get("title") != "":
+                    print(f"FAIL title: 刻印の name を題として出す (長い題は 80 字で切る): {[r.get('title') for r in rows.values()]}"); ok = False
+                s = surface(me, None)
+                if ("題「[local推奨] [model: opus xhigh] 例の窓 (1/1)」 / 本人の最後の発言「本人の問い X」" not in s
+                        or "task-notification" in s or "cross-session-message" in s or "eeeeeeee" in s):
+                    print(f"FAIL surface: 題と本人の最後の発言を出し、 harness の文と自分を出さない: {s!r}"); ok = False
+                r = render(collect(self_uuid=me), me)
+                if "題「[local推奨] [model: opus xhigh] 例の窓 (1/1)」" not in r or "本人の最後の発言「途中の一言 Y」" not in r:
+                    print(f"FAIL render: 題と本人の最後の発言を出す: {r!r}"); ok = False
         finally:
             for k, v in saved.items():
                 if v is None:
