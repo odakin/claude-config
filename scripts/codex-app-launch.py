@@ -444,6 +444,14 @@ def launch(a) -> int:
     if stop:
         print("⛔ " + stop, file=sys.stderr)
         return 3
+    try:
+        if getattr(a, "latest_family", None):
+            a.model = chosen_model("latest", a.latest_family, a.effort)
+        elif getattr(a, "exact_model", False):
+            a.model = chosen_model("exact", a.model, a.effort)
+    except ValueError as ex:
+        print(f"⛔ {ex}", file=sys.stderr)
+        return 3
     cwd = os.path.realpath(os.path.expanduser(a.cwd))
     if not os.path.isdir(cwd):
         print(f"⛔ cwd が無い: {cwd}", file=sys.stderr)
@@ -526,6 +534,12 @@ def launch_app(a, cwd: str, prompt: str, rule: str) -> int:
         s.close()
         return fall_back(f"app-server で thread を作れない ({e})")
     s.close()
+    got_model, got_effort = res.get("model") or "?", res.get("reasoningEffort") or "?"
+    if governed_launch(a) and (got_model != a.model or got_effort != a.effort):
+        print(f"⛔ 作成した窓 {tid} のモデル・effort が {a.model} / {a.effort} と一致しないため、起動文は送らない", file=sys.stderr)
+        return 6
+    if a.record and governed_launch(a):
+        record_app_worker(a, tid, "app", got_model)
     queued, qout = queue_message(cli, tid, prompt)
     if not queued:
         print(f"⛔ thread {tid} は作ったが、 起動文を予約できない ({qout})。 アプリで開いて起動文を貼って送る:"
@@ -533,8 +547,31 @@ def launch_app(a, cwd: str, prompt: str, rule: str) -> int:
         return 6
     revealed = open_in_app(reveal_url(tid))
     sources = res.get("instructionSources") or []
-    got_model, got_effort = res.get("model") or "?", res.get("reasoningEffort") or "?"
     return report(a, tid, cwd, got_model, got_effort, sources, residual, revealed, "app", rule)
+
+
+def governed_launch(a):
+    return getattr(a, "latest_family", None) or getattr(a, "exact_model", False)
+
+
+def record_app_worker(a, tid, writer, model):
+    path = Path(a.record)
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        record = {}
+    if governed_launch(a):
+        record.setdefault("initial_model", record.get("model"))
+        record["model"] = model
+    record.update(codex_thread=tid, launched_host=short_host(), surface="codex-app", writer=writer,
+                  launched_at=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as out:
+        json.dump(record, out, ensure_ascii=False, indent=1)
+        temp = Path(out.name)
+    try:
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def report(a, tid, cwd, got_model, got_effort, sources, residual, revealed, writer, rule) -> int:
@@ -547,14 +584,8 @@ def report(a, tid, cwd, got_model, got_effort, sources, residual, revealed, writ
     if getattr(a, "sealed", False) and a.sandbox == "workspace-write":
         # measured: the daemon's turn keeps the /tmp and $TMPDIR exclusion and the TMPDIR override, the app's turn does not
         out["sealed_tmp"] = "excluded" if writer == "daemon" else "not-held-in-app-turn"
-    if a.record:
-        try:
-            rec = json.loads(Path(a.record).read_text(encoding="utf-8"))
-        except Exception:
-            rec = {}
-        rec.update(codex_thread=tid, launched_host=out["host"], launched_at=out["launched_at"], surface="codex-app",
-                   writer=writer)
-        Path(a.record).write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+    if a.record and not governed_launch(a):
+        record_app_worker(a, tid, writer, got_model)
     if a.json:
         print(json.dumps(out, ensure_ascii=False))
         return 0
@@ -602,6 +633,12 @@ def launch_daemon(a, cwd: str, prompt: str, rule: str) -> int:
                 return 5
         res = w.call("thread/start", thread_params(cwd, a.model, a.effort, a.sandbox, a.approval, a.network, writable=a.writable_root, sealed=a.sealed))
         tid = res["thread"]["id"]
+        if governed_launch(a):
+            if res.get("model") != a.model or res.get("reasoningEffort") != a.effort:
+                print(f"⛔ 作成した窓 {tid} のモデル・effort が {a.model} / {a.effort} と一致しないため、起動文は送らない", file=sys.stderr)
+                return 6
+            if a.record:
+                record_app_worker(a, tid, "daemon", a.model)
         if a.name:
             try:
                 w.call("thread/name/set", {"threadId": tid, "name": a.name})
@@ -630,6 +667,11 @@ def continue_thread(a) -> int:
     tid = a.thread
     if ct is not None:
         tid = ct.resolve(a.thread) or a.thread
+    try:
+        check_board_resume(tid, getattr(a, "board_root", None), a.effort)
+    except ValueError as ex:
+        print(f"⛔ {ex}", file=sys.stderr)
+        return 3
     prompt = Path(a.prompt_file).read_text(encoding="utf-8")
     if writer_of(a) == "app":
         cli = codex_cli()
@@ -724,26 +766,52 @@ def models_cache_path() -> Path:
     return Path(os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")) / "models_cache.json"
 
 
-def best_model(family: str, path=None) -> tuple[str, str]:
+def model_entries(path=None, *, listed_only=True):
+    p = Path(path) if path else models_cache_path()
+    try:
+        listing = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as ex:
+        raise ValueError(f"Codex の model の一覧 ({p}) が読めない ({type(ex).__name__})") from ex
+    entries = listing.get("models") if isinstance(listing, dict) else None
+    if not isinstance(entries, list):
+        raise ValueError(f"Codex の model の一覧 ({p}) の形が不明")
+    return {m["slug"]: m for m in entries if isinstance(m, dict) and isinstance(m.get("slug"), str)
+            and (not listed_only or m.get("visibility") == "list")}
+
+
+def check_model_effort(model, entries, effort):
+    if model not in entries:
+        raise ValueError(f"Codex の一覧で指定された版 {model} が見つからない")
+    levels = entries[model].get("supported_reasoning_levels") or []
+    if effort and not any(isinstance(level, dict) and level.get("effort") == effort for level in levels):
+        raise ValueError(f"Codex の {model} は {effort} を選べると確認できない")
+
+
+def best_model(family: str, path=None, *, effort=None) -> tuple[str, str]:
     """(id, '') = the listed model (visibility = list) of this family with the highest version in this machine's Codex
     model list; ('', why) when the list cannot be read or has no model of the family (no guess: an old id would start
     the worker one version behind, the stop this tool replaced)."""
-    p = Path(path) if path else models_cache_path()
     fam = (family or "").strip().lower()
     try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        return "", f"Codex の model の一覧 ({p}) が読めない ({e.__class__.__name__})"
-    best = None
-    for m in (data.get("models") if isinstance(data, dict) else data) or []:
-        if not isinstance(m, dict) or m.get("visibility") != "list":
-            continue
-        fv = model_family(str(m.get("slug") or ""))
-        if fv and fv[0] == fam and (best is None or fv[1] > best[1]):
-            best = (str(m["slug"]), fv[1])
-    if not best:
-        return "", f"Codex の model の一覧 ({p}) に系統 {fam or '?'} の model が無い"
-    return best[0], ""
+        entries = model_entries(path)
+        versions = [(parts[1], slug) for slug in entries if (parts := model_family(slug)) and parts[0] == fam]
+        if not versions:
+            raise ValueError(f"Codex の model の一覧に系統 {fam or '?'} の model が無い")
+        best = max(versions)[1]
+        check_model_effort(best, entries, effort)
+    except ValueError as ex:
+        return "", str(ex)
+    return best, ""
+
+
+def chosen_model(mode, selector, effort):
+    if mode == "exact":
+        check_model_effort(selector, model_entries(listed_only=False), effort)
+        return selector
+    target, why = best_model(selector, effort=effort)
+    if why:
+        raise ValueError(why)
+    return target
 
 
 def model_verdict(asked: str, got: str) -> tuple[bool, str]:
@@ -769,6 +837,145 @@ def model_verdict(asked: str, got: str) -> tuple[bool, str]:
     return False, f"頼まれた {asked} より古い {got} で動いている"
 
 
+def board_worker_record(tid, root=None):
+    """Find a model-governed app worker's exact local board binding."""
+    if not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", tid or ""):
+        return None
+    workspace = Path(os.environ.get("AGENT_BOARD_WORKSPACE") or HERE.parent.parent).expanduser()
+    board = Path(root).expanduser() if root else workspace / "agent-board"
+    config = board / "board.json"
+    if not config.is_file() and root is None:
+        return None
+    try:
+        cfg = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as ex:
+        raise ValueError("掲示板のモデル方針を読めない") from ex
+    if not isinstance(cfg, dict) or cfg.get("codex_model_policy") is not True:
+        return None
+    if (board / ".local").is_dir():
+        outbox = board / ".local" / "outbox"
+    else:
+        result = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=board,
+                                capture_output=True, text=True, timeout=3, check=False)
+        if result.returncode:
+            raise ValueError("掲示板の起動記録の所在を確認できない")
+        outbox = Path(result.stdout.strip()) / "board-outbox" / "root"
+    matches = []
+    for path in outbox.glob("*.launch.json"):
+        try:
+            data = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if tid not in data:
+            continue
+        try:
+            record = json.loads(data)
+        except ValueError as ex:
+            raise ValueError("対象窓の起動記録を読めない") from ex
+        if isinstance(record, dict) and record.get("codex_thread") == tid and record.get("surface") == "codex-app":
+            matches.append(record)
+    if len(matches) > 1:
+        raise ValueError("この窓の起動記録が複数あるため照合できない")
+    return matches[0] if matches else None
+
+
+def worker_selection(record):
+    policy = record.get("model_policy") or {}
+    if not policy:
+        request = record.get("request_id", "?")
+        raise ValueError(f"旧依頼 {request} は系統と版指定元が未記録。掲示板の codex-reconcile で照合してから再開する")
+    mode, target, effort = policy.get("mode"), policy.get("selector"), record.get("effort")
+    families = {"chore": "sol", "physics": "astra"}
+    family = families.get(policy.get("work"))
+    if not effort or family is None or not isinstance(target, str) or not (
+        (mode == "latest" and target == family) or (mode == "exact" and model_family(target))
+    ):
+        raise ValueError("この窓のモデル方針が不完全")
+    return chosen_model(mode, target, effort), effort, mode == "exact"
+
+
+def active_worker_runtime(tid):
+    """Read the active turn, independently of the thread's mutable settings row."""
+    home = models_cache_path().parent
+    paths = list((home / "sessions").glob(f"*/*/*/rollout-*-{tid}.jsonl"))
+    if len(paths) != 1:
+        raise ValueError("この窓の実行中ターンの記録を一意に読めない")
+    turn, runtime = None, None
+    try:
+        with paths[0].open(encoding="utf-8") as records:
+            for line in records:
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue  # a concurrently appended last line may still be incomplete
+                if not isinstance(entry, dict):
+                    continue
+                payload = entry.get("payload") or {}
+                if not isinstance(payload, dict):
+                    continue
+                kind = payload.get("type")
+                event_turn = payload.get("turn_id")
+                if entry.get("type") == "event_msg" and kind == "task_started":
+                    turn, runtime = event_turn, None
+                elif entry.get("type") == "event_msg" and kind in {"task_complete", "turn_aborted"} and event_turn == turn:
+                    turn, runtime = None, None
+                elif entry.get("type") == "turn_context" and turn and event_turn == turn:
+                    runtime = payload.get("model"), payload.get("effort") or payload.get("reasoning_effort")
+    except OSError as ex:
+        raise ValueError("この窓の実行中ターンの記録を読めない") from ex
+    if not runtime or not all(runtime):
+        raise ValueError("この窓の実行中ターンのモデル・effort を確認できない")
+    return runtime
+
+
+def check_board_resume(tid, root=None, effort_override=None, active_model=None):
+    record = board_worker_record(tid, root)
+    if record is None:
+        return
+    wanted, effort, exact = worker_selection(record)
+    rows = ct.thread_rows(ids=[tid]) if ct is not None else []
+    if not rows:
+        raise ValueError("対象窓のモデル・effort の記録を読めない")
+    model, actual = rows[0].get("model"), rows[0].get("reasoning_effort")
+    match = model == wanted if exact else model_verdict(wanted, model)[0]
+    if not match or actual != effort or (effort_override and effort_override != effort) or (active_model is not None and active_model != model):
+        raise ValueError(f"{wanted} / {effort} に切り替えてから再開する (現在 {model or '?'} / {actual or '?'})")
+
+
+def queue_checked(a):
+    if not re.fullmatch(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", a.thread):
+        print("⛔ 対象窓の完全な Codex thread id を指定する", file=sys.stderr)
+        return 3
+    try:
+        check_board_resume(a.thread, a.board_root)
+    except ValueError as ex:
+        print(f"⛔ {ex}", file=sys.stderr)
+        return 3
+    cli = codex_cli()
+    if not cli:
+        print("⛔ Codex CLI が見つからない", file=sys.stderr)
+        return 4
+    ok, output = queue_message(cli, a.thread, a.message)
+    if output:
+        print(output, file=sys.stdout if ok else sys.stderr)
+    return 0 if ok else 5
+
+
+def check_prompt():
+    """Native UserPromptSubmit gate for board worker turns entered directly in the app."""
+    event = json.load(sys.stdin)
+    if event.get("hook_event_name") != "UserPromptSubmit":
+        return 0
+    # The wrap skill and the board's accepted-receipt check govern a standalone wrap command.
+    if event.get("prompt", "").strip() in {"/wrap", "/wrap-close", "仕上げ", "いつもの整備", "締めて閉じて"}:
+        return 0
+    try:
+        check_board_resume(event.get("session_id"), active_model=event.get("model") or "?")
+    except (ValueError, OSError, subprocess.TimeoutExpired) as ex:
+        print(json.dumps({"decision": "block", "reason": str(ex)}, ensure_ascii=False))
+    return 0
+
+
 def check_self(a) -> int:
     tid = os.environ.get("CODEX_THREAD_ID", "")
     rows = ct.thread_rows(ids=[tid]) if (ct is not None and tid) else []
@@ -777,21 +984,35 @@ def check_self(a) -> int:
               " 依頼元に 1 行言って止まる")
         return 1
     model, effort = rows[0].get("model") or "?", rows[0].get("reasoning_effort") or "?"
-    m_ok, line = model_verdict(a.model, model)
-    ok = m_ok and (not a.effort or effort == a.effort)
-    print(f"{'✅' if ok else '⛔'} この thread の記録 = model {model} / effort {effort} (頼まれた値 = {a.model}"
-          + (f" / {a.effort}" if a.effort else "") + ")")
+    want, want_effort = a.model, a.effort
+    exact = getattr(a, "exact_model", False)
+    family = getattr(a, "latest_family", None)
+    try:
+        record = board_worker_record(tid, getattr(a, "board_root", None))
+        if record is not None and (family or exact or (want == record.get("initial_model", record.get("model"))
+                                                       and want_effort == record.get("effort"))):
+            want, want_effort, exact = worker_selection(record)
+            model, effort = active_worker_runtime(tid)
+        elif family or exact:
+            want = chosen_model("latest" if family else "exact", family or want, want_effort)
+    except ValueError as ex:
+        print(f"⛔ {ex}")
+        return 1
+    m_ok, line = (want == model, "") if exact else model_verdict(want, model)
+    ok = m_ok and (not want_effort or effort == want_effort)
+    print(f"{'✅' if ok else '⛔'} この thread の記録 = model {model} / effort {effort} (頼まれた値 = {want}"
+          + (f" / {want_effort}" if want_effort else "") + ")")
     if line:
         if m_ok and not ok:   # a newer version alone goes on; here the effort stops it (the next line), so no "go on"
             line = line.split(" = ")[0]
         print(("  " if m_ok else "  ⛔ ") + line)
-    if m_ok and a.effort and effort != a.effort:
-        print(f"  ⛔ effort が違う (頼まれた = {a.effort}、 記録 = {effort})")
+    if m_ok and want_effort and effort != want_effort:
+        print(f"  ⛔ effort が違う (頼まれた = {want_effort}、 記録 = {effort})")
     return 0 if ok else 1
 
 
 def best_model_cmd(a) -> int:
-    model, why = best_model(a.family)
+    model, why = best_model(a.family, effort=getattr(a, "effort", None))
     if a.json:
         print(json.dumps({"family": a.family, "model": model, "source": str(models_cache_path()),
                           **({"unknown": why} if why else {})}, ensure_ascii=False))
@@ -886,6 +1107,14 @@ sys.exit(2)
 
 
 def _selftest() -> int:
+    # Test board policy against a disposable workspace even when the real owner board enables it.
+    import unittest.mock
+    with tempfile.TemporaryDirectory(prefix="codex-launch-workspace-") as workspace:
+        with unittest.mock.patch.dict(os.environ, {"AGENT_BOARD_WORKSPACE": workspace}):
+            return _selftest_launch()
+
+
+def _selftest_launch() -> int:
     import argparse
     checks = []
     tmp = tempfile.mkdtemp(prefix="cal-")
@@ -1122,6 +1351,8 @@ def _selftest() -> int:
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         rc = main(["best-model", "--family", "luna"])
     checks.append(("best-model の CLI: 分からなければ exit 1", rc == 1))
+    if ct is not None:
+        checks.extend(_selftest_worker_policy(Path(tmp)))
     if _home is None:
         os.environ.pop("CODEX_HOME")
     else:
@@ -1152,6 +1383,54 @@ def _selftest() -> int:
     return 0 if all(ok for _, ok in checks) else 1
 
 
+def _selftest_worker_policy(tmp):
+    import contextlib
+    import io
+    from unittest.mock import patch
+
+    root = tmp / "policy" / "agent-board"
+    outbox = root / ".local" / "outbox"
+    outbox.mkdir(parents=True)
+    (root / "board.json").write_text('{"codex_model_policy":true}', encoding="utf-8")
+    models = [{"slug": model, "visibility": "list", "supported_reasoning_levels": [{"effort": effort}]}
+              for model, effort in [("gpt-6-astra", "xhigh"), ("gpt-6.1-sol", "xhigh"), ("gpt-6.2-sol", "xhigh")]]
+    (tmp / "models_cache.json").write_text(json.dumps({"models": models}), encoding="utf-8")
+    tid = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+    launch_path = outbox / "fixture.launch.json"
+    launch = {"request_id": "fixture", "codex_thread": tid, "surface": "codex-app", "effort": "xhigh", "model": "gpt-6-astra"}
+
+    def blocked(actual, current_effort, prompt="Continue the work", hook_model=None):
+        event = {"hook_event_name": "UserPromptSubmit", "session_id": tid, "model": hook_model or actual, "prompt": prompt}
+        buf = io.StringIO()
+        with patch.object(sys, "stdin", io.StringIO(json.dumps(event))), contextlib.redirect_stdout(buf), \
+                patch.object(ct, "thread_rows", return_value=[{"model": actual, "reasoning_effort": current_effort}]):
+            check_prompt()
+        return bool(buf.getvalue() and json.loads(buf.getvalue())["decision"] == "block")
+
+    with patch.dict(os.environ, {"AGENT_BOARD_WORKSPACE": str(root.parent), "CODEX_HOME": str(tmp)}):
+        launch_path.write_text(json.dumps(launch), encoding="utf-8")
+        legacy = blocked("gpt-6-astra", "xhigh")
+        wrap = not blocked("gpt-6.2-sol", "xhigh", "/wrap")
+        launch["model_policy"] = {"work": "chore", "mode": "latest", "selector": "sol"}
+        launch_path.write_text(json.dumps(launch), encoding="utf-8")
+        latest = (blocked("gpt-6-astra", "xhigh") and blocked("gpt-6.1-sol", "xhigh") and blocked("gpt-6.2-sol", "high")
+                  and blocked("gpt-6.2-sol", "xhigh", hook_model="gpt-6-astra") and not blocked("gpt-6.2-sol", "xhigh"))
+        launch["model_policy"] = {"work": "chore", "mode": "exact", "selector": "gpt-6.1-sol"}
+        launch_path.write_text(json.dumps(launch), encoding="utf-8")
+        pinned = blocked("gpt-6.2-sol", "xhigh") and not blocked("gpt-6.1-sol", "xhigh")
+        rollout = tmp / "sessions" / "2026" / "11" / "28" / f"rollout-test-{tid}.jsonl"
+        rollout.parent.mkdir(parents=True)
+        events = [{"type": "event_msg", "payload": {"type": "task_started", "turn_id": "turn-1"}},
+                  {"type": "turn_context", "payload": {"turn_id": "turn-1", "model": "gpt-6-astra", "effort": "xhigh"}},
+                  {"type": "event_msg", "payload": {"type": "thread_settings_applied", "thread_settings": {"model": "gpt-6.2-sol"}}}]
+        rollout.write_text("\n".join(map(json.dumps, events)) + "\n", encoding="utf-8")
+        active = active_worker_runtime(tid) == ("gpt-6-astra", "xhigh")
+    return [("legacy worker: no prompt before reconciliation", legacy), ("standalone wrap retains its own gate", wrap),
+            ("latest worker: separate family, version, effort and hook-model checks", latest),
+            ("owner pin: preserve the exact version on resume", pinned),
+            ("assignment turn uses actual context after mutable settings changed", active)]
+
+
 def main(argv=None) -> int:
     import argparse
     if argv is None:
@@ -1164,6 +1443,9 @@ def main(argv=None) -> int:
     s.add_argument("--cwd", required=True)
     s.add_argument("--prompt-file", required=True)
     s.add_argument("--model")
+    policy = s.add_mutually_exclusive_group()
+    policy.add_argument("--latest-family")
+    policy.add_argument("--exact-model", action="store_true")
     s.add_argument("--effort", choices=EFFORTS)
     s.add_argument("--sandbox", default="workspace-write", choices=["read-only", "workspace-write", "danger-full-access"])
     s.add_argument("--approval", default="never", choices=["untrusted", "on-request", "never"])
@@ -1188,15 +1470,26 @@ def main(argv=None) -> int:
     n.add_argument("--no-reveal", action="store_true")
     n.add_argument("--writer", choices=["app", "daemon"], help="次の turn を走らせる側 (既定 = app = 予約)")
     n.add_argument("--daemon-reason", help="daemon で走らせる理由 (env CODEX_DAEMON_REASON でも可)")
+    n.add_argument("--board-root")
+    q = sub.add_parser("queue")
+    q.add_argument("--thread", required=True)
+    q.add_argument("--message", required=True)
+    q.add_argument("--board-root", required=True)
+    sub.add_parser("check-prompt")
     r = sub.add_parser("rpc")
     r.add_argument("method", help="app-server の method (例 thread/loaded/list)")
     r.add_argument("params", nargs="?", help="params の JSON (既定 {})")
     c = sub.add_parser("check-self")
     c.add_argument("--model", required=True)
     c.add_argument("--effort", choices=EFFORTS)
+    c.add_argument("--board-root")
+    policy = c.add_mutually_exclusive_group()
+    policy.add_argument("--latest-family")
+    policy.add_argument("--exact-model", action="store_true")
     bm = sub.add_parser("best-model")
     bm.add_argument("--family", required=True, help="系統の語 (astra / sol / …)")
     bm.add_argument("--json", action="store_true")
+    bm.add_argument("--effort", choices=EFFORTS)
     k = sub.add_parser("compose-link")
     k.add_argument("--cwd", required=True)
     k.add_argument("--prompt-file", required=True)
@@ -1205,6 +1498,10 @@ def main(argv=None) -> int:
         return launch(a)
     if a.cmd == "continue":
         return continue_thread(a)
+    if a.cmd == "queue":
+        return queue_checked(a)
+    if a.cmd == "check-prompt":
+        return check_prompt()
     if a.cmd == "rpc":
         return rpc(a)
     if a.cmd == "check-self":
