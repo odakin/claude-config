@@ -59,7 +59,7 @@ AGENTS.md は「どの正本を最初に読むか」だけを運ぶ入口、CLAU
 
 **契約:** 本規約に従う Git リポは、tracked・非空・通常 file の `AGENTS.md` をリポ root に置く。Codex は task 開始時に `AGENTS.md` chain を自動発見する一方、`CLAUDE.md` は machine-local な fallback 設定が無ければ自動発見しない。また instruction chain は task 開始時に組み立てられるため、親 workspace で始めた task が後から nested repo へ `cd` しても、その repo の入口が自動追加されたとは扱わない。Codex の技術的 discovery 契約と公式根拠は [`codex/PARITY.md#project-instruction-discovery`](codex/PARITY.md#project-instruction-discovery) が正本。
 
-`AGENTS.md` は**薄い dispatcher**であり、第二の規約正本ではない。本文は次の責務だけに絞る:
+`AGENTS.md` は**薄い dispatcher**であり、第二の規約正本ではない。 `CLAUDE.md` の写しにも `CLAUDE.md` への symlink にもせず、 2 つを 1 本にしない: Codex が自動で読み込む指示の file には合計の上限 (既定 32 KiB) があり、 長い `CLAUDE.md` は切れて届くか届かない。 `CLAUDE.md` には Claude Code の道具でしか動かない手順も入る (上限と出典・入口の大きさとの関係 = [`codex/PARITY.md#project-instruction-discovery`](codex/PARITY.md#project-instruction-discovery))。本文は次の責務だけに絞る:
 
 1. 作業前に root の `CLAUDE.md` と `SESSION.md` を読む。
 2. `CLAUDE.md` 内の task-relevant な pointer を実行前に辿る。
