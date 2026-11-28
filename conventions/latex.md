@@ -166,6 +166,19 @@ latexdiff --type=UNDERLINE --math-markup=off --disable-citation-markup \
 >
 > <a id="math-guard-is-a-pair"></a>⚠️ **上の症状表 3 行 (wrapper 展開 / safe-command / 無印検査) は engine の既定に入っている** (2026-09-12)。 それ以前は**表に対策が書いてあるだけで engine は適用しておらず**、 engine を呼ぶ repo は「compile 0 error・式の変更だけ無色」 の PDF を共著者に渡し得た (= 規約に書いた対策が道具に入っていない型の drift。 合成 repo の実測: 旧挙動は新式を `\DIFadd` 無しで挿入し旧式を comment out、 既定では両式が着色される)。 **展開と検査は対でしか効かない** — 展開前の本文には display-math 環境が無いので、 検査だけ回すと同じ silent miss に対して 0 を返す (= 検査の 0 は「安全」 ではなく「展開していない」 でもあり得る)。 無印が残ったときは deploy 前に停止する: preamble に新しい構造 macro があるなら `LATEXDIFF_BENIGN_EXTRA=名前,名前` で宣言し、 意図して無視するなら `--allow-unmarked-math`、 guard 自体を切るなら `--no-math-guard` (= 旧挙動)。
 
+### <a id="latexdiff-japanese-line-breaks"></a>和文の差分に下線を付けても行を折り返せるようにする
+
+`latexdiff --type=UNDERLINE` の `ulem` は、長い和文の変更箇所を空白のない一つの語として組むことがある。pLaTeX でコンパイルが通っても、差分の右端が `Overfull \hbox` で切れる。旧版と新版の比較用コピーを同じ設定で [LuaLaTeX 向け](#lualatex-compat) に組める形にし、生成した差分のプリアンブルで和文の下線と取り消し線を [lua-ul](https://ctan.org/pkg/lua-ul) に任せる。元原稿の組版エンジンはそのまま使える。
+
+```latex
+% latexdiff が挿入したプリアンブルの後
+\usepackage{lua-ul}
+\renewcommand{\DIFadd}[1]{{\color{blue}\ifmmode\underline{#1}\else\underLine{#1}\fi}}
+\renewcommand{\DIFdel}[1]{{\color{red}\ifmmode\sout{\ensuremath{#1}}\else\strikeThrough{#1}\fi}}
+```
+
+数式の印は `latexdiff` の `ulem` と [構文木の比較](#latexdiff-eqtree) を使う。比較用コピーは組み替える前の原稿と印字内容を照合し、差分は [追加側・削除側を読み戻す](#latexdiff-views-check)。行をまたぐ和文と訂正した式のページを描画し、文字が余白内にあり、線が該当する字を指していることを確認する。
+
 ## <a id="latexdiff-fine-markup"></a>式の中の変わった記号だけに印を付ける差分 (`--math-markup=fine`) の壊れ方と直し方
 
 共著者が「式もちゃんと変更箇所だけ」 と求めるとき (添字 1 つ・関係記号 1 つの変更で式全体に削除線が付くのを避けたいとき) は `--math-markup=fine` を使う (latexdiff の番号では fine = 3、 2 は coarse)。 実際の原稿では fine の出力が決まった形で壊れる (実測):
