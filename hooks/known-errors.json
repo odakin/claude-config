@@ -218,6 +218,11 @@
       "match": "dependency_file_not_evaluatable",
       "doc": "conventions/github-security-automation.md#dependency-graph-text-named-manifest",
       "hint": "Dependabot か依存グラフが依存の file を読めなかった。 run 名が Graph Update で、 落ちた file が依存の file でない text (名前に requirements を含む web 頁の写しなど) なら、 名前から manifest の語を外す"
+    },
+    {
+      "match": "a hook changed this call's input after auto mode reviewed it",
+      "doc": "conventions/tool-call-robustness.md#classifier-no-verdict-hook-rewrite",
+      "hint": "入力を書き換える hook が auto mode の判定を無効にした (一時の失敗ではない)。 断りの文が示す入力を次の message で単独でそのまま出し直し、 同じ message に並べた他の呼び出しはその後の別の message で出し直す"
     }
   ]
 }
