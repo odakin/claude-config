@@ -1722,6 +1722,7 @@ assert fitz.open("p1.pdf").page_count == 1
 **規律 (= 抽出 ladder、 「読めない」 と言う前に全段降りる)**:
 
 1. **`page.get_text("words")` + bbox sort/cluster** (= 第一選択): `(x0, y0, x1, y1, text, …)` を y で row cluster → x で列判定して視覚 layout を復元。 表の行帰属は **同一 y-band に在ることを確認してから**主張する
+   - <a id="side-by-side-record-groups"></a>**同じ列の組が左右に並ぶ表** (「番号 | 氏名 | 所属」 の組が頁の左半分と右半分に 2 つ並ぶ名簿) は、 y の帯だけで行を作ると、 同じ高さの右の組の記録が左の組の行に混ざる (実測)。 帯の中を頁の幅の半分 (組の境目の x) で左右に分けてから行にする。 起こした行の数を、 番号の形の語の数と「語数 = 見出し + 列の数 × 行の数」 で照らす。 AI に見せない値を含む表は、 起こすのを手元の script にして件数だけを出す ([`confidential-repo-boundary.md#counts-only-analysis`](confidential-repo-boundary.md#counts-only-analysis))
 2. **`page.get_text("dict")`**: block/line/span 構造 + font/size/color で見出しと値を判別 (= 青字ガイダンス検出等と同経路)
 3. **`page.find_tables()`** (PyMuPDF 1.23+): 罫線ベースの表構造を直接抽出 (= vector 罫線がある表なら最短)
 4. **`page.get_text(clip=rect)`**: 特定セル矩形に絞って読む (= [`pdf-cell-label-vs-data-disambiguation`](#pdf-cell-label-vs-data-disambiguation) の読み側適用)
