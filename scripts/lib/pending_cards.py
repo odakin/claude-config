@@ -76,7 +76,7 @@ EDITED = re.compile(r"edited the message of (task_[0-9a-zA-Z]+), so only its car
 
 
 # 構造化した結果 (会話記録の行の `mcpMeta._meta.ccdToolStamp.outcome`、 app 本体の bundle の code と会話記録で確認): 文より
-# 版の間で変わりにくい機械の値なので先に読む (文は app の版で 3 回変わり、 読み分けが黙って外れた = 実測)。
+# 版の間で変わりにくい機械の値なので先に読む (文は app の版で変わり、 読み分けが黙って外れた = 実測)。
 #   "did" = 取り下げた / "not_done" = 押されていた・起動の途中 / "no_change" = もう無い (閉じた・押し出された・期限切れ・
 #   見つからない) / null = もう無い (残していた写しも取り下げた)。 編集された・session が無いは誤りの結果で outcome が無い
 #   → 文で読む。 知らない値も文で読む (版の検査 = scripts/check-dismiss-replies.py が知らせる)

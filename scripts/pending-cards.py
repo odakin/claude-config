@@ -56,7 +56,7 @@ def _final_text(entries: list[dict]) -> str:
 def _maybe_check_dismiss_replies() -> None:
     """app の版か返事の読み分けの file が前に確かめた時と違えば、 返事の表の照合 (scripts/check-dismiss-replies.py) を
     背景で起こす (待たない。 外れは digest の ⚙️ の段に出る)。 毎 turn の費用 = Info.plist と 2 file を読むだけ。
-    文は app の版で変わり、 読み分けが黙って外れた (実測 = 10 日で 3 回)。 env PENDING_CARDS_NO_REPLY_CHECK=1 で起こさない (試験)。"""
+    文は app の版で変わり、 読み分けが黙って外れた (実測)。 env PENDING_CARDS_NO_REPLY_CHECK=1 で起こさない (試験)。"""
     if os.environ.get("PENDING_CARDS_NO_REPLY_CHECK"):
         return
     try:

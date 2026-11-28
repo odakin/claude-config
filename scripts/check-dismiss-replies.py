@@ -4,7 +4,7 @@
 なぜ:
   dismiss_task の返事は app 本体の表 (`{dismissed:…, already_started:…, …}[outcome]`) の英文で、 文は app の版で変わる。
   読み分けは文の形で読むので、 版が変わると黙って外れ、 取り下げた card を点呼し続けたり、 同じ依頼の card の作り直しを
-  止め続けたりした (実測 = 10 日で 3 回、 2 か所が別々に外れた回も同時に外れた回もある)。 版が変わったら、 表の各文を
+  止め続けたりした (実測。 2 か所が別々に外れた回も、 同時に外れた回もある)。 版が変わったら、 表の各文を
   2 か所の読み分けの code にそのまま通して、 期待どおりに分かれるかを先に見る。 表の鍵 (dismissed など) は機械の値で、
   文より変わりにくい。 結果に付く構造化した値 (did / not_done / no_change) の対応も同じ表の隣にあるので一緒に見る
   (pending_cards.py はこの値を先に読む)。 正本 = conventions/multi-session-coordination.md#pending-card-rollcall。
