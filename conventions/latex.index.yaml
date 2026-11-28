@@ -28,6 +28,9 @@ sections:
   - id: latexdiff-review-snapshot
     level: 2
     title: "latexdiff で差分レビュー PDF を作る"
+  - id: latexdiff-japanese-line-breaks
+    level: 3
+    title: "和文の差分に下線を付けても行を折り返せるようにする"
   - id: latexdiff-fine-markup
     level: 2
     title: "式の中の変わった記号だけに印を付ける差分 (`--math-markup=fine`) の壊れ方と直し方"
