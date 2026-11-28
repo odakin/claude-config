@@ -513,6 +513,8 @@
 - **[lib/classroom-courses.mjs](lib/classroom-courses.mjs)** — Google Classroom course engine: create / update, invite (parallel), announcements and coursework readback, roster match by address, coursework list, short answers without names; takes a googleapis classroom client, no imports.
 - **[lib/classroom-courses.test.mjs](lib/classroom-courses.test.mjs)** — Hermetic self-test for classroom-courses.mjs; uses a fake Classroom client and needs no network or googleapis.
 - **[lib/claude_config_dirs.py](lib/claude_config_dirs.py)** — every Claude Code config dir on this machine, so readers of per-session state see all of them.
+- **[lib/codex_owner_input.py](lib/codex_owner_input.py)** — Read direct composer input in one native desktop Codex rollout, read-only.
+- **[lib/codex_owner_input_test.py](lib/codex_owner_input_test.py)** — Synthetic regression tests for the native direct-input authorization reader.
 - **[lib/codex_thread_reader.py](lib/codex_thread_reader.py)** — Read explicitly addressed Codex threads through app-server; never list history.
 - **[lib/codex_threads.py](lib/codex_threads.py)** — Codex threads on this machine: which are live, their cwd / title / model, and the command that hands one a message.
 - **[lib/codex_worker_contract.py](lib/codex_worker_contract.py)** — Worker-side record contract for Codex-origin delegation. No command rewrites.

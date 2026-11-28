@@ -35,6 +35,40 @@ arbitrary semantic restatements; the thin secondary documents and ordinary
 review cover that remaining judgment. The repository's pre-commit hook runs
 the same check as an early warning; CI remains the blocking layer.
 
+### Native direct-input evidence for downstream authorization
+
+[`scripts/lib/codex_owner_input.py`](../scripts/lib/codex_owner_input.py) is a
+strict read-only compatibility reader for one full native desktop thread id.
+On POSIX, it resolves one rollout from the OS account's standard Codex data
+root. Callers cannot redirect this evidence lookup through environment values.
+It validates matching session metadata, per-item user
+provenance, retained message identity and an adjacent native `UserMessage`
+receipt. The supported desktop composer receipt has a version-4 UUID client
+id; a user role or `provenance=user` alone does not establish authorship.
+Repository instructions paired with environment context in the Desktop bootstrap
+are recognized by their native provenance before the first composer message.
+Queue-started turns, tool creation prompts, relay envelopes and known
+scheduled heartbeat envelopes provide no owner authority. An agent-created thread can still receive later direct
+composer input. Missing, malformed, conflicting or unsupported records return
+unknown. Unreadable directory walks, duplicate rollouts, and changes to
+the rollout during a read also return unknown.
+
+This layout and the composer client-id distinction are observed compatibility
+assumptions, not a documented or signed identity guarantee. Same-user writes
+to local records or arbitrary low-level API calls remain outside this check.
+The caller owns designation vocabulary, revocation, liveness, the registration
+ledger and the authorization decision; public code contains none of those
+owner-specific values. Question-UI envelopes require the earlier native request call id, question index
+and exact question text; unread requests, mismatches and duplicate answers are
+unknown. Reply objects contain exactly `questionItemId`, `question`, and
+`answer`; unknown members or duplicated JSON members are unknown rather than
+being silently discarded. A question-UI-origin turn without a recognized
+reply envelope is unknown, never ordinary composer evidence. Answers and their
+verified agent-authored questions are exposed in separate
+fields, so callers can reject ambiguous answers without treating a question
+as owner authority. Neither field itself establishes direct designation. Synthetic checks live in
+[`codex_owner_input_test.py`](../scripts/lib/codex_owner_input_test.py).
+
 ### Fact placement and evidence
 
 Keep each Codex fact in the one home that owns its lifecycle:
