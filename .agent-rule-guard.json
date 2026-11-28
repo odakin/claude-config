@@ -3,6 +3,9 @@
   "protect_paths": [
     "hooks/*",
     "codex/hooks/*",
+    "scripts/codex-app-launch.py",
+    "scripts/lib/codex_threads.py",
+    "scripts/session_provenance_cache.py",
     "codex/skills/*/SKILL.md",
     "codex/PARITY.md",
     "scripts/*guard*",

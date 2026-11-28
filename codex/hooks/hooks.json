@@ -36,6 +36,16 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 \"$HOME/.codex/claude-config-hooks/board_worker_model.py\"",
+            "timeout": 8,
+            "statusMessage": "Checking the board worker model"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 \"$HOME/.codex/claude-config-hooks/session_provenance.py\"",
             "timeout": 3
           },
