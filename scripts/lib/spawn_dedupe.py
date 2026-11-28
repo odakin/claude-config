@@ -380,14 +380,16 @@ def post_dismiss(inp: dict) -> str:
     sid = inp.get("session_id") or ""
     tid = ti.get("task_id") or ""
     text = flatten(inp.get("tool_response"))
-    # app の取り下げの返事は 7 通り (読み分けの正本 = scripts/lib/pending_cards.py の冒頭の表、 文は app の版で変わる)。
+    # app の取り下げの返事の読み分けの正本 = scripts/lib/pending_cards.py の WITHDRAWN の上の表 (文は app の版で変わる)。
     # 「withdrawn」 の部分一致で読むと、 取り下げていない返事 (「… was not withdrawn」「Not withdrawn: …」) を取り下げ済みと
-    # 記録して同じ依頼の作り直しを通してしまう (2 枚目の card = 押せば 2 人目の worker)。 文の形で読む
-    if re.search(r"Task task_[0-9A-Za-z]+ (?:was already started|is no longer pending)", text) \
+    # 記録して同じ依頼の作り直しを通してしまう (2 枚目の card = 押せば 2 人目の worker)。 文の形で読む。
+    # 当たらない返事 (session が無い など) は台帳を変えない
+    if re.search(r"Task task_[0-9A-Za-z]+ (?:was already started|is no longer pending|is being started right now)", text) \
             or "has just clicked Start" in text:
-        st = "started"      # 押されていた・押した瞬間・編集して押した
-    elif re.search(r"Task task_[0-9A-Za-z]+ was already dismissed", text) or "No pending task with id" in text:
-        st = "dismissed"    # 本人が閉じた・app にその card が無い
+        st = "started"      # 押されていた・起動の途中・編集して押した
+    elif re.search(r"Task task_[0-9A-Za-z]+ (?:was already dismissed|had already left the queue|already expired unstarted)",
+                   text) or "No pending task with id" in text:
+        st = "dismissed"    # 本人が閉じた・新しい card に押し出された・期限切れ・app にその card が無い = もう押せない
     elif "Not withdrawn:" in text and "edited the message" in text:
         st = "edited"       # 本人が文を編集した = 取り下げていない。 作り直さず、 card の上で押すか閉じてもらう
     elif re.search(r"Task task_[0-9A-Za-z]+ withdrawn", text):
@@ -568,8 +570,14 @@ def selftest() -> int:
         note = post_dismiss({"session_id": me, "tool_input": {"task_id": "task_000000aa"},
                              "tool_response": "Task task_000000aa was already started by the user — it's no longer pending and can't be withdrawn."})
         check("post-dismiss already started → state started + nudge", load_ledger(me)[0]["state"] == "started" and "作り直さない" in note)
-        # 取り下げの返事 7 通り (app 本体の表の文) + 旧い文。 取り下げていない返事を取り下げ済みと記録しない
+        # 取り下げの返事 (app 本体の表の文、 今の版と旧い版)。 取り下げていない返事を取り下げ済みと記録しない
         forms7 = [
+            ("Task task_000000aa had already left the queue (dismissed earlier, or displaced by newer suggestions); "
+             "any copy kept for later is being withdrawn too. Do not re-flag it.", "dismissed"),
+            ("Task task_000000aa already expired unstarted, so it is no longer shown; any copy kept for later is being "
+             "withdrawn too. Do not re-propose it.", "dismissed"),
+            ("Task task_000000aa is being started right now — it can't be withdrawn while the spawn is in flight. "
+             "Nothing was changed.", "started"),
             ("Task task_000000aa withdrawn. The card is no longer shown to the user. Continue your current work.", "withdrawn"),
             ("Task task_000000aa is no longer pending, so there is nothing to withdraw: the user started it as a new session.",
              "started"),
@@ -589,7 +597,7 @@ def selftest() -> int:
             _e[0]["state"] = "pending"
             save_ledger(me, _e)
             _note = post_dismiss({"session_id": me, "tool_input": {"task_id": "task_000000aa"}, "tool_response": _reply})
-            check("post-dismiss 7 通り: " + _reply[:44] + " → " + _want, load_ledger(me)[0]["state"] == _want)
+            check("post-dismiss の返事: " + _reply[:44] + " → " + _want, load_ledger(me)[0]["state"] == _want)
         check("post-dismiss 本人が編集した → 作り直さない案内", "作り直さない" in _note and "編集" in _note)
         rc, txt = pre_spawn(spawn_inp(), Ext)
         check("本人が編集した card と同じ依頼の作り直し → 止める (理由に編集)", rc == 2 and "編集" in txt)
