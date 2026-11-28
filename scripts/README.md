@@ -64,6 +64,7 @@
 - **[check-degenerate-text.py](check-degenerate-text.py)** — script 置換の暴走で壊れた text file (1 行の異常な繰り返し / HEAD 比の爆発的な増加) を commit で止める + fleet を走査して surface する。
 - **[check-desktop-logout-auth.py](check-desktop-logout-auth.py)** — desktop app でアカウントを切り替えた後、 同じ account の無人 job / RC の設定フォルダが切れていないかを自動で確かめる (切れたら 🔴)。
 - **[check-dirac-conventions.py](check-dirac-conventions.py)** — conventions/dirac-conventions.md の対応表と変換の辞書を、 教科書 3 冊が印字した明示表現 (γ 行列) で数値検算する (負の対照つき)。
+- **[check-dismiss-replies.py](check-dismiss-replies.py)** — card の取り下げ (dismiss_task) の返事の文が、 desktop app の版が変わっても、 返事を読み分ける 2 か所 (scripts/lib/pending_cards.py の点呼・scripts/lib/spawn_dedupe.py の二重起動の guard) に当たるかを、 app 本体の返事の表で確かめる
 - **[check-display-math-style.py](check-display-math-style.py)** — Display-math house-style gate for LaTeX manuscripts (2026-09-09).
 - **[check-doc-truncation.py](check-doc-truncation.py)** — 台帳 doc の「黙って消える」削除を git 高水位で検出（表の行/list/見出し/entry の大幅減、[truncation-ok] で baseline reset、config 駆動）
 - **[check-docx-integrity.py](check-docx-integrity.py)** — docx の Word「破損」判定源を Word 不要・決定論で検出（single-quote 宣言 / checkbox 状態↔グリフ / bookmark / table grid / dangling r:id 等、 office-automation.md#docx-checkbox-content-control）

@@ -53,6 +53,26 @@ def _final_text(entries: list[dict]) -> str:
     return final
 
 
+def _maybe_check_dismiss_replies() -> None:
+    """app の版か返事の読み分けの file が前に確かめた時と違えば、 返事の表の照合 (scripts/check-dismiss-replies.py) を
+    背景で起こす (待たない。 外れは digest の ⚙️ の段に出る)。 毎 turn の費用 = Info.plist と 2 file を読むだけ。
+    文は app の版で変わり、 読み分けが黙って外れた (実測 = 10 日で 3 回)。 env PENDING_CARDS_NO_REPLY_CHECK=1 で起こさない (試験)。"""
+    if os.environ.get("PENDING_CARDS_NO_REPLY_CHECK"):
+        return
+    try:
+        import importlib.util
+        import subprocess
+        chk = os.path.join(os.path.dirname(os.path.realpath(__file__)), "check-dismiss-replies.py")
+        spec = importlib.util.spec_from_file_location("check_dismiss_replies", chk)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if mod.needs_check():
+            subprocess.Popen([sys.executable, chk, "--if-changed"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+    except Exception:
+        pass
+
+
 def _state_dir() -> str:
     return os.environ.get("PENDING_CARDS_STATE_DIR") or os.path.expanduser("~/.claude/state/pending-cards")
 
@@ -165,6 +185,7 @@ def stop_main() -> int:
         return 0
     if not isinstance(payload, dict):
         return 0
+    _maybe_check_dismiss_replies()
     path = payload.get("transcript_path")
     if not path or not os.path.isfile(path):
         return 0
@@ -273,7 +294,8 @@ class _T:
         self.rows.append({"type": "user", "timestamp": self._tick(), "isMeta": True,
                           "message": {"role": "user", "content": "Stop hook feedback:\n" + text}})
 
-    def tool(self, name: str, inp: dict, result: str, is_error: bool = False):
+    def tool(self, name: str, inp: dict, result: str, is_error: bool = False, stamp=()):
+        """stamp = 結果の行の構造化した値 (mcpMeta._meta.ccdToolStamp.outcome、 None = null)。 既定 () = 載せない。"""
         self.n += 1
         tid = f"toolu_{self.n:04d}"
         self.rows.append({"type": "assistant", "timestamp": self._tick(),
@@ -282,7 +304,10 @@ class _T:
         res = {"type": "tool_result", "tool_use_id": tid, "content": [{"type": "text", "text": result}]}
         if is_error:
             res["is_error"] = True
-        self.rows.append({"type": "user", "timestamp": self._tick(), "message": {"role": "user", "content": [res]}})
+        row = {"type": "user", "timestamp": self._tick(), "message": {"role": "user", "content": [res]}}
+        if stamp != ():
+            row["mcpMeta"] = {"_meta": {"ccdToolStamp": {"outcome": stamp}}}
+        self.rows.append(row)
 
     def parallel(self, calls: list[tuple[str, dict, str, bool]]):
         """1 つの応答に並べた呼び出し (tool_use を全部出してから結果が並ぶ)。"""
@@ -353,6 +378,7 @@ def _reason(out: str) -> str:
 def selftest() -> int:
     fails = 0
     now = time.time()
+    os.environ["PENDING_CARDS_NO_REPLY_CHECK"] = "1"   # 試験の Stop から本物の app の照合を起こさない
 
     def check(name: str, ok: bool):
         nonlocal fails
@@ -555,6 +581,28 @@ def selftest() -> int:
             else:
                 ok = st == want and after == "" and nxt == ""
             check(f"取り下げの返事「{label}」 → {want}", ok)
+
+        # 構造化した値 (mcpMeta の outcome) を先に読む: 文がどの読み分けにも当たらなくても分かれる。 期限切れだけは文で分ける。
+        # 知らない値・値の無い行は文で読む (今までどおり)
+        stamps = [
+            ("did・知らない文", "did", "Task {t} went away.", "withdrawn"),
+            ("not_done・知らない文", "not_done", "Task {t} cannot be pulled back now.", "started"),
+            ("no_change・期限切れの文", "no_change", "Task {t} already expired unstarted, so it is no longer shown.", "expired"),
+            ("null・知らない文", None, "Task {t} is gone.", "closed"),
+            ("知らない値・取り下げの文", "weird", "Task {t} withdrawn — the chip is no longer shown to the user.", "withdrawn"),
+        ]
+        for k, (label, stamp, reply, want) in enumerate(stamps):
+            tid = f"task_stmp{k}"
+            ts = _T(now - 3600)
+            ts.event()
+            ts.card(tid, f"[local推奨] 値の形 {k}", None)
+            ts.say(f"{mark} 1 枚: 値の形 {k}")
+            ts.tool("mcp__ccd_session__dismiss_task", {"task_id": tid}, reply.format(t=tid), stamp=stamp)
+            st = pc.chains(pc.load_entries(ts.write(d)))[0]["status"]
+            check(f"取り下げの構造化した値「{label}」 → {want}", st == want)
+        check("dismiss_kind: 版の照合が読む 1 つの文の読み分け",
+              [pc.dismiss_kind(f.format(t="task_x1")) for _l, f, _w in forms[:3]] == ["closed", "expired", "started"]
+              and pc.dismiss_kind("Session not found — cannot look up task task_x1.") == "")
         te = _T(now - 3600)
         te.event()
         te.card("task_edok", "[local推奨] 編集済み", None)

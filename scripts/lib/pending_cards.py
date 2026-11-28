@@ -75,6 +75,44 @@ APP_EXPIRED = re.compile(r"Task (task_[0-9a-zA-Z]+) already expired unstarted")
 EDITED = re.compile(r"edited the message of (task_[0-9a-zA-Z]+), so only its card starts it")
 
 
+# 構造化した結果 (会話記録の行の `mcpMeta._meta.ccdToolStamp.outcome`、 app 本体の bundle の code と会話記録で確認): 文より
+# 版の間で変わりにくい機械の値なので先に読む (文は app の版で 3 回変わり、 読み分けが黙って外れた = 実測)。
+#   "did" = 取り下げた / "not_done" = 押されていた・起動の途中 / "no_change" = もう無い (閉じた・押し出された・期限切れ・
+#   見つからない) / null = もう無い (残していた写しも取り下げた)。 編集された・session が無いは誤りの結果で outcome が無い
+#   → 文で読む。 知らない値も文で読む (版の検査 = scripts/check-dismiss-replies.py が知らせる)
+STAMP_KINDS = {"did": "withdrawn", "not_done": "started", "no_change": "gone", None: "gone"}
+TASK_ID = re.compile(r"task_[0-9a-zA-Z]+")
+
+
+def stamp_kind(entry: dict) -> str:
+    """dismiss_task の結果の行 (tool_result を 1 つだけ持つ行) の構造化した結果 = withdrawn / started / gone、 無いか
+    知らない値なら ""。"""
+    meta = entry.get("mcpMeta")
+    stamp = ((meta.get("_meta") or {}).get("ccdToolStamp") if isinstance(meta, dict) else None)
+    if not isinstance(stamp, dict) or "outcome" not in stamp:
+        return ""
+    try:
+        return STAMP_KINDS.get(stamp["outcome"], "")
+    except TypeError:        # list・dict の値 (知らない形)
+        return ""
+
+
+def dismiss_kind(text: str) -> str:
+    """dismiss_task の返事の文 1 つの読み分け = withdrawn / started / closed / expired / edited、 当たらなければ ""
+    (session が無い など)。 cards() と版の検査 (scripts/check-dismiss-replies.py) が同じこの関数を読む。"""
+    if _ids(ALREADY_STARTED, text):
+        return "started"
+    if _ids(APP_EXPIRED, text):
+        return "expired"
+    if _ids(ALREADY_DISMISSED, text) or _ids(NOT_FOUND, text):
+        return "closed"
+    if _ids(EDITED, text):
+        return "edited"
+    if WITHDRAWN.search(text):
+        return "withdrawn"
+    return ""
+
+
 def _ids(rx: re.Pattern, text: str) -> list[str]:
     """正規表現のどれかの group に入った task id。"""
     return [g for m in rx.finditer(text) for g in m.groups() if g]
@@ -313,9 +351,8 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
             continue
         if e.get("type") != "user":
             continue
-        for b in _blocks(e):
-            if not (isinstance(b, dict) and b.get("type") == "tool_result"):
-                continue
+        results = [b for b in _blocks(e) if isinstance(b, dict) and b.get("type") == "tool_result"]
+        for b in results:
             name, inp = uses.get(str(b.get("tool_use_id")), ("", {}))
             text = _result_text(b)
             if name.endswith(SESSION_TOOLS):
@@ -331,6 +368,18 @@ def cards(entries: list[dict], now: float | None = None, use_app_records: bool =
                 if pid and not b.get("is_error") and "error" not in text[:200].lower():
                     started.add(str(pid))
             elif name.endswith(DISMISS_TOOLS):
+                tid = str(inp.get("task_id") or "")
+                kind = stamp_kind(e) if len(results) == 1 and TASK_ID.fullmatch(tid) else ""
+                if kind:   # 構造化した結果を先に読み、 文はもう無い側の期限切れの区別にだけ使う
+                    if kind == "withdrawn":
+                        withdrawn.setdefault(tid, i)
+                    elif kind == "started":
+                        started.add(tid)
+                    elif dismiss_kind(text) == "expired":
+                        app_expired.add(tid)
+                    else:
+                        closed.add(tid)
+                    continue
                 for m in WITHDRAWN.finditer(text):
                     withdrawn.setdefault(m.group(1), i)
                 started.update(_ids(ALREADY_STARTED, text))
