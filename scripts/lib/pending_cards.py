@@ -57,7 +57,8 @@ STARTED = re.compile(r"The user started your proposal (task_[0-9a-zA-Z]+)")
 #   編集して押した (旧い edited_start)    「Not withdrawn: the user edited the message of <id> and has just clicked Start …」
 #   本人が閉じた・新しい card に押し出された (already_dismissed)
 #                                      「Task <id> had already left the queue …」 / 旧い文「Task <id> was already dismissed …」
-#                                      → 出し直さず点呼にも載せない
+#                                      → 出し直さず点呼にも載せない (app は 1 session の提案を 20 枚まで持ち、 超えると
+#                                      古いものから押し出す = 本人が閉じていなくてもこの返事になる。 app 7.37095 の本体で確認)
 #   card が無い (not_found)            「No pending task with id <id> … Do not re-flag it …」 → 同じ
 #   app で期限が切れた (expired)         「Task <id> already expired unstarted …」 → 期限切れ (出し直さず点呼にも載せない)
 #   本人が文を編集した (edited)          「Not withdrawn: the user edited the message of <id>, so only its card starts it …」
