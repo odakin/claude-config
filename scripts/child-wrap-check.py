@@ -232,8 +232,12 @@ THIRD_DATIVE = re.compile(r"(?<!あなた)(?<!貴方)(?<!そちら)(?<!君)(?<!�
 # the closing sweep's report tools (conventions/closing-sweep.md): a child that ran them without the wrap skill closed
 # by hand, which the wrap record does not show (measured: two children ran the tools after the wrap request and never
 # started the skill; the check said only "no wrap record", the same as for a child that did not close at all)
-CLOSE_TOOL_RUN = re.compile(r"(?:session-(?:reply-knowledge|scripts|claims|open-questions|fetched-docs)-report"
-                            r"|subagent-reports|headless-worker-reports)\.py")
+# Only a run counts: the tool started by python (`python3 [-opts] <path>/<tool>.py`) or as the command at the head of a
+# segment (`./scripts/<tool>.py`). A command that only reads the file (`sed -n …p scripts/<tool>.py`, `grep … <tool>.py`)
+# is not a run (measured: a worker that read the tool's source with sed was reported as closing by hand). The name = `tool`.
+CLOSE_TOOL_RUN = re.compile(r"(?:(?:^|[;&|\n])\s*|(?<![\w-])python3?(?:\s+-\S+)*\s+)[\"']?(?:[^\s\"';&|]*/)?"
+                            r"(?P<tool>(?:session-(?:reply-knowledge|scripts|claims|open-questions|fetched-docs)-report"
+                            r"|subagent-reports|headless-worker-reports)\.py)")
 # the skills whose run counts as a wrap: wrap-close runs the whole wrap procedure before it closes the window
 # (conventions/closing-sweep.md#wrap-close) = a window that ran it and stayed open (children were left) has wrapped
 WRAP_SKILLS = ("wrap", "wrap-close")
@@ -620,7 +624,7 @@ def scan_child(path: str, as_of: str = "") -> dict:
                             out["claims"].append(ts)
                         run = CLOSE_TOOL_RUN.search(cmd)
                         if run:
-                            out["close_runs"].append((ts, run.group(0)))
+                            out["close_runs"].append((ts, run.group("tool")))
                 elif kind == "user" and e.get("isMeta") and b.get("type") == "text":
                     t = b.get("text", "")
                     if t.startswith("Base directory for this skill:") and WRAP_SKILL_BASE.search(t[:300]):
@@ -3657,6 +3661,19 @@ def selftest() -> int:
            any(x.startswith(WRAP_MISSING) and "skill なしで締めの道具だけ回した" in x for x in hr))
         ok("no wrap and no closing tools → the plain reason (control)",
            WRAP_MISSING in check_child(ids("nowrap")[0])["reasons"])
+        # reading the tool's source is not running it (measured: sed on the file was reported as closing by hand)
+        read_only = fx_kid("9a00006a", brief + [peer("2026-01-05T00:10:00Z", WRAP_ASK_TEXT, fx_p_l),
+                                                bash("2026-01-05T00:11:00Z", "sed -n 390,412p claude-config/scripts/session-reply-knowledge-report.py"),
+                                                reply("2026-01-05T00:12:00Z"), stop("2026-01-05T00:12:01Z")], 977)
+        rr = check_child(read_only)["reasons"]
+        ok("reading a closing tool's source (sed) is not a run → the plain reason, not 'closing tools only'",
+           WRAP_MISSING in rr and not any("締めの道具だけ回した" in x for x in rr))
+        runs = [CLOSE_TOOL_RUN.search(c) for c in (
+            "cd /w && python3 scripts/session-scripts-report.py 1234abcd", "./scripts/session-claims-report.py 1234abcd",
+            "timeout 60 python3 -I ~/x/subagent-reports.py 1 --max-chars 0", "grep -n x scripts/session-claims-report.py",
+            "python3 - <<'EOF'\nprint('session-claims-report.py')\nEOF")]
+        ok("CLOSE_TOOL_RUN: python / head-of-command runs count, reading and a heredoc that names the file do not",
+           [bool(m) for m in runs] == [True, True, True, False, False] and runs[0].group("tool") == "session-scripts-report.py")
         # the person's 「閉じて」 in the parent's window after the talk in the child's window
         p69_l, p69_c = "local_9a690000-0000-4000-8000-000000000000", "9a690000-aaaa-4000-8000-000000000000"
         record(p69_l, p69_c)
